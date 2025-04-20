@@ -33,7 +33,6 @@ export interface AgentStep {
 }
 
 export interface TaskParams {
-  startingPage?: Page;
   maxSteps?: number;
   debugDir?: string;
   onStep?: (step: AgentStep) => void;
@@ -77,4 +76,9 @@ export interface TaskState {
   steps: AgentStep[];
   output?: string;
   error?: string;
+}
+
+export interface HyperPage extends Page {
+  ai: (task: string, params?: TaskParams) => Promise<TaskOutput>;
+  aiAsync: (task: string, params?: TaskParams) => Promise<Task>;
 }
