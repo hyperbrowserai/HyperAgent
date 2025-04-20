@@ -70,7 +70,7 @@ export class HyperAgent {
         params.hyperbrowserConfig
       );
     } else {
-      this.browserProvider = new LocalBrowserProvider();
+      this.browserProvider = new LocalBrowserProvider(params.localOptions);
     }
 
     if (params.customActions) {

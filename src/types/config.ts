@@ -2,7 +2,10 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AgentActionDefinition } from "./agent/actions/types";
 
 import { z } from "zod";
-import { HyperbrowserProvider } from "@/browser-providers";
+import {
+  HyperbrowserProvider,
+  LocalBrowserProvider,
+} from "@/browser-providers";
 
 export interface MCPServerConfig {
   id?: string;
@@ -60,4 +63,5 @@ export interface HyperagentConfig {
   outputSchema?: z.AnyZodObject;
 
   hyperbrowserConfig?: ConstructorParameters<typeof HyperbrowserProvider>[0];
+  localOptions?: ConstructorParameters<typeof LocalBrowserProvider>[0];
 }
