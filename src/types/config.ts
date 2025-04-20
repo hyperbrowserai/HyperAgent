@@ -55,7 +55,7 @@ export interface MCPConfig {
   servers: MCPServerConfig[];
 }
 
-export interface HyperagentConfig {
+export interface HyperAgentConfig {
   customActions?: Array<AgentActionDefinition>;
 
   debug?: boolean;

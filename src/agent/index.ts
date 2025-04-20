@@ -4,7 +4,7 @@ import { Browser, BrowserContext, Page } from "playwright";
 import { v4 as uuidv4 } from "uuid";
 
 import BrowserProvider from "@/types/browser-providers/types";
-import { HyperagentConfig, MCPConfig, MCPServerConfig } from "@/types/config";
+import { HyperAgentConfig, MCPConfig, MCPServerConfig } from "@/types/config";
 import {
   ActionType,
   AgentActionDefinition,
@@ -42,7 +42,7 @@ export class HyperAgent {
   public context: BrowserContext | null = null;
   public currentPage: Page | null = null;
 
-  constructor(params: HyperagentConfig = {}) {
+  constructor(params: HyperAgentConfig = {}) {
     if (!params.llm) {
       if (process.env.OPENAI_API_KEY) {
         this.llm = new ChatOpenAI({
