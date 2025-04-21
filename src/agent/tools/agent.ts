@@ -159,6 +159,9 @@ export const runAgentTask = async (
       }
     }
 
+    // Remove Highlights
+    await removeHighlight(page);
+
     // Build Agent Step Messages
     const msgs = await buildAgentStepMessages(
       baseMsgs,
@@ -192,9 +195,6 @@ export const runAgentTask = async (
     if (endTaskStatuses.has(taskState.status)) {
       break;
     }
-
-    // Remove Highlights
-    await removeHighlight(page);
 
     // Run Actions
     const agentStepActions = agentOutput.actions;
