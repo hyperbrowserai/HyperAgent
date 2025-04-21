@@ -28,12 +28,13 @@ import { HyperagentError } from "./error";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
 import { HyperPage } from "@/types/agent/types";
+import { z } from "zod";
 
 export class HyperAgent {
   private llm: BaseChatModel;
   private tasks: Record<string, TaskState> = {};
-  private tokenLimit: number = 128000;
-  private debug: boolean = false;
+  private tokenLimit = 128000;
+  private debug = false;
   private mcpClient: MCPClient | undefined;
   private browserProvider: BrowserProvider;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
@@ -55,14 +56,6 @@ export class HyperAgent {
       }
     } else {
       this.llm = params.llm;
-    }
-
-    if (params.outputSchema) {
-      this.registerAction(
-        generateCompleteActionWithOutputDefinition(params.outputSchema)
-      );
-    } else {
-      this.registerAction(CompleteActionDefinition);
     }
 
     if (params.hyperbrowserConfig) {
@@ -89,6 +82,25 @@ export class HyperAgent {
       return this.browser;
     }
     return this.browser;
+  }
+
+  /**
+   * Use this function instead of accessing this.actions directly.
+   * This function configures if there is a need for an output schema as a part of the complete action.
+   * @param outputSchema
+   * @returns
+   */
+  private getActions(
+    outputSchema?: z.AnyZodObject
+  ): Array<AgentActionDefinition> {
+    if (outputSchema) {
+      return [
+        ...this.actions,
+        generateCompleteActionWithOutputDefinition(outputSchema),
+      ];
+    } else {
+      return [...this.actions, CompleteActionDefinition];
+    }
   }
 
   /**
@@ -155,6 +167,10 @@ export class HyperAgent {
     }
   }
 
+  /**
+   * Get the current page or create a new one if none exists
+   * @returns The current page
+   */
   public async getCurrentPage(): Promise<Page> {
     if (!this.browser) {
       await this.createBrowser();
@@ -169,6 +185,11 @@ export class HyperAgent {
     return this.currentPage;
   }
 
+  /**
+   * Get task control object for a specific task
+   * @param taskId ID of the task
+   * @returns Task control object
+   */
   private getTaskControl(taskId: string): Task {
     const taskState = this.tasks[taskId];
     if (!taskState) {
@@ -189,7 +210,7 @@ export class HyperAgent {
         return taskState.status;
       },
       cancel: () => {
-        if (taskState.status != TaskStatus.COMPLETED) {
+        if (taskState.status !== TaskStatus.COMPLETED) {
           taskState.status = TaskStatus.CANCELLED;
         }
         return taskState.status;
@@ -222,7 +243,7 @@ export class HyperAgent {
     runAgentTask(
       {
         llm: this.llm,
-        actions: this.actions,
+        actions: this.getActions(params?.outputSchema),
         tokenLimit: this.tokenLimit,
         debug: this.debug,
         mcpClient: this.mcpClient,
@@ -237,7 +258,7 @@ export class HyperAgent {
   }
 
   /**
-   * Execute a task asynchronously
+   * Execute a task and wait for completion
    * @param task The task to execute
    * @param params Optional parameters for the task
    * @param initPage Optional page to use for the task
@@ -262,7 +283,7 @@ export class HyperAgent {
       return await runAgentTask(
         {
           llm: this.llm,
-          actions: this.actions,
+          actions: this.getActions(params?.outputSchema),
           tokenLimit: this.tokenLimit,
           debug: this.debug,
           mcpClient: this.mcpClient,
@@ -281,6 +302,12 @@ export class HyperAgent {
    * @param action The action to register
    */
   private async registerAction(action: AgentActionDefinition) {
+    if (action.type === "complete") {
+      throw new HyperagentError(
+        "Could not add an action with the name 'complete'. Complete is a reserved action.",
+        400
+      );
+    }
     const actionsList = new Set(
       this.actions.map((registeredAction) => registeredAction.type)
     );
@@ -297,7 +324,7 @@ export class HyperAgent {
    * Initialize the MCP client with the given configuration
    * @param config The MCP configuration
    */
-  async initializeMCPClient(config: MCPConfig): Promise<void> {
+  public async initializeMCPClient(config: MCPConfig): Promise<void> {
     if (!config || config.servers.length === 0) {
       return;
     }
@@ -413,6 +440,11 @@ export class HyperAgent {
     return this.mcpClient.getServerInfo();
   }
 
+  /**
+   * Pretty print an action
+   * @param action The action to print
+   * @returns Formatted string representation of the action
+   */
   public pprintAction(action: ActionType): string {
     const foundAction = this.actions.find(
       (actions) => actions.type === action.type

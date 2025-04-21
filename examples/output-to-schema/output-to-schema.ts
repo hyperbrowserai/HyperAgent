@@ -1,23 +1,23 @@
 /**
  * # Output Schema Example
- * 
+ *
  * This example demonstrates how to use HyperAgent with a defined output schema
  * to ensure structured and validated responses from the agent.
- * 
+ *
  * ## What This Example Does
- * 
+ *
  * The agent performs a task with structured output that:
  * 1. Defines a Zod schema for the expected output format
  * 2. Performs actions to complete the specified task
  * 3. Returns movie information in a structured format specified
- * 
+ *
  * ## Prerequisites
- * 
+ *
  * 1. Node.js environment
  * 2. OpenAI API key set in your .env file (OPENAI_API_KEY)
- * 
+ *
  * ## Running the Example
- * 
+ *
  * ```bash
  * yarn ts-node -r tsconfig-paths/register examples/output-to-schema/output-to-schema.ts
  * ```
@@ -43,10 +43,6 @@ async function runEval() {
   const agent = new HyperAgent({
     llm: llm,
     debug: true,
-    outputSchema: z.object({
-      releaseDate: z.string().describe("Release date in YYYY-MM-DD format"),
-      titleName: z.string(),
-    }),
   });
 
   await sleep(1000);
@@ -61,6 +57,10 @@ async function runEval() {
       console.dir(step, { depth: null, colors: true });
       console.log(chalk.cyan.bold("===============") + "\n");
     },
+    outputSchema: z.object({
+      releaseDate: z.string().describe("Release date in YYYY-MM-DD format"),
+      titleName: z.string(),
+    }),
   });
   await agent.closeAgent();
   console.log(chalk.green.bold("\nResult:"));
