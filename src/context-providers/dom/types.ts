@@ -11,10 +11,12 @@ export interface InteractiveElement {
 export interface DOMStateRaw {
   elements: InteractiveElement[];
   domState: string;
+  screenshot: string;
 }
 
 export interface DOMState {
   elements: InteractiveElement[];
   domState: string;
+  screenshot: string;
   idxToXPath: Map<number, string>;
 }

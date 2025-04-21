@@ -1,6 +1,5 @@
 export const buildDomViewJs = `(() => {
   // src/context-providers/dom/const.ts
-  var HIGHLIGHT_CONTAINER_ID = "hb-highlight-container";
   var INTERACTIVE_ELEMENTS = /* @__PURE__ */ new Set([
     "a",
     "input",
@@ -167,25 +166,9 @@ export const buildDomViewJs = `(() => {
 
   // src/context-providers/dom/highlight.ts
   var isElementPartiallyVisible = (rect) => {
-    return rect.top < window.innerHeight && rect.bottom > 0 && rect.left < window.innerWidth && rect.right > 0;
-  };
-  var getHighlightContainer = () => {
-    let container = document.getElementById(
-      HIGHLIGHT_CONTAINER_ID
-    );
-    if (!container) {
-      container = document.createElement("div");
-      container.id = HIGHLIGHT_CONTAINER_ID;
-      container.style.position = "fixed";
-      container.style.pointerEvents = "none";
-      container.style.top = "0";
-      container.style.left = "0";
-      container.style.width = "100%";
-      container.style.height = "100%";
-      container.style.zIndex = "2147483647";
-      document.body.appendChild(container);
-    }
-    return container;
+    return rect.width > 0 && rect.height > 0 && rect.top < window.innerHeight && // These checks are relative to the current viewport
+    rect.bottom > 0 && // where the rect was calculated.
+    rect.left < window.innerWidth && rect.right > 0;
   };
   var getHighlightColor = (index) => {
     const colors = [
@@ -207,141 +190,102 @@ export const buildDomViewJs = `(() => {
     const backgroundColor = baseColor + "1A";
     return { baseColor, backgroundColor };
   };
-  var createHighlightOverlay = (rect, iframeOffset, colors) => {
-    const overlay = document.createElement("div");
-    overlay.style.position = "fixed";
-    overlay.style.border = \`2px solid \${colors.baseColor}\`;
-    overlay.style.backgroundColor = colors.backgroundColor;
-    overlay.style.pointerEvents = "none";
-    overlay.style.boxSizing = "border-box";
-    const top = rect.top + iframeOffset.y;
-    const left = rect.left + iframeOffset.x;
-    overlay.style.top = \`\${top}px\`;
-    overlay.style.left = \`\${left}px\`;
-    overlay.style.width = \`\${rect.width}px\`;
-    overlay.style.height = \`\${rect.height}px\`;
-    return overlay;
-  };
-  var calculateLabelPosition = (rect, iframeOffset, labelWidth, labelHeight) => {
+  var calculateLabelPosition = (rect, iframeOffset, labelWidth, labelHeight, canvasWidth, canvasHeight) => {
     const top = rect.top + iframeOffset.y;
     const left = rect.left + iframeOffset.x;
     let labelTop = top - labelHeight;
     let labelLeft = left + rect.width - labelWidth;
-    if (labelTop < 0 || labelLeft + labelWidth > window.innerWidth) {
-      labelTop = top + rect.height;
-      labelLeft = left + rect.width - labelWidth;
+    labelTop = Math.min(labelTop, canvasHeight - labelHeight);
+    labelLeft = Math.min(labelLeft, canvasWidth - labelWidth);
+    const elementBottom = top + rect.height;
+    const elementRight = left + rect.width;
+    if (labelTop + labelHeight > top && labelTop < elementBottom && labelLeft + labelWidth > left && labelLeft < elementRight) {
+      labelTop = elementBottom;
+      labelLeft = elementRight - labelWidth;
+      labelTop = Math.min(labelTop, canvasHeight - labelHeight);
+      labelLeft = Math.min(labelLeft, canvasWidth - labelWidth);
     }
-    if (labelTop + labelHeight > window.innerHeight) {
-      labelTop = top + rect.height;
-      labelLeft = left;
-    }
-    if (labelLeft < 0) {
-      labelTop = top - labelHeight;
-      labelLeft = left;
-    }
-    labelTop = Math.max(0, Math.min(labelTop, window.innerHeight - labelHeight));
-    labelLeft = Math.max(0, Math.min(labelLeft, window.innerWidth - labelWidth));
     return { top: labelTop, left: labelLeft };
   };
-  var createHighlightLabel = (index, rect, iframeOffset, baseColor) => {
-    const label = document.createElement("div");
-    label.style.position = "fixed";
-    label.style.background = baseColor;
-    label.style.color = "white";
-    label.style.borderRadius = "4px";
-    label.style.padding = "2px 4px";
-    label.style.display = "flex";
-    label.style.alignItems = "center";
-    label.style.justifyContent = "center";
-    label.style.fontSize = \`\${Math.min(12, Math.max(8, rect.height / 2))}px\`;
-    label.style.lineHeight = "1";
-    label.style.whiteSpace = "nowrap";
-    label.textContent = index.toString();
-    label.style.visibility = "hidden";
-    document.body.appendChild(label);
-    const labelRect = label.getBoundingClientRect();
-    document.body.removeChild(label);
-    label.style.visibility = "visible";
-    const position = calculateLabelPosition(
-      rect,
-      iframeOffset,
-      labelRect.width,
-      labelRect.height
-    );
-    label.style.top = \`\${position.top}px\`;
-    label.style.left = \`\${position.left}px\`;
-    return label;
-  };
-  var createPositionUpdateHandler = (element, overlay, label, parentIframe) => {
-    return () => {
-      const newRect = element.getBoundingClientRect();
-      let newIframeOffset = { x: 0, y: 0 };
-      if (parentIframe) {
-        const iframeRect = parentIframe.getBoundingClientRect();
-        newIframeOffset.x = iframeRect.left;
-        newIframeOffset.y = iframeRect.top;
-      }
-      const newTop = newRect.top + newIframeOffset.y;
-      const newLeft = newRect.left + newIframeOffset.x;
-      const isVisible = isElementPartiallyVisible(newRect);
-      overlay.style.display = isVisible ? "block" : "none";
-      label.style.display = isVisible ? "flex" : "none";
-      if (isVisible) {
-        overlay.style.top = \`\${newTop}px\`;
-        overlay.style.left = \`\${newLeft}px\`;
-        overlay.style.width = \`\${newRect.width}px\`;
-        overlay.style.height = \`\${newRect.height}px\`;
-        const newLabelRect = label.getBoundingClientRect();
-        const position = calculateLabelPosition(
-          newRect,
-          newIframeOffset,
-          newLabelRect.width,
-          newLabelRect.height
-        );
-        label.style.top = \`\${position.top}px\`;
-        label.style.left = \`\${position.left}px\`;
-      }
-    };
-  };
-  var highlightElem = (element, index, parentIframe = null) => {
-    if (!element) return false;
-    try {
-      const container = getHighlightContainer();
-      const rect = element.getBoundingClientRect();
-      if (!rect) return false;
-      const iframeOffset = { x: 0, y: 0 };
-      if (parentIframe) {
-        const iframeRect = parentIframe.getBoundingClientRect();
-        iframeOffset.x = iframeRect.left;
-        iframeOffset.y = iframeRect.top;
-      }
-      const colors = getHighlightColor(index);
-      const overlay = createHighlightOverlay(rect, iframeOffset, colors);
-      const label = createHighlightLabel(
-        index,
-        rect,
-        iframeOffset,
-        colors.baseColor
+  function renderHighlightsOffscreen(highlightInfos, width, height) {
+    if (width <= 0 || height <= 0) {
+      console.warn(
+        "Attempted to render highlights on zero-sized canvas. Will default to innerWidth x innerHeight"
       );
-      const isVisible = isElementPartiallyVisible(rect);
-      overlay.style.display = isVisible ? "block" : "none";
-      label.style.display = isVisible ? "flex" : "none";
-      container.appendChild(overlay);
-      container.appendChild(label);
-      const updatePositions = createPositionUpdateHandler(
-        element,
-        overlay,
-        label,
-        parentIframe
+      const emptyCanvas = new OffscreenCanvas(
+        window.innerWidth,
+        window.innerHeight
       );
-      window.addEventListener("scroll", updatePositions);
-      window.addEventListener("resize", updatePositions);
-      return true;
-    } catch (error) {
-      console.error("Error highlighting element", error);
-      return false;
+      return emptyCanvas.transferToImageBitmap();
     }
-  };
+    const dpr = window.devicePixelRatio || 1;
+    const canvasWidth = width * dpr;
+    const canvasHeight = height * dpr;
+    const offscreenCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
+    const ctx = offscreenCanvas.getContext("2d", {
+      alpha: true
+    });
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+    try {
+      highlightInfos.forEach(({ element, index, parentIframe }) => {
+        if (!document.body.contains(element)) {
+          return;
+        }
+        const rect = element.getBoundingClientRect();
+        if (!rect || rect.width === 0 || rect.height === 0 || !isElementPartiallyVisible(rect)) {
+          return;
+        }
+        const iframeOffset = { x: 0, y: 0 };
+        if (parentIframe && document.body.contains(parentIframe)) {
+          const iframeRect = parentIframe.getBoundingClientRect();
+          iframeOffset.x = iframeRect.left;
+          iframeOffset.y = iframeRect.top;
+        }
+        const colors = getHighlightColor(index);
+        const drawTop = rect.top + iframeOffset.y;
+        const drawLeft = rect.left + iframeOffset.x;
+        ctx.fillStyle = colors.backgroundColor;
+        ctx.fillRect(drawLeft, drawTop, rect.width, rect.height);
+        ctx.strokeStyle = colors.baseColor;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(drawLeft, drawTop, rect.width, rect.height);
+        const labelText = index.toString();
+        const fontSize = Math.min(12, Math.max(9, rect.height * 0.3));
+        ctx.font = \`bold \${fontSize}px sans-serif\`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const textMetrics = ctx.measureText(labelText);
+        const labelPadding = 4;
+        const labelHeight = fontSize + labelPadding;
+        const labelWidth = Math.max(
+          labelHeight,
+          textMetrics.width + labelPadding * 2
+        );
+        const labelPos = calculateLabelPosition(
+          rect,
+          iframeOffset,
+          labelWidth,
+          labelHeight,
+          width,
+          height
+        );
+        ctx.fillStyle = colors.baseColor;
+        ctx.fillRect(labelPos.left, labelPos.top, labelWidth, labelHeight);
+        ctx.fillStyle = "white";
+        ctx.fillText(
+          labelText,
+          labelPos.left + labelWidth / 2,
+          labelPos.top + labelHeight / 2
+        );
+      });
+      return offscreenCanvas.transferToImageBitmap();
+    } catch (error) {
+      console.error("Error drawing highlights onto OffscreenCanvas:", error);
+      const emptyCanvas = new OffscreenCanvas(1, 1);
+      return emptyCanvas.transferToImageBitmap();
+    }
+  }
 
   // src/context-providers/dom/get-x-path.ts
   var getXPath = (element) => {
@@ -384,24 +328,35 @@ export const buildDomViewJs = `(() => {
   };
 
   // src/context-providers/dom/build-dom-view.ts
+  var imageBitmapToPngDataUrl = (bitmap) => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0);
+      return canvas.toDataURL("image/png");
+    } finally {
+      bitmap.close();
+    }
+  };
   var buildDomView = () => {
     const interactiveElements = findInteractiveElements();
-    let index = 1;
-    const container = document.getElementById("hb-highlight-container");
-    if (container) {
-      container.remove();
-    }
-    for (const element of interactiveElements) {
-      const success = highlightElem(element.element, index);
-      if (success) {
-        element.highlightIndex = index;
-        index++;
-      }
-    }
-    for (const element of interactiveElements) {
-      if (element.highlightIndex) {
-        element.xPath = getXPath(element.element);
-      }
+    const screenBitmap = renderHighlightsOffscreen(
+      interactiveElements.map((element, index) => ({
+        element: element.element,
+        index: index + 1,
+        // index range from 1 -> index
+        parentIframe: element.iframe ?? null
+      })),
+      window.innerWidth,
+      window.innerHeight
+    );
+    const screenshotPngDataUrl = imageBitmapToPngDataUrl(screenBitmap);
+    for (let idx = 0; idx < interactiveElements.length; idx++) {
+      const element = interactiveElements[idx];
+      element.highlightIndex = idx + 1;
+      element.xPath = getXPath(element.element);
     }
     const domRepresentation = [];
     const getTextBetween = (node, nextNode) => {
@@ -438,7 +393,8 @@ export const buildDomViewJs = `(() => {
     }
     return {
       elements: interactiveElements,
-      domState: domRepresentation.join("\\n")
+      domState: domRepresentation.join("\\n"),
+      screenshot: screenshotPngDataUrl
     };
   };
   return buildDomView();

@@ -13,19 +13,7 @@ export const getDom = async (page: Page): Promise<DOMState | null> => {
   return {
     elements: result.elements,
     domState: result.domState,
+    screenshot: result.screenshot,
     idxToXPath,
   };
-};
-
-export const removeHighlight = async (page: Page) => {
-  try {
-    await page.evaluate(() => {
-      const container = document.getElementById("hb-highlight-container");
-      if (container) {
-        container.remove();
-      }
-    });
-  } catch (error) {
-    console.error("Error removing highlight", error);
-  }
 };

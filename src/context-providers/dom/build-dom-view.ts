@@ -1,27 +1,51 @@
 import { findInteractiveElements } from "./find-interactive-elements";
-import { highlightElem } from "./highlight";
+import { renderHighlightsOffscreen } from "./highlight";
 import { getXPath } from "./get-x-path";
 import { CONTEXT_ATTRIBUTES } from "./const";
 import { DOMStateRaw } from "./types";
 
+// Helper function to convert ImageBitmap to PNG Data URL
+const imageBitmapToPngDataUrl = (bitmap: ImageBitmap): string => {
+  try {
+    // Create an intermediate canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+
+    // Get context and draw the bitmap
+    const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+    ctx.drawImage(bitmap, 0, 0);
+
+    // Export as PNG Data URL
+    // Note: might want to add error handling for toDataURL
+    return canvas.toDataURL("image/png");
+  } finally {
+    // Close the bitmap to free up resources (important!)
+    bitmap.close();
+  }
+};
+
 export const buildDomView = (): DOMStateRaw => {
   const interactiveElements = findInteractiveElements();
-  let index = 1;
-  const container = document.getElementById("hb-highlight-container");
-  if (container) {
-    container.remove();
-  }
-  for (const element of interactiveElements) {
-    const success = highlightElem(element.element, index);
-    if (success) {
-      element.highlightIndex = index;
-      index++;
-    }
-  }
-  for (const element of interactiveElements) {
-    if (element.highlightIndex) {
-      element.xPath = getXPath(element.element);
-    }
+
+  // 1. Render highlights to an ImageBitmap
+  const screenBitmap = renderHighlightsOffscreen(
+    interactiveElements.map((element, index) => ({
+      element: element.element,
+      index: index + 1, // index range from 1 -> index
+      parentIframe: element.iframe ?? null,
+    })),
+    window.innerWidth,
+    window.innerHeight
+  );
+
+  // 2. Convert the ImageBitmap to a PNG Data URL
+  const screenshotPngDataUrl = imageBitmapToPngDataUrl(screenBitmap);
+
+  for (let idx = 0; idx < interactiveElements.length; idx++) {
+    const element = interactiveElements[idx];
+    element.highlightIndex = idx + 1; // index range from 1 -> index
+    element.xPath = getXPath(element.element);
   }
 
   const domRepresentation: string[] = [];
@@ -68,5 +92,6 @@ export const buildDomView = (): DOMStateRaw => {
   return {
     elements: interactiveElements,
     domState: domRepresentation.join("\n"),
+    screenshot: screenshotPngDataUrl,
   };
 };

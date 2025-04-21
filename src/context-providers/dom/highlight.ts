@@ -1,36 +1,28 @@
-import { HIGHLIGHT_CONTAINER_ID } from "./const";
+// --- Interfaces ---
+
+interface HighlightInfo {
+  element: HTMLElement;
+  index: number;
+  parentIframe: HTMLElement | null;
+}
 
 interface IframeOffset {
   x: number;
   y: number;
 }
 
+// --- Helper Functions (Stateless) ---
+
 const isElementPartiallyVisible = (rect: DOMRect): boolean => {
+  // Check if the element is within the viewport, considering potential zero dimensions
   return (
-    rect.top < window.innerHeight &&
-    rect.bottom > 0 &&
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.top < window.innerHeight && // These checks are relative to the current viewport
+    rect.bottom > 0 && // where the rect was calculated.
     rect.left < window.innerWidth &&
     rect.right > 0
   );
-};
-
-const getHighlightContainer = (): HTMLDivElement => {
-  let container = document.getElementById(
-    HIGHLIGHT_CONTAINER_ID
-  ) as HTMLDivElement;
-  if (!container) {
-    container = document.createElement("div");
-    container.id = HIGHLIGHT_CONTAINER_ID;
-    container.style.position = "fixed";
-    container.style.pointerEvents = "none";
-    container.style.top = "0";
-    container.style.left = "0";
-    container.style.width = "100%";
-    container.style.height = "100%";
-    container.style.zIndex = "2147483647";
-    document.body.appendChild(container);
-  }
-  return container;
 };
 
 const getHighlightColor = (
@@ -56,202 +48,175 @@ const getHighlightColor = (
   return { baseColor, backgroundColor };
 };
 
-const createHighlightOverlay = (
-  rect: DOMRect,
-  iframeOffset: IframeOffset,
-  colors: { baseColor: string; backgroundColor: string }
-): HTMLDivElement => {
-  const overlay = document.createElement("div");
-  overlay.style.position = "fixed";
-  overlay.style.border = `2px solid ${colors.baseColor}`;
-  overlay.style.backgroundColor = colors.backgroundColor;
-  overlay.style.pointerEvents = "none";
-  overlay.style.boxSizing = "border-box";
-
-  const top = rect.top + iframeOffset.y;
-  const left = rect.left + iframeOffset.x;
-
-  overlay.style.top = `${top}px`;
-  overlay.style.left = `${left}px`;
-  overlay.style.width = `${rect.width}px`;
-  overlay.style.height = `${rect.height}px`;
-
-  return overlay;
-};
-
+// Calculates label position relative to the canvas (0,0 top-left)
 const calculateLabelPosition = (
   rect: DOMRect,
   iframeOffset: IframeOffset,
   labelWidth: number,
-  labelHeight: number
+  labelHeight: number,
+  canvasWidth: number, // Pass canvas dims for bounds checking
+  canvasHeight: number
 ): { top: number; left: number } => {
   const top = rect.top + iframeOffset.y;
   const left = rect.left + iframeOffset.x;
 
-  // Try positions in order: top-right, bottom-right, bottom-left, top-left
+  // Default: top-right corner relative to element
   let labelTop = top - labelHeight;
   let labelLeft = left + rect.width - labelWidth;
 
-  // If not enough space in top-right, try bottom-right
-  if (labelTop < 0 || labelLeft + labelWidth > window.innerWidth) {
-    labelTop = top + rect.height;
-    labelLeft = left + rect.width - labelWidth;
-  }
+  // Constraints to keep label within *canvas* bounds
+  labelTop = Math.min(labelTop, canvasHeight - labelHeight);
+  labelLeft = Math.min(labelLeft, canvasWidth - labelWidth);
 
-  // If not enough space in bottom-right, try bottom-left
-  if (labelTop + labelHeight > window.innerHeight) {
-    labelTop = top + rect.height;
-    labelLeft = left;
-  }
+  // Basic overlap check (can be improved) - position relative to element
+  const elementBottom = top + rect.height;
+  const elementRight = left + rect.width;
 
-  // If not enough space in bottom-left, try top-left
-  if (labelLeft < 0) {
-    labelTop = top - labelHeight;
-    labelLeft = left;
-  }
+  // If the calculated top-left of the label is inside the element's box
+  if (
+    labelTop + labelHeight > top &&
+    labelTop < elementBottom &&
+    labelLeft + labelWidth > left &&
+    labelLeft < elementRight
+  ) {
+    // Try bottom-right corner relative to element
+    labelTop = elementBottom;
+    labelLeft = elementRight - labelWidth;
 
-  // Keep label within viewport bounds
-  labelTop = Math.max(0, Math.min(labelTop, window.innerHeight - labelHeight));
-  labelLeft = Math.max(0, Math.min(labelLeft, window.innerWidth - labelWidth));
+    // Re-apply constraints
+    labelTop = Math.min(labelTop, canvasHeight - labelHeight);
+    labelLeft = Math.min(labelLeft, canvasWidth - labelWidth);
+  }
 
   return { top: labelTop, left: labelLeft };
 };
 
-const createHighlightLabel = (
-  index: number,
-  rect: DOMRect,
-  iframeOffset: IframeOffset,
-  baseColor: string
-): HTMLDivElement => {
-  const label = document.createElement("div");
-  label.style.position = "fixed";
-  label.style.background = baseColor;
-  label.style.color = "white";
-  label.style.borderRadius = "4px";
-  label.style.padding = "2px 4px";
-  label.style.display = "flex";
-  label.style.alignItems = "center";
-  label.style.justifyContent = "center";
-  label.style.fontSize = `${Math.min(12, Math.max(8, rect.height / 2))}px`;
-  label.style.lineHeight = "1";
-  label.style.whiteSpace = "nowrap";
-  label.textContent = index.toString();
+// --- Public API ---
 
-  // Add the label to DOM temporarily to get its actual dimensions
-  label.style.visibility = "hidden";
-  document.body.appendChild(label);
-  const labelRect = label.getBoundingClientRect();
-  document.body.removeChild(label);
-  label.style.visibility = "visible";
+/**
+ * Renders highlights for the given elements onto an OffscreenCanvas
+ * and returns an ImageBitmap.
+ *
+ * @param highlightInfos Array of objects describing elements to highlight.
+ * @param width The desired width of the canvas (e.g., window.innerWidth).
+ * @param height The desired height of the canvas (e.g., window.innerHeight).
+ * @returns A Promise resolving to an ImageBitmap containing the highlights.
+ */
+export function renderHighlightsOffscreen(
+  highlightInfos: HighlightInfo[],
+  width: number,
+  height: number
+): ImageBitmap {
+  if (width <= 0 || height <= 0) {
+    console.warn(
+      "Attempted to render highlights on zero-sized canvas. Will default to innerWidth x innerHeight"
+    );
+    // Return an empty bitmap maybe? Or null.
+    const emptyCanvas = new OffscreenCanvas(
+      window.innerWidth,
+      window.innerHeight
+    );
+    return emptyCanvas.transferToImageBitmap();
+  }
 
-  const position = calculateLabelPosition(
-    rect,
-    iframeOffset,
-    labelRect.width,
-    labelRect.height
-  );
+  const dpr = window.devicePixelRatio || 1;
+  const canvasWidth = width * dpr;
+  const canvasHeight = height * dpr;
+  const offscreenCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
+  const ctx = offscreenCanvas.getContext("2d", {
+    alpha: true,
+  }) as OffscreenCanvasRenderingContext2D; // Ensure alpha for transparency
 
-  label.style.top = `${position.top}px`;
-  label.style.left = `${position.left}px`;
+  // Scale context for DPI awareness. All drawing coords should be in logical pixels.
+  ctx.scale(dpr, dpr);
 
-  return label;
-};
-
-const createPositionUpdateHandler = (
-  element: HTMLElement,
-  overlay: HTMLDivElement,
-  label: HTMLDivElement,
-  parentIframe: HTMLElement | null
-) => {
-  return () => {
-    const newRect = element.getBoundingClientRect();
-    let newIframeOffset = { x: 0, y: 0 };
-
-    if (parentIframe) {
-      const iframeRect = parentIframe.getBoundingClientRect();
-      newIframeOffset.x = iframeRect.left;
-      newIframeOffset.y = iframeRect.top;
-    }
-
-    const newTop = newRect.top + newIframeOffset.y;
-    const newLeft = newRect.left + newIframeOffset.x;
-
-    // Update visibility based on element's position
-    const isVisible = isElementPartiallyVisible(newRect);
-    overlay.style.display = isVisible ? "block" : "none";
-    label.style.display = isVisible ? "flex" : "none";
-
-    if (isVisible) {
-      overlay.style.top = `${newTop}px`;
-      overlay.style.left = `${newLeft}px`;
-      overlay.style.width = `${newRect.width}px`;
-      overlay.style.height = `${newRect.height}px`;
-
-      // Update label position
-      const newLabelRect = label.getBoundingClientRect();
-      const position = calculateLabelPosition(
-        newRect,
-        newIframeOffset,
-        newLabelRect.width,
-        newLabelRect.height
-      );
-
-      label.style.top = `${position.top}px`;
-      label.style.left = `${position.left}px`;
-    }
-  };
-};
-
-export const highlightElem = (
-  element: HTMLElement,
-  index: number,
-  parentIframe: HTMLElement | null = null
-): boolean => {
-  if (!element) return false;
+  // Clear canvas (important for transparency)
+  ctx.clearRect(0, 0, width, height);
 
   try {
-    const container = getHighlightContainer();
-    const rect = element.getBoundingClientRect();
-    if (!rect) return false;
+    highlightInfos.forEach(({ element, index, parentIframe }) => {
+      // Element might be stale, ensure it's still in the DOM
+      if (!document.body.contains(element)) {
+        return; // Skip elements not in DOM
+      }
 
-    const iframeOffset = { x: 0, y: 0 };
-    if (parentIframe) {
-      const iframeRect = parentIframe.getBoundingClientRect();
-      iframeOffset.x = iframeRect.left;
-      iframeOffset.y = iframeRect.top;
-    }
+      const rect = element.getBoundingClientRect();
+      // Skip elements that are not visible or have no dimensions
+      if (
+        !rect ||
+        rect.width === 0 ||
+        rect.height === 0 ||
+        !isElementPartiallyVisible(rect)
+      ) {
+        return;
+      }
 
-    const colors = getHighlightColor(index);
-    const overlay = createHighlightOverlay(rect, iframeOffset, colors);
-    const label = createHighlightLabel(
-      index,
-      rect,
-      iframeOffset,
-      colors.baseColor
-    );
+      const iframeOffset: IframeOffset = { x: 0, y: 0 };
+      if (parentIframe && document.body.contains(parentIframe)) {
+        const iframeRect = parentIframe.getBoundingClientRect();
+        iframeOffset.x = iframeRect.left;
+        iframeOffset.y = iframeRect.top;
+      }
 
-    // Do initial visibility check
-    const isVisible = isElementPartiallyVisible(rect);
-    overlay.style.display = isVisible ? "block" : "none";
-    label.style.display = isVisible ? "flex" : "none";
+      const colors = getHighlightColor(index);
+      const drawTop = rect.top + iframeOffset.y;
+      const drawLeft = rect.left + iframeOffset.x;
 
-    // Add to container
-    container.appendChild(overlay);
-    container.appendChild(label);
+      // --- Draw overlay rectangle ---
+      ctx.fillStyle = colors.backgroundColor;
+      ctx.fillRect(drawLeft, drawTop, rect.width, rect.height);
+      ctx.strokeStyle = colors.baseColor;
+      ctx.lineWidth = 1; // Use 1 logical pixel for crispness after scaling
+      ctx.strokeRect(drawLeft, drawTop, rect.width, rect.height);
 
-    // Set up position updates
-    const updatePositions = createPositionUpdateHandler(
-      element,
-      overlay,
-      label,
-      parentIframe
-    );
-    window.addEventListener("scroll", updatePositions);
-    window.addEventListener("resize", updatePositions);
+      // --- Draw label ---
+      const labelText = index.toString();
+      // Font size calculation needs to consider DPR if you want physical pixel size
+      // Or keep it simple with logical pixels. Let's use logical pixels.
+      const fontSize = Math.min(12, Math.max(9, rect.height * 0.3));
+      ctx.font = `bold ${fontSize}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
 
-    return true;
+      // Estimate label dimensions in logical pixels
+      const textMetrics = ctx.measureText(labelText);
+      const labelPadding = 4;
+      const labelHeight = fontSize + labelPadding;
+      // Ensure width is at least height for near-square background
+      const labelWidth = Math.max(
+        labelHeight,
+        textMetrics.width + labelPadding * 2
+      );
+
+      // Calculate position relative to the canvas (using logical pixels)
+      const labelPos = calculateLabelPosition(
+        rect,
+        iframeOffset,
+        labelWidth,
+        labelHeight,
+        width,
+        height
+      );
+
+      // Draw label background (logical pixels)
+      ctx.fillStyle = colors.baseColor;
+      ctx.fillRect(labelPos.left, labelPos.top, labelWidth, labelHeight);
+
+      // Draw label text (logical pixels)
+      ctx.fillStyle = "white";
+      ctx.fillText(
+        labelText,
+        labelPos.left + labelWidth / 2,
+        labelPos.top + labelHeight / 2
+      );
+    });
+
+    // Transfer the bitmap
+    return offscreenCanvas.transferToImageBitmap();
   } catch (error) {
-    console.error("Error highlighting element", error);
-    return false;
+    console.error("Error drawing highlights onto OffscreenCanvas:", error);
+    // In case of error, maybe return an empty bitmap or null
+    const emptyCanvas = new OffscreenCanvas(1, 1);
+    return emptyCanvas.transferToImageBitmap(); // Or return null
   }
-};
+}

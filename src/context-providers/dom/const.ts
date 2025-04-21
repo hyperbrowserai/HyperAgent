@@ -1,5 +1,3 @@
-export const HIGHLIGHT_CONTAINER_ID = "hb-highlight-container";
-
 export const INTERACTIVE_ELEMENTS = new Set([
   "a",
   "input",

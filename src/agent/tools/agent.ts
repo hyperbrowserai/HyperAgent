@@ -7,7 +7,7 @@ import {
   ActionType,
   AgentActionDefinition,
 } from "@/types";
-import { getDom, removeHighlight } from "@/context-providers/dom";
+import { getDom } from "@/context-providers/dom";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 
@@ -28,13 +28,15 @@ import { DOMState } from "@/context-providers/dom/types";
 import { Page } from "playwright";
 import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
+import sharp from "sharp";
 
-const getScreenshot = async (page: Page): Promise<string> => {
-  // TODO maybe cache cdp sessions?
-  const cdpSession = await page.context().newCDPSession(page);
-  const screenshot = await cdpSession.send("Page.captureScreenshot");
-  await cdpSession.detach();
-  return screenshot.data;
+const compositeScreenshot = async (page: Page, overlay: string) => {
+  const screenshot = await page.screenshot();
+  const responseBuffer = await sharp(screenshot)
+    .composite([{ input: Buffer.from(overlay, "base64") }])
+    .png()
+    .toBuffer();
+  return responseBuffer.toString("base64");
 };
 
 const getActionSchema = (actions: Array<AgentActionDefinition>) => {
@@ -145,16 +147,22 @@ export const runAgentTask = async (
       await sleep(1000);
       continue;
     }
-    const screenshot = await getScreenshot(page);
+
+    const trimmedScreenshot = await compositeScreenshot(
+      page,
+      domState.screenshot.startsWith("data:image/png;base64,")
+        ? domState.screenshot.slice("data:image/png;base64,".length)
+        : domState.screenshot
+    );
 
     // Store Dom State for Debugging
     if (ctx.debug) {
       fs.mkdirSync(debugDir, { recursive: true });
       fs.writeFileSync(`${debugStepDir}/elems.txt`, domState.domState);
-      if (screenshot) {
+      if (trimmedScreenshot) {
         fs.writeFileSync(
           `${debugStepDir}/screenshot.png`,
-          Buffer.from(screenshot, "base64")
+          Buffer.from(trimmedScreenshot, "base64")
         );
       }
     }
@@ -166,7 +174,7 @@ export const runAgentTask = async (
       taskState.task,
       page,
       domState,
-      screenshot
+      trimmedScreenshot as string
     );
 
     // Store Agent Step Messages for Debugging
@@ -192,9 +200,6 @@ export const runAgentTask = async (
     if (endTaskStatuses.has(taskState.status)) {
       break;
     }
-
-    // Remove Highlights
-    await removeHighlight(page);
 
     // Run Actions
     const agentStepActions = agentOutput.actions;
