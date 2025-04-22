@@ -135,7 +135,10 @@
           iframe: rootInfo.iframe,
           shadowHost: rootInfo.shadowHost,
           rect: element.getBoundingClientRect(),
-          interactiveReason: reason
+          interactiveReason: reason,
+          isUnderShadowRoot: element.getRootNode().nodeType === Node.DOCUMENT_FRAGMENT_NODE,
+          cssPath: "",
+          xpath: ""
         });
       }
     };
@@ -377,6 +380,46 @@
     }
   };
 
+  // src/context-providers/dom/get-x-path.ts
+  var getXPath = (element) => {
+    const segments = [];
+    let currentElement = element;
+    while (currentElement && currentElement.nodeType === Node.ELEMENT_NODE) {
+      if (currentElement.parentNode instanceof ShadowRoot || currentElement.parentNode instanceof HTMLIFrameElement) {
+        break;
+      }
+      let index = 0;
+      let hasSiblings = false;
+      let sibling = currentElement.previousSibling;
+      while (sibling) {
+        if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === currentElement.nodeName) {
+          index++;
+          hasSiblings = true;
+        }
+        sibling = sibling.previousSibling;
+      }
+      if (!hasSiblings) {
+        sibling = currentElement.nextSibling;
+        while (sibling) {
+          if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === currentElement.nodeName) {
+            hasSiblings = true;
+            break;
+          }
+          sibling = sibling.nextSibling;
+        }
+      }
+      const tagName = currentElement.nodeName.toLowerCase();
+      const xpathIndex = hasSiblings ? `[${index + 1}]` : "";
+      if (currentElement.id && currentElement.id.toString().trim() !== "") {
+        segments.unshift(`${tagName}[@id="${currentElement.id}"]`);
+      } else {
+        segments.unshift(`${tagName}${xpathIndex}`);
+      }
+      currentElement = currentElement.parentElement;
+    }
+    return segments.join("/");
+  };
+
   // src/context-providers/dom/build-dom-view.ts
   var imageBitmapToPngDataUrl = (bitmap) => {
     try {
@@ -407,6 +450,7 @@
       const element = interactiveElements[idx];
       element.highlightIndex = idx + 1;
       element.cssPath = getCSSPath(element.element);
+      element.xpath = getXPath(element.element);
     }
     const domRepresentation = [];
     const getTextBetween = (node, nextNode) => {

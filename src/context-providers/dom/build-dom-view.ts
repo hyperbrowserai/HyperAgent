@@ -3,6 +3,7 @@ import { renderHighlightsOffscreen } from "./highlight";
 import { getCSSPath } from "./get-css-path";
 import { CONTEXT_ATTRIBUTES } from "./const";
 import { DOMStateRaw } from "./types";
+import { getXPath } from "./get-x-path";
 
 // Helper function to convert ImageBitmap to PNG Data URL
 const imageBitmapToPngDataUrl = (bitmap: ImageBitmap): string => {
@@ -46,6 +47,7 @@ export const buildDomView = (): DOMStateRaw => {
     const element = interactiveElements[idx];
     element.highlightIndex = idx + 1; // index range from 1 -> index
     element.cssPath = getCSSPath(element.element);
+    element.xpath = getXPath(element.element);
   }
 
   const domRepresentation: string[] = [];

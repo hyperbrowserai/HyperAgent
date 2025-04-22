@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Locator } from "playwright";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { sleep } from "@/utils";
+import { getLocator } from "./utils";
 
 const ClickElementAction = z
   .object({
@@ -22,11 +23,11 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     action: ClickElementActionType
   ): Promise<ActionOutput> {
     const { index } = action;
-    const cssPath = ctx.domState.idxToCSSPath.get(index);
-    if (!cssPath) {
+    const locator = getLocator(ctx, index);
+    if (!locator) {
       return { success: false, message: "Element not found" };
     }
-    const locator = ctx.page.locator(cssPath);
+
     const exists = (await locator.count()) > 0;
     if (!exists) {
       return { success: false, message: "Element not found on page" };

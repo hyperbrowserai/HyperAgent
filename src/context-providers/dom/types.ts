@@ -2,10 +2,12 @@ export interface InteractiveElement {
   element: HTMLElement;
   iframe?: HTMLIFrameElement;
   shadowHost?: HTMLElement;
+  isUnderShadowRoot: boolean;
   rect: DOMRect;
   interactiveReason?: string;
   highlightIndex?: number;
-  cssPath?: string;
+  cssPath: string;
+  xpath: string;
 }
 
 export interface DOMStateRaw {
@@ -15,8 +17,7 @@ export interface DOMStateRaw {
 }
 
 export interface DOMState {
-  elements: InteractiveElement[];
+  elements: Map<number, InteractiveElement>;
   domState: string;
   screenshot: string;
-  idxToCSSPath: Map<number, string>;
 }

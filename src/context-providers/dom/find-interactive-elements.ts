@@ -35,6 +35,10 @@ export const findInteractiveElements = (): InteractiveElement[] => {
         shadowHost: rootInfo.shadowHost,
         rect: element.getBoundingClientRect(),
         interactiveReason: reason,
+        isUnderShadowRoot:
+          element.getRootNode().nodeType === Node.DOCUMENT_FRAGMENT_NODE,
+        cssPath: "",
+        xpath: "",
       });
     }
   };

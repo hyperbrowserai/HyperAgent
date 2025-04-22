@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ActionContext, AgentActionDefinition } from "@/types";
+import { getLocator } from "./utils";
 
 export const SelectOptionAction = z
   .object({
@@ -17,11 +18,11 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   actionParams: SelectOptionAction,
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     const { index, text } = action;
-    const cssPath = ctx.domState.idxToCSSPath.get(index);
-    if (!cssPath) {
+    const locator = getLocator(ctx, index);
+    if (!locator) {
       return { success: false, message: "Element not found" };
     }
-    await ctx.page.locator(cssPath).selectOption({ label: text });
+    await locator.selectOption({ label: text });
     return {
       success: true,
       message: `Selected option "${text}" from element with index ${index}`,

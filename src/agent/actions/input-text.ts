@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ActionContext, AgentActionDefinition } from "@/types";
+import { getLocator } from "./utils";
 
 export const InputTextAction = z
   .object({
@@ -18,12 +19,10 @@ export const InputTextActionDefinition: AgentActionDefinition<InputTextActionTyp
     actionParams: InputTextAction,
     run: async (ctx: ActionContext, action) => {
       const { index, text } = action;
-      const cssPath = ctx.domState.idxToCSSPath.get(index);
-      if (!cssPath) {
+      const locator = getLocator(ctx, index);
+      if (!locator) {
         return { success: false, message: "Element not found" };
       }
-
-      const locator = ctx.page.locator(cssPath);
       await locator.fill(text, { timeout: 5_000 });
       return {
         success: true,
