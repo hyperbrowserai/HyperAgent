@@ -2,26 +2,11 @@
  * Escapes characters that have special meaning in CSS selectors.
  * Handles common cases like IDs and class names.
  *
- * Note: This is a simplified version. For full compliance, consider
- * using `CSS.escape()` if available in the target environment, or a more
- * comprehensive polyfill/library.
- *
  * @param value The string to escape (e.g., an ID or class name).
  * @returns The escaped string suitable for use in a CSS selector.
  */
 const escapeSelector = (value: string): string => {
-  // Escape characters with special meaning in CSS selectors.
-  // See: https://developer.mozilla.org/en-US/docs/Web/API/CSS/escape
-  // Final regex adjustment for character class escaping.
-  // Only \, ], and potentially ^ - need escaping inside [].
-  return value.replace(/["'`!#$%&()+,./:;<=>?@[\\\]^{|}~]/g, '\\$&' /* $& inserts the matched substring */)
-              // If the identifier starts with a digit (needs \\3 prefix and space)
-              .replace(/^\d/, '\\3$& ')
-              // If the identifier starts with -, followed by a digit (needs \\- prefix for -, \\3 for digit)
-              .replace(/^-\d/, '\\-\\3$& ')
-              // If the identifier starts with a single -, not followed by a digit (needs \\- prefix)
-              .replace(/^-$/, '\\-') // Handle single hyphen ID/class
-              .replace(/^-([^\d-])/, '\\-$1'); // Escape leading hyphen if not followed by digit or another hyphen
+  return CSS.escape(value);
 };
 
 /**
@@ -38,24 +23,20 @@ const getUniqueSegment = (element: HTMLElement): string => {
   // 1. Try ID
   if (element.id) {
     const idSelector = `#${escapeSelector(element.id)}`;
-    // Check if ID is unique within the entire document context *it belongs to* (doc or shadow)
-    // This is a simplification; true uniqueness check is expensive. Assume ID is unique enough for most cases.
-    // const root = element.getRootNode();
-    // if (root.querySelector(idSelector) === element) {
-    //   return tagName + idSelector; // More specific: tag#id
-    // }
-    // Let's just use the ID selector directly, as it's usually intended to be unique
-    return idSelector; // Use #id directly as it's stronger than tag#id
+    return idSelector;
   }
 
   // 2. Try unique combination of classes
-  const classes = Array.from(element.classList).map(escapeSelector).join('.');
+  const classes = Array.from(element.classList).map(escapeSelector).join(".");
   if (classes && parent) {
     const classSelector = `${tagName}.${classes}`;
     const siblingsWithSameClasses = Array.from(
       parent.querySelectorAll(`:scope > ${classSelector}`)
     );
-    if (siblingsWithSameClasses.length === 1 && siblingsWithSameClasses[0] === element) {
+    if (
+      siblingsWithSameClasses.length === 1 &&
+      siblingsWithSameClasses[0] === element
+    ) {
       return classSelector;
     }
   }
@@ -73,20 +54,18 @@ const getUniqueSegment = (element: HTMLElement): string => {
   // Only add :nth-of-type if there are other siblings of the same type
   let hasSameTypeSiblings = index > 1; // Already found preceding siblings
   if (!hasSameTypeSiblings && parent) {
-      sibling = element.nextElementSibling;
-       while(sibling) {
-           if (sibling.tagName === element.tagName) {
-               hasSameTypeSiblings = true;
-               break;
-           }
-           sibling = sibling.nextElementSibling;
-       }
+    sibling = element.nextElementSibling;
+    while (sibling) {
+      if (sibling.tagName === element.tagName) {
+        hasSameTypeSiblings = true;
+        break;
+      }
+      sibling = sibling.nextElementSibling;
+    }
   }
-
 
   return hasSameTypeSiblings ? `${tagName}:nth-of-type(${index})` : tagName;
 };
-
 
 /**
  * Calculates a CSS selector path for an element relative to a boundary node (Document or ShadowRoot).
@@ -98,25 +77,33 @@ const getUniqueSegment = (element: HTMLElement): string => {
  */
 const getRelativeCSSPath = (element: HTMLElement, boundary: Node): string => {
   if (element === boundary) {
-    return ''; // Should not happen if called correctly, but return empty if it does
+    return ""; // Should not happen if called correctly, but return empty if it does
   }
 
   const segments: string[] = [];
   let currentElement: HTMLElement | null = element;
 
-  while (currentElement && currentElement !== boundary && currentElement.nodeType === Node.ELEMENT_NODE) {
+  while (
+    currentElement &&
+    currentElement !== boundary &&
+    currentElement.nodeType === Node.ELEMENT_NODE
+  ) {
     const segment = getUniqueSegment(currentElement);
     segments.unshift(segment);
 
     const parent = currentElement.parentElement;
-     // Stop if parent is null, not an element, or the boundary itself
-     if (!parent || parent === boundary || parent.nodeType !== Node.ELEMENT_NODE) {
-       break;
-     }
+    // Stop if parent is null, not an element, or the boundary itself
+    if (
+      !parent ||
+      parent === boundary ||
+      parent.nodeType !== Node.ELEMENT_NODE
+    ) {
+      break;
+    }
     currentElement = parent as HTMLElement;
   }
 
-  return segments.join(' > ');
+  return segments.join(" > ");
 };
 
 /**
@@ -143,35 +130,42 @@ export const getCSSPath = (element: HTMLElement | null): string => {
     // Element is inside a shadow DOM
     const host = root.host as HTMLElement;
     if (!host) {
-       console.warn("ShadowRoot found without a host element:", root);
-       // Cannot generate a path from the document root if the host is unknown
-       return ''; // Or potentially just the relative path within the shadow root? Unreliable.
+      console.warn("ShadowRoot found without a host element:", root);
+      // Cannot generate a path from the document root if the host is unknown
+      return ""; // Or potentially just the relative path within the shadow root? Unreliable.
     }
     const hostPath = getCSSPath(host); // Recursive call to get path to the host
     const relativePath = getRelativeCSSPath(element, root); // Path within the shadow root
 
     if (!hostPath) {
-        console.warn("Could not determine CSS path for host element:", host);
-        return ''; // Cannot construct full path
+      console.warn("Could not determine CSS path for host element:", host);
+      return ""; // Cannot construct full path
     }
     if (!relativePath) {
-        console.warn("Could not determine relative CSS path within ShadowRoot for:", element);
-        // Element might be the direct child/root of the shadow DOM, or path generation failed.
-        // Playwright needs a selector after >>, maybe ':host' or '*' or just return hostPath?
-        // Returning just hostPath might select the host instead of the shadow content.
-        // Let's assume relativePath should usually exist. If not, path is likely invalid.
-        return '';
+      console.warn(
+        "Could not determine relative CSS path within ShadowRoot for:",
+        element
+      );
+      // Element might be the direct child/root of the shadow DOM, or path generation failed.
+      // Playwright needs a selector after >>, maybe ':host' or '*' or just return hostPath?
+      // Returning just hostPath might select the host instead of the shadow content.
+      // Let's assume relativePath should usually exist. If not, path is likely invalid.
+      return "";
     }
 
     // Playwright syntax for piercing shadow DOM
     return `${hostPath} >> ${relativePath}`;
-
   } else if (root instanceof Document) {
     // Element is in the main document or an iframe document
     return getRelativeCSSPath(element, root);
   } else {
-     console.warn("Element root is neither Document nor ShadowRoot:", root, "for element:", element);
-     // Fallback: Try to compute path relative to its own root node anyway
-     return getRelativeCSSPath(element, root);
+    console.warn(
+      "Element root is neither Document nor ShadowRoot:",
+      root,
+      "for element:",
+      element
+    );
+    // Fallback: Try to compute path relative to its own root node anyway
+    return getRelativeCSSPath(element, root);
   }
-}; 
+};

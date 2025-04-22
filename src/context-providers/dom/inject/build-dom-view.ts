@@ -280,11 +280,7 @@ export const buildDomViewJs = `(() => {
 
   // src/context-providers/dom/get-css-path.ts
   var escapeSelector = (value) => {
-    return value.replace(
-      /["'\`!#$%&()+,./:;<=>?@[\\\\\\]^{|}~]/g,
-      "\\\\$&"
-      /* $& inserts the matched substring */
-    ).replace(/^\\d/, "\\\\3$& ").replace(/^-\\d/, "\\\\-\\\\3$& ").replace(/^-$/, "\\\\-").replace(/^-([^\\d-])/, "\\\\-$1");
+    return CSS.escape(value);
   };
   var getUniqueSegment = (element) => {
     const tagName = element.tagName.toLowerCase();
@@ -361,14 +357,22 @@ export const buildDomViewJs = `(() => {
         return "";
       }
       if (!relativePath) {
-        console.warn("Could not determine relative CSS path within ShadowRoot for:", element);
+        console.warn(
+          "Could not determine relative CSS path within ShadowRoot for:",
+          element
+        );
         return "";
       }
       return \`\${hostPath} >> \${relativePath}\`;
     } else if (root instanceof Document) {
       return getRelativeCSSPath(element, root);
     } else {
-      console.warn("Element root is neither Document nor ShadowRoot:", root, "for element:", element);
+      console.warn(
+        "Element root is neither Document nor ShadowRoot:",
+        root,
+        "for element:",
+        element
+      );
       return getRelativeCSSPath(element, root);
     }
   };
