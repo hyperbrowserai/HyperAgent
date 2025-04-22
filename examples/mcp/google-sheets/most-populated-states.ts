@@ -50,7 +50,7 @@
  * ## Running the Example
  *
  * ```
- * yarn ts-node tsconfig-paths/register examples/mcp/google-sheets/most-populated-states.ts <your-mcp-url>
+ * yarn ts-node examples/mcp/google-sheets/most-populated-states.ts <your-mcp-url>
  * ```
  *
  * ## Example Output
@@ -120,7 +120,7 @@ async function run(mcpUrl: string) {
         console.dir(agentOutput, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");
       },
-      onStep: (step) => {
+      onStep: async (step) => {
         console.log("\n" + chalk.cyan.bold(`===== STEP ${step.idx} =====`));
         console.dir(step, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");

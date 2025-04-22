@@ -203,7 +203,7 @@ async function runEvalHelper(
       logger.logObject(agentOutput);
       logger.log("===============\n");
     },
-    onStep: (step) => {
+    onStep: async (step) => {
       logger.log(`\n===== STEP ${step.idx} =====`);
       logger.logObject(step);
       logger.log("===============\n");

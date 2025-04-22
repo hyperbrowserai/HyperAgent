@@ -87,7 +87,7 @@ program
 
       process.stdin.setRawMode(true);
 
-      const onStep = (params: AgentStep) => {
+      const onStep = async (params: AgentStep) => {
         const actionsList = zipWith(
           params.actionOutputs,
           params.agentOutput.actions,

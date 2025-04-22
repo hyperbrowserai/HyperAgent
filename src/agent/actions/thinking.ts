@@ -22,7 +22,7 @@ export const ThinkingActionDefinition: AgentActionDefinition = {
     const { thought } = action;
     return {
       success: true,
-      message: `A simple thought process aobut your next steps. You thought about: ${thought}`,
+      message: `A simple thought process about your next steps. You thought about: ${thought}`,
     };
   },
   pprintAction: function(params: ThinkingActionType): string {

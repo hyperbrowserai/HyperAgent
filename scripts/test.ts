@@ -17,7 +17,7 @@ const agent = new HyperAgent({
         console.dir(agentOutput, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");
       },
-      onStep: (step) => {
+      onStep: async (step) => {
         console.log("\n" + chalk.cyan.bold("===== STEP ====="));
         console.dir(step, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");

@@ -233,7 +233,7 @@ export const runAgentTask = async (
       actionOutputs,
     };
     taskState.steps.push(step);
-    params?.onStep?.(step);
+    await params?.onStep?.(step);
     currStep = currStep + 1;
 
     if (ctx.debug) {
@@ -255,6 +255,6 @@ export const runAgentTask = async (
       JSON.stringify(taskOutput, null, 2)
     );
   }
-  params?.onComplete?.(taskOutput);
+  await params?.onComplete?.(taskOutput);
   return taskOutput;
 };
