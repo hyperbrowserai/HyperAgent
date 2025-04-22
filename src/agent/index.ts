@@ -78,6 +78,37 @@ export class HyperAgent {
       this.context = await this.browser.newContext({
         viewport: null,
       });
+
+      // Inject script to track event listeners
+      await this.context.addInitScript(() => {
+        // TODO: Check this list of events
+        const interactiveEvents = new Set([
+          "click",
+          "mousedown",
+          "mouseup",
+          "keydown",
+          "keyup",
+          "keypress",
+          "submit",
+          "change",
+          "input",
+          "focus",
+          "blur",
+        ]); // Add more events as needed
+
+        const originalAddEventListener = Element.prototype.addEventListener;
+        Element.prototype.addEventListener = function (
+          type: string,
+          listener: EventListenerOrEventListenerObject,
+          options?: boolean | AddEventListenerOptions
+        ) {
+          if (interactiveEvents.has(type.toLowerCase())) {
+            this.setAttribute("data-has-interactive-listener", "true");
+          }
+          originalAddEventListener.call(this, type, listener, options);
+        };
+      });
+
       return this.browser;
     }
     return this.browser;

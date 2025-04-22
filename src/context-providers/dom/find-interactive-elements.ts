@@ -19,6 +19,12 @@ export const findInteractiveElements = (): InteractiveElement[] => {
         continue;
       }
       processedElements.add(element);
+      if (element.shadowRoot) {
+        processRoot(element.shadowRoot, {
+          iframe: rootInfo.iframe,
+          shadowHost: element,
+        });
+      }
       const { isInteractive, reason } = isInteractiveElem(element);
       if (isIgnoredElem(element) || !isInteractive) {
         continue;
@@ -30,12 +36,6 @@ export const findInteractiveElements = (): InteractiveElement[] => {
         rect: element.getBoundingClientRect(),
         interactiveReason: reason,
       });
-      if (element.shadowRoot) {
-        processRoot(element.shadowRoot, {
-          iframe: rootInfo.iframe,
-          shadowHost: element,
-        });
-      }
     }
   };
 

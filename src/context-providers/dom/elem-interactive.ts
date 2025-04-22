@@ -1,6 +1,5 @@
 import {
   INTERACTIVE_ELEMENTS,
-  INTERACTIVE_EVENTS,
   INTERACTIVE_ROLES,
   INTERACTIVE_ARIA_PROPS,
   CLICK_ATTRIBUTES,
@@ -39,14 +38,11 @@ export const isInteractiveElem = (
     return { isInteractive: true, reason: "Has click handler" };
   }
 
-  // @ts-ignore
-  const listeners = window.getEventListeners?.(element) || {};
-  const hasClickListeners = Object.keys(listeners).some(
-    (type) => INTERACTIVE_EVENTS.has(type) && listeners[type]?.length > 0
-  );
+  // Check for the marker attribute set by the injected script
+  const hasInjectedListener = element.hasAttribute("data-has-interactive-listener");
 
-  if (hasClickListeners) {
-    return { isInteractive: true, reason: "Has interactive event listeners" };
+  if (hasInjectedListener) {
+    return { isInteractive: true, reason: "Has interactive event listener (tracked)" };
   }
 
   const hasAriaProps = INTERACTIVE_ARIA_PROPS.some((prop) =>

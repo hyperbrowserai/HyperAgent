@@ -33,14 +33,8 @@
     "spinbutton",
     "scrollbar",
     "menuitemcheckbox",
-    "menuitemradio"
-  ]);
-  var INTERACTIVE_EVENTS = /* @__PURE__ */ new Set([
-    "click",
-    "mousedown",
-    "mouseup",
-    "touchstart",
-    "touchend"
+    "menuitemradio",
+    "action"
   ]);
   var INTERACTIVE_ARIA_PROPS = [
     "aria-expanded",
@@ -82,12 +76,9 @@
     if (hasClickHandler) {
       return { isInteractive: true, reason: "Has click handler" };
     }
-    const listeners = window.getEventListeners?.(element) || {};
-    const hasClickListeners = Object.keys(listeners).some(
-      (type) => INTERACTIVE_EVENTS.has(type) && listeners[type]?.length > 0
-    );
-    if (hasClickListeners) {
-      return { isInteractive: true, reason: "Has interactive event listeners" };
+    const hasInjectedListener = element.hasAttribute("data-has-interactive-listener");
+    if (hasInjectedListener) {
+      return { isInteractive: true, reason: "Has interactive event listener (tracked)" };
     }
     const hasAriaProps = INTERACTIVE_ARIA_PROPS.some(
       (prop) => element.hasAttribute(prop)
@@ -129,6 +120,12 @@
           continue;
         }
         processedElements.add(element);
+        if (element.shadowRoot) {
+          processRoot(element.shadowRoot, {
+            iframe: rootInfo.iframe,
+            shadowHost: element
+          });
+        }
         const { isInteractive, reason } = isInteractiveElem(element);
         if (isIgnoredElem(element) || !isInteractive) {
           continue;
@@ -140,12 +137,6 @@
           rect: element.getBoundingClientRect(),
           interactiveReason: reason
         });
-        if (element.shadowRoot) {
-          processRoot(element.shadowRoot, {
-            iframe: rootInfo.iframe,
-            shadowHost: element
-          });
-        }
       }
     };
     processRoot(document);

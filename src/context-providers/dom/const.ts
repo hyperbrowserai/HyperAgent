@@ -33,6 +33,7 @@ export const INTERACTIVE_ROLES = new Set([
   "scrollbar",
   "menuitemcheckbox",
   "menuitemradio",
+  "action",
 ]);
 
 export const INTERACTIVE_EVENTS = new Set([
