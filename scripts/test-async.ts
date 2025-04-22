@@ -12,7 +12,7 @@ const agent = new HyperAgent({
   const control = await agent.executeTaskAsync(
     "Go to give me a summary of the second link on the show section of hacker news, be sure to actually go to it",
     {
-      onStep: async (step) => {
+      onStep: (step) => {
         console.log("\n" + chalk.cyan.bold("===== STEP ====="));
         console.dir(step, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");

@@ -86,7 +86,7 @@ async function run() {
         console.dir(agentOutput, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");
       },
-      onStep: async (step) => {
+      onStep: (step) => {
         console.log("\n" + chalk.cyan.bold(`===== STEP ${step.idx} =====`));
         console.dir(step, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");

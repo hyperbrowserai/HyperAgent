@@ -36,8 +36,8 @@ export interface TaskParams {
   maxSteps?: number;
   debugDir?: string;
   outputSchema?: z.AnyZodObject;
-  onStep?: (step: AgentStep) => Promise<void>;
-  onComplete?: (output: TaskOutput) => Promise<void>;
+  onStep?: (step: AgentStep) => Promise<void> | void;
+  onComplete?: (output: TaskOutput) => Promise<void> | void;
   debugOnAgentOutput?: (step: AgentOutput) => void;
 }
 
