@@ -278,44 +278,99 @@
     }
   }
 
-  // src/context-providers/dom/get-x-path.ts
-  var getXPath = (element) => {
+  // src/context-providers/dom/get-css-path.ts
+  var escapeSelector = (value) => {
+    return value.replace(
+      /["'`!#$%&()+,./:;<=>?@[\\\]^{|}~]/g,
+      "\\$&"
+      /* $& inserts the matched substring */
+    ).replace(/^\d/, "\\3$& ").replace(/^-\d/, "\\-\\3$& ").replace(/^-$/, "\\-").replace(/^-([^\d-])/, "\\-$1");
+  };
+  var getUniqueSegment = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    const parent = element.parentElement;
+    if (element.id) {
+      const idSelector = `#${escapeSelector(element.id)}`;
+      return idSelector;
+    }
+    const classes = Array.from(element.classList).map(escapeSelector).join(".");
+    if (classes && parent) {
+      const classSelector = `${tagName}.${classes}`;
+      const siblingsWithSameClasses = Array.from(
+        parent.querySelectorAll(`:scope > ${classSelector}`)
+      );
+      if (siblingsWithSameClasses.length === 1 && siblingsWithSameClasses[0] === element) {
+        return classSelector;
+      }
+    }
+    let index = 1;
+    let sibling = element.previousElementSibling;
+    while (sibling) {
+      if (sibling.tagName === element.tagName) {
+        index++;
+      }
+      sibling = sibling.previousElementSibling;
+    }
+    let hasSameTypeSiblings = index > 1;
+    if (!hasSameTypeSiblings && parent) {
+      sibling = element.nextElementSibling;
+      while (sibling) {
+        if (sibling.tagName === element.tagName) {
+          hasSameTypeSiblings = true;
+          break;
+        }
+        sibling = sibling.nextElementSibling;
+      }
+    }
+    return hasSameTypeSiblings ? `${tagName}:nth-of-type(${index})` : tagName;
+  };
+  var getRelativeCSSPath = (element, boundary) => {
+    if (element === boundary) {
+      return "";
+    }
     const segments = [];
     let currentElement = element;
-    while (currentElement && currentElement.nodeType === Node.ELEMENT_NODE) {
-      if (currentElement.parentNode instanceof ShadowRoot || currentElement.parentNode instanceof HTMLIFrameElement) {
+    while (currentElement && currentElement !== boundary && currentElement.nodeType === Node.ELEMENT_NODE) {
+      const segment = getUniqueSegment(currentElement);
+      segments.unshift(segment);
+      const parent = currentElement.parentElement;
+      if (!parent || parent === boundary || parent.nodeType !== Node.ELEMENT_NODE) {
         break;
       }
-      let index = 0;
-      let hasSiblings = false;
-      let sibling = currentElement.previousSibling;
-      while (sibling) {
-        if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === currentElement.nodeName) {
-          index++;
-          hasSiblings = true;
-        }
-        sibling = sibling.previousSibling;
-      }
-      if (!hasSiblings) {
-        sibling = currentElement.nextSibling;
-        while (sibling) {
-          if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === currentElement.nodeName) {
-            hasSiblings = true;
-            break;
-          }
-          sibling = sibling.nextSibling;
-        }
-      }
-      const tagName = currentElement.nodeName.toLowerCase();
-      const xpathIndex = hasSiblings ? `[${index + 1}]` : "";
-      if (currentElement.id && currentElement.id.toString().trim() !== "") {
-        segments.unshift(`${tagName}[@id="${currentElement.id}"]`);
-      } else {
-        segments.unshift(`${tagName}${xpathIndex}`);
-      }
-      currentElement = currentElement.parentElement;
+      currentElement = parent;
     }
-    return segments.join("/");
+    return segments.join(" > ");
+  };
+  var getCSSPath = (element) => {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+    if (!element.isConnected) {
+    }
+    const root = element.getRootNode();
+    if (root instanceof ShadowRoot) {
+      const host = root.host;
+      if (!host) {
+        console.warn("ShadowRoot found without a host element:", root);
+        return "";
+      }
+      const hostPath = getCSSPath(host);
+      const relativePath = getRelativeCSSPath(element, root);
+      if (!hostPath) {
+        console.warn("Could not determine CSS path for host element:", host);
+        return "";
+      }
+      if (!relativePath) {
+        console.warn("Could not determine relative CSS path within ShadowRoot for:", element);
+        return "";
+      }
+      return `${hostPath} >> ${relativePath}`;
+    } else if (root instanceof Document) {
+      return getRelativeCSSPath(element, root);
+    } else {
+      console.warn("Element root is neither Document nor ShadowRoot:", root, "for element:", element);
+      return getRelativeCSSPath(element, root);
+    }
   };
 
   // src/context-providers/dom/build-dom-view.ts
@@ -347,7 +402,7 @@
     for (let idx = 0; idx < interactiveElements.length; idx++) {
       const element = interactiveElements[idx];
       element.highlightIndex = idx + 1;
-      element.xPath = getXPath(element.element);
+      element.cssPath = getCSSPath(element.element);
     }
     const domRepresentation = [];
     const getTextBetween = (node, nextNode) => {

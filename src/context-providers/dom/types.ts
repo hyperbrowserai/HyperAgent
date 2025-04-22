@@ -5,7 +5,7 @@ export interface InteractiveElement {
   rect: DOMRect;
   interactiveReason?: string;
   highlightIndex?: number;
-  xPath?: string;
+  cssPath?: string;
 }
 
 export interface DOMStateRaw {
@@ -18,5 +18,5 @@ export interface DOMState {
   elements: InteractiveElement[];
   domState: string;
   screenshot: string;
-  idxToXPath: Map<number, string>;
+  idxToCSSPath: Map<number, string>;
 }

@@ -22,11 +22,11 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     action: ClickElementActionType
   ): Promise<ActionOutput> {
     const { index } = action;
-    const xpath = ctx.domState.idxToXPath.get(index);
-    if (!xpath) {
+    const cssPath = ctx.domState.idxToCSSPath.get(index);
+    if (!cssPath) {
       return { success: false, message: "Element not found" };
     }
-    const locator = ctx.page.locator(`xpath=${xpath}`);
+    const locator = ctx.page.locator(cssPath);
     const exists = (await locator.count()) > 0;
     if (!exists) {
       return { success: false, message: "Element not found on page" };

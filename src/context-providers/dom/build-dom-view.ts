@@ -1,6 +1,6 @@
 import { findInteractiveElements } from "./find-interactive-elements";
 import { renderHighlightsOffscreen } from "./highlight";
-import { getXPath } from "./get-x-path";
+import { getCSSPath } from "./get-css-path";
 import { CONTEXT_ATTRIBUTES } from "./const";
 import { DOMStateRaw } from "./types";
 
@@ -45,7 +45,7 @@ export const buildDomView = (): DOMStateRaw => {
   for (let idx = 0; idx < interactiveElements.length; idx++) {
     const element = interactiveElements[idx];
     element.highlightIndex = idx + 1; // index range from 1 -> index
-    element.xPath = getXPath(element.element);
+    element.cssPath = getCSSPath(element.element);
   }
 
   const domRepresentation: string[] = [];

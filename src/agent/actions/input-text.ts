@@ -18,11 +18,13 @@ export const InputTextActionDefinition: AgentActionDefinition<InputTextActionTyp
     actionParams: InputTextAction,
     run: async (ctx: ActionContext, action) => {
       const { index, text } = action;
-      const xpath = ctx.domState.idxToXPath.get(index);
-      if (!xpath) {
+      const cssPath = ctx.domState.idxToCSSPath.get(index);
+      if (!cssPath) {
         return { success: false, message: "Element not found" };
       }
-      await ctx.page.locator(`xpath=${xpath}`).fill(text);
+
+      const locator = ctx.page.locator(cssPath);
+      await locator.fill(text, { timeout: 5_000 });
       return {
         success: true,
         message: `Inputted text "${text}" into element with index ${index}`,

@@ -17,11 +17,11 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   actionParams: SelectOptionAction,
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     const { index, text } = action;
-    const xpath = ctx.domState.idxToXPath.get(index);
-    if (!xpath) {
+    const cssPath = ctx.domState.idxToCSSPath.get(index);
+    if (!cssPath) {
       return { success: false, message: "Element not found" };
     }
-    await ctx.page.locator(`xpath=${xpath}`).selectOption({ label: text });
+    await ctx.page.locator(cssPath).selectOption({ label: text });
     return {
       success: true,
       message: `Selected option "${text}" from element with index ${index}`,
