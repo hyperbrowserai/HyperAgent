@@ -1,23 +1,23 @@
 /**
  * # Hyperbrowser Provider Example
- * 
+ *
  * This example demonstrates how to configure and use HyperAgent with the Hyperbrowser
  * provider for web browsing tasks with proxy support.
- * 
+ *
  * ## What This Example Does
- * 
+ *
  * The agent performs a simple web search task that:
  * 1. Configures HyperAgent with Hyperbrowser-specific settings
  * 2. Enables proxy support for enhanced privacy and reliability
  * 3. Searches for and extracts specific information about a movie release date
- * 
+ *
  * ## Prerequisites
- * 
+ *
  * 1. Node.js environment
  * 2. OpenAI API key set in your .env file (OPENAI_API_KEY)
- * 
+ *
  * ## Running the Example
- * 
+ *
  * ```bash
  * yarn ts-node examples/browser-providers/hyperbrowser.ts
  * ```
@@ -37,6 +37,7 @@ async function runEval() {
   const agent = new HyperAgent({
     llm: llm,
     debug: true,
+    browserProvider: "Hyperbrowser",
     hyperbrowserConfig: {
       hyperbrowserSessionOptions: {
         useProxy: true,
