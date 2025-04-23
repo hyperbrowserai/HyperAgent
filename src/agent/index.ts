@@ -2,9 +2,14 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
 import { Browser, BrowserContext, Page } from "playwright";
 import { v4 as uuidv4 } from "uuid";
+import { SessionDetail } from "@hyperbrowser/sdk/types";
 
-import BrowserProvider from "@/types/browser-providers/types";
-import { HyperAgentConfig, MCPConfig, MCPServerConfig } from "@/types/config";
+import {
+  BrowserProviders,
+  HyperAgentConfig,
+  MCPConfig,
+  MCPServerConfig,
+} from "@/types/config";
 import {
   ActionType,
   AgentActionDefinition,
@@ -30,20 +35,23 @@ import { runAgentTask } from "./tools/agent";
 import { HyperPage } from "@/types/agent/types";
 import { z } from "zod";
 
-export class HyperAgent {
+export class HyperAgent<T extends BrowserProviders = "Local"> {
   private llm: BaseChatModel;
   private tasks: Record<string, TaskState> = {};
   private tokenLimit = 128000;
   private debug = false;
   private mcpClient: MCPClient | undefined;
-  private browserProvider: BrowserProvider;
+  private browserProvider: T extends "Hyperbrowser"
+    ? HyperbrowserProvider
+    : LocalBrowserProvider;
+  private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
   public currentPage: Page | null = null;
 
-  constructor(params: HyperAgentConfig = {}) {
+  constructor(params: HyperAgentConfig<T> = {}) {
     if (!params.llm) {
       if (process.env.OPENAI_API_KEY) {
         this.llm = new ChatOpenAI({
@@ -57,14 +65,16 @@ export class HyperAgent {
     } else {
       this.llm = params.llm;
     }
-    if (params.browserProvider === "Hyperbrowser") {
-      this.browserProvider = new HyperbrowserProvider({
-        ...(params.hyperbrowserConfig ?? {}),
-        debug: params.debug,
-      });
-    } else {
-      this.browserProvider = new LocalBrowserProvider(params.localConfig);
-    }
+    this.browserProviderType = (params.browserProvider ?? "Local") as T;
+
+    this.browserProvider = (
+      this.browserProviderType === "Hyperbrowser"
+        ? new HyperbrowserProvider({
+            ...(params.hyperbrowserConfig ?? {}),
+            debug: params.debug,
+          })
+        : new LocalBrowserProvider(params.localConfig)
+    ) as T extends "Hyperbrowser" ? HyperbrowserProvider : LocalBrowserProvider;
 
     if (params.customActions) {
       params.customActions.forEach(this.registerAction, this);
@@ -484,5 +494,11 @@ export class HyperAgent {
       return foundAction.pprintAction(action.params);
     }
     return "";
+  }
+
+  public getSession() {
+    return this.browserProvider.getSession() as T extends "Hyperbrowser"
+      ? SessionDetail
+      : Browser;
   }
 }

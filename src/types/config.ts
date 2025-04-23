@@ -54,10 +54,12 @@ export interface MCPConfig {
   servers: MCPServerConfig[];
 }
 
-export interface HyperAgentConfig {
+export type BrowserProviders = "Local" | "Hyperbrowser";
+
+export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
   customActions?: Array<AgentActionDefinition>;
 
-  browserProvider?: "Local" | "Hyperbrowser";
+  browserProvider?: T;
 
   debug?: boolean;
   llm?: BaseChatModel;

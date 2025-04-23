@@ -7,8 +7,9 @@ import {
 } from "@hyperbrowser/sdk/types";
 
 import BrowserProvider from "@/types/browser-providers/types";
+import { HyperagentError } from "@/agent/error";
 
-export class HyperbrowserProvider extends BrowserProvider {
+export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
   browserOptions: Omit<ConnectOverCDPOptions, "endpointURL"> | undefined;
   hyperbrowserSessionOptions: CreateSessionParams | undefined;
   hyperbrowserConfig: HyperbrowserConfig | undefined;
@@ -43,11 +44,17 @@ export class HyperbrowserProvider extends BrowserProvider {
     );
 
     if (this.debug) {
-      console.log(`Hyperbrowser session info:`, {
-        liveUrl: session.liveUrl,
-        sessionID: session.id,
-        infoUrl: session.sessionUrl,
-      });
+      console.log(
+        "\nHyperbrowser session info:",
+        {
+          liveUrl: session.liveUrl,
+          sessionID: session.id,
+          infoUrl: session.sessionUrl,
+        },
+        "\n"
+      );
+    } else {
+      console.log(`\nHyperbrowser live URL ${session.liveUrl}\n`);
     }
 
     return this.browser;
@@ -58,5 +65,12 @@ export class HyperbrowserProvider extends BrowserProvider {
     if (this.session) {
       await this.hbClient?.sessions.stop(this.session.id);
     }
+  }
+
+  public getSession(): SessionDetail {
+    if (!this.session) {
+      throw new HyperagentError("Local Browser not initialized yet");
+    }
+    return this.session;
   }
 }

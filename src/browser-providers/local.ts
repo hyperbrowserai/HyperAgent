@@ -1,9 +1,10 @@
 import { chromium, Browser, LaunchOptions } from "playwright";
 import BrowserProvider from "@/types/browser-providers/types";
+import { HyperagentError } from "@/agent/error";
 
-export class LocalBrowserProvider extends BrowserProvider {
+export class LocalBrowserProvider extends BrowserProvider<Browser> {
   options: Omit<Omit<LaunchOptions, "headless">, "channel"> | undefined;
-  browser: Browser | undefined;
+  session: Browser | undefined;
   constructor(options?: Omit<Omit<LaunchOptions, "headless">, "channel">) {
     super();
     this.options = options;
@@ -16,10 +17,16 @@ export class LocalBrowserProvider extends BrowserProvider {
       headless: false,
       args: ["--disable-blink-features=AutomationControlled", ...launchArgs],
     });
-    this.browser = browser;
-    return this.browser;
+    this.session = browser;
+    return this.session;
   }
   async close(): Promise<void> {
-    return await this.browser?.close();
+    return await this.session?.close();
+  }
+  public getSession(): Browser {
+    if (!this.session) {
+      throw new HyperagentError("Local Browser not initialized yet");
+    }
+    return this.session;
   }
 }
