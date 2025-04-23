@@ -10,49 +10,56 @@ const ClickElementAction = z
   })
   .describe("Click on an element identified by its index");
 
-type ClickElementActionType = z.infer<typeof ClickElementAction>;
+type ClickElementActionType = typeof ClickElementAction;
 
 const MAX_STABLE_CHECKS = 2;
 const CLICK_CHECK_TIMEOUT_PERIOD = 2_500;
 
-export const ClickElementActionDefinition: AgentActionDefinition = {
-  type: "clickElement" as const,
-  actionParams: ClickElementAction,
-  run: async function (
-    ctx: ActionContext,
-    action: ClickElementActionType
-  ): Promise<ActionOutput> {
-    const { index } = action;
-    const locator = getLocator(ctx, index);
-    if (!locator) {
-      return { success: false, message: "Element not found" };
-    }
+export const ClickElementActionDefinition: AgentActionDefinition<ClickElementActionType> =
+  {
+    type: "clickElement" as const,
+    actionParams: ClickElementAction,
+    run: async function (ctx: ActionContext, action): Promise<ActionOutput> {
+      const { index } = action;
+      const locator = getLocator(ctx, index);
+      if (!locator) {
+        return { success: false, message: "Element not found" };
+      }
 
-    const exists = (await locator.count()) > 0;
-    if (!exists) {
-      return { success: false, message: "Element not found on page" };
-    }
+      const exists = (await locator.count()) > 0;
+      if (!exists) {
+        return { success: false, message: "Element not found on page" };
+      }
 
-    await locator.scrollIntoViewIfNeeded({
-      timeout: CLICK_CHECK_TIMEOUT_PERIOD,
-    });
-
-    await Promise.all([
-      locator.waitFor({
-        state: "visible",
+      await locator.scrollIntoViewIfNeeded({
         timeout: CLICK_CHECK_TIMEOUT_PERIOD,
-      }),
-      waitForElementToBeEnabled(locator, CLICK_CHECK_TIMEOUT_PERIOD),
-      waitForElementToBeStable(locator, CLICK_CHECK_TIMEOUT_PERIOD),
-    ]);
+      });
 
-    await locator.click({ force: true });
-    return { success: true, message: `Clicked element with index ${index}` };
-  },
-  pprintAction: function (params: ClickElementActionType): string {
-    return `Click element at index ${params.index}`;
-  },
-};
+      await Promise.all([
+        locator.waitFor({
+          state: "visible",
+          timeout: CLICK_CHECK_TIMEOUT_PERIOD,
+        }),
+        waitForElementToBeEnabled(locator, CLICK_CHECK_TIMEOUT_PERIOD),
+        waitForElementToBeStable(locator, CLICK_CHECK_TIMEOUT_PERIOD),
+      ]);
+
+      await locator.click({ force: true });
+      return { success: true, message: `Clicked element with index ${index}` };
+    },
+    pprintAction: function (params): string {
+      return `Click element at index ${params.index}`;
+    },
+    hasDomChanged(currentDomState, previousDomState, params) {
+      const currentElementAtIndex = currentDomState.elements.get(params.index);
+      const previousElementAtIndex = previousDomState.elements.get(
+        params.index
+      );
+
+      // Retrun true if the dom has changed
+      return currentElementAtIndex?.xpath !== previousElementAtIndex?.xpath;
+    },
+  };
 
 /**
  * Waits for an element to become enabled with a timeout

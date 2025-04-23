@@ -32,4 +32,17 @@ export const InputTextActionDefinition: AgentActionDefinition<InputTextActionTyp
     pprintAction: function (params: z.infer<InputTextActionType>): string {
       return `Input text "${params.text}" into element at index ${params.index}`;
     },
+    hasDomChanged(
+      currentDomState,
+      previousDomState,
+      params
+    ) {
+      const currentElementAtIndex = currentDomState.elements.get(params.index);
+      const previousElementAtIndex = previousDomState.elements.get(
+        params.index
+      );
+
+      // Retrun true if the dom has changed
+      return currentElementAtIndex?.xpath !== previousElementAtIndex?.xpath;
+    },
   };

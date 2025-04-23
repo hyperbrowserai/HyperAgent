@@ -53,4 +53,9 @@ export interface AgentActionDefinition<
    */
   completeAction?(params: z.infer<T>): Promise<string>;
   pprintAction?(params: z.infer<T>): string;
+  hasDomChanged?(
+    currentDomState: DOMState,
+    previousDomState: DOMState,
+    params: z.infer<T>
+  ): boolean;
 }

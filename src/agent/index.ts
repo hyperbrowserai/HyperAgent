@@ -295,6 +295,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       taskState,
       params
     ).catch((error) => {
+      console.log(error)
       taskState.status = TaskStatus.FAILED;
       taskState.error = error.message;
     });
@@ -336,6 +337,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         params
       );
     } catch (error) {
+
       taskState.status = TaskStatus.FAILED;
       throw error;
     }

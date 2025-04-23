@@ -29,6 +29,7 @@ import { Page } from "playwright";
 import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
 import sharp from "sharp";
+import { hasDOMStateChanged } from "./diff-action-state";
 
 const compositeScreenshot = async (page: Page, overlay: string) => {
   const screenshot = await page.screenshot();
@@ -56,6 +57,18 @@ const getActionHandler = (
   const foundAction = actions.find((actions) => actions.type === type);
   if (foundAction) {
     return foundAction.run;
+  } else {
+    throw new ActionNotFoundError(type);
+  }
+};
+
+const getActionDomChangeDetectionHandler = (
+  actions: Array<AgentActionDefinition>,
+  type: string
+) => {
+  const foundAction = actions.find((actions) => actions.type === type);
+  if (foundAction) {
+    return foundAction.hasDomChanged;
   } else {
     throw new ActionNotFoundError(type);
   }
@@ -122,7 +135,9 @@ export const runAgentTask = async (
   let output = "";
   const page = taskState.startingPage;
   let currStep = 0;
+
   while (true) {
+    let previousDomState: DOMState | null = null;
     // Status Checks
     if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
       await sleep(100);
@@ -141,12 +156,14 @@ export const runAgentTask = async (
     }
 
     // Get DOM State
-    const domState = await retry({ func: () => getDom(page) });
+    let domState = await retry({ func: () => getDom(page) });
     if (!domState) {
       console.log("no dom state, waiting 1 second.");
       await sleep(1000);
       continue;
     }
+
+    previousDomState = domState;
 
     const trimmedScreenshot = await compositeScreenshot(
       page,
@@ -204,7 +221,8 @@ export const runAgentTask = async (
     // Run Actions
     const agentStepActions = agentOutput.actions;
     const actionOutputs: ActionOutput[] = [];
-    for (const action of agentStepActions) {
+    for (let idx = 0; idx < agentStepActions.length; idx++) {
+      const action = agentStepActions[idx];
       if (action.type === "complete") {
         taskState.status = TaskStatus.COMPLETED;
         const actionDefinition = ctx.actions.find(
@@ -217,15 +235,62 @@ export const runAgentTask = async (
         } else {
           output = "No complete action found";
         }
+        actionOutputs.push({ success: true, message: output });
+        // Assuming 'complete' action output doesn't need to be stored like regular actions
+        break; // Complete action ends the step processing
+      } else {
+        const domChangeHandler = getActionDomChangeDetectionHandler(
+          ctx.actions,
+          action.type
+        );
+
+        if (
+          domChangeHandler &&
+          hasDOMStateChanged(
+            previousDomState,
+            domState, // Current DOM state fetched at the start of the step
+            action,
+            domChangeHandler
+          )
+        ) {
+          // DOM state changed unexpectedly before this action could run.
+          // Mark this action and subsequent actions in this step as failed.
+          const failureMessage = `Action ${action.type} failed: DOM changed before execution`;
+          console.warn(failureMessage); // Log the issue
+          actionOutputs.push({ success: false, message: failureMessage });
+
+          // Mark all remaining actions in this step as failed too
+          for (let j = idx + 1; j < agentStepActions.length; j++) {
+            const subsequentAction = agentStepActions[j];
+            const subsequentFailureMessage = `Action ${subsequentAction.type} skipped: DOM changed before preceding action ${action.type}`;
+            actionOutputs.push({
+              success: false,
+              message: subsequentFailureMessage,
+            });
+          }
+          break; // Exit the action loop for this step
+        }
+
+        // If DOM didn't change unexpectedly, run the action
+        const actionOutput = await runAction(
+          action as ActionType,
+          domState,
+          page,
+          ctx
+        );
+        actionOutputs.push(actionOutput);
+        if (!actionOutput.success) {
+          console.warn(`Action ${action.type} failed: ${actionOutput.message}`);
+          // Optional: Decide if a single action failure should stop the rest of the step
+          // break;
+        }
+        await sleep(2000); // TODO: look at this - smarter page loading
       }
-      const actionOutput = await runAction(
-        action as ActionType,
-        domState,
-        page,
-        ctx
-      );
-      actionOutputs.push(actionOutput);
-      await sleep(2000); // TODO: look at this - smarter page loading
+      previousDomState = domState;
+      const currentDomState = await retry({ func: () => getDom(page) });
+      if (currentDomState) {
+        domState = currentDomState;
+      }
     }
     const step: AgentStep = {
       idx: currStep,
