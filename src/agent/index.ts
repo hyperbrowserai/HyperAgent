@@ -58,9 +58,10 @@ export class HyperAgent {
       this.llm = params.llm;
     }
     if (params.browserProvider === "Hyperbrowser") {
-      this.browserProvider = new HyperbrowserProvider(
-        params.hyperbrowserConfig
-      );
+      this.browserProvider = new HyperbrowserProvider({
+        ...(params.hyperbrowserConfig ?? {}),
+        debug: params.debug,
+      });
     } else {
       this.browserProvider = new LocalBrowserProvider(params.localConfig);
     }

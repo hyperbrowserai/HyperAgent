@@ -15,13 +15,16 @@ export class HyperbrowserProvider extends BrowserProvider {
   browser: Browser | undefined;
   session: SessionDetail | undefined;
   hbClient: Hyperbrowser | undefined;
+  debug: boolean;
 
   constructor(params?: {
+    debug?: boolean;
     browserOptions?: Omit<ConnectOverCDPOptions, "endpointURL">;
     hyperbrowserSessionOptions?: CreateSessionParams;
     hyperbrowserConfig?: HyperbrowserConfig;
   }) {
     super();
+    this.debug = params?.debug ?? false;
     this.browserOptions = params?.browserOptions;
     this.hyperbrowserSessionOptions = params?.hyperbrowserSessionOptions;
     this.hyperbrowserConfig = params?.hyperbrowserConfig;
@@ -38,6 +41,15 @@ export class HyperbrowserProvider extends BrowserProvider {
       session.wsEndpoint,
       this.browserOptions
     );
+
+    if (this.debug) {
+      console.log(`Hyperbrowser session info:`, {
+        liveUrl: session.liveUrl,
+        sessionID: session.id,
+        infoUrl: session.sessionUrl,
+      });
+    }
+
     return this.browser;
   }
 

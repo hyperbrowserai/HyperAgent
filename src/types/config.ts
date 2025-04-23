@@ -62,6 +62,9 @@ export interface HyperAgentConfig {
   debug?: boolean;
   llm?: BaseChatModel;
 
-  hyperbrowserConfig?: ConstructorParameters<typeof HyperbrowserProvider>[0];
+  hyperbrowserConfig?: Omit<
+    ConstructorParameters<typeof HyperbrowserProvider>[0],
+    "debug"
+  >;
   localConfig?: ConstructorParameters<typeof LocalBrowserProvider>[0];
 }
