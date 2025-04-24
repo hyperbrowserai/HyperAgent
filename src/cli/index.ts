@@ -39,9 +39,9 @@ program
     const debug = (options.debug as boolean) || false;
     const useHB = (options.hyperbrowser as boolean) || false;
 
-    console.log(chalk.blue("Welcome to Hyperbrowser CLI"));
+    console.log(chalk.blue("HyperAgent CLI"));
     currentSpinner.info(
-      `Hyperagent CLI supports pausing and resuming using the ${chalk.bold("ctrl + p")} and ${chalk.bold("ctrl + r")} keys\n`
+      `Pause using ${chalk.bold("ctrl + p")} and resume using ${chalk.bold("ctrl + r")}\n`
     );
     try {
       // Check for API key if using Hyperbrowser
@@ -194,7 +194,7 @@ program
       if (useHB && !debug) {
         await browser.initBrowser();
         const session = browser.getSession() as SessionDetail;
-        console.log(`Hyperbrowser live URL: ${session.liveUrl}\n`);
+        console.log(`Hyperbrowser Live URL: ${session.liveUrl}\n`);
       }
 
       task = await browser.executeTaskAsync(taskDescription, {
