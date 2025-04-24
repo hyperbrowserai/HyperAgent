@@ -1,6 +1,5 @@
 import { chromium, Browser, LaunchOptions } from "playwright";
 import BrowserProvider from "@/types/browser-providers/types";
-import { HyperagentError } from "@/agent/error";
 
 export class LocalBrowserProvider extends BrowserProvider<Browser> {
   options: Omit<Omit<LaunchOptions, "headless">, "channel"> | undefined;
@@ -23,9 +22,9 @@ export class LocalBrowserProvider extends BrowserProvider<Browser> {
   async close(): Promise<void> {
     return await this.session?.close();
   }
-  public getSession(): Browser {
+  public getSession() {
     if (!this.session) {
-      throw new HyperagentError("Local Browser not initialized yet");
+      return null;
     }
     return this.session;
   }

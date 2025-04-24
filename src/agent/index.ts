@@ -2,7 +2,6 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
 import { Browser, BrowserContext, Page } from "playwright";
 import { v4 as uuidv4 } from "uuid";
-import { SessionDetail } from "@hyperbrowser/sdk/types";
 
 import {
   BrowserProviders,
@@ -83,7 +82,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     this.debug = params.debug ?? false;
   }
 
-  private async createBrowser(): Promise<Browser> {
+  /**
+   *  This is just exposed as a utility function. You don't need to call it explicitly.
+   * @returns A reference to the current Playwright browser instance.
+   */
+  public async initBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await this.browserProvider.start();
       this.context = await this.browser.newContext({
@@ -150,7 +153,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public async getPages(): Promise<HyperPage[]> {
     if (!this.browser) {
-      await this.createBrowser();
+      await this.initBrowser();
     }
     if (!this.context) {
       throw new HyperagentError("No context found");
@@ -171,7 +174,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public async newPage(): Promise<HyperPage> {
     if (!this.browser) {
-      await this.createBrowser();
+      await this.initBrowser();
     }
     if (!this.context) {
       throw new HyperagentError("No context found");
@@ -214,7 +217,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public async getCurrentPage(): Promise<Page> {
     if (!this.browser) {
-      await this.createBrowser();
+      await this.initBrowser();
     }
     if (!this.context) {
       throw new HyperagentError("No context found");
@@ -497,8 +500,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   public getSession() {
-    return this.browserProvider.getSession() as T extends "Hyperbrowser"
-      ? SessionDetail
-      : Browser;
+    const session = this.browserProvider.getSession();
+    if (!session) {
+      return null;
+    }
+    return session;
   }
 }

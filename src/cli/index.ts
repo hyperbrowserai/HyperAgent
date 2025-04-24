@@ -18,6 +18,7 @@ import {
   TaskStatus,
 } from "@/types";
 import { HyperagentError } from "@/agent/error";
+import { SessionDetail } from "@hyperbrowser/sdk/types";
 
 const program = new Command();
 
@@ -32,16 +33,38 @@ program
   .command("run", { isDefault: true })
   .description("Run the interactive CLI")
   .option("-d, --debug", "Enable debug mode")
+  .option("--hyperbrowser", "Use Hyperbrowser for the browser provider")
   .action(async function () {
     const options = this.opts();
     const debug = (options.debug as boolean) || false;
+    const useHB = (options.hyperbrowser as boolean) || false;
 
     console.log(chalk.blue("Welcome to Hyperbrowser CLI"));
     currentSpinner.info(
       `Hyperagent CLI supports pausing and resuming using the ${chalk.bold("ctrl + p")} and ${chalk.bold("ctrl + r")} keys\n`
     );
     try {
-      const browser = new HyperAgent({ debug: debug });
+      // Check for API key if using Hyperbrowser
+      if (useHB && !process.env.HYPERBROWSER_API_KEY) {
+        const apiKey = await inquirer.password({
+          message:
+            "Hyperbrowser API key not found in environment variables. Please enter it here:",
+          mask: "*",
+        });
+        if (!apiKey) {
+          console.log(
+            chalk.yellow("Hyperbrowser API key is required. Exiting.")
+          );
+          process.exit(0);
+        }
+        process.env.HYPERBROWSER_API_KEY = apiKey; // Set it for the current process
+      }
+
+      const browser = new HyperAgent({
+        debug: debug,
+        browserProvider: useHB ? "Hyperbrowser" : "Local",
+      });
+
       let task: Task;
 
       readline.emitKeypressEvents(process.stdin);
@@ -167,6 +190,12 @@ program
         message: "What should HyperAgent do for you today?",
         required: true,
       });
+
+      if (useHB && !debug) {
+        await browser.initBrowser();
+        const session = browser.getSession() as SessionDetail;
+        console.log(`Hyperbrowser live URL: ${session.liveUrl}\n`);
+      }
 
       task = await browser.executeTaskAsync(taskDescription, {
         onStep: onStep,
