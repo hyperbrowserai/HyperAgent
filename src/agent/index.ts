@@ -513,10 +513,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.executeTask(task, params, page);
     hyperPage.aiAsync = (task: string, params?: TaskParams) =>
       this.executeTaskAsync(task, params, page);
-    hyperPage.extract = async (
-      task: string | undefined,
-      outputSchema: z.AnyZodObject | undefined
-    ) => {
+    hyperPage.extract = async ({ task, outputSchema }) => {
       if (!task && !outputSchema) {
         throw new HyperagentError(
           "No task description or output schema specified",
