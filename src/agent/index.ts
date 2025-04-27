@@ -169,7 +169,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.context) {
       throw new HyperagentError("No context found");
     }
-    return this.context.pages().map(this.setupPage.bind(this));
+    return this.context.pages().map(this.setupPage.bind(this), this);
   }
 
   /**
