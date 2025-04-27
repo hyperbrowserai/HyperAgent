@@ -48,7 +48,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
-  public currentPage: Page | null = null;
+  private _currentPage: Page | null = null;
+
+  public get currentPage(): HyperPage | null {
+    if (this._currentPage) {
+      return this.setupPage(this._currentPage);
+    }
+    return null;
+  }
+
+  public set currentPage(page: Page) {
+    this._currentPage = page;
+  }
 
   constructor(params: HyperAgentConfig<T> = {}) {
     if (!params.llm) {
@@ -158,14 +169,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.context) {
       throw new HyperagentError("No context found");
     }
-    return this.context.pages().map((page) => {
-      const hyperPage = page as HyperPage;
-      hyperPage.ai = (task: string, params?: TaskParams) =>
-        this.executeTask(task, params, page);
-      hyperPage.aiAsync = (task: string, params?: TaskParams) =>
-        this.executeTaskAsync(task, params, page);
-      return hyperPage;
-    });
+    return this.context.pages().map(this.setupPage.bind(this));
   }
 
   /**
@@ -180,12 +184,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw new HyperagentError("No context found");
     }
     const page = await this.context.newPage();
-    const hyperPage = page as HyperPage;
-    hyperPage.ai = (task: string, params?: TaskParams) =>
-      this.executeTask(task, params, page);
-    hyperPage.aiAsync = (task: string, params?: TaskParams) =>
-      this.executeTaskAsync(task, params, page);
-    return hyperPage;
+    return this.setupPage(page);
   }
 
   /**
@@ -223,8 +222,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw new HyperagentError("No context found");
     }
     if (!this.currentPage || this.currentPage.isClosed()) {
-      this.currentPage = await this.context.newPage();
-      return this.currentPage;
+      this._currentPage = await this.context.newPage();
+
+      return this.setupPage(this._currentPage);
     }
     return this.currentPage;
   }
@@ -505,5 +505,46 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return null;
     }
     return session;
+  }
+
+  private setupPage(page: Page): HyperPage {
+    const hyperPage = page as HyperPage;
+    hyperPage.ai = (task: string, params?: TaskParams) =>
+      this.executeTask(task, params, page);
+    hyperPage.aiAsync = (task: string, params?: TaskParams) =>
+      this.executeTaskAsync(task, params, page);
+    hyperPage.extract = async (
+      task: string | undefined,
+      outputSchema: z.AnyZodObject | undefined
+    ) => {
+      if (!task && !outputSchema) {
+        throw new HyperagentError(
+          "No task description or output schema specified",
+          400
+        );
+      }
+      if (task) {
+        const res = await this.executeTask(
+          `You have to perform an extraction on the current page. You have to perform the extraction according to the task: ${task}. Make sure your final response only contains the extracted content`,
+          {
+            maxSteps: 2,
+            outputSchema,
+          },
+          page
+        );
+        if (outputSchema) {
+          return JSON.parse(res.output as string);
+        }
+        return res.output as string;
+      } else {
+        const res = await this.executeTask(
+          "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
+          { maxSteps: 2, outputSchema },
+          page
+        );
+        return JSON.parse(res.output as string);
+      }
+    };
+    return hyperPage;
   }
 }
