@@ -53,7 +53,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   public get currentPage(): HyperPage | null {
     if (this._currentPage) {
-      return this.setupPage(this._currentPage);
+      return this.setupHyperPage(this._currentPage);
     }
     return null;
   }
@@ -204,7 +204,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.context) {
       throw new HyperagentError("No context found");
     }
-    return this.context.pages().map(this.setupPage.bind(this), this);
+    return this.context.pages().map(this.setupHyperPage.bind(this), this);
   }
 
   /**
@@ -219,7 +219,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw new HyperagentError("No context found");
     }
     const page = await this.context.newPage();
-    return this.setupPage(page);
+    return this.setupHyperPage(page);
   }
 
   /**
@@ -259,7 +259,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.currentPage || this.currentPage.isClosed()) {
       this._currentPage = await this.context.newPage();
 
-      return this.setupPage(this._currentPage);
+      return this.setupHyperPage(this._currentPage);
     }
     return this.currentPage;
   }
@@ -544,7 +544,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return session;
   }
 
-  private setupPage(page: Page): HyperPage {
+  private setupHyperPage(page: Page): HyperPage {
     const hyperPage = page as HyperPage;
     hyperPage.ai = (task: string, params?: TaskParams) =>
       this.executeTask(task, params, page);
