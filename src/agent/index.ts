@@ -40,7 +40,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private tokenLimit = 128000;
   private debug = false;
   private mcpClient: MCPClient | undefined;
-  private useMobile: boolean = false;
   private browserProvider: T extends "Hyperbrowser"
     ? HyperbrowserProvider
     : LocalBrowserProvider;
