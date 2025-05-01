@@ -68,6 +68,5 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
     NonNullable<ConstructorParameters<typeof HyperbrowserProvider>[0]>,
     "debug"
   >;
-  useMobile?: boolean;
   localConfig?: ConstructorParameters<typeof LocalBrowserProvider>[0];
 }
