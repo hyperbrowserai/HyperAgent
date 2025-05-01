@@ -1,13 +1,21 @@
-import { chromium, Browser, LaunchOptions } from "playwright";
+import { chromium, Browser, LaunchOptions, devices } from "playwright";
 import BrowserProvider from "@/types/browser-providers/types";
 
+type LocalBrowserProviderOptions =
+  | (Omit<Omit<LaunchOptions, "headless">, "channel"> & {
+      device?: keyof typeof devices;
+    })
+  | undefined;
+
 export class LocalBrowserProvider extends BrowserProvider<Browser> {
-  options: Omit<Omit<LaunchOptions, "headless">, "channel"> | undefined;
+  options: LocalBrowserProviderOptions;
   session: Browser | undefined;
-  constructor(options?: Omit<Omit<LaunchOptions, "headless">, "channel">) {
+
+  constructor(options?: LocalBrowserProviderOptions) {
     super();
     this.options = options;
   }
+
   async start(): Promise<Browser> {
     const launchArgs = this.options?.args ?? [];
     const browser = await chromium.launch({
@@ -16,7 +24,21 @@ export class LocalBrowserProvider extends BrowserProvider<Browser> {
       headless: false,
       args: ["--disable-blink-features=AutomationControlled", ...launchArgs],
     });
+
     this.session = browser;
+    if (this?.options?.device) {
+      const defaultContexts = browser.contexts();
+      for (const context of defaultContexts) {
+        await context.close();
+      }
+
+      const newContext = await browser.newContext({
+        ...devices[this.options.device],
+      });
+
+      await newContext.newPage();
+    }
+
     return this.session;
   }
   async close(): Promise<void> {
