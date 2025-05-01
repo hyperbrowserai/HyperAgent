@@ -1,6 +1,6 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
-import { Browser, BrowserContext, devices, Page } from "playwright";
+import { Browser, BrowserContext, Page } from "playwright";
 import { v4 as uuidv4 } from "uuid";
 
 import {
@@ -76,7 +76,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } else {
       this.llm = params.llm;
     }
-    this.useMobile = params?.useMobile ?? false;
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
 
     this.browserProvider = (
@@ -101,22 +100,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public async initBrowser(): Promise<Browser> {
     if (!this.browser) {
-      const iphone12 = devices["iPhone 12"];
-
       this.browser = await this.browserProvider.start();
-      this.context = await this.browser.newContext(
-        this.useMobile
-          ? {
-              userAgent: iphone12.userAgent,
-              viewport: {
-                width: iphone12.viewport.width,
-                height: iphone12.viewport.height + 100,
-              },
-            }
-          : {
-              viewport: null,
-            }
-      );
+      this.context = await this.browser.newContext({
+        viewport: null,
+      });
 
       // Inject script to track event listeners
       await this.context.addInitScript(() => {
