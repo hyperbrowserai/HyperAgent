@@ -31,7 +31,7 @@ import {
 import { HyperagentError } from "./error";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
-import { HyperPage } from "@/types/agent/types";
+import { HyperPage, HyperVariable } from "@/types/agent/types";
 import { z } from "zod";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
@@ -49,6 +49,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
   private _currentPage: Page | null = null;
+  private _variables: Record<string, HyperVariable> = {};
 
   public get currentPage(): HyperPage | null {
     if (this._currentPage) {
@@ -156,6 +157,40 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } else {
       return [...this.actions, CompleteActionDefinition];
     }
+  }
+
+  /**
+   * Get all variables
+   * @returns Record of variables
+   */
+  public getVariables(): Record<string, HyperVariable> {
+    return this._variables;
+  }
+
+  /**
+   * Set a variable
+   * @param key Key of the variable
+   * @param value Value of the variable
+   */
+  public addVariable(variable: HyperVariable): void {
+    this._variables[variable.key] = variable;
+  }
+
+  /**
+   * Get a variable
+   * @param key Key of the variable
+   * @returns Value of the variable
+   */
+  public getVariable(key: string): HyperVariable | undefined {
+    return this._variables[key];
+  }
+
+  /**
+   * Delete a variable
+   * @param key Key of the variable
+   */
+  public deleteVariable(key: string): void {
+    delete this._variables[key];
   }
 
   /**
@@ -291,6 +326,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         tokenLimit: this.tokenLimit,
         debug: this.debug,
         mcpClient: this.mcpClient,
+        variables: this._variables,
       },
       taskState,
       params
@@ -331,6 +367,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           tokenLimit: this.tokenLimit,
           debug: this.debug,
           mcpClient: this.mcpClient,
+          variables: this._variables,
         },
         taskState,
         params

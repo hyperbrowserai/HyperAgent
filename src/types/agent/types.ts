@@ -79,6 +79,12 @@ export interface TaskState {
   error?: string;
 }
 
+export interface HyperVariable {
+  key: string;
+  value: string;
+  description: string;
+}
+
 export interface HyperPage extends Page {
   ai: (task: string, params?: TaskParams) => Promise<TaskOutput>;
   aiAsync: (task: string, params?: TaskParams) => Promise<Task>;
