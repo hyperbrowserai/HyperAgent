@@ -1,4 +1,10 @@
-import { chromium, Browser, ConnectOverCDPOptions } from "playwright";
+import {
+  chromium,
+  Browser,
+  ConnectOverCDPOptions,
+  BrowserContext,
+  devices,
+} from "playwright";
 import { Hyperbrowser } from "@hyperbrowser/sdk";
 import {
   CreateSessionParams,
@@ -60,6 +66,21 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
     if (this.session) {
       await this.hbClient?.sessions.stop(this.session.id);
     }
+  }
+
+  public async getContext(
+    device: string = "desktop"
+  ): Promise<BrowserContext | null> {
+    if (!this.browser) return null;
+
+    if (device === "mobile") {
+      const iPhone = devices["iPhone 12"];
+      return await this.browser.newContext({
+        ...iPhone,
+      });
+    }
+
+    return await this.browser.newContext();
   }
 
   public getSession() {
