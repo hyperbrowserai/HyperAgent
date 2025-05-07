@@ -76,7 +76,11 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
     if (device === "mobile") {
       const iPhone = devices["iPhone 12"];
       return await this.browser.newContext({
-        ...iPhone,
+        userAgent: iPhone.userAgent,
+        viewport: {
+          width: iPhone.viewport.width + 50,
+          height: iPhone.viewport.height + 50,
+        },
       });
     }
 
