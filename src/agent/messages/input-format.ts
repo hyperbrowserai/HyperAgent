@@ -4,6 +4,12 @@ export const INPUT_FORMAT = `=== Final Goal ===
 [The open tabs]
 === Current URL ===
 [The current URL]
+=== Variables ===
+[Variables that can be used in the task]
+- Variables are referenced using <<name>> syntax
+- Each variable has a name and description
+- Variables persist across actions and can be referenced in subsequent steps
+- Format: <<name>> - {description}
 === Elements ===
 [A list of the elements on the page in the following format]
 [index]<type attributes...>value</type>

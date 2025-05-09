@@ -18,8 +18,11 @@ export const InputTextActionDefinition: AgentActionDefinition<InputTextActionTyp
     type: "inputText" as const,
     actionParams: InputTextAction,
     run: async (ctx: ActionContext, action) => {
-      const { index, text } = action;
+      let { index, text } = action;
       const locator = getLocator(ctx, index);
+      for (const variable of ctx.variables) {
+        text = text.replace(`<<${variable.key}>>`, variable.value);
+      }
       if (!locator) {
         return { success: false, message: "Element not found" };
       }

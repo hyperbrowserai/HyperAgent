@@ -79,6 +79,7 @@ const runAction = async (
     llm: ctx.llm,
     debugDir: ctx.debugDir,
     mcpClient: ctx.mcpClient || undefined,
+    variables: Object.values(ctx.variables),
   };
   const actionType = action.type;
   const actionHandler = getActionHandler(ctx.actions, action.type);
@@ -179,7 +180,8 @@ export const runAgentTask = async (
       taskState.task,
       page,
       domState,
-      trimmedScreenshot as string
+      trimmedScreenshot as string,
+      Object.values(ctx.variables)
     );
 
     // Store Agent Step Messages for Debugging

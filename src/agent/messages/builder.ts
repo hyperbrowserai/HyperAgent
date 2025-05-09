@@ -4,6 +4,7 @@ import { Page } from "playwright";
 import { getScrollInfo } from "./utils";
 import { retry } from "@/utils/retry";
 import { DOMState } from "@/context-providers/dom/types";
+import { HyperVariable } from "@/types/agent/types";
 
 export const buildAgentStepMessages = async (
   baseMessages: BaseMessageLike[],
@@ -11,7 +12,8 @@ export const buildAgentStepMessages = async (
   task: string,
   page: Page,
   domState: DOMState,
-  screenshot: string
+  screenshot: string,
+  variables: HyperVariable[]
 ): Promise<BaseMessageLike[]> => {
   const messages = [...baseMessages];
 
@@ -25,6 +27,12 @@ export const buildAgentStepMessages = async (
   messages.push({
     role: "user",
     content: `=== Current URL ===\n${page.url()}\n`,
+  });
+
+  // Add variables section
+  messages.push({
+    role: "user",
+    content: `=== Variables ===\n${variables.map((v) => `<<${v.key}>> - ${v.description}`).join("\n")}\n`,
   });
 
   // Add previous actions section if there are steps

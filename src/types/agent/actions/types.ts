@@ -3,12 +3,14 @@ import { DOMState } from "../../../context-providers/dom/types";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { z } from "zod";
 import { MCPClient } from "../../../agent/mcp/client";
+import { HyperVariable } from "../types";
 
 export interface ActionContext {
   page: Page;
   domState: DOMState;
   llm: BaseChatModel;
   tokenLimit: number;
+  variables: HyperVariable[];
   debugDir?: string;
   mcpClient?: MCPClient;
 }
