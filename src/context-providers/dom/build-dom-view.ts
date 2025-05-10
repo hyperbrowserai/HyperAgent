@@ -108,7 +108,11 @@ export const buildDomView = (): DOMStateRaw => {
     const textContent = getElementTextContent(el);
 
     const indexPrefix = `[${element.highlightIndex}]`;
-    const elementString = `${indexPrefix}<${tagName}${attributes}>${textContent.replace(/\s+/g, " ")}</${tagName}>`;
+    const truncatedText =
+      textContent.length > 1000
+        ? textContent.substring(0, 997) + "..."
+        : textContent;
+    const elementString = `${indexPrefix}<${tagName}${attributes}>${truncatedText.replace(/\s+/g, " ")}</${tagName}>`;
     domRepresentation.push(elementString);
 
     const nextElement = interactiveElements[i + 1]?.element || null;

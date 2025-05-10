@@ -33,6 +33,7 @@ import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "@/types/agent/types";
 import { z } from "zod";
+import { ErrorEmitter } from "@/utils";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   private llm: BaseChatModel;
@@ -50,6 +51,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public context: BrowserContext | null = null;
   private _currentPage: Page | null = null;
   private _variables: Record<string, HyperVariable> = {};
+  private errorEmitter: ErrorEmitter;
 
   public get currentPage(): HyperPage | null {
     if (this._currentPage) {
@@ -92,6 +94,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     this.debug = params.debug ?? false;
+    this.errorEmitter = new ErrorEmitter();
   }
 
   /**
@@ -294,6 +297,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
         return taskState.status;
       },
+      emitter: this.errorEmitter,
     };
   }
 
@@ -330,9 +334,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       },
       taskState,
       params
-    ).catch((error) => {
-      taskState.status = TaskStatus.FAILED;
-      taskState.error = error.message;
+    ).catch((error: Error) => {
+      // Retrieve the correct state to update
+      const failedTaskState = this.tasks[taskId];
+      if (failedTaskState) {
+        failedTaskState.status = TaskStatus.FAILED;
+        failedTaskState.error = error.message;
+        // Emit error on the central emitter, including the taskId
+        this.errorEmitter.emit("error", error);
+      } else {
+        // Fallback if task state somehow doesn't exist
+        console.error(`Task state ${taskId} not found during error handling.`);
+      }
     });
     return this.getTaskControl(taskId);
   }

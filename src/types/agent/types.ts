@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ActionOutput } from "./actions/types";
 import { Page } from "playwright";
+import { ErrorEmitter } from "@/utils";
 
 export const AgentOutputFn = (
   actionsSchema: z.ZodUnion<readonly [z.AnyZodObject, ...z.AnyZodObject[]]>
@@ -52,6 +53,7 @@ export interface Task {
   pause: () => TaskStatus;
   resume: () => TaskStatus;
   cancel: () => TaskStatus;
+  emitter: ErrorEmitter;
 }
 
 export enum TaskStatus {

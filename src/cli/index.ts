@@ -254,6 +254,10 @@ program
             debugOnAgentOutput: debugAgentOutput,
             onComplete: onComplete,
           });
+          task.emitter.addListener("error", (error) => {
+            task.cancel();
+            throw error;
+          });
         } else {
           process.exit(0);
         }
@@ -286,6 +290,10 @@ program
         onStep: onStep,
         onComplete: onComplete,
         debugOnAgentOutput: debugAgentOutput,
+      });
+      task.emitter.addListener("error", (error) => {
+        task.cancel();
+        throw error;
       });
     } catch (err) {
       if (err instanceof HyperagentError || err instanceof Error) {
