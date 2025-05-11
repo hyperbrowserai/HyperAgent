@@ -34,6 +34,7 @@ import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "@/types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "@/utils";
+import { PageExtractFn } from "./tools/page-actions/extract";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   private llm: BaseChatModel;
@@ -570,27 +571,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           400
         );
       }
-      if (task) {
-        const res = await this.executeTask(
-          `You have to perform an extraction on the current page. You have to perform the extraction according to the task: ${task}. Make sure your final response only contains the extracted content`,
-          {
-            maxSteps: 2,
-            outputSchema,
-          },
-          page
-        );
-        if (outputSchema) {
-          return JSON.parse(res.output as string);
-        }
-        return res.output as string;
-      } else {
-        const res = await this.executeTask(
-          "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
-          { maxSteps: 2, outputSchema },
-          page
-        );
-        return JSON.parse(res.output as string);
-      }
+      return await PageExtractFn({
+        task,
+        schema: outputSchema,
+        page,
+        llm: this.llm,
+        tokenLimit: this.tokenLimit,
+      });
     };
     return hyperPage;
   }
