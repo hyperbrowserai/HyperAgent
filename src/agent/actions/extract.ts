@@ -13,7 +13,7 @@ export const ExtractAction = z
 
 export type ExtractActionType = z.infer<typeof ExtractAction>;
 
-export const ExtractActionDefinition: AgentActionDefinition = {
+export const ExtractActionDefinition: AgentActionDefinition<typeof ExtractAction> = {
   type: "extract" as const,
   actionParams: ExtractAction,
   run: async (
