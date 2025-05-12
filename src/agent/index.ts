@@ -46,6 +46,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
+  private clientType: "desktop" | "mobile";
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -79,6 +80,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.llm = params.llm;
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
+    this.clientType = params.clientType ?? "desktop";
 
     this.browserProvider = (
       this.browserProviderType === "Hyperbrowser"
@@ -104,9 +106,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async initBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await this.browserProvider.start();
-      this.context = await this.browser.newContext({
-        viewport: null,
-      });
+      this.context = await this.browserProvider.getContext(this.clientType);
+
+      if (!this.context) {
+        this.context = await this.browser.newContext({
+          viewport: null,
+        });
+      }
 
       // Inject script to track event listeners
       await this.context.addInitScript(() => {
