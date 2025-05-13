@@ -9,7 +9,7 @@ export const SelectOptionAction = z
       .describe("The numeric index of the  element to select an option."),
     text: z.string().describe("The text of the option to select."),
   })
-  .describe("Select an option from a dropdown element");
+  .describe("Select an option from a dropdown element. Use this only when interacting with a dropdown, select element or something which acts similarly.");
 
 export type SelectOptionActionType = z.infer<typeof SelectOptionAction>;
 

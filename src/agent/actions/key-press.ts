@@ -99,7 +99,9 @@ export const KeyPressAction = z
 
 export type KeyPressActionType = z.infer<typeof KeyPressAction>;
 
-export const KeyPressActionDefinition: AgentActionDefinition = {
+export const KeyPressActionDefinition: AgentActionDefinition<
+  typeof KeyPressAction
+> = {
   type: "keyPress" as const,
   actionParams: KeyPressAction,
   run: async (ctx: ActionContext, action: KeyPressActionType) => {
@@ -128,7 +130,7 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
       message: `Pressed key "${text}"`,
     };
   },
-  pprintAction: function(params: KeyPressActionType): string {
+  pprintAction: function (params: KeyPressActionType): string {
     return `Press key "${params.text}"`;
   },
 };

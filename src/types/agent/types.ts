@@ -94,4 +94,14 @@ export interface HyperPage extends Page {
     task?: string,
     outputSchema?: T
   ): Promise<T extends z.AnyZodObject ? z.infer<T> : string>;
+  scan: () => Promise<{
+    pageDescription: string;
+    elementGroups: {
+      actions: {
+        action: string;
+        intent: string;
+      }[];
+      name: string;
+    }[];
+  }>;
 }

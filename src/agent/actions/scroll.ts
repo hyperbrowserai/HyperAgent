@@ -11,8 +11,11 @@ export const ScrollAction = z
 
 export type ScrollActionType = z.infer<typeof ScrollAction>;
 
-export const ScrollActionDefinition: AgentActionDefinition = {
+export const ScrollActionDefinition: AgentActionDefinition<
+  typeof ScrollAction
+> = {
   type: "scroll" as const,
+  shouldIgnoreActionForScan: true,
   actionParams: ScrollAction,
   run: async (ctx: ActionContext, action: ScrollActionType) => {
     const { direction } = action;
@@ -32,7 +35,7 @@ export const ScrollActionDefinition: AgentActionDefinition = {
     }
     return { success: true, message: `Scrolled ${direction}` };
   },
-  pprintAction: function(params: ScrollActionType): string {
+  pprintAction: function (params: ScrollActionType): string {
     return `Scroll ${params.direction}`;
   },
 };

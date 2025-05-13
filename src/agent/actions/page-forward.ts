@@ -7,14 +7,17 @@ export const PageForwardAction = z
 
 export type PageForwardActionType = z.infer<typeof PageForwardAction>;
 
-export const PageForwardActionDefinition: AgentActionDefinition = {
+export const PageForwardActionDefinition: AgentActionDefinition<
+  typeof PageForwardAction
+> = {
   type: "pageForward" as const,
+  shouldIgnoreActionForScan: true,
   actionParams: PageForwardAction,
   run: async (ctx: ActionContext) => {
     await ctx.page.goForward();
     return { success: true, message: "Navigated forward to the next page" };
   },
-  pprintAction: function(): string {
+  pprintAction: function (): string {
     return "Navigate forward to next page";
   },
 };

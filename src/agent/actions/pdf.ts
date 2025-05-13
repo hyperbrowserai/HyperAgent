@@ -14,7 +14,7 @@ export const PDFAction = z
 
 export type PDFActionType = z.infer<typeof PDFAction>;
 
-export const PDFActionDefinition: AgentActionDefinition = {
+export const PDFActionDefinition: AgentActionDefinition<typeof PDFAction> = {
   type: "analyzePdf" as const,
   actionParams: PDFAction,
   run: async (ctx: ActionContext, action: PDFActionType) => {
