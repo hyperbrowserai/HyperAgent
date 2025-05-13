@@ -24,6 +24,7 @@ export const generateCompleteActionWithOutputDefinition = (
   return {
     type: "complete" as const,
     actionParams: actionParamsSchema,
+    shouldIgnoreActionForScan: true,
     run: async (
       ctx: ActionContext,
       actionParams: CompeleteActionWithOutputSchema

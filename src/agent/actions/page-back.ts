@@ -7,14 +7,17 @@ export const PageBackAction = z
 
 export type PageBackActionType = z.infer<typeof PageBackAction>;
 
-export const PageBackActionDefinition: AgentActionDefinition = {
+export const PageBackActionDefinition: AgentActionDefinition<
+  typeof PageBackAction
+> = {
   type: "pageBack" as const,
+  shouldIgnoreActionForScan: true,
   actionParams: PageBackAction,
   run: async (ctx: ActionContext) => {
     await ctx.page.goBack();
     return { success: true, message: "Navigated back to the previous page" };
   },
-  pprintAction: function(): string {
+  pprintAction: function (): string {
     return "Navigate back to previous page";
   },
 };

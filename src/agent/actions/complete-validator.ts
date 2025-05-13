@@ -34,6 +34,7 @@ export type CompleteValidateActionType = z.infer<
 export const CompletionValidateActionDefinition: AgentActionDefinition = {
   type: "taskCompleteValidation",
   actionParams: CompletionValidateAction,
+  shouldIgnoreActionForScan: true,
   run: async (
     ctx: ActionContext,
     action: CompleteValidateActionType

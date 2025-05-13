@@ -9,14 +9,17 @@ export const RefreshPageAction = z
 
 export type RefreshPageActionType = z.infer<typeof RefreshPageAction>;
 
-export const RefreshPageActionDefinition: AgentActionDefinition = {
+export const RefreshPageActionDefinition: AgentActionDefinition<
+  typeof RefreshPageAction
+> = {
   type: "refreshPage" as const,
+  shouldIgnoreActionForScan: true,
   actionParams: RefreshPageAction,
   run: async (ctx: ActionContext) => {
     await ctx.page.reload();
     return { success: true, message: "Succesfully refreshed a page." };
   },
-  pprintAction: function(): string {
+  pprintAction: function (): string {
     return "Refresh current page";
   },
 };

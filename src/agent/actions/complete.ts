@@ -17,8 +17,11 @@ export const CompleteAction = z
 
 export type CompleteActionType = z.infer<typeof CompleteAction>;
 
-export const CompleteActionDefinition: AgentActionDefinition = {
+export const CompleteActionDefinition: AgentActionDefinition<
+  typeof CompleteAction
+> = {
   type: "complete" as const,
+  shouldIgnoreActionForScan: true,
   actionParams: CompleteAction,
   run: async (): Promise<ActionOutput> => {
     return { success: true, message: "Task Complete" };

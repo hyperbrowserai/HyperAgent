@@ -34,6 +34,7 @@ import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "@/types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "@/utils";
+import { PageScanFn } from "./tools/page-actions/scan";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   private llm: BaseChatModel;
@@ -592,6 +593,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return JSON.parse(res.output as string);
       }
     };
+    hyperPage.scan = () =>
+      PageScanFn({
+        page,
+        llm: this.llm,
+        tokenLimit: this.tokenLimit,
+        actions: this.getActions(),
+      });
     return hyperPage;
   }
 }

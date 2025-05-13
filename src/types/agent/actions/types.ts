@@ -47,6 +47,7 @@ export interface AgentActionDefinition<
 > {
   readonly type: string;
   actionParams: T;
+  shouldIgnoreActionForScan?: boolean;
 
   run(ctx: ActionContext, params: z.infer<T>): Promise<ActionOutput>;
   /**
