@@ -11,13 +11,12 @@ export const InputTextAction = z
   })
   .describe("Input text into a input interactive element");
 
-export type InputTextActionType = typeof InputTextAction;
+export type InputTextActionType = z.infer<typeof InputTextAction>;
 
-export const InputTextActionDefinition: AgentActionDefinition<InputTextActionType> =
-  {
+export const InputTextActionDefinition: AgentActionDefinition = {
     type: "inputText" as const,
     actionParams: InputTextAction,
-    run: async (ctx: ActionContext, action) => {
+    run: async (ctx: ActionContext, action: InputTextActionType) => {
       let { index, text } = action;
       const locator = getLocator(ctx, index);
       for (const variable of ctx.variables) {
@@ -32,7 +31,7 @@ export const InputTextActionDefinition: AgentActionDefinition<InputTextActionTyp
         message: `Inputted text "${text}" into element with index ${index}`,
       };
     },
-    pprintAction: function (params: z.infer<InputTextActionType>): string {
+    pprintAction: function (params: InputTextActionType): string {
       return `Input text "${params.text}" into element at index ${params.index}`;
     },
   };
