@@ -2,7 +2,7 @@ import { isIgnoredElem, isInteractiveElem } from "./elem-interactive";
 import { InteractiveElement } from "./types";
 
 export const findInteractiveElements = (): InteractiveElement[] => {
-  const intereactiveElements: InteractiveElement[] = [];
+  const interactiveElements: InteractiveElement[] = [];
   const processedElements = new Set<HTMLElement>();
 
   const processRoot = (
@@ -29,7 +29,7 @@ export const findInteractiveElements = (): InteractiveElement[] => {
       if (isIgnoredElem(element) || !isInteractive) {
         continue;
       }
-      intereactiveElements.push({
+      interactiveElements.push({
         element,
         iframe: rootInfo.iframe,
         shadowHost: rootInfo.shadowHost,
@@ -59,5 +59,5 @@ export const findInteractiveElements = (): InteractiveElement[] => {
     }
   }
 
-  return intereactiveElements;
+  return interactiveElements;
 };

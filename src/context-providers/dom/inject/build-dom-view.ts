@@ -110,7 +110,7 @@ export const buildDomViewJs = `(() => {
 
   // src/context-providers/dom/find-interactive-elements.ts
   var findInteractiveElements = () => {
-    const intereactiveElements = [];
+    const interactiveElements = [];
     const processedElements = /* @__PURE__ */ new Set();
     const processRoot = (root, rootInfo = {}) => {
       const elements = root.querySelectorAll("*");
@@ -130,7 +130,7 @@ export const buildDomViewJs = `(() => {
         if (isIgnoredElem(element) || !isInteractive) {
           continue;
         }
-        intereactiveElements.push({
+        interactiveElements.push({
           element,
           iframe: rootInfo.iframe,
           shadowHost: rootInfo.shadowHost,
@@ -155,7 +155,7 @@ export const buildDomViewJs = `(() => {
         console.warn("error processing iframe", e);
       }
     }
-    return intereactiveElements;
+    return interactiveElements;
   };
 
   // src/context-providers/dom/highlight.ts
