@@ -63,7 +63,7 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
 
   debug?: boolean;
   llm?: BaseChatModel;
-
+  clientType?: "mobile" | "desktop";
   hyperbrowserConfig?: Omit<
     NonNullable<ConstructorParameters<typeof HyperbrowserProvider>[0]>,
     "debug"
