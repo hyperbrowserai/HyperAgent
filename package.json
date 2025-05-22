@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "commonjs",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "scripts": {
     "build": "rm -rf dist && tsc && tsc-alias && node -e \"require('fs').chmodSync('dist/cli/index.js', '755')\" && node -e \"require('fs').chmodSync('cli.sh', '755')\"",
     "build-dom-tree-script": "ts-node src/context-providers/dom/builder.ts",
