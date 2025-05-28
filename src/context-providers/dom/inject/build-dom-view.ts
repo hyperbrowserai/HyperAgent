@@ -143,12 +143,24 @@ export const buildDomViewJs = `(() => {
       }
     };
     processRoot(document);
+    // Process iframes, but exclude those with src="about:blank"
     const iframes = document.querySelectorAll("iframe");
     for (let i = 0; i < iframes.length; i++) {
       const iframe = iframes[i];
+      
+      // Skip iframes with src="about:blank"
+      const src = iframe.getAttribute("src");
+      if (src === "about:blank") {
+        continue;
+      }
+      
       try {
         const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
         if (iframeDoc) {
+          // Also check the document URL in case src was set programmatically
+          if (iframeDoc.URL === "about:blank") {
+            continue;
+          }
           processRoot(iframeDoc, { iframe });
         }
       } catch (e) {
