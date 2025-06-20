@@ -97,11 +97,14 @@ const runAction = async (
   // DEBUG
   if (ctx.debug) {
     const actionLogFile = `${ctx.debugDir}/action.log`;
-    fs.appendFileSync(actionLogFile, `action: ${action.type}\n`);
-    fs.appendFileSync(actionLogFile, `${JSON.stringify(action.params, null, 2)}`);
-    fs.appendFileSync(actionLogFile, `\n`);
-    fs.appendFileSync(actionLogFile, getActionSourceCode(actionHandler));
-    fs.appendFileSync(actionLogFile, `\n\n`);
+
+    const actionParamsStr = JSON.stringify(action.params, null, 2);
+    fs.appendFileSync(actionLogFile, `action: ${actionType}\n`);
+    fs.appendFileSync(actionLogFile, `const actionParams = ${actionParamsStr}\n`);
+
+    let handlerSrc = actionHandler.toString();
+    fs.appendFileSync(
+      actionLogFile, `const result = (${handlerSrc})(null, actionParams)\nconsole.log(result)\n\n`);
   }
   // DEBUG DONE
   
