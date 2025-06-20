@@ -66,6 +66,10 @@ const getActionHandler = (
   }
 };
 
+const getActionSourceCode = (actionHandler: Function): string => {
+  return actionHandler.toString();
+};
+
 const runAction = async (
   action: ActionType,
   domState: DOMState,
@@ -89,6 +93,18 @@ const runAction = async (
       message: `Unknown action type: ${actionType}`,
     };
   }
+  
+  // DEBUG
+  if (ctx.debug) {
+    const actionLogFile = `${ctx.debugDir}/action.log`;
+    fs.appendFileSync(actionLogFile, `action: ${action.type}\n`);
+    fs.appendFileSync(actionLogFile, `${JSON.stringify(action.params, null, 2)}`);
+    fs.appendFileSync(actionLogFile, `\n`);
+    fs.appendFileSync(actionLogFile, getActionSourceCode(actionHandler));
+    fs.appendFileSync(actionLogFile, `\n\n`);
+  }
+  // DEBUG DONE
+  
   try {
     return await actionHandler(actionCtx, action.params);
   } catch (error) {
@@ -112,6 +128,7 @@ export const runAgentTask = async (
   const debugDir = params?.debugDir || `debug/${taskId}`;
   if (ctx.debug) {
     console.log(`Debugging task ${taskId} in ${debugDir}`);
+    ctx.debugDir = debugDir;
   }
 
   taskState.status = TaskStatus.RUNNING as TaskStatus;
@@ -214,6 +231,7 @@ export const runAgentTask = async (
     const actionOutputs: ActionOutput[] = [];
     for (const action of agentStepActions) {
       if (action.type === "complete") {
+        // Qinyu TODO: I never see this action being called. How does it work?
         taskState.status = TaskStatus.COMPLETED;
         const actionDefinition = ctx.actions.find(
           (actionDefinition) => actionDefinition.type === "complete"
