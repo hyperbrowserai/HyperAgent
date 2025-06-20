@@ -77,9 +77,6 @@ const getActionCode = (
     throw new ActionNotFoundError(type);
   }
 };
-const getActionSourceCode = (actionHandler: Function): string => {
-  return actionHandler.toString();
-};
 
 const runAction = async (
   action: ActionType,
