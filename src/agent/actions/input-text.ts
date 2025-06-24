@@ -16,6 +16,7 @@ export type InputTextActionType = z.infer<typeof InputTextAction>;
 export const InputTextActionDefinition: AgentActionDefinition = {
     type: "inputText" as const,
     actionParams: InputTextAction,
+
     run: async (ctx: ActionContext, action: InputTextActionType) => {
       let { index, text } = action;
       const locator = getLocator(ctx, index);
@@ -31,16 +32,18 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         message: `Inputted text "${text}" into element with index ${index}`,
       };
     },
+
     generateCode: async (ctx: ActionContext, action: InputTextActionType) => {
       const locator = getLocator(ctx, action.index);
       return `
-        const locator = ${locator};
+        const locator = ctx.page.${locator};
         if (!locator) {
           return { success: false, message: "Element not found" };
         }
         await locator.fill("${action.text}", { timeout: 5_000 });
       `;
     },
+
     pprintAction: function (params: InputTextActionType): string {
       return `Input text "${params.text}" into element at index ${params.index}`;
     },

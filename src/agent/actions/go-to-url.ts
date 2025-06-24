@@ -20,7 +20,9 @@ export const GoToURLActionDefinition: AgentActionDefinition = {
   },
   
   generateCode: async (ctx: ActionContext, action: GoToUrlActionType) => {
-    return `await ctx.page.goto("${action.url}");`;
+    return `
+      await ctx.page.goto("${action.url}");
+    `;
   },
   
   pprintAction: function(params: GoToUrlActionType): string {

@@ -70,6 +70,13 @@ export const PDFActionDefinition: AgentActionDefinition = {
       message: geminiResponse.text || "No response text returned.",
     };
   },
+
+  generateCode: async (ctx: ActionContext, action: PDFActionType) => {
+    return `
+      // TODO: Implement analyze PDF action
+    `;
+  },
+
   pprintAction: function (params: PDFActionType): string {
     return `Analyze PDF at URL: ${params.pdfUrl} with prompt: ${params.prompt}`;
   },

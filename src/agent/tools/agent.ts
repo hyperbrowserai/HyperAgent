@@ -66,6 +66,17 @@ const getActionHandler = (
   }
 };
 
+const getActionCode = (
+  actions: Array<AgentActionDefinition>,
+  type: string
+) => {
+  const foundAction = actions.find((actions) => actions.type === type);
+  if (foundAction) {
+    return foundAction.generateCode || (() => "// Function not implemented");
+  } else {
+    throw new ActionNotFoundError(type);
+  }
+};
 const getActionSourceCode = (actionHandler: Function): string => {
   return actionHandler.toString();
 };
@@ -99,21 +110,12 @@ const runAction = async (
     const actionLogFile = `${ctx.debugDir}/action.ts`;
 
     const actionParamsStr = JSON.stringify(action.params, null, 2);
-    fs.appendFileSync(actionLogFile, `// action: ${actionType}\n`);
-    fs.appendFileSync(actionLogFile, `actionParams = ${actionParamsStr}\n`);
+    fs.appendFileSync(actionLogFile, `/*\naction: ${actionType}\nactionParams = ${actionParamsStr}\n*/\n`);
 
-    let handlerSrc = actionHandler.toString();
-    if (handlerSrc.includes("getLocator")) {
-      const index = (action.params as Record<string, any>)?.["index"];
-      const element = actionCtx.domState.elements.get(index);
-      const escapedPath = JSON.stringify(element?.isUnderShadowRoot ? element.cssPath : `xpath=${element?.xpath}`);
-      handlerSrc = handlerSrc.replace(
-        /^\s*.*getLocator.*$/gm,
-        `        const locator = ctx.page.locator(${escapedPath});`
-      );
-    }
-    fs.appendFileSync(
-      actionLogFile, `result = (${handlerSrc})(ctx, actionParams)\nconsole.log(result)\n\n\n`);
+    const generateCode = getActionCode(ctx.actions, action.type);
+    const code = await generateCode(actionCtx, action.params);
+    fs.appendFileSync(actionLogFile, `{\n${code}\n}\n\n`);
+    fs.appendFileSync(actionLogFile, `await sleep(2000);\n\n`);
   }
   // DEBUG DONE
   
@@ -142,6 +144,8 @@ export const runAgentTask = async (
     console.log(`Debugging task ${taskId} in ${debugDir}`);
     ctx.debugDir = debugDir;
   }
+
+  // TODO: add file logging to `action.ts`
 
   taskState.status = TaskStatus.RUNNING as TaskStatus;
   if (!ctx.llm) {

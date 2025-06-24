@@ -20,12 +20,21 @@ export type CompleteActionType = z.infer<typeof CompleteAction>;
 export const CompleteActionDefinition: AgentActionDefinition = {
   type: "complete" as const,
   actionParams: CompleteAction,
+
   run: async (): Promise<ActionOutput> => {
     return { success: true, message: "Task Complete" };
   },
+
+  generateCode: async () => {
+    return `
+      console.log("Task complete");
+    `;
+  },
+
   completeAction: async (params: CompleteActionType) => {
     return params.text ?? "No response text found";
   },
+
   pprintAction: function (params: CompleteActionType): string {
     return `Complete task with ${params.success ? "success" : "failure"}`;
   },

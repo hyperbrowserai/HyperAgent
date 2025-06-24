@@ -18,6 +18,7 @@ const CLICK_CHECK_TIMEOUT_PERIOD = 2_500;
 export const ClickElementActionDefinition: AgentActionDefinition = {
   type: "clickElement" as const,
   actionParams: ClickElementAction,
+
   run: async function (
     ctx: ActionContext,
     action: ClickElementActionType
@@ -49,6 +50,38 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     await locator.click({ force: true });
     return { success: true, message: `Clicked element with index ${index}` };
   },
+
+  generateCode: async (ctx: ActionContext, action: ClickElementActionType) => {
+    const locator = getLocator(ctx, action.index);
+
+    return `
+        const locator = ctx.page.${locator};
+        if (!locator) {
+          return { success: false, message: "Element not found" };
+        }
+
+        const exists = (await locator.count()) > 0;
+        if (!exists) {
+          return { success: false, message: "Element not found on page" };
+        }
+
+        await locator.scrollIntoViewIfNeeded({
+          timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
+        });
+
+        await Promise.all([
+          locator.waitFor({
+            state: "visible",
+            timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
+          }),
+          waitForElementToBeEnabled(locator, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+          waitForElementToBeStable(locator, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+        ]);
+
+        await locator.click({ force: true });
+    `;
+  },
+
   pprintAction: function (params: ClickElementActionType): string {
     return `Click element at index ${params.index}`;
   },
