@@ -76,7 +76,7 @@ const getActionCode = (
   } else {
     throw new ActionNotFoundError(type);
   }
-};
+}
 
 const runAction = async (
   action: ActionType,

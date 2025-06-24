@@ -135,3 +135,6 @@ dist
 
 .ignore
 extensions
+
+# TO be removed
+scripts/test-qinyuh.ts
