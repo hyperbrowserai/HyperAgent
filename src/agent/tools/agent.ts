@@ -96,15 +96,24 @@ const runAction = async (
   
   // DEBUG
   if (ctx.debug) {
-    const actionLogFile = `${ctx.debugDir}/action.log`;
+    const actionLogFile = `${ctx.debugDir}/action.ts`;
 
     const actionParamsStr = JSON.stringify(action.params, null, 2);
-    fs.appendFileSync(actionLogFile, `action: ${actionType}\n`);
-    fs.appendFileSync(actionLogFile, `const actionParams = ${actionParamsStr}\n`);
+    fs.appendFileSync(actionLogFile, `// action: ${actionType}\n`);
+    fs.appendFileSync(actionLogFile, `actionParams = ${actionParamsStr}\n`);
 
     let handlerSrc = actionHandler.toString();
+    if (handlerSrc.includes("getLocator")) {
+      const index = (action.params as Record<string, any>)?.["index"];
+      const element = actionCtx.domState.elements.get(index);
+      const escapedPath = JSON.stringify(element?.isUnderShadowRoot ? element.cssPath : `xpath=${element?.xpath}`);
+      handlerSrc = handlerSrc.replace(
+        /^\s*.*getLocator.*$/gm,
+        `        const locator = ctx.page.locator(${escapedPath});`
+      );
+    }
     fs.appendFileSync(
-      actionLogFile, `const result = (${handlerSrc})(null, actionParams)\nconsole.log(result)\n\n`);
+      actionLogFile, `result = (${handlerSrc})(ctx, actionParams)\nconsole.log(result)\n\n\n`);
   }
   // DEBUG DONE
   

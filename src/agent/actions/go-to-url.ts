@@ -12,11 +12,17 @@ export type GoToUrlActionType = z.infer<typeof GoToUrlAction>;
 export const GoToURLActionDefinition: AgentActionDefinition = {
   type: "goToUrl" as const,
   actionParams: GoToUrlAction,
+  
   run: async (ctx: ActionContext, action: GoToUrlActionType) => {
     const { url } = action;
     await ctx.page.goto(url);
     return { success: true, message: `Navigated to ${url}` };
   },
+  
+  generateCode: async (ctx: ActionContext, action: GoToUrlActionType) => {
+    return `await ctx.page.goto("${action.url}");`;
+  },
+  
   pprintAction: function(params: GoToUrlActionType): string {
     return `Navigate to URL: ${params.url}`;
   },
