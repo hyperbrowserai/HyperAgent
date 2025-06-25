@@ -104,13 +104,14 @@ export const runAgentTask = async (
   taskState: TaskState,
   params?: TaskParams
 ): Promise<TaskOutput> => {
+  if (!taskState) {
+    throw new HyperagentError(`Task not found`);
+  }
   const taskId = taskState.id;
+
   const debugDir = params?.debugDir || `debug/${taskId}`;
   if (ctx.debug) {
     console.log(`Debugging task ${taskId} in ${debugDir}`);
-  }
-  if (!taskState) {
-    throw new HyperagentError(`Task ${taskId} not found`);
   }
 
   taskState.status = TaskStatus.RUNNING as TaskStatus;
