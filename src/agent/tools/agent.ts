@@ -72,7 +72,7 @@ const getActionCode = (
 ) => {
   const foundAction = actions.find((actions) => actions.type === type);
   if (foundAction) {
-    return foundAction.generateCode || (() => "// Function not implemented");
+    return foundAction.generateCode;
   } else {
     throw new ActionNotFoundError(type);
   }
@@ -110,7 +110,7 @@ const runAction = async (
     fs.appendFileSync(actionLogFile, `/*\naction: ${actionType}\nactionParams = ${actionParamsStr}\n*/\n`);
 
     const generateCode = getActionCode(ctx.actions, action.type);
-    const code = await generateCode(actionCtx, action.params);
+    const code = generateCode(actionCtx, action.params);
     fs.appendFileSync(actionLogFile, `{\n${code}\n}\n\n`);
     fs.appendFileSync(actionLogFile, `await sleep(2000);\n\n`);
   }

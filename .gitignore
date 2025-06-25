@@ -137,4 +137,4 @@ dist
 extensions
 
 # TO be removed
-scripts/test-qinyuh.ts
+scripts/test-qrex.ts
