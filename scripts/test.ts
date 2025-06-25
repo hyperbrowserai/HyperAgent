@@ -6,6 +6,7 @@ dotenv.config();
 
 const agent = new HyperAgent({
   debug: true,
+  browserProvider: "Hyperbrowser",
 });
 
 (async () => {
