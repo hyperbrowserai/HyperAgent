@@ -72,7 +72,7 @@ const getActionCode = (
 ) => {
   const foundAction = actions.find((actions) => actions.type === type);
   if (foundAction) {
-    return foundAction.generateCode;
+    return foundAction.generateCode || (() => "// Function not implemented");
   } else {
     throw new ActionNotFoundError(type);
   }
@@ -82,7 +82,9 @@ const runAction = async (
   action: ActionType,
   domState: DOMState,
   page: Page,
-  ctx: AgentCtx
+  ctx: AgentCtx,
+  stepIndex?: number,
+  actionIndex?: number
 ): Promise<ActionOutput> => {
   const actionCtx: ActionContext = {
     domState,
@@ -110,8 +112,8 @@ const runAction = async (
     fs.appendFileSync(actionLogFile, `/*\naction: ${actionType}\nactionParams = ${actionParamsStr}\n*/\n`);
 
     const generateCode = getActionCode(ctx.actions, action.type);
-    const code = generateCode(actionCtx, action.params);
-    fs.appendFileSync(actionLogFile, `{\n${code}\n}\n\n`);
+    const code = await generateCode(actionCtx, action.params, stepIndex, actionIndex);
+    fs.appendFileSync(actionLogFile, `${code}\n\n`);
     fs.appendFileSync(actionLogFile, `await sleep(2000);\n\n`);
   }
   // DEBUG DONE
@@ -142,7 +144,7 @@ export const runAgentTask = async (
     ctx.debugDir = debugDir;
   }
 
-  // TODO: add file logging to `action.ts`
+  // TODO: add file logging to `action.ts` and initialize it here
 
   taskState.status = TaskStatus.RUNNING as TaskStatus;
   if (!ctx.llm) {
@@ -242,9 +244,8 @@ export const runAgentTask = async (
     // Run Actions
     const agentStepActions = agentOutput.actions;
     const actionOutputs: ActionOutput[] = [];
-    for (const action of agentStepActions) {
+    for (const [actionIndex, action] of agentStepActions.entries()) {
       if (action.type === "complete") {
-        // Qinyu TODO: I never see this action being called. How does it work?
         taskState.status = TaskStatus.COMPLETED;
         const actionDefinition = ctx.actions.find(
           (actionDefinition) => actionDefinition.type === "complete"
@@ -261,7 +262,9 @@ export const runAgentTask = async (
         action as ActionType,
         domState,
         page,
-        ctx
+        ctx,
+        currStep,
+        actionIndex,
       );
       actionOutputs.push(actionOutput);
       await sleep(2000); // TODO: look at this - smarter page loading

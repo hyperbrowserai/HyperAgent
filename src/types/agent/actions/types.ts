@@ -49,7 +49,7 @@ export interface AgentActionDefinition<
   actionParams: T;
 
   run(ctx: ActionContext, params: z.infer<T>): Promise<ActionOutput>;
-  generateCode(ctx: ActionContext, params: z.infer<T>): Promise<string>;
+  generateCode?(ctx: ActionContext, params: z.infer<T>, stepIndex?: number, actionIndex?: number): Promise<string>;
   /**
    * completeAction is only called if the name of this action is "complete". It is meant to format text into a proper format for output.
    * @param params

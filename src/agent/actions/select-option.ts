@@ -30,14 +30,23 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     };
   },
 
-  generateCode: async (ctx: ActionContext, action: SelectOptionActionType) => {
+  generateCode: async (
+    ctx: ActionContext,
+    action: SelectOptionActionType,
+    stepIndex?: number,
+    actionIndex?: number,
+  ) => {
     const locator = getLocator(ctx, action.index);
+    const stepIndexStr = stepIndex !== undefined ? `${stepIndex}` : "";
+    const actionIndexStr = actionIndex !== undefined ? `${actionIndex}` : "";
+    const variableSuffixStr = `${stepIndexStr}_${actionIndexStr}`;
+
     return `
-      const locator = ctx.page.${locator};
-      if (!locator) {
+      const locator_${variableSuffixStr} = ctx.page.${locator};
+      if (!locator_${variableSuffixStr}) {
         return { success: false, message: "Element not found" };
       }
-      await locator.selectOption({ label: ${action.text} });
+      await locator_${variableSuffixStr}.selectOption({ label: ${action.text} });
     `;
   },
 

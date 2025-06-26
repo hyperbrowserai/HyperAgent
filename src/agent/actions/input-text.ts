@@ -33,14 +33,23 @@ export const InputTextActionDefinition: AgentActionDefinition = {
       };
     },
 
-    generateCode: async (ctx: ActionContext, action: InputTextActionType) => {
+    generateCode: async (
+      ctx: ActionContext,
+      action: InputTextActionType,
+      stepIndex?: number,
+      actionIndex?: number,
+    ) => {
       const locator = getLocator(ctx, action.index);
+      const stepIndexStr = stepIndex !== undefined ? `${stepIndex}` : "";
+      const actionIndexStr = actionIndex !== undefined ? `${actionIndex}` : "";
+      const variableSuffixStr = `${stepIndexStr}_${actionIndexStr}`;
+
       return `
-        const locator = ctx.page.${locator};
-        if (!locator) {
+        const locator_${variableSuffixStr} = ctx.page.${locator};
+        if (!locator_${variableSuffixStr}) {
           return { success: false, message: "Element not found" };
         }
-        await locator.fill("${action.text}", { timeout: 5_000 });
+        await locator_${variableSuffixStr}.fill("${action.text}", { timeout: 5_000 });
       `;
     },
 
