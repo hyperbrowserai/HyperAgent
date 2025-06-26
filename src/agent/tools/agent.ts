@@ -1,5 +1,6 @@
 import { AgentStep } from "@/types/agent/types";
 import fs from "fs";
+import prettier from "prettier";
 
 import {
   ActionContext,
@@ -8,6 +9,7 @@ import {
   AgentActionDefinition,
 } from "@/types";
 import { getDom } from "@/context-providers/dom";
+import { initActionScript } from "@/utils/action";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 
@@ -104,7 +106,6 @@ const runAction = async (
     };
   }
   
-  // DEBUG
   if (ctx.debug) {
     const actionLogFile = `${ctx.debugDir}/action.ts`;
 
@@ -116,7 +117,6 @@ const runAction = async (
     fs.appendFileSync(actionLogFile, `${code}\n\n`);
     fs.appendFileSync(actionLogFile, `await sleep(2000);\n\n`);
   }
-  // DEBUG DONE
   
   try {
     return await actionHandler(actionCtx, action.params);
@@ -142,11 +142,12 @@ export const runAgentTask = async (
   if (ctx.debug) {
     console.log(`Debugging task ${taskId} in ${debugDir}`);
     ctx.debugDir = debugDir;
+    fs.mkdirSync(debugDir, { recursive: true });
+
+    // Initialize action.ts with pre-set content
+    initActionScript(`${debugDir}/action.ts`);
   }
-
-  // TODO: add file logging to `action.ts` and initialize it here
-
-  taskState.status = TaskStatus.RUNNING as TaskStatus;
+  
   if (!ctx.llm) {
     throw new HyperagentError("LLM not initialized");
   }
@@ -158,15 +159,18 @@ export const runAgentTask = async (
   );
   const baseMsgs = [{ role: "system", content: SYSTEM_PROMPT }];
 
+  taskState.status = TaskStatus.RUNNING as TaskStatus;
   let output = "";
   const page = taskState.startingPage;
   let currStep = 0;
+
   while (true) {
     // Status Checks
     if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
       await sleep(100);
       continue;
     }
+
     if (endTaskStatuses.has(taskState.status)) {
       break;
     }
@@ -174,6 +178,7 @@ export const runAgentTask = async (
       taskState.status = TaskStatus.CANCELLED;
       break;
     }
+
     const debugStepDir = `${debugDir}/step-${currStep}`;
     if (ctx.debug) {
       fs.mkdirSync(debugStepDir, { recursive: true });
@@ -196,7 +201,6 @@ export const runAgentTask = async (
 
     // Store Dom State for Debugging
     if (ctx.debug) {
-      fs.mkdirSync(debugDir, { recursive: true });
       fs.writeFileSync(`${debugStepDir}/elems.txt`, domState.domState);
       if (trimmedScreenshot) {
         fs.writeFileSync(
@@ -291,12 +295,23 @@ export const runAgentTask = async (
     steps: taskState.steps,
     output,
   };
+
   if (ctx.debug) {
     fs.writeFileSync(
       `${debugDir}/taskOutput.json`,
       JSON.stringify(taskOutput, null, 2)
     );
+
+    // Finish action.ts & format it
+    const actionLogFile = `${debugDir}/action.ts`;
+    fs.appendFileSync(actionLogFile, `})();` + `\n\n`);
+    const formatted = await prettier.format(
+      fs.readFileSync(actionLogFile, "utf-8"),
+      {filepath: actionLogFile},
+    );
+    fs.writeFileSync(actionLogFile, formatted);
   }
   await params?.onComplete?.(taskOutput);
+
   return taskOutput;
 };
