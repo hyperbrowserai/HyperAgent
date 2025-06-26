@@ -6,7 +6,9 @@ import { getLocator } from "./utils";
 
 const ClickElementAction = z
   .object({
-    description: z.string().describe("The description of the element to click."),
+    description: z.string()
+      .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
+      .describe("The description of the element to click."),
     index: z.number().describe("The numeric index of the element to click."),
   })
   .describe("Click on an element identified by its index");
@@ -67,35 +69,33 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     actionIndex?: number,
   ) => {
     const locator = getLocator(ctx, action.index);
-    const stepIndexStr = stepIndex !== undefined ? `${stepIndex}` : "";
-    const actionIndexStr = actionIndex !== undefined ? `${actionIndex}` : "";
-    const variableSuffixStr = `${stepIndexStr}_${actionIndexStr}`;
+    const description = action.description;
 
     return `
-        const locator_${variableSuffixStr} = ctx.page.${locator};
-        if (!locator_${variableSuffixStr}) {
+        const locator${description} = ctx.page.${locator};
+        if (!locator${description}) {
           return { success: false, message: "Element not found" };
         }
 
-        const exists_${variableSuffixStr} = (await locator_${variableSuffixStr}.count()) > 0;
-        if (!exists_${variableSuffixStr}) {
+        const exists${description} = (await locator${description}.count()) > 0;
+        if (!exists${description}) {
           return { success: false, message: "Element not found on page" };
         }
 
-        await locator_${variableSuffixStr}.scrollIntoViewIfNeeded({
+        await locator${description}.scrollIntoViewIfNeeded({
           timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
         });
 
         await Promise.all([
-          locator_${variableSuffixStr}.waitFor({
+          locator${description}.waitFor({
             state: "visible",
             timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
           }),
-          waitForElementToBeEnabled(locator_${variableSuffixStr}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
-          waitForElementToBeStable(locator_${variableSuffixStr}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+          waitForElementToBeEnabled(locator${description}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+          waitForElementToBeStable(locator${description}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
         ]);
 
-        await locator_${variableSuffixStr}.click({ force: true });
+        await locator${description}.click({ force: true });
     `;
   },
 

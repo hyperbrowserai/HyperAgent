@@ -3,9 +3,13 @@ import prettier from "prettier";
 
 
 export function initActionScript(actionLogFile: string) {
+    if (process.env.NODE_ENV === "development") {
+        console.log("Hey there, this is a development environment.");
+    }
+
     // Add imports
     fs.writeFileSync(actionLogFile, `
-    import { chromium, Page, Locator } from "playwright";
+    import { chromium, Page } from "playwright";
 
     import { sleep } from "@/utils/sleep";
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "@/agent/actions/click-element";

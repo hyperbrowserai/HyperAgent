@@ -84,8 +84,6 @@ const runAction = async (
   domState: DOMState,
   page: Page,
   ctx: AgentCtx,
-  stepIndex?: number,
-  actionIndex?: number
 ): Promise<ActionOutput> => {
   const actionCtx: ActionContext = {
     domState,
@@ -112,7 +110,7 @@ const runAction = async (
     fs.appendFileSync(actionLogFile, `/*\naction: ${actionType}\nactionParams = ${actionParamsStr}\n*/\n`);
 
     const generateCode = getActionCode(ctx.actions, action.type);
-    const code = await generateCode(actionCtx, action.params, stepIndex, actionIndex);
+    const code = await generateCode(actionCtx, action.params);
     fs.appendFileSync(actionLogFile, `${code}\n\n`);
     fs.appendFileSync(actionLogFile, `await sleep(2000);\n\n`);
   }
@@ -247,7 +245,7 @@ export const runAgentTask = async (
     // Run Actions
     const agentStepActions = agentOutput.actions;
     const actionOutputs: ActionOutput[] = [];
-    for (const [actionIndex, action] of agentStepActions.entries()) {
+    for (const action of agentStepActions) {
       if (action.type === "complete") {
         taskState.status = TaskStatus.COMPLETED;
         const actionDefinition = ctx.actions.find(
@@ -266,8 +264,6 @@ export const runAgentTask = async (
         domState,
         page,
         ctx,
-        currStep,
-        actionIndex,
       );
       actionOutputs.push(actionOutput);
       await sleep(2000); // TODO: look at this - smarter page loading
