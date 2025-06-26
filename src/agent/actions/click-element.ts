@@ -6,6 +6,7 @@ import { getLocator } from "./utils";
 
 const ClickElementAction = z
   .object({
+    description: z.string().describe("The description of the element to click."),
     index: z.number().describe("The numeric index of the element to click."),
   })
   .describe("Click on an element identified by its index");
@@ -109,7 +110,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
  * @param timeout Maximum time to wait in milliseconds
  * @returns Promise that resolves when element is enabled or rejects on timeout
  */
-async function waitForElementToBeEnabled(
+export async function waitForElementToBeEnabled(
   locator: Locator,
   timeout: number = 5000
 ): Promise<void> {
@@ -137,7 +138,7 @@ async function waitForElementToBeEnabled(
  * @param timeout Maximum time to wait in milliseconds
  * @returns Promise that resolves when element is stable or rejects on timeout
  */
-async function waitForElementToBeStable(
+export async function waitForElementToBeStable(
   locator: Locator,
   timeout: number = 5000
 ): Promise<void> {

@@ -1,6 +1,5 @@
 import { AgentStep } from "@/types/agent/types";
 import fs from "fs";
-import prettier from "prettier";
 
 import {
   ActionContext,
@@ -9,7 +8,7 @@ import {
   AgentActionDefinition,
 } from "@/types";
 import { getDom } from "@/context-providers/dom";
-import { initActionScript } from "@/utils/action";
+import { initActionScript, wrapUpActionScript } from "@/utils/action";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 
@@ -303,13 +302,7 @@ export const runAgentTask = async (
     );
 
     // Finish action.ts & format it
-    const actionLogFile = `${debugDir}/action.ts`;
-    fs.appendFileSync(actionLogFile, `})();` + `\n\n`);
-    const formatted = await prettier.format(
-      fs.readFileSync(actionLogFile, "utf-8"),
-      {filepath: actionLogFile},
-    );
-    fs.writeFileSync(actionLogFile, formatted);
+    wrapUpActionScript(`${debugDir}/action.ts`);
   }
   await params?.onComplete?.(taskOutput);
 
