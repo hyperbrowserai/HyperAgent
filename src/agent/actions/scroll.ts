@@ -14,6 +14,7 @@ export type ScrollActionType = z.infer<typeof ScrollAction>;
 export const ScrollActionDefinition: AgentActionDefinition = {
   type: "scroll" as const,
   actionParams: ScrollAction,
+  
   run: async (ctx: ActionContext, action: ScrollActionType) => {
     const { direction } = action;
     switch (direction) {
@@ -32,6 +33,27 @@ export const ScrollActionDefinition: AgentActionDefinition = {
     }
     return { success: true, message: `Scrolled ${direction}` };
   },
+
+  generateCode: async (ctx: ActionContext, action: ScrollActionType) => {
+    const { direction } = action;
+    const scrollByUpDown =
+      direction === "up"
+        ? -window.innerHeight
+        : direction === "down"
+        ? window.innerHeight
+        : 0;
+    const scrollByLeftRight =
+      direction === "left"
+        ? -window.innerWidth
+        : direction === "right"
+        ? window.innerWidth
+        : 0;
+  
+  return `
+      await ctx.page.evaluate(() => window.scrollBy(${scrollByLeftRight}, ${scrollByUpDown}));
+    `;
+  },
+  
   pprintAction: function(params: ScrollActionType): string {
     return `Scroll ${params.direction}`;
   },

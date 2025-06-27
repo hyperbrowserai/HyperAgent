@@ -24,6 +24,7 @@ export const generateCompleteActionWithOutputDefinition = (
   return {
     type: "complete" as const,
     actionParams: actionParamsSchema,
+
     run: async (
       ctx: ActionContext,
       actionParams: CompeleteActionWithOutputSchema
@@ -42,6 +43,13 @@ export const generateCompleteActionWithOutputDefinition = (
         };
       }
     },
+
+    generateCode: async (ctx: ActionContext, action: CompeleteActionWithOutputSchema) => {
+      return `
+        // TODO: Implement complete action with output schema
+      `;
+    },
+
     completeAction: async (params: CompeleteActionWithOutputSchema) => {
       return JSON.stringify(params.outputSchema, null, 2);
     },

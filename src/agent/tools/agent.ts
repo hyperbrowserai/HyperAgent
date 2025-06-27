@@ -8,6 +8,7 @@ import {
   AgentActionDefinition,
 } from "@/types";
 import { getDom } from "@/context-providers/dom";
+import { initActionScript, wrapUpActionScript } from "@/utils/action";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 
@@ -66,11 +67,23 @@ const getActionHandler = (
   }
 };
 
+const getActionCode = (
+  actions: Array<AgentActionDefinition>,
+  type: string
+) => {
+  const foundAction = actions.find((actions) => actions.type === type);
+  if (foundAction) {
+    return foundAction.generateCode || (() => "// Function not implemented");
+  } else {
+    throw new ActionNotFoundError(type);
+  }
+}
+
 const runAction = async (
   action: ActionType,
   domState: DOMState,
   page: Page,
-  ctx: AgentCtx
+  ctx: AgentCtx,
 ): Promise<ActionOutput> => {
   const actionCtx: ActionContext = {
     domState,
@@ -89,6 +102,19 @@ const runAction = async (
       message: `Unknown action type: ${actionType}`,
     };
   }
+  
+  if (ctx.debug) {
+    const actionLogFile = `${ctx.debugDir}/action.ts`;
+
+    const actionParamsStr = JSON.stringify(action.params, null, 2);
+    fs.appendFileSync(actionLogFile, `/*\naction: ${actionType}\nactionParams = ${actionParamsStr}\n*/\n`);
+
+    const generateCode = getActionCode(ctx.actions, action.type);
+    const code = await generateCode(actionCtx, action.params);
+    fs.appendFileSync(actionLogFile, `${code}\n\n`);
+    fs.appendFileSync(actionLogFile, `await sleep(2000);\n\n`);
+  }
+  
   try {
     return await actionHandler(actionCtx, action.params);
   } catch (error) {
@@ -112,9 +138,13 @@ export const runAgentTask = async (
   const debugDir = params?.debugDir || `debug/${taskId}`;
   if (ctx.debug) {
     console.log(`Debugging task ${taskId} in ${debugDir}`);
-  }
+    ctx.debugDir = debugDir;
+    fs.mkdirSync(debugDir, { recursive: true });
 
-  taskState.status = TaskStatus.RUNNING as TaskStatus;
+    // Initialize action.ts with pre-set content
+    initActionScript(`${debugDir}/action.ts`, taskState.task);
+  }
+  
   if (!ctx.llm) {
     throw new HyperagentError("LLM not initialized");
   }
@@ -126,15 +156,18 @@ export const runAgentTask = async (
   );
   const baseMsgs = [{ role: "system", content: SYSTEM_PROMPT }];
 
+  taskState.status = TaskStatus.RUNNING as TaskStatus;
   let output = "";
   const page = taskState.startingPage;
   let currStep = 0;
+
   while (true) {
     // Status Checks
     if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
       await sleep(100);
       continue;
     }
+
     if (endTaskStatuses.has(taskState.status)) {
       break;
     }
@@ -142,6 +175,7 @@ export const runAgentTask = async (
       taskState.status = TaskStatus.CANCELLED;
       break;
     }
+
     const debugStepDir = `${debugDir}/step-${currStep}`;
     if (ctx.debug) {
       fs.mkdirSync(debugStepDir, { recursive: true });
@@ -164,7 +198,6 @@ export const runAgentTask = async (
 
     // Store Dom State for Debugging
     if (ctx.debug) {
-      fs.mkdirSync(debugDir, { recursive: true });
       fs.writeFileSync(`${debugStepDir}/elems.txt`, domState.domState);
       if (trimmedScreenshot) {
         fs.writeFileSync(
@@ -230,7 +263,7 @@ export const runAgentTask = async (
         action as ActionType,
         domState,
         page,
-        ctx
+        ctx,
       );
       actionOutputs.push(actionOutput);
       await sleep(2000); // TODO: look at this - smarter page loading
@@ -257,12 +290,17 @@ export const runAgentTask = async (
     steps: taskState.steps,
     output,
   };
+
   if (ctx.debug) {
     fs.writeFileSync(
       `${debugDir}/taskOutput.json`,
       JSON.stringify(taskOutput, null, 2)
     );
+
+    // Finish action.ts & format it
+    wrapUpActionScript(`${debugDir}/action.ts`);
   }
   await params?.onComplete?.(taskOutput);
+
   return taskOutput;
 };

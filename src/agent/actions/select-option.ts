@@ -16,6 +16,7 @@ export type SelectOptionActionType = z.infer<typeof SelectOptionAction>;
 export const SelectOptionActionDefinition: AgentActionDefinition = {
   type: "selectOption" as const,
   actionParams: SelectOptionAction,
+
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     const { index, text } = action;
     const locator = getLocator(ctx, index);
@@ -28,6 +29,27 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
       message: `Selected option "${text}" from element with index ${index}`,
     };
   },
+
+  generateCode: async (
+    ctx: ActionContext,
+    action: SelectOptionActionType,
+    stepIndex?: number,
+    actionIndex?: number,
+  ) => {
+    const locator = getLocator(ctx, action.index);
+    const stepIndexStr = stepIndex !== undefined ? `${stepIndex}` : "";
+    const actionIndexStr = actionIndex !== undefined ? `${actionIndex}` : "";
+    const variableSuffixStr = `${stepIndexStr}_${actionIndexStr}`;
+
+    return `
+      const locator_${variableSuffixStr} = ctx.page.${locator};
+      if (!locator_${variableSuffixStr}) {
+        return { success: false, message: "Element not found" };
+      }
+      await locator_${variableSuffixStr}.selectOption({ label: ${action.text} });
+    `;
+  },
+
   pprintAction: function (params: SelectOptionActionType): string {
     return `Select option "${params.text}" from element at index ${params.index}`;
   },

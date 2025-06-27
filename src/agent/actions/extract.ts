@@ -16,6 +16,7 @@ export type ExtractActionType = z.infer<typeof ExtractAction>;
 export const ExtractActionDefinition: AgentActionDefinition = {
   type: "extract" as const,
   actionParams: ExtractAction,
+
   run: async (
     ctx: ActionContext,
     action: ExtractActionType
@@ -87,6 +88,13 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       };
     }
   },
+
+  generateCode: async (ctx: ActionContext, action: ExtractActionType) => {
+    return `
+      // TODO: Implement extract action
+    `;
+  },
+
   pprintAction: function(params: ExtractActionType): string {
     return `Extract content from page with objective: "${params.objective}"`;
   },
