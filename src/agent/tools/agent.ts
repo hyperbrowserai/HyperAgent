@@ -142,7 +142,7 @@ export const runAgentTask = async (
     fs.mkdirSync(debugDir, { recursive: true });
 
     // Initialize action.ts with pre-set content
-    initActionScript(`${debugDir}/action.ts`);
+    initActionScript(`${debugDir}/action.ts`, taskState.task);
   }
   
   if (!ctx.llm) {

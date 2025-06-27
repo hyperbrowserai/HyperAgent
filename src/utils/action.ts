@@ -1,14 +1,17 @@
 import fs from "fs";
 import prettier from "prettier";
+import { resolve } from "path";
 
 
-export function initActionScript(actionLogFile: string) {
+export function initActionScript(actionLogFile: string, task: string) {
     if (process.env.NODE_ENV === "development") {
         console.log("Hey there, this is a development environment.");
     }
 
+    fs.writeFileSync(actionLogFile, `/*\n${task}\n*/\n\n`);
+    
     // Add imports
-    fs.writeFileSync(actionLogFile, `
+    fs.appendFileSync(actionLogFile, `
     import { chromium, Page } from "playwright";
 
     import { sleep } from "@/utils/sleep";
@@ -47,4 +50,7 @@ export async function wrapUpActionScript(actionLogFile: string) {
       {filepath: actionLogFile},
     );
     fs.writeFileSync(actionLogFile, formatted);
+
+    // Keep a copy of the action script in the scripts folder
+    fs.copyFileSync(actionLogFile, resolve(__dirname, "../../test-action.ts"));
 }
