@@ -1,6 +1,5 @@
 import fs from "fs";
 import prettier from "prettier";
-import { resolve } from "path";
 
 
 export function initActionScript(actionLogFile: string, task: string) {
@@ -11,10 +10,13 @@ export function initActionScript(actionLogFile: string, task: string) {
     if (process.env.NODE_ENV === "development") {
         fs.appendFileSync(actionLogFile, `
             import { waitForElementToBeEnabled, waitForElementToBeStable } from "./src/agent/actions/click-element";
+            import { sleep } from "./src/utils/sleep";
+            import { parseMarkdown } from "./src/utils/html-to-markdown";
             ` + `\n\n`);
     } else {
         fs.appendFileSync(actionLogFile, `
             import { waitForElementToBeEnabled, waitForElementToBeStable } from "@hyperbrowser/agent/actions";
+            import { parseMarkdown, sleep } from "@hyperbrowser/agent/utils";
             ` + `\n\n`);
     }
     

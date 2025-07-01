@@ -22,6 +22,9 @@
       "@hyperbrowser/agent/actions": [
         "./src/agent/actions/index"
       ],
+      "@hyperbrowser/agent/utils": [
+        "./src/utils/index"
+      ],
       "@/*": [
         "./src/*"
       ]

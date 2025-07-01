@@ -95,6 +95,10 @@
     "./actions": {
       "types": "./dist/agent/actions/index.d.ts",
       "default": "./dist/agent/actions/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "default": "./dist/utils/index.js"
     }
   },
   "typesVersions": {

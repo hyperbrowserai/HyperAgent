@@ -74,7 +74,7 @@ const getActionCode = (
   const foundAction = actions.find((actions) => actions.type === type);
   if (foundAction) {
     return foundAction.generateCode || (
-      () => `// Action ${type} invoked, but skipped code logging.`)
+      () => `// Skipped. Action ${type} invoked, but skipped code logging.`)
   } else {
     throw new ActionNotFoundError(type);
   }
