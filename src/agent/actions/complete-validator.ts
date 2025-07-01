@@ -52,8 +52,12 @@ export const CompletionValidateActionDefinition: AgentActionDefinition = {
   },
 
   generateCode: async (ctx: ActionContext, action: CompleteValidateActionType) => {
-    return `
-      // TODO: Implement complete validator action
-    `;
+    const completionCriteria = action.completionCriteria
+    .map(
+      (subTask) =>
+        `subTask:${subTask.subTask} || condition satisfied: ${subTask.subTaskSatisfied}`
+    )
+    .join("\n");
+    return `Task Completion Report: \ntask:${action.task} \nsubtasks: \n${completionCriteria}`;
   },
 };

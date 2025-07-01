@@ -71,12 +71,6 @@ export const PDFActionDefinition: AgentActionDefinition = {
     };
   },
 
-  generateCode: async (ctx: ActionContext, action: PDFActionType) => {
-    return `
-      // TODO: Implement analyze PDF action
-    `;
-  },
-
   pprintAction: function (params: PDFActionType): string {
     return `Analyze PDF at URL: ${params.pdfUrl} with prompt: ${params.prompt}`;
   },

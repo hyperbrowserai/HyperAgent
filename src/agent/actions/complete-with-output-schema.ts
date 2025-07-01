@@ -45,9 +45,13 @@ export const generateCompleteActionWithOutputDefinition = (
     },
 
     generateCode: async (ctx: ActionContext, action: CompeleteActionWithOutputSchema) => {
-      return `
-        // TODO: Implement complete action with output schema
-      `;
+      if (action.success && action.outputSchema) {
+        return `
+        // The action generated an object
+        // Extract response into output schema ${JSON.stringify(action.outputSchema, null, 2)}
+      `} else {
+        return `Could not complete task and/or could not extract response into output schema.`
+      }
     },
 
     completeAction: async (params: CompeleteActionWithOutputSchema) => {

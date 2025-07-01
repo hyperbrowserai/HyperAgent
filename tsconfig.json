@@ -19,6 +19,9 @@
       "@hyperbrowser/agent/custom-actions": [
         "./src/custom-actions/index"
       ],
+      "@hyperbrowser/agent/actions": [
+        "./src/agent/actions/index"
+      ],
       "@/*": [
         "./src/*"
       ]
