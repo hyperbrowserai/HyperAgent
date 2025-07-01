@@ -36,21 +36,13 @@ export const ScrollActionDefinition: AgentActionDefinition = {
 
   generateCode: async (ctx: ActionContext, action: ScrollActionType) => {
     const { direction } = action;
-    const scrollByUpDown =
-      direction === "up"
-        ? -window.innerHeight
-        : direction === "down"
-        ? window.innerHeight
-        : 0;
-    const scrollByLeftRight =
-      direction === "left"
-        ? -window.innerWidth
-        : direction === "right"
-        ? window.innerWidth
-        : 0;
   
-  return `
-      await ctx.page.evaluate(() => window.scrollBy(${scrollByLeftRight}, ${scrollByUpDown}));
+    return `
+      await ctx.page.evaluate(() => {
+        const scrollByUpDown = ${direction === "up" ? "-window.innerHeight" : direction === "down" ? "window.innerHeight" : "0"};
+        const scrollByLeftRight = ${direction === "left" ? "-window.innerWidth" : direction === "right" ? "window.innerWidth" : "0"};
+        window.scrollBy(scrollByLeftRight, scrollByUpDown);
+      });
     `;
   },
   

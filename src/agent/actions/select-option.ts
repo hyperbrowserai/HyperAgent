@@ -46,7 +46,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
       if (!locator_${variableSuffixStr}) {
         return { success: false, message: "Element not found" };
       }
-      await locator_${variableSuffixStr}.selectOption({ label: ${action.text} });
+      await locator_${variableSuffixStr}.selectOption({ label: ${JSON.stringify(action.text)} });
     `;
   },
 
