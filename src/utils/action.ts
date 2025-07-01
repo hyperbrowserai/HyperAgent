@@ -4,19 +4,21 @@ import { resolve } from "path";
 
 
 export function initActionScript(actionLogFile: string, task: string) {
-    if (process.env.NODE_ENV === "development") {
-        console.log("Hey there, this is a development environment.");
-    }
-
     fs.writeFileSync(actionLogFile, `/*\n${task}\n*/\n\n`);
-    
-    // Add imports
-    fs.appendFileSync(actionLogFile, `
-    import { chromium, Page } from "playwright";
+    fs.appendFileSync(actionLogFile, `import { chromium, Page } from "playwright";\n\n`);
 
-    import { sleep } from "@/utils/sleep";
-    import { waitForElementToBeEnabled, waitForElementToBeStable } from "@/agent/actions/click-element";
-    ` + `\n\n`);
+    // Import from Hyperagent
+    if (process.env.NODE_ENV === "development") {
+        fs.appendFileSync(actionLogFile, `
+            import { sleep } from "./src/utils/sleep";
+            import { waitForElementToBeEnabled, waitForElementToBeStable } from "./src/agent/actions/click-element";
+            ` + `\n\n`);
+    } else {
+        fs.appendFileSync(actionLogFile, `
+            import { sleep } from "@/utils/sleep";
+            import { waitForElementToBeEnabled, waitForElementToBeStable } from "@/agent/actions/click-element";
+            ` + `\n\n`);
+    }
     
     // Add initPage function
     fs.appendFileSync(actionLogFile, `
