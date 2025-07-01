@@ -100,7 +100,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
   try {
     const content${description} = await ctx.page.content();
     const markdown${description} = await parseMarkdown(content${description});
-    const objective${description} = ${action.objective};
+    const objective${description} = "${action.objective}";
     const tokenLimit${description} = ${ctx.tokenLimit};
 
     // Take a screenshot of the page
@@ -108,9 +108,6 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     const screenshot${description} = await cdpSession${description}.send("Page.captureScreenshot");
     cdpSession${description}.detach();
 
-
-    // Trim markdown to stay within token limit
-    // TODO: this is a hack, we should use a better token counting method
     const avgTokensPerChar${description} = 0.75;  // Conservative estimate of tokens per character
     const maxChars${description} = Math.floor(tokenLimit${description} / avgTokensPerChar${description});
     const trimmedMarkdown${description} =

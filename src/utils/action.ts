@@ -20,13 +20,6 @@ export function initActionScript(actionLogFile: string, task: string) {
             ` + `\n\n`);
     }
     
-    // Add simple helper functions
-    fs.appendFileSync(actionLogFile, `
-        const sleep = (ms: number): Promise<void> => {
-        return new Promise((resolve) => setTimeout(resolve, ms));
-        }
-        ` + `\n\n`);
-    
     // Add initPage function
     fs.appendFileSync(actionLogFile, `
         export async function initPage(): Promise<Page> {
