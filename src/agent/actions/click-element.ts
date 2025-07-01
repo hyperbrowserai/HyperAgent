@@ -54,19 +54,9 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     return { success: true, message: `Clicked element with index ${index}` };
   },
 
-  /**
-   * Generate code for the click element action. Keep this function in sync with the run function.
-   * @param ctx The action context
-   * @param action The action parameters
-   * @param stepIndex The index of the step
-   * @param actionIndex The index of the action
-   * @returns The generated code
-   */
   generateCode: async (
     ctx: ActionContext,
     action: ClickElementActionType,
-    stepIndex?: number,
-    actionIndex?: number,
   ) => {
     const locator = getLocator(ctx, action.index);
     const description = action.description;

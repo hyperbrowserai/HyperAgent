@@ -8,6 +8,9 @@ export const SelectOptionAction = z
       .number()
       .describe("The numeric index of the  element to select an option."),
     text: z.string().describe("The text of the option to select."),
+    description: z.string()
+      .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
+      .describe("The description of the option to select."),
   })
   .describe("Select an option from a dropdown element");
 
@@ -33,20 +36,16 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   generateCode: async (
     ctx: ActionContext,
     action: SelectOptionActionType,
-    stepIndex?: number,
-    actionIndex?: number,
   ) => {
     const locator = getLocator(ctx, action.index);
-    const stepIndexStr = stepIndex !== undefined ? `${stepIndex}` : "";
-    const actionIndexStr = actionIndex !== undefined ? `${actionIndex}` : "";
-    const variableSuffixStr = `${stepIndexStr}_${actionIndexStr}`;
+    const description = action.description;
 
     return `
-      const locator_${variableSuffixStr} = ctx.page.${locator};
-      if (!locator_${variableSuffixStr}) {
+      const locator${description} = ctx.page.${locator};
+      if (!locator${description}) {
         return { success: false, message: "Element not found" };
       }
-      await locator_${variableSuffixStr}.selectOption({ label: ${JSON.stringify(action.text)} });
+      await locator${description}.selectOption({ label: ${JSON.stringify(action.text)} });
     `;
   },
 
