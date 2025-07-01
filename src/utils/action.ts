@@ -57,7 +57,4 @@ export async function wrapUpActionScript(actionLogFile: string) {
       {filepath: actionLogFile},
     );
     fs.writeFileSync(actionLogFile, formatted);
-
-    // Keep a copy of the action script in the scripts folder
-    fs.copyFileSync(actionLogFile, resolve(__dirname, "../../test-action.ts"));
 }
