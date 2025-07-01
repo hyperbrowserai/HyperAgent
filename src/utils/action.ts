@@ -7,7 +7,7 @@ export function initActionScript(actionLogFile: string, task: string) {
     fs.writeFileSync(actionLogFile, `/*\n${task}\n*/\n\n`);
     fs.appendFileSync(actionLogFile, `import { chromium, Page } from "playwright";\n\n`);
 
-    // Import from Hyperagent
+    // Import helper funmctions from Hyperagent
     if (process.env.NODE_ENV === "development") {
         fs.appendFileSync(actionLogFile, `
             import { waitForElementToBeEnabled, waitForElementToBeStable } from "./src/agent/actions/click-element";

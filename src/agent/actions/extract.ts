@@ -89,12 +89,6 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     }
   },
 
-  generateCode: async (ctx: ActionContext, action: ExtractActionType) => {
-    return `
-      // TODO: Implement extract action
-    `;
-  },
-
   pprintAction: function(params: ExtractActionType): string {
     return `Extract content from page with objective: "${params.objective}"`;
   },
