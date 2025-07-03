@@ -15,7 +15,6 @@ import {
   ActionContext,
   ActionType,
   AgentActionDefinition,
-  AgentOutputFn,
   endTaskStatuses,
   Task,
   TaskOutput,
@@ -35,8 +34,7 @@ import {
 import { HyperagentError } from "./error";
 import { SYSTEM_PROMPT_FIND_ELEMENT } from "./messages/system-prompt";
 import { MCPClient } from "./mcp/client";
-import { compositeScreenshot, getActionSchema, runAgentTask } from "./tools/agent";
-import { getStructuredOutputMethod } from "./llms/structured-output";
+import { compositeScreenshot, runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "@/types/agent/types";
 import { buildAgentStepMessages } from "./messages/builder";
 import { ErrorEmitter } from "@/utils";
