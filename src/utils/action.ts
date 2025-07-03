@@ -9,28 +9,28 @@ export function initActionScript(actionLogFile: string, task: string) {
     // Import helper funmctions from Hyperagent
     if (process.env.NODE_ENV === "development") {
         fs.appendFileSync(actionLogFile, `
-            import { waitForElementToBeEnabled, waitForElementToBeStable } from "./src/agent/actions/click-element";
-            import { sleep } from "./src/utils/sleep";
-            import { parseMarkdown } from "./src/utils/html-to-markdown";
+    import { waitForElementToBeEnabled, waitForElementToBeStable } from "./src/agent/actions/click-element";
+    import { sleep } from "./src/utils/sleep";
+    import { parseMarkdown } from "./src/utils/html-to-markdown";
             ` + `\n\n`);
     } else {
         fs.appendFileSync(actionLogFile, `
-            import { waitForElementToBeEnabled, waitForElementToBeStable } from "@hyperbrowser/agent/actions";
-            import { parseMarkdown, sleep } from "@hyperbrowser/agent/utils";
+    import { waitForElementToBeEnabled, waitForElementToBeStable } from "@hyperbrowser/agent/actions";
+    import { parseMarkdown, sleep } from "@hyperbrowser/agent/utils";
             ` + `\n\n`);
     }
     
     // Add initPage function
     fs.appendFileSync(actionLogFile, `
-        export async function initPage(): Promise<Page> {
-            const browser = await chromium.launch({
-                channel: "chrome",
-                headless: false,
-                args: ["--disable-blink-features=AutomationControlled"],
-            });
-            const context = await browser.newContext();
-            const page = await context.newPage();
-            return page;
+    export async function initPage(): Promise<Page> {
+        const browser = await chromium.launch({
+            channel: "chrome",
+            headless: false,
+            args: ["--disable-blink-features=AutomationControlled"],
+        });
+        const context = await browser.newContext();
+        const page = await context.newPage();
+        return page;
         }` + `\n\n`
     )
 
