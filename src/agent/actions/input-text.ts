@@ -42,13 +42,21 @@ export const InputTextActionDefinition: AgentActionDefinition = {
     ) => {
       const locator = getLocator(ctx, action.index);
       const description = action.description;
+      
+      // Escape the text to prevent code injection
+      const escapedText = action.text
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/"/g, '\\"')    // Escape double quotes
+        .replace(/\n/g, '\\n')   // Escape newlines
+        .replace(/\r/g, '\\r')   // Escape carriage returns
+        .replace(/\t/g, '\\t');  // Escape tabs
 
       return `
         const locator${description} = ctx.page.${locator};
         if (!locator${description}) {
           return { success: false, message: "Element not found" };
         }
-        await locator${description}.fill("${action.text}", { timeout: 5_000 });
+        await locator${description}.fill("${escapedText}", { timeout: 5_000 });
       `;
     },
 
