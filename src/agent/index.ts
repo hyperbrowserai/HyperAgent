@@ -42,6 +42,11 @@ import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { getLocator } from "./actions/utils";
 
+
+const ResponseSchema = z.object({
+  index: z.number().describe("The index number of the element"),
+});
+
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   private llm: BaseChatModel;
   private tasks: Record<string, TaskState> = {};
@@ -430,9 +435,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     );
 
     // Invoke LLM
-    const ResponseSchema = z.object({
-      index: z.number().describe("The index number of the element"),
-    });
     const llmStructured = this.llm.withStructuredOutput(ResponseSchema);
     const agentOutput = await retry({
       func: () => llmStructured.invoke(msgs),
