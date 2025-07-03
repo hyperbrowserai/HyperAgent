@@ -71,10 +71,10 @@ const getActionCode = (
   actions: Array<AgentActionDefinition>,
   type: string
 ) => {
-  const foundAction = actions.find((actions) => actions.type === type);
+  const foundAction = actions.find((action) => action.type === type);
   if (foundAction) {
     return foundAction.generateCode || (
-      () => `// Skipped. Action ${type} invoked, but skipped code logging.`)
+      async () => `// Skipped. Action ${type} invoked, but skipped code logging.`)
   } else {
     throw new ActionNotFoundError(type);
   }
