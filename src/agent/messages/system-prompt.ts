@@ -1,5 +1,5 @@
 import { INPUT_FORMAT } from "./input-format";
-import { OUTPUT_FORMAT } from "./output-format";
+import { OUTPUT_FORMAT, OUTPUT_FORMAT_FIND_ELEMENT } from "./output-format";
 import { EXAMPLE_ACTIONS } from "./examples-actions";
 
 const DATE_STRING = new Date().toLocaleString(undefined, {
@@ -8,6 +8,21 @@ const DATE_STRING = new Date().toLocaleString(undefined, {
   day: "2-digit",
   weekday: "long",
 });
+
+export const SYSTEM_PROMPT_FIND_ELEMENT = `
+You are a smart and sophisticated agent that is designed to automate web browser interactions.
+You try to accomplish goals in a quick and concise manner.
+Your goal is to accomplish the final goal.
+
+# World State
+The current Date is ${DATE_STRING}. The date format is MM/DD/YYYY.
+
+# Input Format
+${INPUT_FORMAT}
+
+# Output Format
+${OUTPUT_FORMAT}
+`;
 
 export const SYSTEM_PROMPT = `You are a smart and sophisticated agent that is designed to automate web browser interactions.
 You try to accomplish goals in a quick and concise manner.

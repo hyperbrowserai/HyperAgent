@@ -30,7 +30,7 @@ import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
 import sharp from "sharp";
 
-const compositeScreenshot = async (page: Page, overlay: string) => {
+export const compositeScreenshot = async (page: Page, overlay: string) => {
   const screenshot = await page.screenshot();
   const responseBuffer = await sharp(screenshot)
     .composite([{ input: Buffer.from(overlay, "base64") }])
@@ -39,7 +39,7 @@ const compositeScreenshot = async (page: Page, overlay: string) => {
   return responseBuffer.toString("base64");
 };
 
-const getActionSchema = (actions: Array<AgentActionDefinition>) => {
+export const getActionSchema = (actions: Array<AgentActionDefinition>) => {
   const zodDefs = actions.map((action) =>
     z.object({
       type: z.nativeEnum([action.type] as unknown as z.EnumLike),
