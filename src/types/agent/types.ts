@@ -94,5 +94,5 @@ export interface HyperPage extends Page {
     task?: string,
     outputSchema?: T
   ): Promise<T extends z.AnyZodObject ? z.infer<T> : string>;
-  findElement: (taskDescription: string) => Promise<Locator | null>;
+  getLocator: (querySelector: string, fallbackDescription: string) => Promise<Locator>;
 }

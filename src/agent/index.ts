@@ -403,7 +403,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
-  public async findElement(taskDescription : string, page: Page): Promise<Locator | null> {
+  public async getLocator(querySelector: string, fallbackDescription: string, page: Page): Promise<Locator> {
+    const locator = page.locator(querySelector);
+    if (locator) {
+      return locator;
+    }
+    const element = await this.findElement(fallbackDescription, page);
+    if (element) {
+      return element;
+    }
+    throw new HyperagentError(`Element not found for description: ${fallbackDescription}`);
+  }
+  
+  private async findElement(taskDescription : string, page: Page): Promise<Locator | null> {
     // Get the DOM state
     let domState;
     while (!domState) {
@@ -658,8 +670,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return JSON.parse(res.output as string);
       }
     };
-    hyperPage.findElement = (taskDescription: string) =>
-      this.findElement(taskDescription, page);
+    hyperPage.getLocator = (querySelector: string, fallbackDescription: string) =>
+      this.getLocator(querySelector, fallbackDescription, page);
     return hyperPage;
   }
 }
