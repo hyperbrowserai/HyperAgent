@@ -658,6 +658,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return JSON.parse(res.output as string);
       }
     };
+    hyperPage.findElement = (taskDescription: string) =>
+      this.findElement(taskDescription, page);
     return hyperPage;
   }
 }
