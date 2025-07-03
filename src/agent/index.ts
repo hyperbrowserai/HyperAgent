@@ -405,12 +405,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   public async getLocator(querySelector: string, fallbackDescription: string, page: Page): Promise<Locator> {
     const locator = page.locator(querySelector);
-    if (locator) {
+    let count = await locator.count();
+    if (count > 0) {
       return locator;
     }
-    const element = await this.findElement(fallbackDescription, page);
-    if (element) {
-      return element;
+    const fallbackLocator = await this.findElement(fallbackDescription, page);
+    if (fallbackLocator) {
+      count = await fallbackLocator.count();
+      if (count > 0) {
+        return fallbackLocator;
+      }
     }
     throw new HyperagentError(`Element not found for description: ${fallbackDescription}`);
   }

@@ -1,7 +1,7 @@
 export const OUTPUT_FORMAT_FIND_ELEMENT = `
 Your response MUST be in this exact format:
 {
-  "index": "The index number of the element you found"
+  "index": 0
 }
   `;
 
