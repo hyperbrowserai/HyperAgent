@@ -1,5 +1,5 @@
-import { INPUT_FORMAT } from "./input-format";
-import { OUTPUT_FORMAT } from "./output-format";
+import { INPUT_FORMAT, INPUT_FORMAT_FIND_ELEMENT } from "./input-format";
+import { OUTPUT_FORMAT, OUTPUT_FORMAT_FIND_ELEMENT } from "./output-format";
 import { EXAMPLE_ACTIONS } from "./examples-actions";
 
 const DATE_STRING = new Date().toLocaleString(undefined, {
@@ -8,6 +8,17 @@ const DATE_STRING = new Date().toLocaleString(undefined, {
   day: "2-digit",
   weekday: "long",
 });
+
+export const SYSTEM_PROMPT_FIND_ELEMENT = `
+You are a smart and sophisticated agent that is designed to automate web browser interactions.
+You try to accomplish goals in a quick and concise manner.
+
+# Input Format
+${INPUT_FORMAT_FIND_ELEMENT}
+
+# Output Format
+${OUTPUT_FORMAT_FIND_ELEMENT}
+`;
 
 export const SYSTEM_PROMPT = `You are a smart and sophisticated agent that is designed to automate web browser interactions.
 You try to accomplish goals in a quick and concise manner.

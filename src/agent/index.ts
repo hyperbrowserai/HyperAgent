@@ -1,8 +1,10 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
-import { Browser, BrowserContext, Page } from "playwright";
+import { Browser, BrowserContext, Locator, Page } from "playwright";
 import { v4 as uuidv4 } from "uuid";
+import { z } from "zod";
 
+import { getDom } from "@/context-providers/dom";
 import {
   BrowserProviders,
   HyperAgentConfig,
@@ -10,6 +12,7 @@ import {
   MCPServerConfig,
 } from "@/types/config";
 import {
+  ActionContext,
   ActionType,
   AgentActionDefinition,
   endTaskStatuses,
@@ -29,11 +32,20 @@ import {
   LocalBrowserProvider,
 } from "../browser-providers";
 import { HyperagentError } from "./error";
+import { SYSTEM_PROMPT_FIND_ELEMENT } from "./messages/system-prompt";
 import { MCPClient } from "./mcp/client";
-import { runAgentTask } from "./tools/agent";
+import { compositeScreenshot, runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "@/types/agent/types";
-import { z } from "zod";
+import { buildAgentStepMessages } from "./messages/builder";
 import { ErrorEmitter } from "@/utils";
+import { retry } from "@/utils/retry";
+import { sleep } from "@/utils/sleep";
+import { getLocator } from "./actions/utils";
+
+
+const ResponseSchema = z.object({
+  index: z.number().describe("The index number of the element"),
+});
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   private llm: BaseChatModel;
@@ -391,6 +403,82 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  public async getLocator(querySelector: string, fallbackDescription: string, page: Page): Promise<Locator> {
+    const locator = page.locator(querySelector);
+    let count = await locator.count();
+    if (count > 0) {
+      return locator;
+    }
+    const fallbackLocator = await this.findElement(fallbackDescription, page);
+    if (fallbackLocator) {
+      count = await fallbackLocator.count();
+      if (count > 0) {
+        return fallbackLocator;
+      }
+    }
+    throw new HyperagentError(`Element not found for description: ${fallbackDescription}`);
+  }
+  
+  private async findElement(taskDescription : string, page: Page): Promise<Locator | null> {
+    // Get the DOM state
+    let domState;
+    while (!domState) {
+      domState = await retry({ func: () => getDom(page) });
+      if (!domState) {
+        console.log("No DOM state, waiting 1 second.");
+        await sleep(1000);
+      }
+    }
+    
+    // Get the screenshot ready with indexes
+    const trimmedScreenshot = await compositeScreenshot(
+      page,
+      domState.screenshot.startsWith("data:image/png;base64,")
+        ? domState.screenshot.slice("data:image/png;base64,".length)
+        : domState.screenshot
+    );
+
+    // Build Agent Step Messages
+    const baseMsgs = [{ role: "system", content: SYSTEM_PROMPT_FIND_ELEMENT }];
+    const msgs = await buildAgentStepMessages(
+      baseMsgs,
+      [],
+      taskDescription,
+      page,
+      domState,
+      trimmedScreenshot as string,
+      [],
+    );
+
+    // Invoke LLM
+    const llmStructured = this.llm.withStructuredOutput(ResponseSchema);
+    const agentOutput = await retry({
+      func: () => llmStructured.invoke(msgs),
+    })
+
+    // Check if agentOutput is null/undefined or doesn't have the expected structure
+    if (!agentOutput || typeof agentOutput.index !== 'number') {
+      console.warn('LLM failed to return valid structured output for element finding');
+      return null;
+    }
+
+    // Return the element locator
+    const actionCtx: ActionContext = {
+      domState,
+      page,
+      tokenLimit: this.tokenLimit,
+      llm: this.llm,
+      debugDir: undefined,
+      mcpClient: undefined,
+      variables: [],
+    }
+    const locator = getLocator(actionCtx, agentOutput.index);
+    if (!locator) {
+      return null;
+    }
+    return locator;
+  }
+
   /**
    * Register a new action with the agent
    * @param action The action to register
@@ -592,6 +680,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return JSON.parse(res.output as string);
       }
     };
+    hyperPage.getLocator = (querySelector: string, fallbackDescription: string) =>
+      this.getLocator(querySelector, fallbackDescription, page);
     return hyperPage;
   }
 }

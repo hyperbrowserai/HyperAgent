@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ActionOutput } from "./actions/types";
-import { Page } from "playwright";
+import { Locator, Page } from "playwright";
 import { ErrorEmitter } from "@/utils";
 
 export const AgentOutputFn = (
@@ -94,4 +94,5 @@ export interface HyperPage extends Page {
     task?: string,
     outputSchema?: T
   ): Promise<T extends z.AnyZodObject ? z.infer<T> : string>;
+  getLocator: (querySelector: string, fallbackDescription: string) => Promise<Locator>;
 }
