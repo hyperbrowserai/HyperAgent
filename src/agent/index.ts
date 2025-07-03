@@ -456,6 +456,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       func: () => llmStructured.invoke(msgs),
     })
 
+    // Check if agentOutput is null/undefined or doesn't have the expected structure
+    if (!agentOutput || typeof agentOutput.index !== 'number') {
+      console.warn('LLM failed to return valid structured output for element finding');
+      return null;
+    }
+
     // Return the element locator
     const actionCtx: ActionContext = {
       domState,
