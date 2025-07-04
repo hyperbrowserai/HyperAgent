@@ -28,10 +28,10 @@ export function initActionScript(actionLogFile: string, task: string) {
         debug: true,
         browserProvider: "Hyperbrowser",
       });
-      const page = await agent.newPage();
+    const page = await agent.newPage() as HyperPage;
 
-      const ctx = {
-        page: HyperPage,
+    const ctx = {
+        page: page,
         variables: [],
       };` + `\n\n`,
     );
