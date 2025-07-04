@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ActionContext, AgentActionDefinition } from "@/types";
-import { getLocator } from "./utils";
+import { getLocator, getLocatorString } from "./utils";
 
 export const SelectOptionAction = z
   .object({
@@ -37,11 +37,11 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     ctx: ActionContext,
     action: SelectOptionActionType,
   ) => {
-    const locator = getLocator(ctx, action.index);
+    const locatorString = getLocatorString(ctx, action.index) ?? "";
     const description = action.description;
 
     return `
-      const querySelector${description} = ${locator}.toString();
+      const querySelector${description} = '${locatorString}';
       const fallbackDescription${description} = "Find the element with the text '${description}'";
       const locator${description} = ctx.page.getLocator(querySelector${description}, fallbackDescription${description});
 

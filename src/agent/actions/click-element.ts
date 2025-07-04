@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Locator } from "playwright";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { sleep } from "@/utils";
-import { getLocator } from "./utils";
+import { getLocator, getLocatorString } from "./utils";
 
 const ClickElementAction = z
   .object({
@@ -58,11 +58,11 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     ctx: ActionContext,
     action: ClickElementActionType,
   ) => {
-    const locator = getLocator(ctx, action.index);
+    const locatorString = getLocatorString(ctx, action.index) ?? "";
     const description = action.description;
 
     return `
-        const querySelector${description} = ${locator}.toString();
+        const querySelector${description} = '${locatorString}';
         const fallbackDescription${description} = "Find the element with the text '${description}'";
         const locator${description} = ctx.page.getLocator(querySelector${description}, fallbackDescription${description});
 

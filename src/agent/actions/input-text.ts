@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ActionContext, AgentActionDefinition } from "@/types";
-import { getLocator } from "./utils";
+import { getLocator, getLocatorString } from "./utils";
 
 export const InputTextAction = z
   .object({
@@ -40,7 +40,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
       ctx: ActionContext,
       action: InputTextActionType,
     ) => {
-      const locator = getLocator(ctx, action.index);
+      const locatorString = getLocatorString(ctx, action.index) ?? "";
       const description = action.description;
       
       // Escape the text to prevent code injection
@@ -52,7 +52,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         .replace(/\t/g, '\\t');  // Escape tabs
 
       return `
-        const querySelector${description} = ${locator}.toString();
+        const querySelector${description} = '${locatorString}';
         const fallbackDescription${description} = "Find the element with the text '${description}'";
         const locator${description} = ctx.page.getLocator(querySelector${description}, fallbackDescription${description});
         
