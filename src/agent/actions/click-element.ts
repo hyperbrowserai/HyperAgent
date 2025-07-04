@@ -62,15 +62,9 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     const description = action.description;
 
     return `
-        const locator${description} = ctx.page.${locator};
-        if (!locator${description}) {
-          return { success: false, message: "Element not found" };
-        }
-
-        const exists${description} = (await locator${description}.count()) > 0;
-        if (!exists${description}) {
-          return { success: false, message: "Element not found on page" };
-        }
+        const querySelector${description} = ${locator}.toString();
+        const fallbackDescription${description} = "Find the element with the text '${description}'";
+        const locator${description} = ctx.page.getLocator(querySelector${description}, fallbackDescription${description});
 
         await locator${description}.scrollIntoViewIfNeeded({
           timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},

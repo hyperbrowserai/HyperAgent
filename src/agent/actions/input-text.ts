@@ -52,10 +52,10 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         .replace(/\t/g, '\\t');  // Escape tabs
 
       return `
-        const locator${description} = ctx.page.${locator};
-        if (!locator${description}) {
-          return { success: false, message: "Element not found" };
-        }
+        const querySelector${description} = ${locator}.toString();
+        const fallbackDescription${description} = "Find the element with the text '${description}'";
+        const locator${description} = ctx.page.getLocator(querySelector${description}, fallbackDescription${description});
+        
         await locator${description}.fill("${escapedText}", { timeout: 5_000 });
       `;
     },
