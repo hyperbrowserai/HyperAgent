@@ -1,6 +1,6 @@
 {
   "name": "@hyperbrowser/agent",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Hyperbrowsers Web Agent",
   "author": "",
   "main": "dist/index.js",
@@ -91,6 +91,14 @@
     "./custom-actions": {
       "types": "./dist/custom-actions/index.d.ts",
       "default": "./dist/custom-actions/index.js"
+    },
+    "./actions": {
+      "types": "./dist/agent/actions/index.d.ts",
+      "default": "./dist/agent/actions/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "default": "./dist/utils/index.js"
     }
   },
   "typesVersions": {

@@ -1,12 +1,15 @@
 import { z } from "zod";
 import { ActionContext, AgentActionDefinition } from "@/types";
-import { getLocator } from "./utils";
+import { getLocator, getLocatorString } from "./utils";
 
 export const InputTextAction = z
   .object({
     index: z
       .number()
       .describe("The numeric index of the element to input text."),
+    description: z.string()
+      .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
+      .describe("The description of the element to input text."),
     text: z.string().describe("The text to input."),
   })
   .describe("Input text into a input interactive element");
@@ -16,6 +19,7 @@ export type InputTextActionType = z.infer<typeof InputTextAction>;
 export const InputTextActionDefinition: AgentActionDefinition = {
     type: "inputText" as const,
     actionParams: InputTextAction,
+
     run: async (ctx: ActionContext, action: InputTextActionType) => {
       let { index, text } = action;
       const locator = getLocator(ctx, index);
@@ -31,6 +35,31 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         message: `Inputted text "${text}" into element with index ${index}`,
       };
     },
+
+    generateCode: async (
+      ctx: ActionContext,
+      action: InputTextActionType,
+    ) => {
+      const locatorString = getLocatorString(ctx, action.index) ?? "";
+      const description = action.description;
+      
+      // Escape the text to prevent code injection
+      const escapedText = action.text
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/"/g, '\\"')    // Escape double quotes
+        .replace(/\n/g, '\\n')   // Escape newlines
+        .replace(/\r/g, '\\r')   // Escape carriage returns
+        .replace(/\t/g, '\\t');  // Escape tabs
+
+      return `
+        const querySelector${description} = '${locatorString}';
+        const fallbackDescription${description} = "Find the element with the text '${description}'";
+        const locator${description} = ctx.page.getLocator(querySelector${description}, fallbackDescription${description});
+        
+        await locator${description}.fill("${escapedText}", { timeout: 5_000 });
+      `;
+    },
+
     pprintAction: function (params: InputTextActionType): string {
       return `Input text "${params.text}" into element at index ${params.index}`;
     },

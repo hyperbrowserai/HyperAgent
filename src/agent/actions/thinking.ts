@@ -18,6 +18,7 @@ export type ThinkingActionType = z.infer<typeof ThinkingAction>;
 export const ThinkingActionDefinition: AgentActionDefinition = {
   type: "thinkAction" as const,
   actionParams: ThinkingAction,
+
   run: async (ctx: ActionContext, action: ThinkingActionType) => {
     const { thought } = action;
     return {
@@ -25,6 +26,14 @@ export const ThinkingActionDefinition: AgentActionDefinition = {
       message: `A simple thought process about your next steps. You thought about: ${thought}`,
     };
   },
+
+  generateCode: async (ctx: ActionContext, action: ThinkingActionType) => {
+    const { thought } = action;
+    return (`
+      // A simple thought process about your next steps. You thought about: ${thought}`
+    );
+  },
+
   pprintAction: function(params: ThinkingActionType): string {
     return `Think about: "${params.thought}"`;
   },

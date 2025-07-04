@@ -34,6 +34,7 @@ export type CompleteValidateActionType = z.infer<
 export const CompletionValidateActionDefinition: AgentActionDefinition = {
   type: "taskCompleteValidation",
   actionParams: CompletionValidateAction,
+
   run: async (
     ctx: ActionContext,
     action: CompleteValidateActionType
@@ -48,5 +49,15 @@ export const CompletionValidateActionDefinition: AgentActionDefinition = {
       success: true,
       message: `Task Completion Report: \ntask:${action.task} \nsubtasks: \n${completionCriteria}`,
     };
+  },
+
+  generateCode: async (ctx: ActionContext, action: CompleteValidateActionType) => {
+    const completionCriteria = action.completionCriteria
+    .map(
+      (subTask) =>
+        `subTask:${subTask.subTask} || condition satisfied: ${subTask.subTaskSatisfied}`
+    )
+    .join("\n");
+    return `Task Completion Report: \ntask:${action.task} \nsubtasks: \n${completionCriteria}`;
   },
 };
