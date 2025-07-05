@@ -121,7 +121,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         content: [
           {
             type: "text",
-            text: \`Extract the following information from the page according to this objective:"\${objective${description}}"\n\nPage content:\n\${trimmedMarkdown${description}}\nHere is as screenshot of the page:\n\`,
+            text: \`Extract the following information from the page according to this objective:"\${objective${variableName}}"\n\nPage content:\n\${trimmedMarkdown${variableName}}\nHere is as screenshot of the page:\n\`,
           },
           {
             type: "image_url",

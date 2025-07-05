@@ -54,7 +54,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
       return `
         const querySelector${variableName} = '${locatorString}';
         const fallbackDescription${variableName} = "Find the element with the text '${variableName}'";
-        const locator${variableName} = ctx.page.getLocator(querySelector${variableName}, fallbackDescription${description});
+        const locator${variableName} = ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
         
         await locator${variableName}.fill("${escapedText}", { timeout: 5_000 });
       `;
