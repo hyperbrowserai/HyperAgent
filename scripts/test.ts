@@ -12,10 +12,10 @@ const agent = new HyperAgent({
 
 (async () => {
   const result = await agent.executeTask(
-    `Go to https://flights.google.com and find a round-trip flight 
-    from Rio de Janeiro to Los Angeles,
-    leaving on July 15, 2025, and returning on July 22, 2025,
-    and select the option with the least carbon dioxide emissions.`,
+    `Go to https://hiveword.com/location-name-generator and use extract action to get the top two countries;
+    get the capitals of these two countries.
+    Then go to https://flights.google.com and find the cheapest flight from the first capital to the second capital,
+    departing on August 15, 2025, and returning on August 22, 2025.`,
     {
       debugOnAgentOutput: (agentOutput: AgentOutput) => {
         console.log("\n" + chalk.cyan.bold("===== AGENT OUTPUT ====="));

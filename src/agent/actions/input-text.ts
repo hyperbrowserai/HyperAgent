@@ -7,9 +7,9 @@ export const InputTextAction = z
     index: z
       .number()
       .describe("The numeric index of the element to input text."),
-    description: z.string()
+    variableName: z.string()
       .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
-      .describe("The description of the element to input text."),
+      .describe("The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."),
     text: z.string().describe("The text to input."),
   })
   .describe("Input text into a input interactive element");
@@ -41,7 +41,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
       action: InputTextActionType,
     ) => {
       const locatorString = getLocatorString(ctx, action.index) ?? "";
-      const description = action.description;
+      const variableName = action.variableName;
       
       // Escape the text to prevent code injection
       const escapedText = action.text
@@ -52,11 +52,11 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         .replace(/\t/g, '\\t');  // Escape tabs
 
       return `
-        const querySelector${description} = '${locatorString}';
-        const fallbackDescription${description} = "Find the element with the text '${description}'";
-        const locator${description} = ctx.page.getLocator(querySelector${description}, fallbackDescription${description});
+        const querySelector${variableName} = '${locatorString}';
+        const fallbackDescription${variableName} = "Find the element with the text '${variableName}'";
+        const locator${variableName} = ctx.page.getLocator(querySelector${variableName}, fallbackDescription${description});
         
-        await locator${description}.fill("${escapedText}", { timeout: 5_000 });
+        await locator${variableName}.fill("${escapedText}", { timeout: 5_000 });
       `;
     },
 

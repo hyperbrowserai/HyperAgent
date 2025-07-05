@@ -5,7 +5,7 @@ export function getLocator(ctx: ActionContext, index: number) {
   if (!locatorString) {
     return null;
   }
-  return ctx.page.locator(locatorString);
+  return ctx.page.locator(locatorString);  // Note: this does not guarantee the locator is valid
 }
 
 export function getLocatorString(ctx: ActionContext, index: number) {

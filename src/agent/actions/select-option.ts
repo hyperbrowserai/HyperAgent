@@ -8,9 +8,9 @@ export const SelectOptionAction = z
       .number()
       .describe("The numeric index of the  element to select an option."),
     text: z.string().describe("The text of the option to select."),
-    description: z.string()
+    variableName: z.string()
       .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
-      .describe("The description of the option to select."),
+      .describe("The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."),
   })
   .describe("Select an option from a dropdown element");
 
@@ -38,14 +38,14 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     action: SelectOptionActionType,
   ) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
-    const description = action.description;
+    const variableName = action.variableName;
 
     return `
-      const querySelector${description} = '${locatorString}';
-      const fallbackDescription${description} = "Find the element with the text '${description}'";
-      const locator${description} = ctx.page.getLocator(querySelector${description}, fallbackDescription${description});
+      const querySelector${variableName} = '${locatorString}';
+      const fallbackDescription${variableName} = "Find the element with the text '${variableName}'";
+      const locator${variableName} = ctx.page.getLocator(querySelector${variableName}, fallbackDescription${description});
 
-      await locator${description}.selectOption({ label: ${JSON.stringify(action.text)} });
+      await locator${variableName}.selectOption({ label: ${JSON.stringify(action.text)} });
     `;
   },
 
