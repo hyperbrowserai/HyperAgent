@@ -3,6 +3,18 @@ import { ActionOutput } from "./actions/types";
 import { Locator, Page } from "playwright";
 import { ErrorEmitter } from "@/utils";
 
+export const VariableFn = () =>
+  z.array(
+    z.object({
+      key: z.string()
+      .regex(/^[a-z][a-z0-9_]*$/,
+        "Key must be in snake_case format (lowercase letters, numbers, and underscores only, starting with a letter)")
+      .describe("The key of the extracted variable in snake_case format (e.g., 'top_country_1', 'first_capital', 'price_usd')."),
+      value: z.string().describe("The value of the extracted variable."),
+      description: z.string().describe("The description of the extracted variable, including the objective that was used to extract the variable."),
+    })
+  ).describe("List of extracted key-value pairs from the page that you will need in your future actions.");
+
 export const AgentOutputFn = (
   actionsSchema: z.ZodUnion<readonly [z.AnyZodObject, ...z.AnyZodObject[]]>
 ) =>

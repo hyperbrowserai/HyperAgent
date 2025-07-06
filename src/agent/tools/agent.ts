@@ -117,7 +117,21 @@ const runAction = async (
   }
   
   try {
-    return await actionHandler(actionCtx, action.params);
+    const actionOutput = await actionHandler(actionCtx, action.params);
+    
+    // Check if the action output contains variable updates
+    if (actionOutput.variableUpdates && actionOutput.variableUpdates.length > 0) {
+      // Update ctx.variables with the new values
+      for (const update of actionOutput.variableUpdates) {
+        ctx.variables[update.key] = {
+          key: update.key,
+          value: update.value,
+          description: update.description || ctx.variables[update.key]?.description || ''
+        };
+      }
+    }
+    
+    return actionOutput;
   } catch (error) {
     return {
       success: false,
@@ -150,10 +164,7 @@ export const runAgentTask = async (
     throw new HyperagentError("LLM not initialized");
   }
   const llmStructured = ctx.llm.withStructuredOutput(
-    AgentOutputFn(getActionSchema(ctx.actions)),
-    {
-      method: getStructuredOutputMethod(ctx.llm),
-    }
+    AgentOutputFn(getActionSchema(ctx.actions)), {method: getStructuredOutputMethod(ctx.llm),}
   );
   const baseMsgs = [{ role: "system", content: SYSTEM_PROMPT }];
 

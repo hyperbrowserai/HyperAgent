@@ -32,7 +32,8 @@ export function initActionScript(actionLogFile: string, task: string) {
 
     const ctx = {
         page: page,
-        variables: [],
+        llm: agent.llm,
+        variables: ActionContext,
       };` + `\n\n`,
     );
 }

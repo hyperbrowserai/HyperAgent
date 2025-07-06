@@ -19,6 +19,7 @@ export interface ActionOutput {
   success: boolean;
   message: string;
   extract?: object;
+  variableUpdates?: HyperVariable[];
 }
 
 export type ActionSchemaType = z.ZodObject<

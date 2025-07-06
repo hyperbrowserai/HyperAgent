@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { parseMarkdown } from "@/utils/html-to-markdown";
 import fs from "fs";
+import { VariableFn } from "@/types/agent/types";
 
 export const ExtractAction = z
   .object({
@@ -11,7 +12,7 @@ export const ExtractAction = z
       .describe("The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."),
   })
   .describe(
-    "Extract content from the page according to the objective, e.g. product prices, contact information, article text, table data, or specific metadata fields"
+    "Extract content from the page to create reusable variables. REQUIRED when gathering any information that will be used in subsequent steps (e.g., country names, prices, dates, etc.)"
   )
 
 export type ExtractActionType = z.infer<typeof ExtractAction>;
@@ -58,13 +59,22 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         );
       }
 
-      const response = await ctx.llm.invoke([
+      const response = await ctx.llm.withStructuredOutput(z.object({variables: VariableFn()})).invoke([
         {
-          role: "user",
+          role: "user", 
           content: [
             {
               type: "text",
-              text: `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nHere is as screenshot of the page:\n`,
+              text: `
+              Extract the following information from the page according to this objective: "${objective}"
+              Return the results in structured output format, where each pair has:
+              - key: A descriptive name in snake_case format (e.g., 'top_country_1', 'first_capital', 'price_usd')
+              - value: The actual extracted content
+              
+              IMPORTANT: Keys must be in snake_case format - lowercase letters, numbers, and underscores only.
+              
+              Page content:\n${trimmedMarkdown}\n
+              Here is as screenshot of the page:\n`,
             },
             {
               type: "image_url",
@@ -75,20 +85,28 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           ],
         },
       ]);
-      if (response.content.length === 0) {
+      if (response.variables.length === 0) {
         return {
           success: false,
-          message: `No content extracted from page.`,
+          message: `No variables extracted from page.`,
         };
       }
+      const variableUpdates = response.variables.map(variable => ({ 
+        key: variable.key, 
+        value: variable.value,
+        description: variable.description,
+      }));
+
       return {
         success: true,
-        message: `Extracted content from page:\n${response.content}`,
+        message: `Extracted variables from page: 
+        ${response.variables.map(variable => `${variable.key}`).join(', ')}`,
+        variableUpdates: variableUpdates,
       };
     } catch (error) {
       return {
         success: false,
-        message: `Failed to extract content: ${error}`,
+        message: `Failed to extract variables: ${error}`,
       };
     }
   },
@@ -112,7 +130,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     const maxChars${variableName} = Math.floor(tokenLimit${variableName} / avgTokensPerChar${variableName});
     const trimmedMarkdown${variableName} =
       markdown${variableName}.length > maxChars${variableName}
-        ? markdown${variableName}.slice(0, maxChars${variableName}) + "\n[Content truncated due to length]"
+        ? markdown${variableName}.slice(0, maxChars${variableName}) + "\\n[Content truncated due to length]"
         : markdown${variableName};
 
     const response${variableName} = await ctx.llm.invoke([
@@ -121,7 +139,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         content: [
           {
             type: "text",
-            text: \`Extract the following information from the page according to this objective:"\${objective${variableName}}"\n\nPage content:\n\${trimmedMarkdown${variableName}}\nHere is as screenshot of the page:\n\`,
+            text: \`Extract the following information from the page according to this objective:"\${objective${variableName}}"\\n\\nPage content:\\n\${trimmedMarkdown${variableName}}\\nHere is as screenshot of the page:\\n\`,
           },
           {
             type: "image_url",
@@ -135,7 +153,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     if (response${variableName}.content.length === 0) {
       console.log(\`No content extracted from page.\`);
     }
-    console.log(\`Extracted content from page:\n\${response${variableName}.content}\`);
+    console.log(\`Extracted content from page:\\n\${response${variableName}.content}\`);
   } catch (error) {
     console.log(\`Failed to extract content: \${error}\`);
   }

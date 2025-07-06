@@ -10,7 +10,9 @@ export const InputTextAction = z
     variableName: z.string()
       .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
       .describe("The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."),
-    text: z.string().describe("The text to input."),
+    text: z.string().describe(
+      `The text to input. Use <<variableKey>> to reference extracted variables 
+      (e.g., 'Capital of <<top_country_1>>')`),
   })
   .describe("Input text into a input interactive element");
 
@@ -40,23 +42,20 @@ export const InputTextActionDefinition: AgentActionDefinition = {
       ctx: ActionContext,
       action: InputTextActionType,
     ) => {
-      const locatorString = getLocatorString(ctx, action.index) ?? "";
       const variableName = action.variableName;
-      
-      // Escape the text to prevent code injection
-      const escapedText = action.text
-        .replace(/\\/g, '\\\\')  // Escape backslashes first
-        .replace(/"/g, '\\"')    // Escape double quotes
-        .replace(/\n/g, '\\n')   // Escape newlines
-        .replace(/\r/g, '\\r')   // Escape carriage returns
-        .replace(/\t/g, '\\t');  // Escape tabs
+      let { index, text } = action;
+      const locatorString = getLocatorString(ctx, index) ?? "";
 
       return `
         const querySelector${variableName} = '${locatorString}';
         const fallbackDescription${variableName} = "Find the element with the text '${variableName}'";
         const locator${variableName} = ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
         
-        await locator${variableName}.fill("${escapedText}", { timeout: 5_000 });
+        for (const variable of ctx.variables) {
+          text = text.replace(\`<<\${variable.key}>>\`, variable.value);
+        }
+
+        await locator${variableName}.fill("${text}", { timeout: 5_000 });
       `;
     },
 

@@ -5,12 +5,16 @@ export const EXAMPLE_ACTIONS = `- Search: [
 - Clicking on an element: [
     {"type": "clickElement", "params": {"index": 1}}
 ]
-- Extracting content (if your goal is to find any information on a page): [
-    {"type": "extractContent", "params": {"goal": "what specifically you need to extract"}}
+- Extracting content (MANDATORY when gathering information for later use): [
+    {"type": "extract", "params": {"objective": "what specifically you need to extract", "variableName": "descriptive_name"}}
 ]
 - Forms: [
     {"type": "inputText", "params": {"index": 1, "text": "first name"}},
     {"type": "inputText", "params": {"index": 2, "text": "last name"}},
     {"type": "inputText", "params": {"index": 2, "text": "job title"}},
     {"type": "clickElement", "params": {"index": 3}}
+]
+- Using extracted variables (IMPORTANT): [
+    {"type": "extract", "params": {"objective": "get top two countries", "variableName": "extracted_countries"}},
+    {"type": "inputText", "params": {"index": 1, "text": "Capital of <<top_country_1>>"}}
 ]`;
