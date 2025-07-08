@@ -48,7 +48,7 @@ const ResponseSchema = z.object({
 });
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
-  private llm: BaseChatModel;
+  public llm: BaseChatModel;
   private tasks: Record<string, TaskState> = {};
   private tokenLimit = 128000;
   private debug = false;
@@ -405,10 +405,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   public async getLocator(querySelector: string, fallbackDescription: string, page: Page): Promise<Locator> {
     const locator = page.locator(querySelector);
+
     let count = await locator.count();
     if (count > 0) {
       return locator;
     }
+
     const fallbackLocator = await this.findElement(fallbackDescription, page);
     if (fallbackLocator) {
       count = await fallbackLocator.count();
@@ -416,6 +418,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return fallbackLocator;
       }
     }
+    
     throw new HyperagentError(`Element not found for description: ${fallbackDescription}`);
   }
   

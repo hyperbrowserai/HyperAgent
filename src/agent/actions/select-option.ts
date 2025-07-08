@@ -21,11 +21,16 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   actionParams: SelectOptionAction,
 
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
-    const { index, text } = action;
+    let { index, text } = action;
+    for (const variable of ctx.variables) {
+      text = text.replace(`<<${variable.key}>>`, variable.value);
+    }
+
     const locator = getLocator(ctx, index);
     if (!locator) {
       return { success: false, message: "Element not found" };
     }
+    
     await locator.selectOption({ label: text });
     return {
       success: true,
@@ -41,11 +46,16 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     const variableName = action.variableName;
 
     return `
+      let text${variableName} = ${JSON.stringify(action.text)};
+      for (const variable of Object.values(ctx.variables)) {
+        text${variableName} = text${variableName}.replace(\`<<\${variable.key}>>\`, variable.value as string);
+      }
+
       const querySelector${variableName} = '${locatorString}';
       const fallbackDescription${variableName} = "Find the element with the text '${variableName}'";
-      const locator${variableName} = ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
+      const locator${variableName} = await ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
 
-      await locator${variableName}.selectOption({ label: ${JSON.stringify(action.text)} });
+      await locator${variableName}.selectOption({ label: text${variableName} });
     `;
   },
 

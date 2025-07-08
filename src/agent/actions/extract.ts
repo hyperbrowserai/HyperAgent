@@ -85,12 +85,14 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           ],
         },
       ]);
+
       if (response.variables.length === 0) {
         return {
           success: false,
           message: `No variables extracted from page.`,
         };
       }
+
       const variableUpdates = response.variables.map(variable => ({ 
         key: variable.key, 
         value: variable.value,
@@ -112,6 +114,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
   },
 
   generateCode: async (ctx: ActionContext, action: ExtractActionType) => {
+
     const variableName = action.variableName;
 
     return `
@@ -133,13 +136,23 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         ? markdown${variableName}.slice(0, maxChars${variableName}) + "\\n[Content truncated due to length]"
         : markdown${variableName};
 
-    const response${variableName} = await ctx.llm.invoke([
+    const response${variableName} = await ctx.llm.withStructuredOutput(z.object({variables: VariableFn()})).invoke([
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: \`Extract the following information from the page according to this objective:"\${objective${variableName}}"\\n\\nPage content:\\n\${trimmedMarkdown${variableName}}\\nHere is as screenshot of the page:\\n\`,
+            text: \`
+            Extract the following information from the page according to this objective: "\${objective${variableName}}"
+              Return the results in structured output format, where each pair has:
+              - key: A descriptive name in snake_case format (e.g., 'top_country_1', 'first_capital', 'price_usd')
+              - value: The actual extracted content
+              
+              IMPORTANT: Keys must be in snake_case format - lowercase letters, numbers, and underscores only.
+              
+              Page content:\\n\${trimmedMarkdown${variableName}}\\n
+              Here is as screenshot of the page:\\n,
+            \`
           },
           {
             type: "image_url",
@@ -150,12 +163,30 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         ],
       },
     ]);
-    if (response${variableName}.content.length === 0) {
-      console.log(\`No content extracted from page.\`);
+
+    if (response${variableName}.variables.length === 0) {
+      console.log(\`No variables extracted from page.\`);
     }
-    console.log(\`Extracted content from page:\\n\${response${variableName}.content}\`);
+
+    const variableUpdates${variableName} = response${variableName}.variables.map(variable => ({ 
+      key: variable.key, 
+      value: variable.value,
+      description: variable.description,
+    }));
+
+    console.log(\`Extracted variables from page: 
+    \${response${variableName}.variables.map(variable => \`\${variable.key}\`).join(', ')}\`);
+
+    // Update the ctx.variables with the new values
+    for (const variable of variableUpdates${variableName}) {
+      ctx.variables[variable.key] = {
+        key: variable.key,
+        value: variable.value,
+        description: variable.description,
+      };
+    }
   } catch (error) {
-    console.log(\`Failed to extract content: \${error}\`);
+    console.log(\`Failed to extract variables: \${error}\`);
   }
     `;
   },
