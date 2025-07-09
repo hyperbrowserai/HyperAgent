@@ -138,7 +138,10 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
       let code = "";
       for (const k of keys) {
         const translatedKey = translateKey(k);
-        code += `await ctx.page.keyboard.press(${JSON.stringify(translatedKey)});\n`;
+        code += `
+        await ctx.page.keyboard.press(${JSON.stringify(translatedKey)});
+        console.log("Pressed key: ${translatedKey}");
+        \n`
       }
       return code;
 
@@ -148,22 +151,34 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
       const keys = text.split("+");
       for (let i = 0; i < keys.length - 1; i++) {
         const translatedKey = translateKey(keys[i]);
-        code += `await ctx.page.keyboard.down(${JSON.stringify(translatedKey)});\n`
+        code += `
+        await ctx.page.keyboard.down(${JSON.stringify(translatedKey)});
+        console.log("Pressed key down: ${translatedKey}");
+        \n`
       }
 
       const lastKey = translateKey(keys[keys.length - 1]);
-      code += `await ctx.page.keyboard.press(${JSON.stringify(lastKey)});\n`;
+      code += `
+      await ctx.page.keyboard.press(${JSON.stringify(lastKey)});
+      console.log("Pressed key: ${lastKey}");
+      \n`;
       
       for (let i = keys.length - 2; i >= 0; i--) {
         const translatedKey = translateKey(keys[i]);
-        code += `await ctx.page.keyboard.up(${JSON.stringify(translatedKey)});\n`;
+        code += `
+        await ctx.page.keyboard.up(${JSON.stringify(translatedKey)});
+        console.log("Pressed key up: ${translatedKey}");
+        \n`;
       }
 
       return code;
 
     } else {
       const translatedKey = translateKey(text);
-      return `await ctx.page.keyboard.press(${JSON.stringify(translatedKey)});\n`;
+      return `
+      await ctx.page.keyboard.press(${JSON.stringify(translatedKey)});
+      console.log("Pressed key: ${translatedKey}");
+      \n`;
     };
   },
 

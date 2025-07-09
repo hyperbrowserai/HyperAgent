@@ -56,6 +56,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         const locator${variableName} = await ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
 
         await locator${variableName}.fill(text${variableName}, { timeout: 5_000 });
+        console.log(\`Inputted text "\${text${variableName}}" into element\`);
       `;
     },
 

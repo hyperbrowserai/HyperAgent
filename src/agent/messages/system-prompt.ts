@@ -78,6 +78,16 @@ ${EXAMPLE_ACTIONS}
 - Even if you can see the information in the Elements section, you MUST extract it properly
 - Example: If you need "top two countries", use extract action, don't just read from DOM
 - The complete action should reference extracted variables, not hardcoded values
+- CRITICAL: In extract actions:
+  * Objectives MUST use <<variableKey>> references:
+    - CORRECT: "Extract the capital of <<top_country_1>>"
+    - WRONG: "Extract the capital of France"
+  * Extracted variable keys MUST be generic:
+    - CORRECT: "capital_of_top_country_1"
+    - WRONG: "capital_of_france" or "paris"
+  * Descriptions MUST use variable references:
+    - CORRECT: "The capital of <<top_country_1>>"
+    - WRONG: "The capital of France"
 
 # Guidelines
 

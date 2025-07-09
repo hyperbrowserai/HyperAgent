@@ -80,6 +80,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
         ]);
 
         await locator${variableName}.click({ force: true });
+        console.log("Clicked element");
     `;
   },
 

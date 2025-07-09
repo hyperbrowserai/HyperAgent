@@ -120,7 +120,7 @@ const runAction = async (
     }
 
     // TODO: check all the actions and see which ones need ctx.variables.keys updates
-    updateActionScript(action, ctx, actionCtx);
+    updateActionScript(action, ctx, actionCtx, actionOutput);
     return actionOutput;
   } catch (error) {
     return {
@@ -130,7 +130,8 @@ const runAction = async (
   }
 };
 
-const updateActionScript = async (action: ActionType, ctx: AgentCtx, actionCtx: ActionContext) => {
+const updateActionScript = async (
+  action: ActionType, ctx: AgentCtx, actionCtx: ActionContext, actionOutput: ActionOutput) => {
   if (ctx.debug) {
     // TODO: change the order and let extract action take actionOutput as inspiration
     const actionLogFile = `${ctx.debugDir}/action.ts`;
@@ -139,7 +140,15 @@ const updateActionScript = async (action: ActionType, ctx: AgentCtx, actionCtx: 
     fs.appendFileSync(actionLogFile, `/*\naction: ${action.type}\nactionParams = ${actionParamsStr}\n*/\n`);
 
     const generateCode = getActionCode(ctx.actions, action.type);
-    const code = await generateCode(actionCtx, action.params);
+
+    let code = "";
+    if (action.type === "extract" && actionOutput.variableUpdates) {
+      // Treat `Extract` action differently to keep the variable updates consistent
+      code = await generateCode(actionCtx, action.params, actionOutput.variableUpdates);
+    } else {
+      code = await generateCode(actionCtx, action.params);
+    }
+
     fs.appendFileSync(actionLogFile, `${code}\n\n`);
     fs.appendFileSync(actionLogFile, `await sleep(2000);\n\n`);
   }

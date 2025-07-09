@@ -8,6 +8,11 @@ dotenv.config();
 const agent = new HyperAgent({
   debug: true,
   browserProvider: "Hyperbrowser",
+  // hyperbrowserConfig: {
+  //   hyperbrowserSessionOptions: {
+  //     useProxy: true,
+  //   },
+  // }
 });
 
 (async () => {

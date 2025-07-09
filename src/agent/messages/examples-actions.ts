@@ -16,5 +16,6 @@ export const EXAMPLE_ACTIONS = `- Search: [
 ]
 - Using extracted variables (IMPORTANT): [
     {"type": "extract", "params": {"objective": "get top two countries", "variableName": "extracted_countries"}},
-    {"type": "inputText", "params": {"index": 1, "text": "Capital of <<top_country_1>>"}}
+    {"type": "inputText", "params": {"index": 1, "text": "Capital of <<top_country_1>>"}},
+    {"type": "extract", "params": {"objective": "Extract the capital of <<top_country_1>>", "variableName": "capital_1"}}
 ]`;

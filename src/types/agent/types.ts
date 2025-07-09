@@ -9,9 +9,15 @@ export const VariableFn = () =>
       key: z.string()
       .regex(/^[a-z][a-z0-9_]*$/,
         "Key must be in snake_case format (lowercase letters, numbers, and underscores only, starting with a letter)")
-      .describe("The key of the extracted variable in snake_case format (e.g., 'top_country_1', 'first_capital', 'price_usd')."),
-      value: z.string().describe("The value of the extracted variable."),
-      description: z.string().describe("The description of the extracted variable, including the objective that was used to extract the variable."),
+      .describe(`The key MUST be generic and NOT contain actual values. 
+        CORRECT examples: 'capital_of_top_country_1', 'price_from_city_1_to_city_2', 'first_result'
+        WRONG examples: 'capital_of_yemen', 'price_paris_london', 'gabon_capital'
+        Use numbers or generic terms, NEVER actual country/city names.`),
+      value: z.string().describe("The actual extracted value from the page."),
+      description: z.string().describe(`Generic description using variable references. 
+        CORRECT: "The capital of <<top_country_1>>"
+        WRONG: "The capital of Yemen"
+        NEVER include actual values in descriptions.`),
     })
   ).describe("List of extracted key-value pairs from the page that you will need in your future actions.");
 

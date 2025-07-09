@@ -56,6 +56,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
       const locator${variableName} = await ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
 
       await locator${variableName}.selectOption({ label: text${variableName} });
+      console.log(\`Selected option "\${text${variableName}}" from element\`);
     `;
   },
 
