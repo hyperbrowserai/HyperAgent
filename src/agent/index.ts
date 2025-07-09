@@ -50,7 +50,7 @@ const ResponseSchema = z.object({
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   public llm: BaseChatModel;
   private tasks: Record<string, TaskState> = {};
-  private tokenLimit = 128000;
+  private tokenLimit = 128000;  // Default token limit
   private debug = false;
   private mcpClient: MCPClient | undefined;
   private browserProvider: T extends "Hyperbrowser"
@@ -106,6 +106,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     this.debug = params.debug ?? false;
+    this.tokenLimit = params.tokenLimit ?? this.tokenLimit;
     this.errorEmitter = new ErrorEmitter();
   }
 

@@ -36,8 +36,8 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     try {
       const content = await ctx.page.content();
       const markdown = await parseMarkdown(content);
-      const tokenLimit = ctx.tokenLimit;
 
+      const originalObjective = action.objective;
       let objective = action.objective;
       for (const variable of ctx.variables) {
         objective = objective.replace(`<<${variable.key}>>`, variable.value);
@@ -57,11 +57,9 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       }
 
       // Trim markdown to stay within token limit
-      // Be conservative to avoid hitting API limits
-      const avgTokensPerChar = 0.75;  // Conservative estimate of tokens per character
-      // Use a much smaller limit to account for prompt overhead and API limits
-      const maxTokensForContent = Math.min(20000, tokenLimit * 0.3); // Use 30% of limit or 20k, whichever is smaller
-      const maxChars = Math.floor(maxTokensForContent / avgTokensPerChar);
+      // TODO: this is a hack, we should use a better token counting method
+      const avgTokensPerChar = 0.75; // Conservative estimate of tokens per character
+      const maxChars = Math.floor(ctx.tokenLimit / avgTokensPerChar);
       const trimmedMarkdown =
         markdown.length > maxChars
           ? markdown.slice(0, maxChars) + "\n[Content truncated due to length]"
@@ -80,27 +78,32 @@ export const ExtractActionDefinition: AgentActionDefinition = {
             {
               type: "text",
               text: `
-              Extract the following information from the page according to this objective: "${objective}"
+              Original objective (with variable references): "${originalObjective}"
+              Resolved objective (with actual values): "${objective}"
               
-              CRITICAL RULES:
-              1. Analyze the objective to create the correct key:
-                 - Look for variable references like <<variable_name>> in the objective
-                 - Create a key that matches the context and variable reference
-                 - Example: "Extract capital of <<top_country_1>>" → key: "capital_of_top_country_1"
-                 - Example: "Extract capital of <<top_country_2>>" → key: "capital_of_top_country_2"
-                 - Example: "Extract price from <<city_1>> to <<city_2>>" → key: "price_city_1_to_city_2"
+              CRITICAL INSTRUCTIONS:
+              1. Use the RESOLVED objective to find the information on the page
+              2. Use the ORIGINAL objective to create your key and description
               
-              2. Keys MUST be generic (no actual values):
-                 - NEVER include actual country/city names you see on the page
-                 - Use the variable numbers/identifiers from the objective
+              For the key:
+              - Look at the ORIGINAL objective: "${originalObjective}"
+              - Take the variable references (e.g., <<top_country_1>>) and convert to snake_case
+              - Add appropriate prefix (e.g., "capital_of_", "price_of_")
               
-              3. Description MUST match the objective's variable reference:
-                 - Use the same <<variable_reference>> from the objective
-                 - Example: If objective has <<top_country_2>>, description uses <<top_country_2>>
+              EXAMPLES:
+              Original: "Extract the capital of <<top_country_1>>"
+              Resolved: "Extract the capital of Ethiopia"
+              → key: "capital_of_top_country_1"
+              → value: "Addis Ababa" (found using resolved objective)
+              → description: "The capital of <<top_country_1>>"
               
-              4. Only the 'value' field contains the actual extracted data
+              Original: "Extract the capital of <<top_country_2>>"
+              Resolved: "Extract the capital of Italy"
+              → key: "capital_of_top_country_2"
+              → value: "Rome" (found using resolved objective)
+              → description: "The capital of <<top_country_2>>"
               
-              Return the results in structured output format.
+              NEVER use actual country/city names in the key or description!
               
               Page content:\n${trimmedMarkdown}\n
               Here is as screenshot of the page:\n`,
@@ -157,9 +160,10 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     const markdown${variableName} = await parseMarkdown(content${variableName});
     const tokenLimit${variableName} = ${ctx.tokenLimit};
 
+    const originalObjective${variableName} = "${action.objective}";
     let objective${variableName} = "${action.objective}";
-    for (const variable of ctx.variables) {
-      objective${variableName} = objective${variableName}.replace(\`<<\${variable.key}>>\`, variable.value);
+    for (const variable of Object.values(ctx.variables)) {
+      objective${variableName} = objective${variableName}.replace(\`<<\${variable.key}>>\`, variable.value as string);
     }
 
     // Take a screenshot of the page
@@ -182,20 +186,21 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           {
             type: "text",
             text: \`
-            Extract the following information from the page according to this objective: "\${objective${variableName}}"
-              For each of these variables, find their values from the page content:
-              ${expectedVar.map(v => `- ${v.key}: ${v.description}`).join('\n              ')}
-              
-              CRITICAL RULES:
-              1. Keys MUST be EXACTLY as provided above - do not change them
-              2. Keys should NEVER contain actual values or any other information that you can see in the DOM
-              3. Descriptions MUST use variable references like <<capital_of_from_country>>
-              4. Only 'value' should contain the actual data
-              
-              Return the results in structured output format.
-              
-              Page content:\\n\${trimmedMarkdown${variableName}}\\n
-              Here is as screenshot of the page:\\n,
+            Original objective (with variable references): "\${originalObjective${variableName}}"
+            Resolved objective (with actual values): "\${objective${variableName}}"
+            
+            Extract the following information from the page according to the resolved objective.
+            For each of these variables, find their values from the page content:
+            ${expectedVar.map(v => `- ${v.key}: ${v.description}`).join('\\n            ')}
+            
+            CRITICAL RULES:
+            1. Keys MUST be EXACTLY as provided above - do not change them
+            2. Only the 'value' field should contain the actual data from the page
+            3. Use the provided descriptions exactly as given
+            4. Use the RESOLVED objective to understand what to look for on the page
+            
+            Page content:\\n\${trimmedMarkdown${variableName}}\\n
+            Here is as screenshot of the page:\\n,
             \`
           },
           {

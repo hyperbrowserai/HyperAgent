@@ -7,6 +7,11 @@ export const SelectOptionAction = z
     index: z
       .number()
       .describe("The numeric index of the  element to select an option."),
+    indexDescription: z.string().describe(`
+      A descriptive text that uniquely identifies this element on the page. 
+      This should help locate this element again.
+      Examples: "Search button", "Submit form button", "Next page arrow", "Login link in header"
+      This description will be used as a fallback to find the element if the index changes.`),
     text: z.string().describe("The text of the option to select."),
     variableName: z.string()
       .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
@@ -52,7 +57,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
       }
 
       const querySelector${variableName} = '${locatorString}';
-      const fallbackDescription${variableName} = "Find the element with the text '${variableName}'";
+      const fallbackDescription${variableName} = "Find the element with the text '${action.indexDescription}'";
       const locator${variableName} = await ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
 
       await locator${variableName}.selectOption({ label: text${variableName} });
