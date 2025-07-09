@@ -52,14 +52,12 @@ export const buildAgentStepMessages = async (
     });
     for (const step of steps) {
       const actionOutputs = JSON.stringify({
-        actionOutputs: {
-          ...step.actionOutputs.map(output => ({
-            success: output.success,
-            message: output.message,
-            extract: output.extract,
-            // Intentionally not including variableUpdates here to avoid leaking information of values
-          })),
-        },
+        actionOutputs: step.actionOutputs.map(output => ({
+          success: output.success,
+          message: output.message,
+          extract: output.extract,
+          // Intentionally not including variableUpdates here to avoid leaking information of values
+        })),
         thoughts: step.agentOutput.thoughts,
         memory: step.agentOutput.memory,
         nextGoal: step.agentOutput.nextGoal,
@@ -84,7 +82,10 @@ export const buildAgentStepMessages = async (
   // Add elements section with DOM tree
   messages.push({
     role: "user",
-    content: `=== Elements (READ-ONLY - DO NOT USE VALUES DIRECTLY) ===\n${domState.domState}\n`,
+    content: `=== Elements (FOR REFERENCE ONLY - NEVER USE ACTUAL VALUES IN YOUR RESPONSE) ===
+${domState.domState}
+CRITICAL: Any values you see here (country names, city names, etc.) must ONLY be referenced through variables.
+If you see "United Kingdom" here and you've extracted it as <<top_country_1>>, you MUST use <<top_country_1>> everywhere.`,
   });
 
   // Add page screenshot section

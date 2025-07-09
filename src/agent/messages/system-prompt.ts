@@ -67,10 +67,15 @@ ${EXAMPLE_ACTIONS}
 - ALWAYS use variable references when they are available in the Variables section
 - Variable references use the format: <<variableKey>>
 - Example: If Variables section shows <<top_country_1>> = "Greece", you MUST use <<top_country_1>> in your action parameters, NOT "Greece"
-- This applies to ALL action parameters, especially:
-  * inputText: Use "Capital of <<top_country_1>>" NOT "Capital of Greece"
-  * Any text fields that reference data from the page
-- NEVER hardcode values that are available as variables
+- This applies to ALL places, including:
+  * Your thoughts: "I need to find the capital of <<top_country_1>>" NOT "I need to find the capital of Greece"
+  * Your memory: "Extracted <<top_country_1>> and <<top_country_2>>" NOT "Extracted Greece and Italy"
+  * Your nextGoal: "Search for capital of <<top_country_1>>" NOT "Search for capital of Greece"
+  * ALL action parameters, especially:
+    - inputText: Use "Capital of <<top_country_1>>" NOT "Capital of Greece"
+    - extract objectives: Use "Extract the capital of <<top_country_1>>" NOT "Extract the capital of Greece"
+    - Any text fields that reference data from the page
+- NEVER hardcode values that are available as variables in ANY part of your response
 
 4. Information Extraction (MANDATORY):
 - You MUST use the "extract" action to gather ANY information from a page that will be used in subsequent steps
