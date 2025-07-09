@@ -30,7 +30,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
     run: async (ctx: ActionContext, action: InputTextActionType) => {
       let { index, text } = action;
       for (const variable of ctx.variables) {
-        text = text.replaceAll(`<<${variable.key}>>`, variable.value);
+        text = text.replace(new RegExp(`<<${variable.key}>>`, "g"), variable.value);
       }
 
       const locator = getLocator(ctx, index);
@@ -53,17 +53,20 @@ export const InputTextActionDefinition: AgentActionDefinition = {
       const locatorString = getLocatorString(ctx, action.index) ?? "";
 
       return `
-        let text${variableName} = ${JSON.stringify(action.text)};
+        let text_${variableName} = ${JSON.stringify(action.text)};
         for (const variable of Object.values(ctx.variables)) {
-          text${variableName} = text${variableName}.replaceAll(\`<<\${variable.key}>>\`, variable.value as string);
+          text_${variableName} = text_${variableName}.replace(
+            new RegExp(\`<<\${variable.key}>>\`, "g"),
+            variable.value as string
+          );
         }
 
-        const querySelector${variableName} = '${locatorString}';
-        const fallbackDescription${variableName} = "Find the element with the text '${action.indexDescription}'";
-        const locator${variableName} = await ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
+        const querySelector_${variableName} = '${locatorString}';
+        const fallbackDescription_${variableName} = "Find the element with the text '${action.indexDescription}'";
+        const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
 
-        await locator${variableName}.fill(text${variableName}, { timeout: 5_000 });
-        console.log(\`Inputted text "\${text${variableName}}" into element\`);
+        await locator_${variableName}.fill(text_${variableName}, { timeout: 5_000 });
+        console.log(\`Inputted text "\${text_${variableName}}" into element\`);
       `;
     },
 

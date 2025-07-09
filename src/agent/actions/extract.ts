@@ -40,7 +40,10 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       const originalObjective = action.objective;
       let objective = action.objective;
       for (const variable of ctx.variables) {
-        objective = objective.replaceAll(`<<${variable.key}>>`, variable.value);
+        objective = objective.replace(
+          new RegExp(`<<${variable.key}>>`, "g"),
+          variable.value,
+        );
       }
 
       // Take a screenshot of the page
@@ -156,28 +159,31 @@ export const ExtractActionDefinition: AgentActionDefinition = {
 
     return `
   try {
-    const content${variableName} = await ctx.page.content();
-    const markdown${variableName} = await parseMarkdown(content${variableName});
-    const tokenLimit${variableName} = ${ctx.tokenLimit};
+    const content_${variableName} = await ctx.page.content();
+    const markdown_${variableName} = await parseMarkdown(content_${variableName});
+    const tokenLimit_${variableName} = ${ctx.tokenLimit};
 
-    const originalObjective${variableName} = "${action.objective}";
-    let objective${variableName} = "${action.objective}";
+    const originalObjective_${variableName} = "${action.objective}";
+    let objective_${variableName} = "${action.objective}";
     for (const variable of Object.values(ctx.variables)) {
-      objective${variableName} = objective${variableName}.replaceAll(\`<<\${variable.key}>>\`, variable.value as string);
+      objective_${variableName} = objective_${variableName}.replace(
+        new RegExp(\`<<\${variable.key}>>\`, "g"),
+        variable.value
+      );
     }
 
     // Take a screenshot of the page
-    const cdpSession${variableName} = await ctx.page.context().newCDPSession(ctx.page);
-    const screenshot${variableName} = await cdpSession${variableName}.send("Page.captureScreenshot");
-    cdpSession${variableName}.detach();
+    const cdpSession_${variableName} = await ctx.page.context().newCDPSession(ctx.page);
+    const screenshot_${variableName} = await cdpSession_${variableName}.send("Page.captureScreenshot");
+    cdpSession_${variableName}.detach();
 
-    const avgTokensPerChar${variableName} = 0.75;  // Conservative estimate of tokens per character
-    const maxTokensForContent${variableName} = Math.min(20000, tokenLimit${variableName} * 0.3); // Use 30% of limit or 20k
-    const maxChars${variableName} = Math.floor(maxTokensForContent${variableName} / avgTokensPerChar${variableName});
-    const trimmedMarkdown${variableName} =
-      markdown${variableName}.length > maxChars${variableName}
-        ? markdown${variableName}.slice(0, maxChars${variableName}) + "\\n[Content truncated due to length]"
-        : markdown${variableName};
+    const avgTokensPerChar_${variableName} = 0.75;  // Conservative estimate of tokens per character
+    const maxTokensForContent_${variableName} = Math.min(20000, tokenLimit_${variableName} * 0.3); // Use 30% of limit or 20k
+    const maxChars_${variableName} = Math.floor(maxTokensForContent_${variableName} / avgTokensPerChar_${variableName});
+    const trimmedMarkdown_${variableName} =
+      markdown_${variableName}.length > maxChars_${variableName}
+        ? markdown_${variableName}.slice(0, maxChars_${variableName}) + "\\n[Content truncated due to length]"
+        : markdown_${variableName};
 
     const response${variableName} = await ctx.llm.withStructuredOutput(z.object({variables: VariableFn()})).invoke([
       {
@@ -186,8 +192,8 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           {
             type: "text",
             text: \`
-            Original objective (with variable references): "\${originalObjective${variableName}}"
-            Resolved objective (with actual values): "\${objective${variableName}}"
+            Original objective (with variable references): "\${originalObjective_${variableName}}"
+            Resolved objective (with actual values): "\${objective_${variableName}}"
             
             Extract the following information from the page according to the resolved objective.
             For each of these variables, find their values from the page content:
@@ -199,35 +205,35 @@ export const ExtractActionDefinition: AgentActionDefinition = {
             3. Use the provided descriptions exactly as given
             4. Use the RESOLVED objective to understand what to look for on the page
             
-            Page content:\\n\${trimmedMarkdown${variableName}}\\n
+            Page content:\\n\${trimmedMarkdown_${variableName}}\\n
             Here is as screenshot of the page:\\n,
             \`
           },
           {
             type: "image_url",
             image_url: {
-              url: \`data:image/png;base64,\${screenshot${variableName}.data}\`,
+              url: \`data:image/png;base64,\${screenshot_${variableName}.data}\`,
             },
           },
         ],
       },
     ]);
 
-    if (response${variableName}.variables.length === 0) {
+    if (response_${variableName}.variables.length === 0) {
       console.log(\`No variables extracted from page.\`);
     }
 
-    const variableUpdates${variableName} = response${variableName}.variables.map(variable => ({ 
+    const variableUpdates_${variableName} = response_${variableName}.variables.map(variable => ({ 
       key: variable.key, 
       value: variable.value,
       description: variable.description,
     }));
 
     console.log(\`Extracted variables from page: 
-    \${response${variableName}.variables.map(variable => \`\${variable.key}\`).join(', ')}\`);
+    \${response_${variableName}.variables.map(variable => \`\${variable.key}\`).join(', ')}\`);
 
     // Update the ctx.variables with the new values
-    for (const variable of variableUpdates${variableName}) {
+    for (const variable of variableUpdates_${variableName}) {
       ctx.variables[variable.key] = {
         key: variable.key,
         value: variable.value,

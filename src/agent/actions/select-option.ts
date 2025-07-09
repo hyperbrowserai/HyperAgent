@@ -28,7 +28,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     let { index, text } = action;
     for (const variable of ctx.variables) {
-      text = text.replaceAll(`<<${variable.key}>>`, variable.value);
+      text = text.replace(new RegExp(`<<${variable.key}>>`, "g"), variable.value);
     }
 
     const locator = getLocator(ctx, index);
@@ -51,17 +51,20 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     const variableName = action.variableName;
 
     return `
-      let text${variableName} = ${JSON.stringify(action.text)};
+      let text_${variableName} = ${JSON.stringify(action.text)};
       for (const variable of Object.values(ctx.variables)) {
-        text${variableName} = text${variableName}.replaceAll(\`<<\${variable.key}>>\`, variable.value as string);
+        text_${variableName} = text_${variableName}.replace(
+          new RegExp(\`<<\${variable.key}>>\`, "g"),
+          variable.value as string
+        );
       }
 
-      const querySelector${variableName} = '${locatorString}';
-      const fallbackDescription${variableName} = "Find the element with the text '${action.indexDescription}'";
-      const locator${variableName} = await ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
+      const querySelector_${variableName} = '${locatorString}';
+      const fallbackDescription_${variableName} = "Find the element with the text '${action.indexDescription}'";
+      const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
 
-      await locator${variableName}.selectOption({ label: text${variableName} });
-      console.log(\`Selected option "\${text${variableName}}" from element\`);
+      await locator_${variableName}.selectOption({ label: text_${variableName} });
+      console.log(\`Selected option "\${text_${variableName}}" from element\`);
     `;
   },
 

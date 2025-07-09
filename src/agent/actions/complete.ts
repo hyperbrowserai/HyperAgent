@@ -29,11 +29,12 @@ export const CompleteActionDefinition: AgentActionDefinition = {
     const variableName = "complete";
 
     return `
-      let text${variableName} = ${JSON.stringify(action.text)};
+      let text_${variableName} = ${JSON.stringify(action.text)};
       for (const variable of Object.values(ctx.variables)) {
-        text${variableName} = text${variableName}.replaceAll(\`<<\${variable.key}>>\`, variable.value as string);
+        text_${variableName} = text_${variableName}.replace(
+        new RegExp(\`<<\${variable.key}>>\`, "g"), variable.value as string);
       }
-      console.log(\`Task complete: \${text${variableName}}\`);
+      console.log(\`Task complete: \${text_${variableName}}\`);
     `;
   },
 
@@ -41,7 +42,7 @@ export const CompleteActionDefinition: AgentActionDefinition = {
     let text = params.text ?? "No response text found";
     if (variables) {
       for (const variable of Object.values(variables)) {
-        text = text.replaceAll(`<<${variable.key}>>`, variable.value);
+        text = text.replace(new RegExp(`<<${variable.key}>>`, "g"), variable.value);
       }
     }
     return text;

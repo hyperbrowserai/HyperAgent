@@ -67,24 +67,24 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     const variableName = action.variableName;
 
     return `
-        const querySelector${variableName} = '${locatorString}';
-        const fallbackDescription${variableName} = "${action.indexDescription}";
-        const locator${variableName} = await ctx.page.getLocator(querySelector${variableName}, fallbackDescription${variableName});
+        const querySelector_${variableName} = '${locatorString}';
+        const fallbackDescription_${variableName} = "${action.indexDescription}";
+        const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
 
-        await locator${variableName}.scrollIntoViewIfNeeded({
+        await locator_${variableName}.scrollIntoViewIfNeeded({
           timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
         });
 
         await Promise.all([
-          locator${variableName}.waitFor({
+          locator_${variableName}.waitFor({
             state: "visible",
             timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
           }),
-          waitForElementToBeEnabled(locator${variableName}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
-          waitForElementToBeStable(locator${variableName}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+          waitForElementToBeEnabled(locator_${variableName}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+          waitForElementToBeStable(locator_${variableName}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
         ]);
 
-        await locator${variableName}.click({ force: true });
+        await locator_${variableName}.click({ force: true });
         console.log("Clicked element");
     `;
   },
