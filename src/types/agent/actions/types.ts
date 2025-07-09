@@ -54,7 +54,8 @@ export interface AgentActionDefinition<
   /**
    * completeAction is only called if the name of this action is "complete". It is meant to format text into a proper format for output.
    * @param params
+   * @param variables Optional variables to replace in the text
    */
-  completeAction?(params: z.infer<T>): Promise<string>;
+  completeAction?(params: z.infer<T>, variables?: Record<string, any>): Promise<string>;
   pprintAction?(params: z.infer<T>): string;
 }

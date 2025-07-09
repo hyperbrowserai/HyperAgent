@@ -28,7 +28,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     let { index, text } = action;
     for (const variable of ctx.variables) {
-      text = text.replace(`<<${variable.key}>>`, variable.value);
+      text = text.replaceAll(`<<${variable.key}>>`, variable.value);
     }
 
     const locator = getLocator(ctx, index);
@@ -53,7 +53,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     return `
       let text${variableName} = ${JSON.stringify(action.text)};
       for (const variable of Object.values(ctx.variables)) {
-        text${variableName} = text${variableName}.replace(\`<<\${variable.key}>>\`, variable.value as string);
+        text${variableName} = text${variableName}.replaceAll(\`<<\${variable.key}>>\`, variable.value as string);
       }
 
       const querySelector${variableName} = '${locatorString}';

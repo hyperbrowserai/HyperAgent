@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ActionOutput, AgentActionDefinition } from "@/types";
+import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 
 export const CompleteAction = z
   .object({
@@ -25,14 +25,26 @@ export const CompleteActionDefinition: AgentActionDefinition = {
     return { success: true, message: "Task Complete" };
   },
 
-  generateCode: async () => {
+  generateCode: async (_: ActionContext, action: CompleteActionType) => {
+    const variableName = "complete";
+
     return `
-      console.log("Task complete");
+      let text${variableName} = ${JSON.stringify(action.text)};
+      for (const variable of Object.values(ctx.variables)) {
+        text${variableName} = text${variableName}.replaceAll(\`<<\${variable.key}>>\`, variable.value as string);
+      }
+      console.log(\`Task complete: \${text${variableName}}\`);
     `;
   },
 
-  completeAction: async (params: CompleteActionType) => {
-    return params.text ?? "No response text found";
+  completeAction: async (params: CompleteActionType, variables?: Record<string, any>) => {
+    let text = params.text ?? "No response text found";
+    if (variables) {
+      for (const variable of Object.values(variables)) {
+        text = text.replaceAll(`<<${variable.key}>>`, variable.value);
+      }
+    }
+    return text;
   },
 
   pprintAction: function (params: CompleteActionType): string {

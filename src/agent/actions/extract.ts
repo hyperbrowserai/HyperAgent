@@ -40,7 +40,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       const originalObjective = action.objective;
       let objective = action.objective;
       for (const variable of ctx.variables) {
-        objective = objective.replace(`<<${variable.key}>>`, variable.value);
+        objective = objective.replaceAll(`<<${variable.key}>>`, variable.value);
       }
 
       // Take a screenshot of the page
@@ -163,7 +163,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     const originalObjective${variableName} = "${action.objective}";
     let objective${variableName} = "${action.objective}";
     for (const variable of Object.values(ctx.variables)) {
-      objective${variableName} = objective${variableName}.replace(\`<<\${variable.key}>>\`, variable.value as string);
+      objective${variableName} = objective${variableName}.replaceAll(\`<<\${variable.key}>>\`, variable.value as string);
     }
 
     // Take a screenshot of the page

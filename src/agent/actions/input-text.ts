@@ -29,14 +29,16 @@ export const InputTextActionDefinition: AgentActionDefinition = {
 
     run: async (ctx: ActionContext, action: InputTextActionType) => {
       let { index, text } = action;
-      const locator = getLocator(ctx, index);
       for (const variable of ctx.variables) {
-        text = text.replace(`<<${variable.key}>>`, variable.value);
+        text = text.replaceAll(`<<${variable.key}>>`, variable.value);
       }
+
+      const locator = getLocator(ctx, index);
       if (!locator) {
         return { success: false, message: "Element not found" };
       }
       await locator.fill(text, { timeout: 5_000 });
+      
       return {
         success: true,
         message: `Inputted text "${text}" into element with index ${index}`,
@@ -53,7 +55,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
       return `
         let text${variableName} = ${JSON.stringify(action.text)};
         for (const variable of Object.values(ctx.variables)) {
-          text${variableName} = text${variableName}.replace(\`<<\${variable.key}>>\`, variable.value as string);
+          text${variableName} = text${variableName}.replaceAll(\`<<\${variable.key}>>\`, variable.value as string);
         }
 
         const querySelector${variableName} = '${locatorString}';

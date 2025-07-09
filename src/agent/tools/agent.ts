@@ -150,7 +150,7 @@ const updateActionScript = async (
     }
 
     fs.appendFileSync(actionLogFile, `${code}\n\n`);
-    fs.appendFileSync(actionLogFile, `await sleep(2000);\n\n`);
+    fs.appendFileSync(actionLogFile, `await sleep(4000);\n\n`);  // Script runs too fast, so we wait for 4 seconds
   }
 }
 
@@ -279,7 +279,7 @@ export const runAgentTask = async (
         );
         if (actionDefinition) {
           output =
-            (await actionDefinition.completeAction?.(action.params)) ??
+            (await actionDefinition.completeAction?.(action.params, ctx.variables)) ??
             "No complete action found";
         } else {
           output = "No complete action found";

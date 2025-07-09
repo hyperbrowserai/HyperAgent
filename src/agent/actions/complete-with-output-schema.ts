@@ -54,7 +54,7 @@ export const generateCompleteActionWithOutputDefinition = (
       }
     },
 
-    completeAction: async (params: CompeleteActionWithOutputSchema) => {
+    completeAction: async (params: CompeleteActionWithOutputSchema, variables?: Record<string, any>) => {
       return JSON.stringify(params.outputSchema, null, 2);
     },
   };
