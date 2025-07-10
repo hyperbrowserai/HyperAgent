@@ -98,23 +98,27 @@ export const ExtractActionDefinition: AgentActionDefinition = {
               
               For the key:
               - Look at the ORIGINAL objective: "${originalObjective}"
-              - Take the variable references (e.g., <<top_country_1>>) and convert to snake_case
-              - Add appropriate prefix (e.g., "capital_of_", "price_of_")
+              - Take the variable references (e.g., <<variable_name>>) and convert to snake_case
+              - Add appropriate prefix based on the type of data being extracted
               
               EXAMPLES:
-              Original: "Extract the capital of <<top_country_1>>"
-              Resolved: "Extract the capital of Ethiopia"
-              → key: "capital_of_top_country_1"
-              → value: "Addis Ababa" (found using resolved objective)
-              → description: "The capital of <<top_country_1>>"
+              Original: "Extract the name of <<person_1>>"
+              Resolved: "Extract the name of John Smith" 
+              → key: "name_of_person_1"
+              → value: "John Smith" (found using resolved objective)
+              → description: "The name of <<person_1>>"
               
-              Original: "Extract the capital of <<top_country_2>>"
-              Resolved: "Extract the capital of Italy"
-              → key: "capital_of_top_country_2"
-              → value: "Rome" (found using resolved objective)
-              → description: "The capital of <<top_country_2>>"
+              Original: "Extract the price of <<product_2>>"
+              Resolved: "Extract the price of Blue Shirt"
+              → key: "price_of_product_2"
+              → value: "$19.99" (found using resolved objective)
+              → description: "The price of <<product_2>>"
               
-              NEVER use actual country/city names in the key or description!
+              CRITICAL RULES:
+              - NEVER use actual values in keys or descriptions, only use variable references
+              - ALWAYS maintain the original variable reference format in descriptions
+              - ALWAYS use snake_case for keys
+              - ALWAYS add appropriate descriptive prefixes to keys
               
               Page content:\n${trimmedMarkdown}\n
               Here is as screenshot of the page:\n`,
