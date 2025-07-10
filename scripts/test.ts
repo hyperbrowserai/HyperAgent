@@ -10,10 +10,10 @@ const agent = new HyperAgent({
   browserProvider: "Hyperbrowser",
   tokenLimit: 50000,
   // hyperbrowserConfig: {
-  //   hyperbrowserSessionOptions: {
+  //   sessionConfig: {
   //     useProxy: true,
   //   },
-  // }
+  // },
 });
 
 (async () => {
