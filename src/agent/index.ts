@@ -42,7 +42,6 @@ import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { getLocator } from "./actions/utils";
 
-
 const ResponseSchema = z.object({
   index: z.number().describe("The index number of the element"),
 });
@@ -474,11 +473,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       console.warn(
         "LLM failed to return valid structured output for element finding",
       );
-    })
+    }
 
     // Check if agentOutput is null/undefined or doesn't have the expected structure
-    if (!agentOutput || typeof agentOutput.index !== 'number') {
-      console.warn('LLM failed to return valid structured output for element finding');
+    if (!agentOutput || typeof agentOutput.index !== "number") {
+      console.warn(
+        "LLM failed to return valid structured output for element finding",
+      );
       return null;
     }
 
