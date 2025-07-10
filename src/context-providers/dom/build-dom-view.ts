@@ -62,7 +62,7 @@ export const buildDomView = (): DOMStateRaw => {
       parentIframe: element.iframe ?? null,
     })),
     window.innerWidth,
-    window.innerHeight
+    window.innerHeight,
   );
 
   // 2. Convert the ImageBitmap to a PNG Data URL

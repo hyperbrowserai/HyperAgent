@@ -92,7 +92,7 @@ export const KeyPressAction = z
       `Press a key or key-combination on the keyboard.\n
 - This supports xdotool's \`key\` syntax.\n
 - Examples: "a", "Return", "alt+Tab", "ctrl+s", "Up", "KP_0" (for the numpad 0 key).
-`
+`,
     ),
   })
   .describe("Press a key or key-combination on the keyboard");
@@ -141,20 +141,19 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
         code += `
         await ctx.page.keyboard.press(${JSON.stringify(translatedKey)});
         console.log("Pressed key: ${translatedKey}");
-        \n`
+        \n`;
       }
       return code;
-
     } else if (text.includes("+")) {
       let code = "";
-      
+
       const keys = text.split("+");
       for (let i = 0; i < keys.length - 1; i++) {
         const translatedKey = translateKey(keys[i]);
         code += `
         await ctx.page.keyboard.down(${JSON.stringify(translatedKey)});
         console.log("Pressed key down: ${translatedKey}");
-        \n`
+        \n`;
       }
 
       const lastKey = translateKey(keys[keys.length - 1]);
@@ -162,7 +161,7 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
       await ctx.page.keyboard.press(${JSON.stringify(lastKey)});
       console.log("Pressed key: ${lastKey}");
       \n`;
-      
+
       for (let i = keys.length - 2; i >= 0; i--) {
         const translatedKey = translateKey(keys[i]);
         code += `
@@ -172,17 +171,16 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
       }
 
       return code;
-
     } else {
       const translatedKey = translateKey(text);
       return `
       await ctx.page.keyboard.press(${JSON.stringify(translatedKey)});
       console.log("Pressed key: ${translatedKey}");
       \n`;
-    };
+    }
   },
 
-  pprintAction: function(params: KeyPressActionType): string {
+  pprintAction: function (params: KeyPressActionType): string {
     return `Press key "${params.text}"`;
   },
 };

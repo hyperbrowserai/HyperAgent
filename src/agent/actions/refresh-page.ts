@@ -4,7 +4,7 @@ import { ActionContext, AgentActionDefinition } from "@/types";
 export const RefreshPageAction = z
   .object({})
   .describe(
-    "Refresh a webpage. Refreshing a webpage is usually a good way if you need to reset the state on a page. Take care since every thing you did on that page will be reset."
+    "Refresh a webpage. Refreshing a webpage is usually a good way if you need to reset the state on a page. Take care since every thing you did on that page will be reset.",
   );
 
 export type RefreshPageActionType = z.infer<typeof RefreshPageAction>;
@@ -22,7 +22,7 @@ export const RefreshPageActionDefinition: AgentActionDefinition = {
     return `await ctx.page.reload();`;
   },
 
-  pprintAction: function(): string {
+  pprintAction: function (): string {
     return "Refresh current page";
   },
 };

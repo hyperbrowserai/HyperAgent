@@ -13,7 +13,7 @@ export const buildAgentStepMessages = async (
   page: Page,
   domState: DOMState,
   screenshot: string,
-  variables: HyperVariable[]
+  variables: HyperVariable[],
 ): Promise<BaseMessageLike[]> => {
   const messages = [...baseMessages];
 
@@ -34,7 +34,7 @@ export const buildAgentStepMessages = async (
     messages.push({
       role: "user",
       content: `=== Variables ===
-      ${variables.map((v) => `<<${v.key}>> = (${v.description || 'extracted value'})`).join("\n")}
+      ${variables.map((v) => `<<${v.key}>> = (${v.description || "extracted value"})`).join("\n")}
       REMINDER: Use <<variableKey>> in action parameters instead of the actual value.`,
     });
   } else {
@@ -52,7 +52,7 @@ export const buildAgentStepMessages = async (
     });
     for (const step of steps) {
       const actionOutputs = JSON.stringify({
-        actionOutputs: step.actionOutputs.map(output => ({
+        actionOutputs: step.actionOutputs.map((output) => ({
           success: output.success,
           message: output.message,
           extract: output.extract,

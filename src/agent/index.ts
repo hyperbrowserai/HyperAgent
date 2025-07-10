@@ -42,7 +42,6 @@ import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { getLocator } from "./actions/utils";
 
-
 const ResponseSchema = z.object({
   index: z.number().describe("The index number of the element"),
 });
@@ -50,7 +49,7 @@ const ResponseSchema = z.object({
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   public llm: BaseChatModel;
   private tasks: Record<string, TaskState> = {};
-  private tokenLimit = 128000;  // Default token limit
+  private tokenLimit = 128000; // Default token limit
   private debug = false;
   private mcpClient: MCPClient | undefined;
   private browserProvider: T extends "Hyperbrowser"
@@ -142,7 +141,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         Element.prototype.addEventListener = function (
           type: string,
           listener: EventListenerOrEventListenerObject,
-          options?: boolean | AddEventListenerOptions
+          options?: boolean | AddEventListenerOptions,
         ) {
           if (interactiveEvents.has(type.toLowerCase())) {
             this.setAttribute("data-has-interactive-listener", "true");
@@ -163,7 +162,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns
    */
   private getActions(
-    outputSchema?: z.AnyZodObject
+    outputSchema?: z.AnyZodObject,
   ): Array<AgentActionDefinition> {
     if (outputSchema) {
       return [
@@ -324,7 +323,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async executeTaskAsync(
     task: string,
     params?: TaskParams,
-    initPage?: Page
+    initPage?: Page,
   ): Promise<Task> {
     const taskId = uuidv4();
     const page = initPage || (await this.getCurrentPage());
@@ -346,7 +345,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         variables: this._variables,
       },
       taskState,
-      params
+      params,
     ).catch((error: Error) => {
       // Retrieve the correct state to update
       const failedTaskState = this.tasks[taskId];
@@ -373,7 +372,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async executeTask(
     task: string,
     params?: TaskParams,
-    initPage?: Page
+    initPage?: Page,
   ): Promise<TaskOutput> {
     const taskId = uuidv4();
     const page = initPage || (await this.getCurrentPage());
@@ -396,7 +395,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           variables: this._variables,
         },
         taskState,
-        params
+        params,
       );
     } catch (error) {
       taskState.status = TaskStatus.FAILED;
@@ -404,7 +403,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
-  public async getLocator(querySelector: string, fallbackDescription: string, page: Page): Promise<Locator> {
+  public async getLocator(
+    querySelector: string,
+    fallbackDescription: string,
+    page: Page,
+  ): Promise<Locator> {
     const locator = page.locator(querySelector);
 
     let count = await locator.count();
@@ -419,11 +422,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return fallbackLocator;
       }
     }
-    
-    throw new HyperagentError(`Element not found for description: ${fallbackDescription}`);
+
+    throw new HyperagentError(
+      `Element not found for description: ${fallbackDescription}`,
+    );
   }
-  
-  private async findElement(taskDescription : string, page: Page): Promise<Locator | null> {
+
+  private async findElement(
+    taskDescription: string,
+    page: Page,
+  ): Promise<Locator | null> {
     // Get the DOM state
     let domState;
     while (!domState) {
@@ -433,13 +441,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         await sleep(1000);
       }
     }
-    
+
     // Get the screenshot ready with indexes
     const trimmedScreenshot = await compositeScreenshot(
       page,
       domState.screenshot.startsWith("data:image/png;base64,")
         ? domState.screenshot.slice("data:image/png;base64,".length)
-        : domState.screenshot
+        : domState.screenshot,
     );
 
     // Build Agent Step Messages
@@ -458,11 +466,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const llmStructured = this.llm.withStructuredOutput(ResponseSchema);
     const agentOutput = await retry({
       func: () => llmStructured.invoke(msgs),
-    })
+    });
 
     // Check if agentOutput is null/undefined or doesn't have the expected structure
-    if (!agentOutput || typeof agentOutput.index !== 'number') {
-      console.warn('LLM failed to return valid structured output for element finding');
+    if (!agentOutput || typeof agentOutput.index !== "number") {
+      console.warn(
+        "LLM failed to return valid structured output for element finding",
+      );
       return null;
     }
 
@@ -475,7 +485,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       debugDir: undefined,
       mcpClient: undefined,
       variables: [],
-    }
+    };
     const locator = getLocator(actionCtx, agentOutput.index);
     if (!locator) {
       return null;
@@ -491,15 +501,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (action.type === "complete") {
       throw new HyperagentError(
         "Could not add an action with the name 'complete'. Complete is a reserved action.",
-        400
+        400,
       );
     }
     const actionsList = new Set(
-      this.actions.map((registeredAction) => registeredAction.type)
+      this.actions.map((registeredAction) => registeredAction.type),
     );
     if (actionsList.has(action.type)) {
       throw new Error(
-        `Could not register action of type ${action.type}. Action with the same name is already registered`
+        `Could not register action of type ${action.type}. Action with the same name is already registered`,
       );
     } else {
       this.actions.push(action);
@@ -527,7 +537,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         } catch (error) {
           console.error(
             `Failed to initialize MCP server ${serverConfig.id || "unknown"}:`,
-            error
+            error,
           );
         }
       }
@@ -546,7 +556,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Server ID if connection was successful
    */
   public async connectToMCPServer(
-    serverConfig: MCPServerConfig
+    serverConfig: MCPServerConfig,
   ): Promise<string | null> {
     if (!this.mcpClient) {
       this.mcpClient = new MCPClient(this.debug);
@@ -633,7 +643,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public pprintAction(action: ActionType): string {
     const foundAction = this.actions.find(
-      (actions) => actions.type === action.type
+      (actions) => actions.type === action.type,
     );
     if (foundAction && foundAction.pprintAction) {
       return foundAction.pprintAction(action.params);
@@ -659,7 +669,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (!task && !outputSchema) {
         throw new HyperagentError(
           "No task description or output schema specified",
-          400
+          400,
         );
       }
       if (task) {
@@ -669,7 +679,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             maxSteps: 2,
             outputSchema,
           },
-          page
+          page,
         );
         if (outputSchema) {
           return JSON.parse(res.output as string);
@@ -679,13 +689,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         const res = await this.executeTask(
           "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
           { maxSteps: 2, outputSchema },
-          page
+          page,
         );
         return JSON.parse(res.output as string);
       }
     };
-    hyperPage.getLocator = (querySelector: string, fallbackDescription: string) =>
-      this.getLocator(querySelector, fallbackDescription, page);
+    hyperPage.getLocator = (
+      querySelector: string,
+      fallbackDescription: string,
+    ) => this.getLocator(querySelector, fallbackDescription, page);
     return hyperPage;
   }
 }

@@ -12,7 +12,7 @@ esbuild.buildSync({
 
 const scriptContent = fs.readFileSync(
   path.join(__dirname, "./inject/build-dom-view-script.js"),
-  "utf8"
+  "utf8",
 );
 const lines = scriptContent.trim().split("\n");
 const trimmedContent = `(() => {
@@ -21,7 +21,7 @@ ${lines.slice(2, -1).join("\n")}
 })();`;
 fs.writeFileSync(
   path.join(__dirname, "./inject/build-dom-view-script.js"),
-  trimmedContent
+  trimmedContent,
 );
 const escapedContent = trimmedContent
   .replace(/\\/g, "\\\\")
@@ -31,5 +31,5 @@ const tsConstFile = `export const buildDomViewJs = \`${escapedContent}\`;`;
 
 fs.writeFileSync(
   path.join(__dirname, "./inject/build-dom-view.ts"),
-  tsConstFile
+  tsConstFile,
 );

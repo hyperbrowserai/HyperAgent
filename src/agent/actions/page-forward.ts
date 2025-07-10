@@ -20,7 +20,7 @@ export const PageForwardActionDefinition: AgentActionDefinition = {
     return `await ctx.page.goForward();`;
   },
 
-  pprintAction: function(): string {
+  pprintAction: function (): string {
     return "Navigate forward to next page";
   },
 };

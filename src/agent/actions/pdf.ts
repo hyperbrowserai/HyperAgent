@@ -35,7 +35,8 @@ export const PDFActionDefinition: AgentActionDefinition = {
         const [resp] = await Promise.all([
           ctx.page.waitForResponse(
             (r) =>
-              r.url() === pdfUrl && r.headers()["content-type"]?.includes("pdf")
+              r.url() === pdfUrl &&
+              r.headers()["content-type"]?.includes("pdf"),
           ),
           ctx.page.goto(pdfUrl, { waitUntil: "networkidle" }),
         ]);

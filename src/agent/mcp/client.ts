@@ -29,7 +29,7 @@ class MCPClient {
    * @returns List of action definitions provided by the server
    */
   async connectToServer(
-    serverConfig: MCPServerConfig
+    serverConfig: MCPServerConfig,
   ): Promise<{ serverId: string; actions: AgentActionDefinition[] }> {
     try {
       // Generate or use provided server ID
@@ -46,7 +46,7 @@ class MCPClient {
 
         if (this.debug) {
           console.log(
-            `Establishing SSE connection to ${serverConfig.sseUrl}...`
+            `Establishing SSE connection to ${serverConfig.sseUrl}...`,
           );
         }
 
@@ -58,7 +58,7 @@ class MCPClient {
                   headers: serverConfig.sseHeaders,
                 },
               }
-            : undefined
+            : undefined,
         );
 
         transport.onerror = (error: any) => {
@@ -120,17 +120,17 @@ class MCPClient {
                 params: z
                   .string()
                   .describe(
-                    `The stringified parameters to the ${tool.name} MCP tool. Here is the schema: ${JSON.stringify(tool.inputSchema)}`
+                    `The stringified parameters to the ${tool.name} MCP tool. Here is the schema: ${JSON.stringify(tool.inputSchema)}`,
                   ),
               })
               .describe(tool.description ?? ""),
             run: async (
               ctx: ActionContext,
-              action: any
+              action: any,
             ): Promise<ActionOutput> => {
               if (!ctx.mcpClient) {
                 throw new Error(
-                  "MCP client not available. Please ensure an MCP server is connected."
+                  "MCP client not available. Please ensure an MCP server is connected.",
                 );
               }
 
@@ -140,7 +140,7 @@ class MCPClient {
               const result = await ctx.mcpClient.executeTool(
                 tool.name,
                 params,
-                targetServerId
+                targetServerId,
               );
 
               return {
@@ -181,7 +181,7 @@ class MCPClient {
   async executeTool(
     toolName: string,
     parameters: Record<string, any>,
-    serverId?: string
+    serverId?: string,
   ): Promise<any> {
     // If no server ID provided and only one server exists, use that one
     if (!serverId && this.servers.size === 1) {
@@ -217,7 +217,7 @@ class MCPClient {
     } catch (e) {
       console.error(
         `Error executing tool ${toolName} on server ${serverId}:`,
-        e
+        e,
       );
       throw e;
     }

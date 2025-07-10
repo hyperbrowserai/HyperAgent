@@ -54,13 +54,13 @@ const removeSkipToContentLinks = (markdownContent: string): string => {
   // Remove [Skip to Content](#page) and [Skip to content](#skip)
   const newMarkdownContent = markdownContent.replace(
     /\[Skip to Content\]\(#[^\)]*\)/gi,
-    ""
+    "",
   );
   return newMarkdownContent;
 };
 
 export async function parseMarkdown(
-  html: string | null | undefined
+  html: string | null | undefined,
 ): Promise<string> {
   if (!html) {
     return "";

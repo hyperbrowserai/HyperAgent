@@ -15,12 +15,12 @@ export const PageBackActionDefinition: AgentActionDefinition = {
     await ctx.page.goBack();
     return { success: true, message: "Navigated back to the previous page" };
   },
-  
+
   generateCode: async (ctx: ActionContext) => {
     return `await ctx.page.goBack();`;
   },
 
-  pprintAction: function(): string {
+  pprintAction: function (): string {
     return "Navigate back to previous page";
   },
 };

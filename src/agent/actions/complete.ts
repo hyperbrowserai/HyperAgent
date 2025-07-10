@@ -10,7 +10,7 @@ export const CompleteAction = z
       .string()
       .nullable()
       .describe(
-        "The text to complete the task with, make this answer the ultimate goal of the task. Be sure to include all the information requested in the task in explicit detail."
+        "The text to complete the task with, make this answer the ultimate goal of the task. Be sure to include all the information requested in the task in explicit detail.",
       ),
   })
   .describe("Complete the task, this must be the final action in the sequence");
@@ -38,11 +38,17 @@ export const CompleteActionDefinition: AgentActionDefinition = {
     `;
   },
 
-  completeAction: async (params: CompleteActionType, variables?: Record<string, any>) => {
+  completeAction: async (
+    params: CompleteActionType,
+    variables?: Record<string, any>,
+  ) => {
     let text = params.text ?? "No response text found";
     if (variables) {
       for (const variable of Object.values(variables)) {
-        text = text.replace(new RegExp(`<<${variable.key}>>`, "g"), variable.value);
+        text = text.replace(
+          new RegExp(`<<${variable.key}>>`, "g"),
+          variable.value,
+        );
       }
     }
     return text;

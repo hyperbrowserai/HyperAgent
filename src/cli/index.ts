@@ -50,7 +50,7 @@ program
 
     console.log(chalk.blue("HyperAgent CLI"));
     currentSpinner.info(
-      `Pause using ${chalk.bold("ctrl + p")} and resume using ${chalk.bold("ctrl + r")}\n`
+      `Pause using ${chalk.bold("ctrl + p")} and resume using ${chalk.bold("ctrl + r")}\n`,
     );
     try {
       // Check for API key if using Hyperbrowser
@@ -62,7 +62,7 @@ program
         });
         if (!apiKey) {
           console.log(
-            chalk.yellow("Hyperbrowser API key is required. Exiting.")
+            chalk.yellow("Hyperbrowser API key is required. Exiting."),
           );
           process.exit(0);
         }
@@ -99,8 +99,8 @@ program
                 } else if (kind === "password") {
                   console.warn(
                     chalk.red(
-                      "Providing passwords to LLMs can be dangerous. Passwords are passed in plain-text to the LLM and can be read by other people."
-                    )
+                      "Providing passwords to LLMs can be dangerous. Passwords are passed in plain-text to the LLM and can be read by other people.",
+                    ),
                   );
                   const response = await inquirer.password({
                     message,
@@ -133,7 +133,7 @@ program
               } finally {
                 currentSpinner.start(currentText);
               }
-            }
+            },
           ),
         ],
       });
@@ -149,8 +149,8 @@ program
           }
           currentSpinner.start(
             chalk.blue(
-              "Hyperagent will pause after completing this operation. Press Ctrl+r again to resume."
-            )
+              "Hyperagent will pause after completing this operation. Press Ctrl+r again to resume.",
+            ),
           );
           currentSpinner.stopAndPersist({ symbol: "⏸" });
           currentSpinner = ora();
@@ -190,19 +190,19 @@ program
           (output, action) => ({
             output,
             action,
-          })
+          }),
         );
 
         const actions = actionsList
           .map((action, index, array) =>
             index < array.length - 1
               ? `  ├── [${action.output.success ? chalk.yellow(action.action.type) : chalk.red(action.action.type)}] ${action.output.success ? agent.pprintAction(action.action as ActionType) : chalk.red(action.output.message)}`
-              : `  └── [${action.output.success ? chalk.yellow(action.action.type) : chalk.red(action.action.type)}] ${action.output.success ? agent.pprintAction(action.action as ActionType) : chalk.red(action.output.message)}`
+              : `  └── [${action.output.success ? chalk.yellow(action.action.type) : chalk.red(action.action.type)}] ${action.output.success ? agent.pprintAction(action.action as ActionType) : chalk.red(action.output.message)}`,
           )
           .join("\n");
 
         currentSpinner.succeed(
-          `[${chalk.yellow("task")}]: ${params.agentOutput.nextGoal}\n${actions}`
+          `[${chalk.yellow("task")}]: ${params.agentOutput.nextGoal}\n${actions}`,
         );
         currentSpinner = ora();
         process.stdin.setRawMode(true);
@@ -213,10 +213,10 @@ program
         const actions = params.actions.map((action, index, array) =>
           index < array.length - 1
             ? `  ├── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`
-            : `  └── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`
+            : `  └── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`,
         );
         currentSpinner.start(
-          `[${chalk.yellow("task")}]: ${params.nextGoal}\n${actions.join("\n")}`
+          `[${chalk.yellow("task")}]: ${params.nextGoal}\n${actions.join("\n")}`,
         );
         process.stdin.setRawMode(true);
         process.stdin.resume();
@@ -230,7 +230,7 @@ program
             float: "center",
             padding: 1,
             margin: { top: 2, left: 0, right: 0, bottom: 0 },
-          })
+          }),
         );
         console.log("\n");
         const continueTask = await inquirer.select({
@@ -275,7 +275,7 @@ program
 
       if (mcpPath) {
         const mcpConfig = JSON.parse(
-          (await fs.promises.readFile(mcpPath)).toString()
+          (await fs.promises.readFile(mcpPath)).toString(),
         );
         await agent.initializeMCPClient({ servers: mcpConfig });
       }

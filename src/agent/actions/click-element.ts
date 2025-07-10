@@ -6,9 +6,15 @@ import { getLocator, getLocatorString } from "./utils";
 
 const ClickElementAction = z
   .object({
-    variableName: z.string()
-      .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
-      .describe("The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."),
+    variableName: z
+      .string()
+      .regex(
+        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
+        "Must be a valid TypeScript identifier",
+      )
+      .describe(
+        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
+      ),
     index: z.number().describe("The numeric index of the element to click."),
     indexDescription: z.string().describe(`
       A descriptive text that uniquely identifies this element on the page. 
@@ -29,7 +35,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
 
   run: async function (
     ctx: ActionContext,
-    action: ClickElementActionType
+    action: ClickElementActionType,
   ): Promise<ActionOutput> {
     const { index } = action;
     const locator = getLocator(ctx, index);
@@ -59,10 +65,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     return { success: true, message: `Clicked element with index ${index}` };
   },
 
-  generateCode: async (
-    ctx: ActionContext,
-    action: ClickElementActionType,
-  ) => {
+  generateCode: async (ctx: ActionContext, action: ClickElementActionType) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
     const variableName = action.variableName;
 
@@ -102,7 +105,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
  */
 export async function waitForElementToBeEnabled(
   locator: Locator,
-  timeout: number = 5000
+  timeout: number = 5000,
 ): Promise<void> {
   return Promise.race([
     (async () => {
@@ -116,7 +119,7 @@ export async function waitForElementToBeEnabled(
     new Promise<never>((_, reject) => {
       setTimeout(
         () => reject(new Error("Timeout waiting for element to be enabled")),
-        timeout
+        timeout,
       );
     }),
   ]);
@@ -130,7 +133,7 @@ export async function waitForElementToBeEnabled(
  */
 export async function waitForElementToBeStable(
   locator: Locator,
-  timeout: number = 5000
+  timeout: number = 5000,
 ): Promise<void> {
   return Promise.race([
     (async () => {
@@ -172,7 +175,7 @@ export async function waitForElementToBeStable(
     new Promise<never>((_, reject) => {
       setTimeout(
         () => reject(new Error("Timeout waiting for element to be stable")),
-        timeout
+        timeout,
       );
     }),
   ]);

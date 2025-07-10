@@ -9,7 +9,7 @@
     "menuitem",
     "textarea",
     "canvas",
-    "embed"
+    "embed",
   ]);
   var INTERACTIVE_ROLES = /* @__PURE__ */ new Set([
     "button",
@@ -34,13 +34,13 @@
     "scrollbar",
     "menuitemcheckbox",
     "menuitemradio",
-    "action"
+    "action",
   ]);
   var INTERACTIVE_ARIA_PROPS = [
     "aria-expanded",
     "aria-pressed",
     "aria-selected",
-    "aria-checked"
+    "aria-checked",
   ];
   var CLICK_ATTRIBUTES = ["onclick", "ng-click", "@click", "v-on:click"];
   var CONTEXT_ATTRIBUTES = [
@@ -52,7 +52,7 @@
     "placeholder",
     "value",
     "alt",
-    "aria-expanded"
+    "aria-expanded",
   ];
 
   // src/context-providers/dom/elem-interactive.ts
@@ -60,7 +60,10 @@
     const tagName = element.tagName.toLowerCase();
     const role = element.getAttribute("role");
     const ariaRole = element.getAttribute("aria-role");
-    const hasInteractiveRole = INTERACTIVE_ELEMENTS.has(tagName) || INTERACTIVE_ROLES.has(role || "") || INTERACTIVE_ROLES.has(ariaRole || "");
+    const hasInteractiveRole =
+      INTERACTIVE_ELEMENTS.has(tagName) ||
+      INTERACTIVE_ROLES.has(role || "") ||
+      INTERACTIVE_ROLES.has(ariaRole || "");
     if (hasInteractiveRole) {
       let reason = "";
       if (INTERACTIVE_ELEMENTS.has(tagName)) {
@@ -72,31 +75,42 @@
       }
       return { isInteractive: true, reason };
     }
-    const hasClickHandler = element.onclick !== null || element.getAttribute("onclick") !== null || CLICK_ATTRIBUTES.some((attr) => element.hasAttribute(attr));
+    const hasClickHandler =
+      element.onclick !== null ||
+      element.getAttribute("onclick") !== null ||
+      CLICK_ATTRIBUTES.some((attr) => element.hasAttribute(attr));
     if (hasClickHandler) {
       return { isInteractive: true, reason: "Has click handler" };
     }
-    const hasInjectedListener = element.hasAttribute("data-has-interactive-listener");
+    const hasInjectedListener = element.hasAttribute(
+      "data-has-interactive-listener",
+    );
     if (hasInjectedListener) {
-      return { isInteractive: true, reason: "Has interactive event listener (tracked)" };
+      return {
+        isInteractive: true,
+        reason: "Has interactive event listener (tracked)",
+      };
     }
-    const hasAriaProps = INTERACTIVE_ARIA_PROPS.some(
-      (prop) => element.hasAttribute(prop)
+    const hasAriaProps = INTERACTIVE_ARIA_PROPS.some((prop) =>
+      element.hasAttribute(prop),
     );
     if (hasAriaProps) {
-      const props = INTERACTIVE_ARIA_PROPS.filter(
-        (prop) => element.hasAttribute(prop)
+      const props = INTERACTIVE_ARIA_PROPS.filter((prop) =>
+        element.hasAttribute(prop),
       );
       return {
         isInteractive: true,
-        reason: `Has interactive ARIA properties: ${props.join(", ")}`
+        reason: `Has interactive ARIA properties: ${props.join(", ")}`,
       };
     }
-    const isContentEditable = element.getAttribute("contenteditable") === "true" || element.isContentEditable;
+    const isContentEditable =
+      element.getAttribute("contenteditable") === "true" ||
+      element.isContentEditable;
     if (isContentEditable) {
       return { isInteractive: true, reason: "Is content editable" };
     }
-    const isDraggable = element.draggable || element.getAttribute("draggable") === "true";
+    const isDraggable =
+      element.draggable || element.getAttribute("draggable") === "true";
     if (isDraggable) {
       return { isInteractive: true, reason: "Is draggable" };
     }
@@ -105,7 +119,13 @@
   var isIgnoredElem = (element) => {
     const rect = element.getBoundingClientRect();
     const isNotVisible = rect.width === 0 || rect.height === 0;
-    return element.tagName.toLowerCase() === "html" || element.tagName.toLowerCase() === "body" || isNotVisible || element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true";
+    return (
+      element.tagName.toLowerCase() === "html" ||
+      element.tagName.toLowerCase() === "body" ||
+      isNotVisible ||
+      element.hasAttribute("disabled") ||
+      element.getAttribute("aria-disabled") === "true"
+    );
   };
 
   // src/context-providers/dom/find-interactive-elements.ts
@@ -123,7 +143,7 @@
         if (element.shadowRoot) {
           processRoot(element.shadowRoot, {
             iframe: rootInfo.iframe,
-            shadowHost: element
+            shadowHost: element,
           });
         }
         const { isInteractive, reason } = isInteractiveElem(element);
@@ -136,9 +156,10 @@
           shadowHost: rootInfo.shadowHost,
           rect: element.getBoundingClientRect(),
           interactiveReason: reason,
-          isUnderShadowRoot: element.getRootNode().nodeType === Node.DOCUMENT_FRAGMENT_NODE,
+          isUnderShadowRoot:
+            element.getRootNode().nodeType === Node.DOCUMENT_FRAGMENT_NODE,
           cssPath: "",
-          xpath: ""
+          xpath: "",
         });
       }
     };
@@ -147,7 +168,8 @@
     for (let i = 0; i < iframes.length; i++) {
       const iframe = iframes[i];
       try {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        const iframeDoc =
+          iframe.contentDocument || iframe.contentWindow?.document;
         if (iframeDoc) {
           processRoot(iframeDoc, { iframe });
         }
@@ -160,9 +182,14 @@
 
   // src/context-providers/dom/highlight.ts
   var isElementPartiallyVisible = (rect) => {
-    return rect.width > 0 && rect.height > 0 && rect.top < window.innerHeight && // These checks are relative to the current viewport
-    rect.bottom > 0 && // where the rect was calculated.
-    rect.left < window.innerWidth && rect.right > 0;
+    return (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.top < window.innerHeight && // These checks are relative to the current viewport
+      rect.bottom > 0 && // where the rect was calculated.
+      rect.left < window.innerWidth &&
+      rect.right > 0
+    );
   };
   var getHighlightColor = (index) => {
     const colors = [
@@ -177,14 +204,21 @@
       "#FF4500",
       "#2E8B57",
       "#DC143C",
-      "#4682B4"
+      "#4682B4",
     ];
     const colorIndex = index % colors.length;
     const baseColor = colors[colorIndex];
     const backgroundColor = baseColor + "1A";
     return { baseColor, backgroundColor };
   };
-  var calculateLabelPosition = (rect, iframeOffset, labelWidth, labelHeight, canvasWidth, canvasHeight) => {
+  var calculateLabelPosition = (
+    rect,
+    iframeOffset,
+    labelWidth,
+    labelHeight,
+    canvasWidth,
+    canvasHeight,
+  ) => {
     const top = rect.top + iframeOffset.y;
     const left = rect.left + iframeOffset.x;
     let labelTop = top - labelHeight;
@@ -193,7 +227,12 @@
     labelLeft = Math.min(labelLeft, canvasWidth - labelWidth);
     const elementBottom = top + rect.height;
     const elementRight = left + rect.width;
-    if (labelTop + labelHeight > top && labelTop < elementBottom && labelLeft + labelWidth > left && labelLeft < elementRight) {
+    if (
+      labelTop + labelHeight > top &&
+      labelTop < elementBottom &&
+      labelLeft + labelWidth > left &&
+      labelLeft < elementRight
+    ) {
       labelTop = elementBottom;
       labelLeft = elementRight - labelWidth;
       labelTop = Math.min(labelTop, canvasHeight - labelHeight);
@@ -204,11 +243,11 @@
   function renderHighlightsOffscreen(highlightInfos, width, height) {
     if (width <= 0 || height <= 0) {
       console.warn(
-        "Attempted to render highlights on zero-sized canvas. Will default to innerWidth x innerHeight"
+        "Attempted to render highlights on zero-sized canvas. Will default to innerWidth x innerHeight",
       );
       const emptyCanvas = new OffscreenCanvas(
         window.innerWidth,
-        window.innerHeight
+        window.innerHeight,
       );
       return emptyCanvas.transferToImageBitmap();
     }
@@ -217,7 +256,7 @@
     const canvasHeight = height * dpr;
     const offscreenCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
     const ctx = offscreenCanvas.getContext("2d", {
-      alpha: true
+      alpha: true,
     });
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
@@ -227,7 +266,12 @@
           return;
         }
         const rect = element.getBoundingClientRect();
-        if (!rect || rect.width === 0 || rect.height === 0 || !isElementPartiallyVisible(rect)) {
+        if (
+          !rect ||
+          rect.width === 0 ||
+          rect.height === 0 ||
+          !isElementPartiallyVisible(rect)
+        ) {
           return;
         }
         const iframeOffset = { x: 0, y: 0 };
@@ -254,7 +298,7 @@
         const labelHeight = fontSize + labelPadding;
         const labelWidth = Math.max(
           labelHeight,
-          textMetrics.width + labelPadding * 2
+          textMetrics.width + labelPadding * 2,
         );
         const labelPos = calculateLabelPosition(
           rect,
@@ -262,7 +306,7 @@
           labelWidth,
           labelHeight,
           width,
-          height
+          height,
         );
         ctx.fillStyle = colors.baseColor;
         ctx.fillRect(labelPos.left, labelPos.top, labelWidth, labelHeight);
@@ -270,7 +314,7 @@
         ctx.fillText(
           labelText,
           labelPos.left + labelWidth / 2,
-          labelPos.top + labelHeight / 2
+          labelPos.top + labelHeight / 2,
         );
       });
       return offscreenCanvas.transferToImageBitmap();
@@ -296,9 +340,12 @@
     if (classes && parent) {
       const classSelector = `${tagName}.${classes}`;
       const siblingsWithSameClasses = Array.from(
-        parent.querySelectorAll(`:scope > ${classSelector}`)
+        parent.querySelectorAll(`:scope > ${classSelector}`),
       );
-      if (siblingsWithSameClasses.length === 1 && siblingsWithSameClasses[0] === element) {
+      if (
+        siblingsWithSameClasses.length === 1 &&
+        siblingsWithSameClasses[0] === element
+      ) {
         return classSelector;
       }
     }
@@ -329,11 +376,19 @@
     }
     const segments = [];
     let currentElement = element;
-    while (currentElement && currentElement !== boundary && currentElement.nodeType === Node.ELEMENT_NODE) {
+    while (
+      currentElement &&
+      currentElement !== boundary &&
+      currentElement.nodeType === Node.ELEMENT_NODE
+    ) {
       const segment = getUniqueSegment(currentElement);
       segments.unshift(segment);
       const parent = currentElement.parentElement;
-      if (!parent || parent === boundary || parent.nodeType !== Node.ELEMENT_NODE) {
+      if (
+        !parent ||
+        parent === boundary ||
+        parent.nodeType !== Node.ELEMENT_NODE
+      ) {
         break;
       }
       currentElement = parent;
@@ -362,7 +417,7 @@
       if (!relativePath) {
         console.warn(
           "Could not determine relative CSS path within ShadowRoot for:",
-          element
+          element,
         );
         return "";
       }
@@ -374,7 +429,7 @@
         "Element root is neither Document nor ShadowRoot:",
         root,
         "for element:",
-        element
+        element,
       );
       return getRelativeCSSPath(element, root);
     }
@@ -385,14 +440,20 @@
     const segments = [];
     let currentElement = element;
     while (currentElement && currentElement.nodeType === Node.ELEMENT_NODE) {
-      if (currentElement.parentNode instanceof ShadowRoot || currentElement.parentNode instanceof HTMLIFrameElement) {
+      if (
+        currentElement.parentNode instanceof ShadowRoot ||
+        currentElement.parentNode instanceof HTMLIFrameElement
+      ) {
         break;
       }
       let index = 0;
       let hasSiblings = false;
       let sibling = currentElement.previousSibling;
       while (sibling) {
-        if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === currentElement.nodeName) {
+        if (
+          sibling.nodeType === Node.ELEMENT_NODE &&
+          sibling.nodeName === currentElement.nodeName
+        ) {
           index++;
           hasSiblings = true;
         }
@@ -401,7 +462,10 @@
       if (!hasSiblings) {
         sibling = currentElement.nextSibling;
         while (sibling) {
-          if (sibling.nodeType === Node.ELEMENT_NODE && sibling.nodeName === currentElement.nodeName) {
+          if (
+            sibling.nodeType === Node.ELEMENT_NODE &&
+            sibling.nodeName === currentElement.nodeName
+          ) {
             hasSiblings = true;
             break;
           }
@@ -456,10 +520,10 @@
         element: element.element,
         index: index + 1,
         // index range from 1 -> index
-        parentIframe: element.iframe ?? null
+        parentIframe: element.iframe ?? null,
       })),
       window.innerWidth,
-      window.innerHeight
+      window.innerHeight,
     );
     const screenshotPngDataUrl = imageBitmapToPngDataUrl(screenBitmap);
     for (let idx = 0; idx < interactiveElements.length; idx++) {
@@ -493,7 +557,10 @@
       });
       const textContent = getElementTextContent(el);
       const indexPrefix = `[${element.highlightIndex}]`;
-      const truncatedText = textContent.length > 1e3 ? textContent.substring(0, 997) + "..." : textContent;
+      const truncatedText =
+        textContent.length > 1e3
+          ? textContent.substring(0, 997) + "..."
+          : textContent;
       const elementString = `${indexPrefix}<${tagName}${attributes}>${truncatedText.replace(/\s+/g, " ")}</${tagName}>`;
       domRepresentation.push(elementString);
       const nextElement = interactiveElements[i + 1]?.element || null;
@@ -505,7 +572,7 @@
     return {
       elements: interactiveElements,
       domState: domRepresentation.join("\n"),
-      screenshot: screenshotPngDataUrl
+      screenshot: screenshotPngDataUrl,
     };
   };
   return buildDomView();

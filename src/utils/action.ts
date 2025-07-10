@@ -1,33 +1,43 @@
 import fs from "fs";
 import prettier from "prettier";
 
-
 export function initActionScript(actionLogFile: string, task: string) {
-    fs.writeFileSync(actionLogFile, `/*\n${task}\n*/\n\n`);
+  fs.writeFileSync(actionLogFile, `/*\n${task}\n*/\n\n`);
 
-    // Imports from dependencies
-    fs.appendFileSync(actionLogFile, `
+  // Imports from dependencies
+  fs.appendFileSync(
+    actionLogFile,
+    `
       import { z } from "zod";
-      ` + `\n\n`);
+      ` + `\n\n`,
+  );
 
-    // Import helper funmctions from Hyperagent
-    if (process.env.NODE_ENV === "development") {
-        fs.appendFileSync(actionLogFile, `
+  // Import helper funmctions from Hyperagent
+  if (process.env.NODE_ENV === "development") {
+    fs.appendFileSync(
+      actionLogFile,
+      `
     import { HyperAgent } from "./src/agent";
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "./src/agent/actions/click-element";
     import { sleep } from "./src/utils/sleep";
     import { parseMarkdown } from "./src/utils/html-to-markdown";
-            ` + `\n\n`);
-    } else {
-        fs.appendFileSync(actionLogFile, `
+            ` + `\n\n`,
+    );
+  } else {
+    fs.appendFileSync(
+      actionLogFile,
+      `
     import { HyperAgent } from "@hyperbrowser/agent";
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "@hyperbrowser/agent/actions";
     import { parseMarkdown, sleep } from "@hyperbrowser/agent/utils";
-            ` + `\n\n`);
-    }
+            ` + `\n\n`,
+    );
+  }
 
-    // Define helper functions
-    fs.appendFileSync(actionLogFile, `
+  // Define helper functions
+  fs.appendFileSync(
+    actionLogFile,
+    `
 const VariableFn = () =>
   z.array(
     z.object({
@@ -39,10 +49,13 @@ const VariableFn = () =>
       description: z.string().describe("The description of the extracted variable, including the objective that was used to extract the variable."),
     })
   ).describe("List of extracted key-value pairs from the page that you will need in your future actions.");
-    ` + `\n\n`);
-    
-    // Add main execution function
-    fs.appendFileSync(actionLogFile, `
+    ` + `\n\n`,
+  );
+
+  // Add main execution function
+  fs.appendFileSync(
+    actionLogFile,
+    `
 (async () => {
   const agent = new HyperAgent({
     debug: true,
@@ -58,14 +71,14 @@ const VariableFn = () =>
         llm: agent.llm,
         variables: {} as Record<string, Record<string, unknown>>, // Record<string, HyperVariable>
       };` + `\n\n`,
-    );
+  );
 }
 
 export async function wrapUpActionScript(actionLogFile: string) {
-    fs.appendFileSync(actionLogFile, `})();` + `\n\n`);
-    const formatted = await prettier.format(
-      fs.readFileSync(actionLogFile, "utf-8"),
-      {filepath: actionLogFile},
-    );
-    fs.writeFileSync(actionLogFile, formatted);
+  fs.appendFileSync(actionLogFile, `})();` + `\n\n`);
+  const formatted = await prettier.format(
+    fs.readFileSync(actionLogFile, "utf-8"),
+    { filepath: actionLogFile },
+  );
+  fs.writeFileSync(actionLogFile, formatted);
 }

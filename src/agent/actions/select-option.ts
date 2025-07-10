@@ -13,9 +13,15 @@ export const SelectOptionAction = z
       Examples: "Search button", "Submit form button", "Next page arrow", "Login link in header"
       This description will be used as a fallback to find the element if the index changes.`),
     text: z.string().describe("The text of the option to select."),
-    variableName: z.string()
-      .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
-      .describe("The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."),
+    variableName: z
+      .string()
+      .regex(
+        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
+        "Must be a valid TypeScript identifier",
+      )
+      .describe(
+        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
+      ),
   })
   .describe("Select an option from a dropdown element");
 
@@ -28,14 +34,17 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     let { index, text } = action;
     for (const variable of ctx.variables) {
-      text = text.replace(new RegExp(`<<${variable.key}>>`, "g"), variable.value);
+      text = text.replace(
+        new RegExp(`<<${variable.key}>>`, "g"),
+        variable.value,
+      );
     }
 
     const locator = getLocator(ctx, index);
     if (!locator) {
       return { success: false, message: "Element not found" };
     }
-    
+
     await locator.selectOption({ label: text });
     return {
       success: true,
@@ -43,10 +52,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     };
   },
 
-  generateCode: async (
-    ctx: ActionContext,
-    action: SelectOptionActionType,
-  ) => {
+  generateCode: async (ctx: ActionContext, action: SelectOptionActionType) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
     const variableName = action.variableName;
 

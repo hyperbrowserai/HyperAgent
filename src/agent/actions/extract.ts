@@ -15,13 +15,19 @@ export const ExtractAction = z
       - CORRECT: "Find the price from <<departure_city>> to <<arrival_city>>"
       - WRONG: "Find the price from Paris to London"
       NEVER include actual values (country names, city names, etc.) that you see in the DOM.`),
-    variableName: z.string()
-      .regex(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/, "Must be a valid TypeScript identifier")
-      .describe("The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."),
+    variableName: z
+      .string()
+      .regex(
+        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
+        "Must be a valid TypeScript identifier",
+      )
+      .describe(
+        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
+      ),
   })
   .describe(
-    "Extract content from the page to create reusable variables. REQUIRED when gathering any information that will be used in subsequent steps (e.g., country names, prices, dates, etc.)"
-  )
+    "Extract content from the page to create reusable variables. REQUIRED when gathering any information that will be used in subsequent steps (e.g., country names, prices, dates, etc.)",
+  );
 
 export type ExtractActionType = z.infer<typeof ExtractAction>;
 
@@ -31,7 +37,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
 
   run: async (
     ctx: ActionContext,
-    action: ExtractActionType
+    action: ExtractActionType,
   ): Promise<ActionOutput> => {
     try {
       const content = await ctx.page.content();
@@ -55,7 +61,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       if (ctx.debugDir) {
         fs.writeFileSync(
           `${ctx.debugDir}/extract-screenshot.png`,
-          Buffer.from(screenshot.data, "base64")
+          Buffer.from(screenshot.data, "base64"),
         );
       }
 
@@ -70,17 +76,19 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       if (ctx.debugDir) {
         fs.writeFileSync(
           `${ctx.debugDir}/extract-markdown-content.md`,
-          trimmedMarkdown
+          trimmedMarkdown,
         );
       }
 
-      const response = await ctx.llm.withStructuredOutput(z.object({variables: VariableFn()})).invoke([
-        {
-          role: "user", 
-          content: [
-            {
-              type: "text",
-              text: `
+      const response = await ctx.llm
+        .withStructuredOutput(z.object({ variables: VariableFn() }))
+        .invoke([
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `
               Original objective (with variable references): "${originalObjective}"
               Resolved objective (with actual values): "${objective}"
               
@@ -110,16 +118,16 @@ export const ExtractActionDefinition: AgentActionDefinition = {
               
               Page content:\n${trimmedMarkdown}\n
               Here is as screenshot of the page:\n`,
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/png;base64,${screenshot.data}`,
               },
-            },
-          ],
-        },
-      ]);
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/png;base64,${screenshot.data}`,
+                },
+              },
+            ],
+          },
+        ]);
 
       if (response.variables.length === 0) {
         return {
@@ -128,8 +136,8 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         };
       }
 
-      const variableUpdates = response.variables.map(variable => ({ 
-        key: variable.key, 
+      const variableUpdates = response.variables.map((variable) => ({
+        key: variable.key,
         value: variable.value,
         description: variable.description,
       }));
@@ -137,7 +145,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       return {
         success: true,
         message: `Extracted variables from page: 
-        ${response.variables.map(variable => `${variable.key}`).join(', ')}`,
+        ${response.variables.map((variable) => `${variable.key}`).join(", ")}`,
         variableUpdates: variableUpdates,
       };
     } catch (error) {
@@ -148,13 +156,18 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     }
   },
 
-  generateCode: async (ctx: ActionContext, action: ExtractActionType, expectedVariables?: HyperVariable[]) => {
+  generateCode: async (
+    ctx: ActionContext,
+    action: ExtractActionType,
+    expectedVariables?: HyperVariable[],
+  ) => {
     // This generated code will take the expected variables and use them to extract the information from the page
-    const expectedVar = expectedVariables?.map(variable => ({
-      key: variable.key,
-      description: variable.description
-    })) || [];
-    
+    const expectedVar =
+      expectedVariables?.map((variable) => ({
+        key: variable.key,
+        description: variable.description,
+      })) || [];
+
     const variableName = action.variableName;
 
     return `
@@ -197,7 +210,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
             
             Extract the following information from the page according to the resolved objective.
             For each of these variables, find their values from the page content:
-            ${expectedVar.map(v => `- ${v.key}: ${v.description}`).join('\\n            ')}
+            ${expectedVar.map((v) => `- ${v.key}: ${v.description}`).join("\\n            ")}
             
             CRITICAL RULES:
             1. Keys MUST be EXACTLY as provided above - do not change them
@@ -247,7 +260,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     `;
   },
 
-  pprintAction: function(params: ExtractActionType): string {
+  pprintAction: function (params: ExtractActionType): string {
     return `Extract content from page with objective: "${params.objective}"`;
   },
 };

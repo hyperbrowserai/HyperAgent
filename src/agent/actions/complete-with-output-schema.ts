@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 
 export const generateCompleteActionWithOutputDefinition = (
-  outputSchema: z.AnyZodObject
+  outputSchema: z.AnyZodObject,
 ): AgentActionDefinition => {
   const actionParamsSchema = z
     .object({
@@ -12,11 +12,11 @@ export const generateCompleteActionWithOutputDefinition = (
       outputSchema: outputSchema
         .nullable()
         .describe(
-          "The output model to return the response in. Given the previous data, try your best to fit the final response into the given schema."
+          "The output model to return the response in. Given the previous data, try your best to fit the final response into the given schema.",
         ),
     })
     .describe(
-      "Complete the task. An output schema has been provided to you. Try your best to provide your response so that it fits the output schema provided."
+      "Complete the task. An output schema has been provided to you. Try your best to provide your response so that it fits the output schema provided.",
     );
 
   type CompeleteActionWithOutputSchema = z.infer<typeof actionParamsSchema>;
@@ -27,7 +27,7 @@ export const generateCompleteActionWithOutputDefinition = (
 
     run: async (
       ctx: ActionContext,
-      actionParams: CompeleteActionWithOutputSchema
+      actionParams: CompeleteActionWithOutputSchema,
     ): Promise<ActionOutput> => {
       if (actionParams.success && actionParams.outputSchema) {
         return {
@@ -44,17 +44,24 @@ export const generateCompleteActionWithOutputDefinition = (
       }
     },
 
-    generateCode: async (ctx: ActionContext, action: CompeleteActionWithOutputSchema) => {
+    generateCode: async (
+      ctx: ActionContext,
+      action: CompeleteActionWithOutputSchema,
+    ) => {
       if (action.success && action.outputSchema) {
         return `
         // The action generated an object
         // Extract response into output schema ${JSON.stringify(action.outputSchema, null, 2)}
-      `} else {
-        return `Could not complete task and/or could not extract response into output schema.`
+      `;
+      } else {
+        return `Could not complete task and/or could not extract response into output schema.`;
       }
     },
 
-    completeAction: async (params: CompeleteActionWithOutputSchema, variables?: Record<string, any>) => {
+    completeAction: async (
+      params: CompeleteActionWithOutputSchema,
+      variables?: Record<string, any>,
+    ) => {
       return JSON.stringify(params.outputSchema, null, 2);
     },
   };

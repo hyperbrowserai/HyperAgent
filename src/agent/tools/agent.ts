@@ -48,16 +48,16 @@ export const getActionSchema = (actions: Array<AgentActionDefinition>) => {
       actionDescription: z
         .string()
         .describe(
-          "Describe why you are performing this action and what you aim to perform with this action."
+          "Describe why you are performing this action and what you aim to perform with this action.",
         ),
-    })
+    }),
   );
   return z.union([zodDefs[0], zodDefs[1], ...zodDefs.splice(2)]);
 };
 
 const getActionHandler = (
   actions: Array<AgentActionDefinition>,
-  type: string
+  type: string,
 ) => {
   const foundAction = actions.find((actions) => actions.type === type);
   if (foundAction) {
@@ -67,18 +67,18 @@ const getActionHandler = (
   }
 };
 
-const getActionCode = (
-  actions: Array<AgentActionDefinition>,
-  type: string
-) => {
+const getActionCode = (actions: Array<AgentActionDefinition>, type: string) => {
   const foundAction = actions.find((action) => action.type === type);
   if (foundAction) {
-    return foundAction.generateCode || (
-      async () => `// Skipped. Action ${type} invoked, but skipped code logging.`)
+    return (
+      foundAction.generateCode ||
+      (async () =>
+        `// Skipped. Action ${type} invoked, but skipped code logging.`)
+    );
   } else {
     throw new ActionNotFoundError(type);
   }
-}
+};
 
 const runAction = async (
   action: ActionType,
@@ -103,18 +103,22 @@ const runAction = async (
       message: `Unknown action type: ${actionType}`,
     };
   }
-  
+
   try {
     const actionOutput = await actionHandler(actionCtx, action.params);
-    
+
     // Check if the action output contains variable updates
-    if (actionOutput.variableUpdates && actionOutput.variableUpdates.length > 0) {
+    if (
+      actionOutput.variableUpdates &&
+      actionOutput.variableUpdates.length > 0
+    ) {
       // Update ctx.variables with the new values
       for (const update of actionOutput.variableUpdates) {
         ctx.variables[update.key] = {
           key: update.key,
           value: update.value,
-          description: update.description || ctx.variables[update.key]?.description || ''
+          description:
+            update.description || ctx.variables[update.key]?.description || "",
         };
       }
     }
@@ -131,33 +135,44 @@ const runAction = async (
 };
 
 const updateActionScript = async (
-  action: ActionType, ctx: AgentCtx, actionCtx: ActionContext, actionOutput: ActionOutput) => {
+  action: ActionType,
+  ctx: AgentCtx,
+  actionCtx: ActionContext,
+  actionOutput: ActionOutput,
+) => {
   if (ctx.debug) {
     // TODO: change the order and let extract action take actionOutput as inspiration
     const actionLogFile = `${ctx.debugDir}/action.ts`;
 
     const actionParamsStr = JSON.stringify(action.params, null, 2);
-    fs.appendFileSync(actionLogFile, `/*\naction: ${action.type}\nactionParams = ${actionParamsStr}\n*/\n`);
+    fs.appendFileSync(
+      actionLogFile,
+      `/*\naction: ${action.type}\nactionParams = ${actionParamsStr}\n*/\n`,
+    );
 
     const generateCode = getActionCode(ctx.actions, action.type);
 
     let code = "";
     if (action.type === "extract" && actionOutput.variableUpdates) {
       // Treat `Extract` action differently to keep the variable updates consistent
-      code = await generateCode(actionCtx, action.params, actionOutput.variableUpdates);
+      code = await generateCode(
+        actionCtx,
+        action.params,
+        actionOutput.variableUpdates,
+      );
     } else {
       code = await generateCode(actionCtx, action.params);
     }
 
     fs.appendFileSync(actionLogFile, `${code}\n\n`);
-    fs.appendFileSync(actionLogFile, `await sleep(4000);\n\n`);  // Script runs too fast, so we wait for 4 seconds
+    fs.appendFileSync(actionLogFile, `await sleep(4000);\n\n`); // Script runs too fast, so we wait for 4 seconds
   }
-}
+};
 
 export const runAgentTask = async (
   ctx: AgentCtx,
   taskState: TaskState,
-  params?: TaskParams
+  params?: TaskParams,
 ): Promise<TaskOutput> => {
   if (!taskState) {
     throw new HyperagentError(`Task not found`);
@@ -173,12 +188,13 @@ export const runAgentTask = async (
     // Initialize action.ts with pre-set content
     initActionScript(`${debugDir}/action.ts`, taskState.task);
   }
-  
+
   if (!ctx.llm) {
     throw new HyperagentError("LLM not initialized");
   }
   const llmStructured = ctx.llm.withStructuredOutput(
-    AgentOutputFn(getActionSchema(ctx.actions)), {method: getStructuredOutputMethod(ctx.llm),}
+    AgentOutputFn(getActionSchema(ctx.actions)),
+    { method: getStructuredOutputMethod(ctx.llm) },
   );
   const baseMsgs = [{ role: "system", content: SYSTEM_PROMPT }];
 
@@ -219,7 +235,7 @@ export const runAgentTask = async (
       page,
       domState.screenshot.startsWith("data:image/png;base64,")
         ? domState.screenshot.slice("data:image/png;base64,".length)
-        : domState.screenshot
+        : domState.screenshot,
     );
 
     // Store Dom State for Debugging
@@ -228,7 +244,7 @@ export const runAgentTask = async (
       if (trimmedScreenshot) {
         fs.writeFileSync(
           `${debugStepDir}/screenshot.png`,
-          Buffer.from(trimmedScreenshot, "base64")
+          Buffer.from(trimmedScreenshot, "base64"),
         );
       }
     }
@@ -241,14 +257,14 @@ export const runAgentTask = async (
       page,
       domState,
       trimmedScreenshot as string,
-      Object.values(ctx.variables)
+      Object.values(ctx.variables),
     );
 
     // Store Agent Step Messages for Debugging
     if (ctx.debug) {
       fs.writeFileSync(
         `${debugStepDir}/msgs.json`,
-        JSON.stringify(msgs, null, 2)
+        JSON.stringify(msgs, null, 2),
       );
     }
 
@@ -275,12 +291,14 @@ export const runAgentTask = async (
       if (action.type === "complete") {
         taskState.status = TaskStatus.COMPLETED;
         const actionDefinition = ctx.actions.find(
-          (actionDefinition) => actionDefinition.type === "complete"
+          (actionDefinition) => actionDefinition.type === "complete",
         );
         if (actionDefinition) {
           output =
-            (await actionDefinition.completeAction?.(action.params, ctx.variables)) ??
-            "No complete action found";
+            (await actionDefinition.completeAction?.(
+              action.params,
+              ctx.variables,
+            )) ?? "No complete action found";
         } else {
           output = "No complete action found";
         }
@@ -306,7 +324,7 @@ export const runAgentTask = async (
     if (ctx.debug) {
       fs.writeFileSync(
         `${debugStepDir}/stepOutput.json`,
-        JSON.stringify(step, null, 2)
+        JSON.stringify(step, null, 2),
       );
     }
   }
@@ -320,7 +338,7 @@ export const runAgentTask = async (
   if (ctx.debug) {
     fs.writeFileSync(
       `${debugDir}/taskOutput.json`,
-      JSON.stringify(taskOutput, null, 2)
+      JSON.stringify(taskOutput, null, 2),
     );
 
     // Finish action.ts & format it
