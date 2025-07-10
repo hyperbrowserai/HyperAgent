@@ -34,8 +34,8 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     let { index, text } = action;
     for (const variable of ctx.variables) {
-      text = text.replace(
-        new RegExp(`<<${variable.key}>>`, "g"),
+      text = text.replaceAll(
+        `<<${variable.key}>>`,
         variable.value,
       );
     }
@@ -59,8 +59,8 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     return `
       let text_${variableName} = ${JSON.stringify(action.text)};
       for (const variable of Object.values(ctx.variables)) {
-        text_${variableName} = text_${variableName}.replace(
-          new RegExp(\`<<\${variable.key}>>\`, "g"),
+        text_${variableName} = text_${variableName}replaceAll(
+        \`<<\${variable.key}>>\`,
           variable.value as string
         );
       }

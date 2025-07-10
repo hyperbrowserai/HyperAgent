@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { parseMarkdown } from "@/utils/html-to-markdown";
 import fs from "fs";
-import { VariableFn } from "@/types/agent/types";
+import { ExtractedVariableArray } from "@/types/agent/types";
 import { HyperVariable } from "@/types/agent/types";
 
 export const ExtractAction = z
@@ -46,8 +46,8 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       const originalObjective = action.objective;
       let objective = action.objective;
       for (const variable of ctx.variables) {
-        objective = objective.replace(
-          new RegExp(`<<${variable.key}>>`, "g"),
+        objective = objective.replaceAll(
+          `<<${variable.key}>>`,
           variable.value,
         );
       }
@@ -81,7 +81,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       }
 
       const response = await ctx.llm
-        .withStructuredOutput(z.object({ variables: VariableFn() }))
+        .withStructuredOutput(ExtractedVariableArray)
         .invoke([
           {
             role: "user",
@@ -129,14 +129,14 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           },
         ]);
 
-      if (response.variables.length === 0) {
+      if (response.length === 0) {
         return {
           success: false,
           message: `No variables extracted from page.`,
         };
       }
 
-      const variableUpdates = response.variables.map((variable) => ({
+      const variableUpdates = response.map((variable) => ({
         key: variable.key,
         value: variable.value,
         description: variable.description,
@@ -145,7 +145,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       return {
         success: true,
         message: `Extracted variables from page: 
-        ${response.variables.map((variable) => `${variable.key}`).join(", ")}`,
+        ${response.map((variable) => `${variable.key}`).join(", ")}`,
         variableUpdates: variableUpdates,
       };
     } catch (error) {
@@ -179,8 +179,8 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     const originalObjective_${variableName} = "${action.objective}";
     let objective_${variableName} = "${action.objective}";
     for (const variable of Object.values(ctx.variables)) {
-      objective_${variableName} = objective_${variableName}.replace(
-        new RegExp(\`<<\${variable.key}>>\`, "g"),
+      objective_${variableName} = objective_${variableName}.replaceAll(
+        \`<<\${variable.key}>>\`,
         variable.value
       );
     }
@@ -198,7 +198,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         ? markdown_${variableName}.slice(0, maxChars_${variableName}) + "\\n[Content truncated due to length]"
         : markdown_${variableName};
 
-    const response${variableName} = await ctx.llm.withStructuredOutput(z.object({variables: VariableFn()})).invoke([
+    const response_${variableName} = await ctx.llm.withStructuredOutput(ExtractedVariableArray).invoke([
       {
         role: "user",
         content: [
@@ -232,18 +232,18 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       },
     ]);
 
-    if (response_${variableName}.variables.length === 0) {
+    if (response_${variableName}.length === 0) {
       console.log(\`No variables extracted from page.\`);
     }
 
-    const variableUpdates_${variableName} = response_${variableName}.variables.map(variable => ({ 
+    const variableUpdates_${variableName} = response_${variableName}.map(variable => ({ 
       key: variable.key, 
       value: variable.value,
       description: variable.description,
     }));
 
     console.log(\`Extracted variables from page: 
-    \${response_${variableName}.variables.map(variable => \`\${variable.key}\`).join(', ')}\`);
+    \${response_${variableName}.map(variable => \`\${variable.key}\`).join(', ')}\`);
 
     // Update the ctx.variables with the new values
     for (const variable of variableUpdates_${variableName}) {

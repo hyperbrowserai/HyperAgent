@@ -50,11 +50,21 @@ export const generateCompleteActionWithOutputDefinition = (
     ) => {
       if (action.success && action.outputSchema) {
         return `
-        // The action generated an object
-        // Extract response into output schema ${JSON.stringify(action.outputSchema, null, 2)}
+        let outputSchema_complete_with_output_schema = ${JSON.stringify(action.outputSchema, null, 2)};
+        for (const variable of Object.values(ctx.variables)) {
+          outputSchema_complete_with_output_schema = outputSchema_complete_with_output_schema.replaceAll(
+            \`<<\${variable.key}>>\`,
+            variable.value,
+          );
+        }
+
+        console.log("The action generated an object\n");
+        console.log(\`\${outputSchema_complete_with_output_schema}\\n\`);
       `;
       } else {
-        return `Could not complete task and/or could not extract response into output schema.`;
+        return `
+        console.log("Could not complete task and/or could not extract response into output schema.");
+        `
       }
     },
 
@@ -62,7 +72,14 @@ export const generateCompleteActionWithOutputDefinition = (
       params: CompeleteActionWithOutputSchema,
       variables?: Record<string, any>,
     ) => {
-      return JSON.stringify(params.outputSchema, null, 2);
+      let outputSchemaString = JSON.stringify(params.outputSchema, null, 2);
+      for (const variable of Object.values(variables ?? {})) {
+        outputSchemaString = outputSchemaString.replaceAll(
+          `<<${variable.key}>>`,
+          variable.value,
+        );
+      }
+      return outputSchemaString;
     },
   };
 };

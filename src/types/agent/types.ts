@@ -3,17 +3,16 @@ import { ActionOutput } from "./actions/types";
 import { Locator, Page } from "playwright";
 import { ErrorEmitter } from "@/utils";
 
-export const VariableFn = () =>
-  z
-    .array(
-      z.object({
-        key: z
-          .string()
-          .regex(
-            /^[a-z][a-z0-9_]*$/,
-            "Key must be in snake_case format (lowercase letters, numbers, and underscores only, starting with a letter)",
-          )
-          .describe(`The key MUST match the variable references in the extraction objective.
+export const ExtractedVariableArray = z
+  .array(
+    z.object({
+      key: z
+        .string()
+        .regex(
+          /^[a-z][a-z0-9_]*$/,
+          "Key must be in snake_case format (lowercase letters, numbers, and underscores only, starting with a letter)",
+        )
+        .describe(`The key MUST match the variable references in the extraction objective.
         If objective contains <<from_country>>, key should be based on that (e.g., 'capital_of_from_country')
         If objective contains <<to_country>>, key should be based on that (e.g., 'capital_of_to_country')
         NEVER use actual values like country/city names in the key.

@@ -21,6 +21,7 @@ export function initActionScript(actionLogFile: string, task: string) {
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "./src/agent/actions/click-element";
     import { sleep } from "./src/utils/sleep";
     import { parseMarkdown } from "./src/utils/html-to-markdown";
+    import { ExtractedVariableArray } from "./src/types/agent/types";
             ` + `\n\n`,
     );
   } else {
@@ -30,27 +31,10 @@ export function initActionScript(actionLogFile: string, task: string) {
     import { HyperAgent } from "@hyperbrowser/agent";
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "@hyperbrowser/agent/actions";
     import { parseMarkdown, sleep } from "@hyperbrowser/agent/utils";
+    import { ExtractedVariableArray } from "@hyperbrowser/agent/types";
             ` + `\n\n`,
     );
   }
-
-  // Define helper functions
-  fs.appendFileSync(
-    actionLogFile,
-    `
-const VariableFn = () =>
-  z.array(
-    z.object({
-      key: z.string()
-      .regex(/^[a-z][a-z0-9_]*$/,
-        "Key must be in snake_case format (lowercase letters, numbers, and underscores only, starting with a letter)")
-      .describe("The key of the extracted variable in snake_case format (e.g., 'top_country_1', 'first_capital', 'price_usd')."),
-      value: z.string().describe("The value of the extracted variable."),
-      description: z.string().describe("The description of the extracted variable, including the objective that was used to extract the variable."),
-    })
-  ).describe("List of extracted key-value pairs from the page that you will need in your future actions.");
-    ` + `\n\n`,
-  );
 
   // Add main execution function
   fs.appendFileSync(
