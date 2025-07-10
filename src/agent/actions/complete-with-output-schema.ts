@@ -64,7 +64,7 @@ export const generateCompleteActionWithOutputDefinition = (
       } else {
         return `
         console.log("Could not complete task and/or could not extract response into output schema.");
-        `
+        `;
       }
     },
 

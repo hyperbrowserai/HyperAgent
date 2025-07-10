@@ -37,10 +37,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
   run: async (ctx: ActionContext, action: InputTextActionType) => {
     let { index, text } = action;
     for (const variable of ctx.variables) {
-      text = text.replaceAll(
-        `<<${variable.key}>>`,
-        variable.value,
-      );
+      text = text.replaceAll(`<<${variable.key}>>`, variable.value);
     }
 
     const locator = getLocator(ctx, index);

@@ -34,10 +34,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     let { index, text } = action;
     for (const variable of ctx.variables) {
-      text = text.replaceAll(
-        `<<${variable.key}>>`,
-        variable.value,
-      );
+      text = text.replaceAll(`<<${variable.key}>>`, variable.value);
     }
 
     const locator = getLocator(ctx, index);

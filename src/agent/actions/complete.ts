@@ -47,10 +47,7 @@ export const CompleteActionDefinition: AgentActionDefinition = {
     let text = params.text ?? "No response text found";
     if (variables) {
       for (const variable of Object.values(variables)) {
-        text = text.replaceAll(
-          `<<${variable.key}>>`,
-          variable.value,
-        );
+        text = text.replaceAll(`<<${variable.key}>>`, variable.value);
       }
     }
     return text;

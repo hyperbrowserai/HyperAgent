@@ -46,10 +46,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       const originalObjective = action.objective;
       let objective = action.objective;
       for (const variable of ctx.variables) {
-        objective = objective.replaceAll(
-          `<<${variable.key}>>`,
-          variable.value,
-        );
+        objective = objective.replaceAll(`<<${variable.key}>>`, variable.value);
       }
 
       // Take a screenshot of the page

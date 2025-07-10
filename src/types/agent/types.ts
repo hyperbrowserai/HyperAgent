@@ -18,17 +18,17 @@ export const ExtractedVariableArray = z
         NEVER use actual values like country/city names in the key.
         WRONG: 'capital_of_italy', 'capital_of_yemen'
         CORRECT: 'capital_of_top_country_1', 'capital_of_top_country_2'`),
-        value: z.string().describe("The actual extracted value from the page."),
-        description: z.string()
-          .describe(`Generic description using variable references. 
+      value: z.string().describe("The actual extracted value from the page."),
+      description: z.string()
+        .describe(`Generic description using variable references. 
         CORRECT: "The capital of <<top_country_1>>"
         WRONG: "The capital of Yemen"
         NEVER include actual values in descriptions.`),
-      }),
-    )
-    .describe(
-      "List of extracted key-value pairs from the page that you will need in your future actions.",
-    );
+    }),
+  )
+  .describe(
+    "List of extracted key-value pairs from the page that you will need in your future actions.",
+  );
 
 export const AgentOutputFn = (
   actionsSchema: z.ZodUnion<readonly [z.AnyZodObject, ...z.AnyZodObject[]]>,
