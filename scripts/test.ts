@@ -9,11 +9,11 @@ const agent = new HyperAgent({
   debug: true,
   browserProvider: "Hyperbrowser",
   tokenLimit: 50000,
-  // hyperbrowserConfig: {
-  //   sessionConfig: {
-  //     useProxy: true,
-  //   },
-  // },
+  hyperbrowserConfig: {
+    sessionConfig: {
+      useProxy: true,
+    },
+  },
 });
 
 (async () => {

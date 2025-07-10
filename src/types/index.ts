@@ -12,7 +12,7 @@ import {
   AgentOutputFn,
   AgentOutput,
   AgentStep,
-  ExtractedVariableArray,
+  VariableExtractionOutput,
   TaskParams,
   TaskOutput,
   Task,
@@ -56,7 +56,7 @@ export {
   endTaskStatuses,
 
   // Helper Types
-  ExtractedVariableArray,
+  VariableExtractionOutput,
 };
 
 // Extend NodeJS.ProcessEnv to include our environment variables

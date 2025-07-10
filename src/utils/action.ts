@@ -21,7 +21,7 @@ export function initActionScript(actionLogFile: string, task: string) {
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "./src/agent/actions/click-element";
     import { sleep } from "./src/utils/sleep";
     import { parseMarkdown } from "./src/utils/html-to-markdown";
-    import { ExtractedVariableArray } from "./src/types/agent/types";
+    import { VariableExtractionOutput } from "./src/types/agent/types";
             ` + `\n\n`,
     );
   } else {
@@ -31,7 +31,7 @@ export function initActionScript(actionLogFile: string, task: string) {
     import { HyperAgent } from "@hyperbrowser/agent";
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "@hyperbrowser/agent/actions";
     import { parseMarkdown, sleep } from "@hyperbrowser/agent/utils";
-    import { ExtractedVariableArray } from "@hyperbrowser/agent/types";
+    import { VariableExtractionOutput } from "@hyperbrowser/agent/types";
             ` + `\n\n`,
     );
   }

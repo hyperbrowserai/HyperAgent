@@ -3,32 +3,34 @@ import { ActionOutput } from "./actions/types";
 import { Locator, Page } from "playwright";
 import { ErrorEmitter } from "@/utils";
 
-export const ExtractedVariableArray = z
-  .array(
-    z.object({
-      key: z
-        .string()
-        .regex(
-          /^[a-z][a-z0-9_]*$/,
-          "Key must be in snake_case format (lowercase letters, numbers, and underscores only, starting with a letter)",
-        )
-        .describe(`The key MUST match the variable references in the extraction objective.
-        If objective contains <<from_country>>, key should be based on that (e.g., 'capital_of_from_country')
-        If objective contains <<to_country>>, key should be based on that (e.g., 'capital_of_to_country')
-        NEVER use actual values like country/city names in the key.
-        WRONG: 'capital_of_italy', 'capital_of_yemen'
-        CORRECT: 'capital_of_top_country_1', 'capital_of_top_country_2'`),
-      value: z.string().describe("The actual extracted value from the page."),
-      description: z.string()
-        .describe(`Generic description using variable references. 
-        CORRECT: "The capital of <<top_country_1>>"
-        WRONG: "The capital of Yemen"
-        NEVER include actual values in descriptions.`),
-    }),
-  )
-  .describe(
-    "List of extracted key-value pairs from the page that you will need in your future actions.",
-  );
+export const ExtractedVariable = z.object({
+  key: z
+    .string()
+    .regex(
+      /^[a-z][a-z0-9_]*$/,
+      "Key must be in snake_case format (lowercase letters, numbers, and underscores only, starting with a letter)",
+    )
+    .describe(`The key MUST match the variable references in the extraction objective.
+    If objective contains <<from_country>>, key should be based on that (e.g., 'capital_of_from_country')
+    If objective contains <<to_country>>, key should be based on that (e.g., 'capital_of_to_country')
+    NEVER use actual values like country/city names in the key.
+    WRONG: 'capital_of_italy', 'capital_of_yemen'
+    CORRECT: 'capital_of_top_country_1', 'capital_of_top_country_2'`),
+  value: z.string().describe("The actual extracted value from the page."),
+  description: z.string()
+    .describe(`Generic description using variable references. 
+    CORRECT: "The capital of <<top_country_1>>"
+    WRONG: "The capital of Yemen"
+    NEVER include actual values in descriptions.`),
+});
+
+export const VariableExtractionOutput = z.object({
+  variables: z
+    .array(ExtractedVariable)
+    .describe(
+      "List of extracted key-value pairs from the page that you will need in your future actions.",
+    ),
+});
 
 export const AgentOutputFn = (
   actionsSchema: z.ZodUnion<readonly [z.AnyZodObject, ...z.AnyZodObject[]]>,
