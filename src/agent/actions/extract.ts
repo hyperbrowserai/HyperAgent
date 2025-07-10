@@ -182,7 +182,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     for (const variable of Object.values(ctx.variables)) {
       objective_${variableName} = objective_${variableName}.replaceAll(
         \`<<\${variable.key}>>\`,
-        variable.value
+        variable.value as string,
       );
     }
 

@@ -61,7 +61,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         for (const variable of Object.values(ctx.variables)) {
           text_${variableName} = text_${variableName}.replaceAll(
             \`<<\${variable.key}>>\`,
-            variable.value as string
+            variable.value as string,
           );
         }
 

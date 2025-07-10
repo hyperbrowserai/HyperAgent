@@ -140,7 +140,7 @@ const updateActionScript = async (
   actionCtx: ActionContext,
   actionOutput: ActionOutput,
 ) => {
-  if (ctx.debug) {
+  if (ctx.debug && actionOutput.success) {
     // TODO: change the order and let extract action take actionOutput as inspiration
     const actionLogFile = `${ctx.debugDir}/action.ts`;
 

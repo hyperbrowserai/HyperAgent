@@ -4,14 +4,6 @@ import prettier from "prettier";
 export function initActionScript(actionLogFile: string, task: string) {
   fs.writeFileSync(actionLogFile, `/*\n${task}\n*/\n\n`);
 
-  // Imports from dependencies
-  fs.appendFileSync(
-    actionLogFile,
-    `
-      import { z } from "zod";
-      ` + `\n\n`,
-  );
-
   // Import helper funmctions from Hyperagent
   if (process.env.NODE_ENV === "development") {
     fs.appendFileSync(
