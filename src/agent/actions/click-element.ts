@@ -88,7 +88,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
         ]);
 
         await locator_${variableName}.click({ force: true });
-        console.log("Clicked element");
+        console.log(\`Clicked element with description: \${fallbackDescription_${variableName}}\`);
     `;
   },
 

@@ -36,6 +36,13 @@ export function initActionScript(actionLogFile: string, task: string) {
   const agent = new HyperAgent({
     debug: true,
     browserProvider: "Hyperbrowser",
+    // Use tokenLimit: 50000 and Proxy when needed
+    // tokenLimit: 50000,
+    // hyperbrowserConfig: {
+    //   sessionConfig: {
+    //     useProxy: true,
+    //   },
+    // },
   });
   const page = await agent.newPage();
   if (!page) {
@@ -51,6 +58,10 @@ export function initActionScript(actionLogFile: string, task: string) {
 }
 
 export async function wrapUpActionScript(actionLogFile: string) {
+  fs.appendFileSync(actionLogFile, `
+    await agent.closeAgent();
+    console.log("Action script complete");
+  ` + `\n\n`);
   fs.appendFileSync(actionLogFile, `})();` + `\n\n`);
   const formatted = await prettier.format(
     fs.readFileSync(actionLogFile, "utf-8"),

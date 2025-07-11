@@ -36,6 +36,7 @@ const agent = new HyperAgent({
       },
     }
   );
+  await agent.closeAgent();
   console.log(chalk.green.bold("\nResult:"));
   console.log(chalk.white(result.output));
 })();
