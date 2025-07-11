@@ -1,7 +1,7 @@
 import { HyperAgent } from "../src/agent";
 import dotenv from "dotenv";
 import chalk from "chalk";
-import { AgentOutput, AgentStep} from "../dist/types";
+import { AgentOutput, AgentStep} from "../src/types/agent/types";
 
 dotenv.config();
 
@@ -29,7 +29,8 @@ const agent = new HyperAgent({
         console.log(chalk.cyan.bold("===============") + "\n");
       },
       onStep: (step: AgentStep) => {
-        console.log("\n" + chalk.cyan.bold(`===== STEP ===== of step:${step.idx}`));
+        console.log("\n" + chalk.cyan.bold(`===== STEP =====`));
+        console.log(`Of step: ${step.idx}`);
         console.dir(step, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");
       },
