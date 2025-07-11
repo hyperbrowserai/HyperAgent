@@ -50,7 +50,7 @@ export const generateCompleteActionWithOutputDefinition = (
     ) => {
       if (action.success && action.outputSchema) {
         return `
-        let outputSchema_complete_with_output_schema = ${JSON.stringify(action.outputSchema, null, 2)};
+        let outputSchema_complete_with_output_schema = \`${JSON.stringify(action.outputSchema, null, 2)}\`;
         for (const variable of Object.values(ctx.variables)) {
           outputSchema_complete_with_output_schema = outputSchema_complete_with_output_schema.replaceAll(
             \`<<\${variable.key}>>\`,
