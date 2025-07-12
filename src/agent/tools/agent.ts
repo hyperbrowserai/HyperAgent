@@ -50,16 +50,16 @@ export const getActionSchema = (actions: Array<AgentActionDefinition>) => {
       actionDescription: z
         .string()
         .describe(
-          "Describe why you are performing this action and what you aim to perform with this action."
+          "Describe why you are performing this action and what you aim to perform with this action.",
         ),
-    })
+    }),
   );
   return z.union([zodDefs[0], zodDefs[1], ...zodDefs.splice(2)]);
 };
 
 const getActionHandler = (
   actions: Array<AgentActionDefinition>,
-  type: string
+  type: string,
 ) => {
   const foundAction = actions.find((actions) => actions.type === type);
   if (foundAction) {
@@ -71,7 +71,7 @@ const getActionHandler = (
 
 const getActionCodeGenerator = (
   actions: Array<AgentActionDefinition>,
-  type: string
+  type: string,
 ) => {
   const foundAction = actions.find((action) => action.type === type);
   if (foundAction) {
@@ -91,7 +91,7 @@ const runAction = async <T extends "Local" | "Hyperbrowser">(
   page: Page,
   ctx: AgentCtx<T>,
   step: number,
-  substep: number
+  substep: number,
 ): Promise<ActionOutput> => {
   const actionCtx: ActionContext = {
     domState,
@@ -137,7 +137,7 @@ const runAction = async <T extends "Local" | "Hyperbrowser">(
         actionCtx,
         actionOutput,
         step,
-        substep
+        substep,
       );
     }
     return actionOutput;
@@ -155,7 +155,7 @@ const updateActionScript = async (
   actionCtx: ActionContext,
   actionOutput: ActionOutput,
   step: number,
-  substep: number
+  substep: number,
 ) => {
   if (actionOutput.success && ctx.scriptFile) {
     const scriptFile = ctx.scriptFile;
@@ -167,7 +167,7 @@ const updateActionScript = async (
       actionCtx,
       action.params,
       `step_${step}_${substep}_`,
-      actionOutput.variableUpdates
+      actionOutput.variableUpdates,
     );
 
     fs.appendFileSync(
@@ -180,7 +180,7 @@ const updateActionScript = async (
 
       ${code}
       await sleep(4000);
-      `
+      `,
     );
   }
 };
@@ -188,7 +188,7 @@ const updateActionScript = async (
 export const runAgentTask = async (
   ctx: AgentCtx<"Local" | "Hyperbrowser">,
   taskState: TaskState,
-  params?: TaskParams
+  params?: TaskParams,
 ): Promise<TaskOutput> => {
   if (!taskState) {
     throw new HyperagentError(`Task not found`);
@@ -211,7 +211,7 @@ export const runAgentTask = async (
   }
   const llmStructured = ctx.llm.withStructuredOutput(
     AgentOutputFn(getActionSchema(ctx.actions)),
-    { method: getStructuredOutputMethod(ctx.llm) }
+    { method: getStructuredOutputMethod(ctx.llm) },
   );
   const baseMsgs = [{ role: "system", content: SYSTEM_PROMPT }];
 
@@ -252,7 +252,7 @@ export const runAgentTask = async (
       page,
       domState.screenshot.startsWith("data:image/png;base64,")
         ? domState.screenshot.slice("data:image/png;base64,".length)
-        : domState.screenshot
+        : domState.screenshot,
     );
 
     // Store Dom State for Debugging
@@ -261,7 +261,7 @@ export const runAgentTask = async (
       if (trimmedScreenshot) {
         fs.writeFileSync(
           `${debugStepDir}/screenshot.png`,
-          Buffer.from(trimmedScreenshot, "base64")
+          Buffer.from(trimmedScreenshot, "base64"),
         );
       }
     }
@@ -274,14 +274,14 @@ export const runAgentTask = async (
       page,
       domState,
       trimmedScreenshot as string,
-      Object.values(ctx.variables)
+      Object.values(ctx.variables),
     );
 
     // Store Agent Step Messages for Debugging
     if (ctx.debug) {
       fs.writeFileSync(
         `${debugStepDir}/msgs.json`,
-        JSON.stringify(msgs, null, 2)
+        JSON.stringify(msgs, null, 2),
       );
     }
 
@@ -309,13 +309,13 @@ export const runAgentTask = async (
       if (action.type === "complete") {
         taskState.status = TaskStatus.COMPLETED;
         const actionDefinition = ctx.actions.find(
-          (actionDefinition) => actionDefinition.type === "complete"
+          (actionDefinition) => actionDefinition.type === "complete",
         );
         if (actionDefinition) {
           output =
             (await actionDefinition.completeAction?.(
               action.params,
-              ctx.variables
+              ctx.variables,
             )) ?? "No complete action found";
         } else {
           output = "No complete action found";
@@ -327,7 +327,7 @@ export const runAgentTask = async (
         page,
         ctx,
         currStep,
-        substep
+        substep,
       );
       actionOutputs.push(actionOutput);
       substep = substep + 1;
@@ -345,7 +345,7 @@ export const runAgentTask = async (
     if (ctx.debug && ctx.debugDir) {
       fs.writeFileSync(
         `${ctx.debugDir}/stepOutput.json`,
-        JSON.stringify(step, null, 2)
+        JSON.stringify(step, null, 2),
       );
     }
   }
@@ -359,7 +359,7 @@ export const runAgentTask = async (
   if (ctx.debug && ctx.debugDir) {
     fs.writeFileSync(
       `${ctx.debugDir}/taskOutput.json`,
-      JSON.stringify(taskOutput, null, 2)
+      JSON.stringify(taskOutput, null, 2),
     );
   }
   // Finish script.ts & format it

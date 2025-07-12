@@ -23,16 +23,16 @@ export const ExtractAction = z
           .string()
           .regex(
             /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-            "A valid TypeScript identifier that properly describes the variable."
+            "A valid TypeScript identifier that properly describes the variable.",
           )
           .describe(
-            "The name used to identify a variable. It must be a valid TypeScript identifier and distinct from others used in the same task."
-          )
+            "The name used to identify a variable. It must be a valid TypeScript identifier and distinct from others used in the same task.",
+          ),
       )
       .describe("The list of variables to extract from the page."),
   })
   .describe(
-    "Extract content from the page to create reusable variables. REQUIRED when gathering any information that will be used in subsequent steps (e.g., country names, prices, dates, etc.)"
+    "Extract content from the page to create reusable variables. REQUIRED when gathering any information that will be used in subsequent steps (e.g., country names, prices, dates, etc.)",
   );
 
 export type ExtractActionType = z.infer<typeof ExtractAction>;
@@ -43,7 +43,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
 
   run: async (
     ctx: ActionContext,
-    action: ExtractActionType
+    action: ExtractActionType,
   ): Promise<ActionOutput> => {
     try {
       const content = await ctx.page.content();
@@ -64,7 +64,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       if (ctx.debugDir) {
         fs.writeFileSync(
           `${ctx.debugDir}/extract-screenshot.png`,
-          Buffer.from(screenshot.data, "base64")
+          Buffer.from(screenshot.data, "base64"),
         );
       }
 
@@ -79,7 +79,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       if (ctx.debugDir) {
         fs.writeFileSync(
           `${ctx.debugDir}/extract-markdown-content.md`,
-          trimmedMarkdown
+          trimmedMarkdown,
         );
       }
 
@@ -122,7 +122,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
               Resolved objective: "${objective}"
               
               Variables to extract:
-              ${action.variables.map(v => `- ${v}`).join("\n              ")}
+              ${action.variables.map((v) => `- ${v}`).join("\n              ")}
 
               Instructions:
               1. Use the RESOLVED objective to find the information on the page
@@ -171,7 +171,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         ${response.variables
           .map(
             (variable) =>
-              `${variable.key} - ${variable.description || "No description"}`
+              `${variable.key} - ${variable.description || "No description"}`,
           )
           .join("\n- ")}`,
         variableUpdates: variableUpdates,
@@ -188,10 +188,10 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     ctx: ActionContext,
     action: ExtractActionType,
     prefix: string,
-    expectedVariables?: HyperVariable[]
+    expectedVariables?: HyperVariable[],
   ) => {
     // This generated code will take the expected variables and use them to extract the information from the page
-    const expectedVar =
+    const expectedVars =
       expectedVariables?.map((variable) => ({
         key: variable.key,
         description: variable.description,
@@ -264,7 +264,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
             Resolved objective: "\${${varPrefix}_objective}"
             
             Variables to extract:
-            ${expectedVar.map(v => `- ${v.key}`).join("\\n            ")}
+            ${expectedVars.map((v) => `- ${v.key}`).join("\\n            ")}
 
             Instructions:
             1. Use the RESOLVED objective to find the information on the page
@@ -291,7 +291,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     if (${varPrefix}_response.variables.length === 0) {
       console.log(\`No variables extracted from page. Adding "Not Available" values\`);
       ${varPrefix}_variableUpdates = ${JSON.stringify(
-        expectedVar
+        expectedVars,
       )}.map((variable: {key: string, description: string}) => ({
         key: variable.key,
         value: "Not Available",

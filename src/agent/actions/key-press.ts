@@ -92,7 +92,7 @@ export const KeyPressAction = z
       `Press a key or key-combination on the keyboard.\n
 - This supports xdotool's \`key\` syntax.\n
 - Examples: "a", "Return", "alt+Tab", "ctrl+s", "Up", "KP_0" (for the numpad 0 key).
-`
+`,
     ),
   })
   .describe("Press a key or key-combination on the keyboard");

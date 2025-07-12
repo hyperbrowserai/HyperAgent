@@ -26,7 +26,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
 
   run: async function (
     ctx: ActionContext,
-    action: ClickElementActionType
+    action: ClickElementActionType,
   ): Promise<ActionOutput> {
     const { index } = action;
     const locator = getLocator(ctx, index);
@@ -59,7 +59,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
   generateCode: async (
     ctx: ActionContext,
     action: ClickElementActionType,
-    prefix: string
+    prefix: string,
   ) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
     const varPrefix = `${prefix}_clickElement`;
@@ -100,7 +100,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
  */
 export async function waitForElementToBeEnabled(
   locator: Locator,
-  timeout: number = 5000
+  timeout: number = 5000,
 ): Promise<void> {
   return Promise.race([
     (async () => {
@@ -114,7 +114,7 @@ export async function waitForElementToBeEnabled(
     new Promise<never>((_, reject) => {
       setTimeout(
         () => reject(new Error("Timeout waiting for element to be enabled")),
-        timeout
+        timeout,
       );
     }),
   ]);
@@ -128,7 +128,7 @@ export async function waitForElementToBeEnabled(
  */
 export async function waitForElementToBeStable(
   locator: Locator,
-  timeout: number = 5000
+  timeout: number = 5000,
 ): Promise<void> {
   return Promise.race([
     (async () => {
@@ -170,7 +170,7 @@ export async function waitForElementToBeStable(
     new Promise<never>((_, reject) => {
       setTimeout(
         () => reject(new Error("Timeout waiting for element to be stable")),
-        timeout
+        timeout,
       );
     }),
   ]);

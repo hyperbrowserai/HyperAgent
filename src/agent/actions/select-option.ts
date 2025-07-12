@@ -43,7 +43,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
   generateCode: async (
     ctx: ActionContext,
     action: SelectOptionActionType,
-    prefix: string
+    prefix: string,
   ) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
     const varPrefix = `${prefix}_selectOption`;
