@@ -22,6 +22,7 @@ export const GoToURLActionDefinition: AgentActionDefinition = {
   generateCode: async (ctx: ActionContext, action: GoToUrlActionType) => {
     return `
       await ctx.page.goto("${action.url}");
+      console.log("Navigated to ${action.url}");
     `;
   },
 
