@@ -129,7 +129,6 @@ const runAction = async <T extends "Local" | "Hyperbrowser">(
       }
     }
 
-    // TODO: check all the actions and see which ones need ctx.variables.keys updates
     if (ctx.generateScript) {
       updateActionScript(action, ctx, actionCtx, actionOutput, step, substep);
     }
@@ -151,7 +150,6 @@ const updateActionScript = async (
   substep: number,
 ) => {
   if (actionOutput.success && ctx.scriptFile) {
-    // TODO: change the order and let extract action take actionOutput as inspiration
     const scriptFile = ctx.scriptFile;
 
     const actionParamsStr = JSON.stringify(action.params, null, 2);
