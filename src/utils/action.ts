@@ -40,14 +40,14 @@ export function initActionScript(actionLogFile: string, task: string) {
             variables: {} as Record<string, Record<string, unknown>>, // Record<string, HyperVariable>
           };
 
-    `
+    `,
   );
 
   // Add main execution function
   fs.appendFileSync(
     actionLogFile,
     `
-` + `\n\n`
+` + `\n\n`,
   );
 }
 
@@ -59,12 +59,12 @@ export async function wrapUpActionScript(actionLogFile: string) {
     await agent.closeAgent();
     console.log("Action script complete");
 
-  `
+  `,
   );
   fs.appendFileSync(actionLogFile, `})();`);
   const formatted = await prettier.format(
     fs.readFileSync(actionLogFile, "utf-8"),
-    { filepath: actionLogFile }
+    { filepath: actionLogFile },
   );
   fs.writeFileSync(actionLogFile, formatted);
 }

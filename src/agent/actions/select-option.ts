@@ -17,10 +17,10 @@ export const SelectOptionAction = z
       .string()
       .regex(
         /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-        "Must be a valid TypeScript identifier"
+        "Must be a valid TypeScript identifier",
       )
       .describe(
-        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."
+        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
       ),
   })
   .describe("Select an option from a dropdown element");
