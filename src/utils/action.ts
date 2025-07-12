@@ -44,7 +44,7 @@ export function initActionScript(
     import { HyperAgent } from "@hyperbrowser/agent";
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "@hyperbrowser/agent/actions";
     import { parseMarkdown, sleep } from "@hyperbrowser/agent/utils";
-    import { VariableExtractionOutput, ActionContext } from "@hyperbrowser/agent/types";
+    import { VariableExtractionOutput, HyperVariable } from "@hyperbrowser/agent/types";
 
 
     (async () => {
@@ -55,16 +55,10 @@ ${llmComment}
         throw new Error("No page found");
       }
 
-      const ctx: ActionContext = {
-        page: page,
-        domState: {
-          elements: new Map(),
-          screenshot: "",
-          domState: "",
-        },
-        tokenLimit: 50000,
+      const ctx = {
+        page,
         llm: agent.llm,
-        variables: {}
+        variables: {} as Record<string, HyperVariable>,
       };
 
     `
