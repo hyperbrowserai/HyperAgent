@@ -2,10 +2,12 @@ import fs from "fs";
 import prettier from "prettier";
 import { HyperAgentConfig } from "@/types";
 
+import { ActionContext } from "@/types";
+
 export function initActionScript(
   actionLogFile: string,
   task: string,
-  agentConfig?: HyperAgentConfig<"Local" | "Hyperbrowser">,
+  agentConfig?: HyperAgentConfig<"Local" | "Hyperbrowser">
 ) {
   let agentConfigString: string;
   let llmComment = "";
@@ -42,7 +44,7 @@ export function initActionScript(
     import { HyperAgent } from "@hyperbrowser/agent";
     import { waitForElementToBeEnabled, waitForElementToBeStable } from "@hyperbrowser/agent/actions";
     import { parseMarkdown, sleep } from "@hyperbrowser/agent/utils";
-    import { VariableExtractionOutput } from "@hyperbrowser/agent/types";
+    import { VariableExtractionOutput, ActionContext } from "@hyperbrowser/agent/types";
 
 
     (async () => {
@@ -53,20 +55,26 @@ ${llmComment}
         throw new Error("No page found");
       }
 
-      const ctx = {
+      const ctx: ActionContext = {
         page: page,
+        domState: {
+          elements: new Map(),
+          screenshot: "",
+          domState: "",
+        },
+        tokenLimit: 50000,
         llm: agent.llm,
-        variables: {} as Record<string, Record<string, unknown>>, // Record<string, HyperVariable>
+        variables: {}
       };
 
-    `,
+    `
   );
 
   // Add main execution function
   fs.appendFileSync(
     actionLogFile,
     `
-` + `\n\n`,
+` + `\n\n`
   );
 }
 
@@ -78,12 +86,12 @@ export async function wrapUpActionScript(actionLogFile: string) {
     await agent.closeAgent();
     console.log("Action script complete");
 
-  `,
+  `
   );
   fs.appendFileSync(actionLogFile, `})();`);
   const formatted = await prettier.format(
     fs.readFileSync(actionLogFile, "utf-8"),
-    { filepath: actionLogFile },
+    { filepath: actionLogFile }
   );
   fs.writeFileSync(actionLogFile, formatted);
 }

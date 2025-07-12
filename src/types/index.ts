@@ -19,6 +19,7 @@ import {
   TaskStatus,
   TaskState,
   endTaskStatuses,
+  HyperVariable,
 } from "./agent/types";
 
 // Config Types
@@ -57,6 +58,7 @@ export {
 
   // Helper Types
   VariableExtractionOutput,
+  HyperVariable,
 };
 
 // Extend NodeJS.ProcessEnv to include our environment variables
