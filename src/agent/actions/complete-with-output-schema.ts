@@ -54,11 +54,11 @@ export const generateCompleteActionWithOutputDefinition = (
         for (const variable of Object.values(ctx.variables)) {
           outputSchema_complete_with_output_schema = outputSchema_complete_with_output_schema.replaceAll(
             \`<<\${variable.key}>>\`,
-            variable.value,
+            variable.value as string,
           );
         }
 
-        console.log("The action generated an object\n");
+        console.log("The action generated an object\\n");
         console.log(\`\${outputSchema_complete_with_output_schema}\\n\`);
       `;
       } else {
