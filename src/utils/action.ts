@@ -7,6 +7,29 @@ export function initActionScript(
   task: string,
   agentConfig?: HyperAgentConfig<"Local" | "Hyperbrowser">,
 ) {
+  let agentConfigString: string;
+  let llmComment = "";
+
+  if (agentConfig) {
+    const configCopy = { ...agentConfig }; // Create a shallow copy to modify
+    if (configCopy.llm) {
+      const llm = configCopy.llm as any;
+      const llmClassName = llm.constructor?.name || "LLM";
+      const llmParams = JSON.stringify(llm, null, 2);
+      llmComment = `
+      // The agent's LLM configuration has been omitted as it cannot be reliably stringified.
+      // It was an instance of '${llmClassName}'.
+      // You may need to manually instantiate it. The original parameters were:
+      // Note: The following parameters are from JSON.stringify and may be an incomplete representation of the class instance.
+      // ${llmParams.replace(/\n/g, "\n      // ")}
+      `;
+      delete configCopy.llm;
+    }
+    agentConfigString = JSON.stringify(configCopy, null, 2);
+  } else {
+    agentConfigString = "";
+  }
+
   fs.appendFileSync(
     actionLogFile,
     `
@@ -23,7 +46,8 @@ export function initActionScript(
 
 
     (async () => {
-      const agent = new HyperAgent(${agentConfig ? JSON.stringify(agentConfig, null, 2) : ""});
+${llmComment}
+      const agent = new HyperAgent(${agentConfigString});
       const page = await agent.newPage();
       if (!page) {
         throw new Error("No page found");
@@ -31,9 +55,9 @@ export function initActionScript(
 
       const ctx = {
         page: page,
-            llm: agent.llm,
-            variables: {} as Record<string, Record<string, unknown>>, // Record<string, HyperVariable>
-          };
+        llm: agent.llm,
+        variables: {} as Record<string, Record<string, unknown>>, // Record<string, HyperVariable>
+      };
 
     `,
   );

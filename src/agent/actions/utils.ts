@@ -1,4 +1,4 @@
-import { ActionContext } from "@hyperbrowser/agent/types";
+import { ActionContext } from "@/types";
 
 export function getLocator(ctx: ActionContext, index: number) {
   const locatorString = getLocatorString(ctx, index);

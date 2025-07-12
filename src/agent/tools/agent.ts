@@ -13,13 +13,14 @@ import { initActionScript, wrapUpActionScript } from "@/utils/action";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 
-import { AgentOutputFn, endTaskStatuses } from "@hyperbrowser/agent/types";
 import {
+  AgentOutputFn,
+  endTaskStatuses,
   TaskParams,
   TaskOutput,
   TaskState,
   TaskStatus,
-} from "@hyperbrowser/agent/types";
+} from "@/types";
 
 import { HyperagentError } from "../error";
 import { buildAgentStepMessages } from "../messages/builder";
