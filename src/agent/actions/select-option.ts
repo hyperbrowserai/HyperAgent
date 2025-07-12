@@ -54,9 +54,9 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     const variableName = action.variableName;
 
     return `
-      let text_${variableName} = ${JSON.stringify(action.text)};
+      let select_text_${variableName} = ${JSON.stringify(action.text)};
       for (const variable of Object.values(ctx.variables)) {
-        text_${variableName} = text_${variableName}replaceAll(
+        select_text_${variableName} = select_text_${variableName}replaceAll(
         \`<<\${variable.key}>>\`,
           variable.value as string
         );
@@ -66,8 +66,8 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
       const fallbackDescription_${variableName} = "Find the element with the text '${action.indexDescription}'";
       const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
 
-      await locator_${variableName}.selectOption({ label: text_${variableName} });
-      console.log(\`Selected option "\${text_${variableName}}" from element\`);
+      await locator_${variableName}.selectOption({ label: select_text_${variableName} });
+      console.log(\`Selected option "\${select_text_${variableName}}" from element\`);
     `;
   },
 

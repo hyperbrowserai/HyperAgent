@@ -57,9 +57,9 @@ export const InputTextActionDefinition: AgentActionDefinition = {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
 
     return `
-        let text_${variableName} = ${JSON.stringify(action.text)};
+        let input_text_${variableName} = ${JSON.stringify(action.text)};
         for (const variable of Object.values(ctx.variables)) {
-          text_${variableName} = text_${variableName}.replaceAll(
+          input_text_${variableName} = input_text_${variableName}.replaceAll(
             \`<<\${variable.key}>>\`,
             variable.value as string,
           );
@@ -69,8 +69,8 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         const fallbackDescription_${variableName} = "Find the element with the text '${action.indexDescription}'";
         const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
 
-        await locator_${variableName}.fill(text_${variableName}, { timeout: 5_000 });
-        console.log(\`Inputted text "\${text_${variableName}}" into element\`);
+        await locator_${variableName}.fill(input_text_${variableName}, { timeout: 5_000 });
+        console.log(\`Inputted text "\${input_text_${variableName}}" into element\`);
       `;
   },
 

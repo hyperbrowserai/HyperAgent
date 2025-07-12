@@ -29,14 +29,14 @@ export const CompleteActionDefinition: AgentActionDefinition = {
     const variableName = "complete";
 
     return `
-      let text_${variableName} = ${JSON.stringify(action.text)};
+      let complete_text_${variableName} = ${JSON.stringify(action.text)};
       for (const variable of Object.values(ctx.variables)) {
-        text_${variableName} = text_${variableName}.replaceAll(
+        complete_text_${variableName} = complete_text_${variableName}.replaceAll(
           \`<<\${variable.key}>>\`,
           variable.value as string,
         );
       }
-      console.log(\`Task complete: \${text_${variableName}}\`);
+      console.log(\`Task complete: \${complete_text_${variableName}}\`);
     `;
   },
 
