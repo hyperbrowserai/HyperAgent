@@ -97,7 +97,7 @@ const runAction = async (
     llm: ctx.llm,
     debugDir: ctx.debugDir,
     mcpClient: ctx.mcpClient || undefined,
-    variables: Object.values(ctx.variables),
+    variables: ctx.variables,
   };
   const actionType = action.type;
   const actionHandler = getActionHandler(ctx.actions, action.type);

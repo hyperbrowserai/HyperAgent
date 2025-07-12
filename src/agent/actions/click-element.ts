@@ -16,7 +16,7 @@ const ClickElementAction = z
         "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
       ),
     index: z.number().describe("The numeric index of the element to click."),
-    indexDescription: z.string().describe(`
+    indexElementDescription: z.string().describe(`
       A descriptive text that uniquely identifies this element on the page. 
       This should help locate this element again.
       Examples: "Search button", "Submit form button", "Next page arrow", "Login link in header"
@@ -71,7 +71,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
 
     return `
         const querySelector_${variableName} = '${locatorString}';
-        const fallbackDescription_${variableName} = "${action.indexDescription}";
+        const fallbackDescription_${variableName} = "${action.indexElementDescription}";
         const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
 
         await locator_${variableName}.scrollIntoViewIfNeeded({

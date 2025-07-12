@@ -7,7 +7,7 @@ export const SelectOptionAction = z
     index: z
       .number()
       .describe("The numeric index of the  element to select an option."),
-    indexDescription: z.string().describe(`
+    indexElementDescription: z.string().describe(`
       A descriptive text that uniquely identifies this element on the page. 
       This should help locate this element again.
       Examples: "Search button", "Submit form button", "Next page arrow", "Login link in header"
@@ -17,10 +17,10 @@ export const SelectOptionAction = z
       .string()
       .regex(
         /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-        "Must be a valid TypeScript identifier",
+        "Must be a valid TypeScript identifier"
       )
       .describe(
-        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
+        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."
       ),
   })
   .describe("Select an option from a dropdown element");
@@ -33,7 +33,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
 
   run: async (ctx: ActionContext, action: SelectOptionActionType) => {
     let { index, text } = action;
-    for (const variable of ctx.variables) {
+    for (const variable of Object.values(ctx.variables)) {
       text = text.replaceAll(`<<${variable.key}>>`, variable.value);
     }
 
@@ -63,7 +63,7 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
       }
 
       const querySelector_${variableName} = '${locatorString}';
-      const fallbackDescription_${variableName} = "Find the element with the text '${action.indexDescription}'";
+      const fallbackDescription_${variableName} = "Find the element with the text '${action.indexElementDescription}'";
       const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
 
       await locator_${variableName}.selectOption({ label: select_text_${variableName} });

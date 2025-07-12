@@ -7,7 +7,7 @@ export const InputTextAction = z
     index: z
       .number()
       .describe("The numeric index of the element to input text."),
-    indexDescription: z.string().describe(`
+    indexElementDescription: z.string().describe(`
       A descriptive text that uniquely identifies this element on the page. 
       This should help locate this element again.
       Examples: "Search button", "Submit form button", "Next page arrow", "Login link in header"
@@ -36,7 +36,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
 
   run: async (ctx: ActionContext, action: InputTextActionType) => {
     let { index, text } = action;
-    for (const variable of ctx.variables) {
+    for (const variable of Object.values(ctx.variables)) {
       text = text.replaceAll(`<<${variable.key}>>`, variable.value);
     }
 
@@ -66,7 +66,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
         }
 
         const querySelector_${variableName} = '${locatorString}';
-        const fallbackDescription_${variableName} = "Find the element with the text '${action.indexDescription}'";
+        const fallbackDescription_${variableName} = "Find the element with the text '${action.indexElementDescription}'";
         const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
 
         await locator_${variableName}.fill(input_text_${variableName}, { timeout: 5_000 });
