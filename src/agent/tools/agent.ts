@@ -161,9 +161,9 @@ const updateActionScript = async (
     const scriptFile = ctx.scriptFile;
 
     const actionParamsStr = JSON.stringify(action.params, null, 2);
-    const generatedCode = getActionCodeGenerator(ctx.actions, action.type);
+    const generateCodeFn = getActionCodeGenerator(ctx.actions, action.type);
 
-    const code = await generatedCode(
+    const code = await generateCodeFn(
       actionCtx,
       action.params,
       `step_${step}_${substep}_`,

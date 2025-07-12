@@ -6,7 +6,8 @@ export const GoToUrlAction = z
     url: z
       .string()
       .describe(
-        "The URL you want to navigate to. This can be a static value or the name of a variable given in the format <<variableName>>. If you're using a variable, make sure it comes from the list of variables provided to you.",
+        `The URL you want to navigate to. This can be a static value or the name of a variable given in the format <<variableKey>>. 
+        If you're using a variable, make sure it comes from the list of variables provided to you.`,
       ),
   })
   .describe("Navigate to a specific URL in the browser");

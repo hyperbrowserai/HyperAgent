@@ -13,15 +13,6 @@ export const SelectOptionAction = z
       Examples: "Search button", "Submit form button", "Next page arrow", "Login link in header"
       This description will be used as a fallback to find the element if the index changes.`),
     text: z.string().describe("The text of the option to select."),
-    variableName: z
-      .string()
-      .regex(
-        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-        "Must be a valid TypeScript identifier"
-      )
-      .describe(
-        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."
-      ),
   })
   .describe("Select an option from a dropdown element");
 

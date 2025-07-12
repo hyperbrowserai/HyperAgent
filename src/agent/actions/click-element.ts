@@ -6,15 +6,6 @@ import { getLocator, getLocatorString } from "./utils";
 
 const ClickElementAction = z
   .object({
-    variableName: z
-      .string()
-      .regex(
-        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-        "Must be a valid TypeScript identifier"
-      )
-      .describe(
-        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."
-      ),
     index: z.number().describe("The numeric index of the element to click."),
     indexElementDescription: z.string().describe(`
       A descriptive text that uniquely identifies this element on the page. 

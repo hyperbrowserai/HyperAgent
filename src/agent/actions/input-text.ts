@@ -12,15 +12,6 @@ export const InputTextAction = z
       This should help locate this element again.
       Examples: "Search button", "Submit form button", "Next page arrow", "Login link in header"
       This description will be used as a fallback to find the element if the index changes.`),
-    variableName: z
-      .string()
-      .regex(
-        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-        "Must be a valid TypeScript identifier",
-      )
-      .describe(
-        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
-      ),
     text: z.string().describe(
       `The text to input. Use <<variableKey>> to reference extracted variables 
       (e.g., 'Capital of <<top_country_1>>')`,
@@ -59,7 +50,7 @@ export const InputTextActionDefinition: AgentActionDefinition = {
   ) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
 
-    const varPrefix = `${prefix}_${action.variableName}`;
+    const varPrefix = `${prefix}_inputText`;
 
     return `
         let ${varPrefix}_text = ${JSON.stringify(action.text)};
