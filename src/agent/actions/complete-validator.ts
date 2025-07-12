@@ -17,14 +17,14 @@ export const CompletionValidateAction = z
         subTaskSatisfiedReason: z
           .string()
           .describe(
-            "How and why has this subtask been marked as completed (if completed). Provide the result as well if this response required an action, and that action produced a result."
+            "How and why has this subtask been marked as completed (if completed). Provide the result as well if this response required an action, and that action produced a result.",
           ),
-      })
+      }),
     ),
   })
   .describe(
     `Must run this before issuing the final complete action to validate that the task is completed.
-    Evaluate if all the sub parts of the task are completed, and so if the task itself is completed. If you don't run this step, you will be heavily penalized.`
+    Evaluate if all the sub parts of the task are completed, and so if the task itself is completed. If you don't run this step, you will be heavily penalized.`,
   );
 
 export type CompleteValidateActionType = z.infer<
@@ -34,19 +34,33 @@ export type CompleteValidateActionType = z.infer<
 export const CompletionValidateActionDefinition: AgentActionDefinition = {
   type: "taskCompleteValidation",
   actionParams: CompletionValidateAction,
+
   run: async (
     ctx: ActionContext,
-    action: CompleteValidateActionType
+    action: CompleteValidateActionType,
   ): Promise<ActionOutput> => {
     const completionCriteria = action.completionCriteria
       .map(
         (subTask) =>
-          `subTask:${subTask.subTask} || condition satisfied: ${subTask.subTaskSatisfied}`
+          `subTask:${subTask.subTask} || condition satisfied: ${subTask.subTaskSatisfied}`,
       )
       .join("\n");
     return {
       success: true,
       message: `Task Completion Report: \ntask:${action.task} \nsubtasks: \n${completionCriteria}`,
     };
+  },
+
+  generateCode: async (
+    ctx: ActionContext,
+    action: CompleteValidateActionType,
+  ) => {
+    const completionCriteria = action.completionCriteria
+      .map(
+        (subTask) =>
+          `subTask:${subTask.subTask} || condition satisfied: ${subTask.subTaskSatisfied}`,
+      )
+      .join("\n");
+    return `Task Completion Report: \ntask:${action.task} \nsubtasks: \n${completionCriteria}`;
   },
 };

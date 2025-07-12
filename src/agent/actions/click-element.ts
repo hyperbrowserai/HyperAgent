@@ -2,11 +2,25 @@ import { z } from "zod";
 import { Locator } from "playwright";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { sleep } from "@/utils";
-import { getLocator } from "./utils";
+import { getLocator, getLocatorString } from "./utils";
 
 const ClickElementAction = z
   .object({
+    variableName: z
+      .string()
+      .regex(
+        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
+        "Must be a valid TypeScript identifier"
+      )
+      .describe(
+        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."
+      ),
     index: z.number().describe("The numeric index of the element to click."),
+    indexElementDescription: z.string().describe(`
+      A descriptive text that uniquely identifies this element on the page. 
+      This should help locate this element again.
+      Examples: "Search button", "Submit form button", "Next page arrow", "Login link in header"
+      This description will be used as a fallback to find the element if the index changes.`),
   })
   .describe("Click on an element identified by its index");
 
@@ -18,6 +32,7 @@ const CLICK_CHECK_TIMEOUT_PERIOD = 2_500;
 export const ClickElementActionDefinition: AgentActionDefinition = {
   type: "clickElement" as const,
   actionParams: ClickElementAction,
+
   run: async function (
     ctx: ActionContext,
     action: ClickElementActionType
@@ -49,6 +64,38 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     await locator.click({ force: true });
     return { success: true, message: `Clicked element with index ${index}` };
   },
+
+  generateCode: async (
+    ctx: ActionContext,
+    action: ClickElementActionType,
+    prefix: string
+  ) => {
+    const locatorString = getLocatorString(ctx, action.index) ?? "";
+    const varPrefix = `${prefix}_clickElement`;
+
+    return `
+        const ${varPrefix}_querySelector = '${locatorString}';
+        const ${varPrefix}_fallbackDescription = "${action.indexElementDescription}";
+        const ${varPrefix}_locator = await ctx.page.getLocator(${varPrefix}_querySelector, ${varPrefix}_fallbackDescription);
+
+        await ${varPrefix}_locator.scrollIntoViewIfNeeded({
+          timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
+        });
+
+        await Promise.all([
+          ${varPrefix}_locator.waitFor({
+            state: "visible",
+            timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
+          }),
+          waitForElementToBeEnabled(${varPrefix}_locator, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+          waitForElementToBeStable(${varPrefix}_locator, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+        ]);
+
+        await ${varPrefix}_locator.click({ force: true });
+        console.log(\`Clicked element with description: \${${varPrefix}_fallbackDescription}\`);
+    `;
+  },
+
   pprintAction: function (params: ClickElementActionType): string {
     return `Click element at index ${params.index}`;
   },
@@ -60,7 +107,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
  * @param timeout Maximum time to wait in milliseconds
  * @returns Promise that resolves when element is enabled or rejects on timeout
  */
-async function waitForElementToBeEnabled(
+export async function waitForElementToBeEnabled(
   locator: Locator,
   timeout: number = 5000
 ): Promise<void> {
@@ -88,7 +135,7 @@ async function waitForElementToBeEnabled(
  * @param timeout Maximum time to wait in milliseconds
  * @returns Promise that resolves when element is stable or rejects on timeout
  */
-async function waitForElementToBeStable(
+export async function waitForElementToBeStable(
   locator: Locator,
   timeout: number = 5000
 ): Promise<void> {

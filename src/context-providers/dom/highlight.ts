@@ -26,7 +26,7 @@ const isElementPartiallyVisible = (rect: DOMRect): boolean => {
 };
 
 const getHighlightColor = (
-  index: number
+  index: number,
 ): { baseColor: string; backgroundColor: string } => {
   const colors = [
     "#FF0000",
@@ -55,7 +55,7 @@ const calculateLabelPosition = (
   labelWidth: number,
   labelHeight: number,
   canvasWidth: number, // Pass canvas dims for bounds checking
-  canvasHeight: number
+  canvasHeight: number,
 ): { top: number; left: number } => {
   const top = rect.top + iframeOffset.y;
   const left = rect.left + iframeOffset.x;
@@ -105,16 +105,16 @@ const calculateLabelPosition = (
 export function renderHighlightsOffscreen(
   highlightInfos: HighlightInfo[],
   width: number,
-  height: number
+  height: number,
 ): ImageBitmap {
   if (width <= 0 || height <= 0) {
     console.warn(
-      "Attempted to render highlights on zero-sized canvas. Will default to innerWidth x innerHeight"
+      "Attempted to render highlights on zero-sized canvas. Will default to innerWidth x innerHeight",
     );
     // Return an empty bitmap maybe? Or null.
     const emptyCanvas = new OffscreenCanvas(
       window.innerWidth,
-      window.innerHeight
+      window.innerHeight,
     );
     return emptyCanvas.transferToImageBitmap();
   }
@@ -185,7 +185,7 @@ export function renderHighlightsOffscreen(
       // Ensure width is at least height for near-square background
       const labelWidth = Math.max(
         labelHeight,
-        textMetrics.width + labelPadding * 2
+        textMetrics.width + labelPadding * 2,
       );
 
       // Calculate position relative to the canvas (using logical pixels)
@@ -195,7 +195,7 @@ export function renderHighlightsOffscreen(
         labelWidth,
         labelHeight,
         width,
-        height
+        height,
       );
 
       // Draw label background (logical pixels)
@@ -207,7 +207,7 @@ export function renderHighlightsOffscreen(
       ctx.fillText(
         labelText,
         labelPos.left + labelWidth / 2,
-        labelPos.top + labelHeight / 2
+        labelPos.top + labelHeight / 2,
       );
     });
 

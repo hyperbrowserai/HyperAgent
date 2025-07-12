@@ -6,7 +6,7 @@ import {
 } from "./const";
 
 export const isInteractiveElem = (
-  element: HTMLElement
+  element: HTMLElement,
 ): { isInteractive: boolean; reason: string } => {
   const tagName = element.tagName.toLowerCase();
   const role = element.getAttribute("role");
@@ -39,19 +39,24 @@ export const isInteractiveElem = (
   }
 
   // Check for the marker attribute set by the injected script
-  const hasInjectedListener = element.hasAttribute("data-has-interactive-listener");
+  const hasInjectedListener = element.hasAttribute(
+    "data-has-interactive-listener",
+  );
 
   if (hasInjectedListener) {
-    return { isInteractive: true, reason: "Has interactive event listener (tracked)" };
+    return {
+      isInteractive: true,
+      reason: "Has interactive event listener (tracked)",
+    };
   }
 
   const hasAriaProps = INTERACTIVE_ARIA_PROPS.some((prop) =>
-    element.hasAttribute(prop)
+    element.hasAttribute(prop),
   );
 
   if (hasAriaProps) {
     const props = INTERACTIVE_ARIA_PROPS.filter((prop) =>
-      element.hasAttribute(prop)
+      element.hasAttribute(prop),
     );
     return {
       isInteractive: true,

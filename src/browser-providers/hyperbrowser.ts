@@ -37,7 +37,7 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
     this.session = session;
     this.browser = await chromium.connectOverCDP(
       session.wsEndpoint,
-      this.browserConfig
+      this.browserConfig,
     );
 
     if (this.debug) {
@@ -48,7 +48,7 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
           sessionID: session.id,
           infoUrl: session.sessionUrl,
         },
-        "\n"
+        "\n",
       );
     }
 

@@ -12,6 +12,7 @@ import {
   AgentOutputFn,
   AgentOutput,
   AgentStep,
+  VariableExtractionOutput,
   TaskParams,
   TaskOutput,
   Task,
@@ -53,6 +54,9 @@ export {
   // Browser Provider Types
   BrowserProvider,
   endTaskStatuses,
+
+  // Helper Types
+  VariableExtractionOutput,
 };
 
 // Extend NodeJS.ProcessEnv to include our environment variables

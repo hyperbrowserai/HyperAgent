@@ -7,21 +7,21 @@ type ErrorEvents = {
 export class ErrorEmitter extends EventEmitter {
   override on<K extends keyof ErrorEvents>(
     event: K,
-    listener: ErrorEvents[K]
+    listener: ErrorEvents[K],
   ): this {
     return super.on(event, listener);
   }
 
   override once<K extends keyof ErrorEvents>(
     event: K,
-    listener: ErrorEvents[K]
+    listener: ErrorEvents[K],
   ): this {
     return super.once(event, listener);
   }
 
   override off<K extends keyof ErrorEvents>(
     event: K,
-    listener: ErrorEvents[K]
+    listener: ErrorEvents[K],
   ): this {
     return super.off(event, listener);
   }
@@ -35,7 +35,7 @@ export class ErrorEmitter extends EventEmitter {
 
   override addListener<K extends keyof ErrorEvents>(
     eventName: K,
-    listener: (...args: Parameters<ErrorEvents[K]>) => void
+    listener: (...args: Parameters<ErrorEvents[K]>) => void,
   ): this {
     return super.addListener(eventName, listener);
   }

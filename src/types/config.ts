@@ -62,7 +62,10 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
   browserProvider?: T;
 
   debug?: boolean;
+  generateScript?: boolean;
+  scriptPath?: string;
   llm?: BaseChatModel;
+  tokenLimit?: number;
 
   hyperbrowserConfig?: Omit<
     NonNullable<ConstructorParameters<typeof HyperbrowserProvider>[0]>,

@@ -39,7 +39,7 @@ async function runEval() {
     debug: true,
     browserProvider: "Hyperbrowser",
     hyperbrowserConfig: {
-      hyperbrowserSessionOptions: {
+      sessionConfig: {
         useProxy: true,
       },
     },

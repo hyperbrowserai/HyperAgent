@@ -31,7 +31,7 @@ const getUniqueSegment = (element: HTMLElement): string => {
   if (classes && parent) {
     const classSelector = `${tagName}.${classes}`;
     const siblingsWithSameClasses = Array.from(
-      parent.querySelectorAll(`:scope > ${classSelector}`)
+      parent.querySelectorAll(`:scope > ${classSelector}`),
     );
     if (
       siblingsWithSameClasses.length === 1 &&
@@ -144,7 +144,7 @@ export const getCSSPath = (element: HTMLElement | null): string => {
     if (!relativePath) {
       console.warn(
         "Could not determine relative CSS path within ShadowRoot for:",
-        element
+        element,
       );
       // Element might be the direct child/root of the shadow DOM, or path generation failed.
       // Playwright needs a selector after >>, maybe ':host' or '*' or just return hostPath?
@@ -163,7 +163,7 @@ export const getCSSPath = (element: HTMLElement | null): string => {
       "Element root is neither Document nor ShadowRoot:",
       root,
       "for element:",
-      element
+      element,
     );
     // Fallback: Try to compute path relative to its own root node anyway
     return getRelativeCSSPath(element, root);

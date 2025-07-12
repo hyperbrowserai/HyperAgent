@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "target": "es2020",
+    "target": "es2021",
     "lib": [
-      "es2020",
+      "es2021",
       "DOM"
     ],
     "module": "commonjs",
@@ -18,6 +18,12 @@
       ],
       "@hyperbrowser/agent/custom-actions": [
         "./src/custom-actions/index"
+      ],
+      "@hyperbrowser/agent/actions": [
+        "./src/agent/actions/index"
+      ],
+      "@hyperbrowser/agent/utils": [
+        "./src/utils/index"
       ],
       "@/*": [
         "./src/*"

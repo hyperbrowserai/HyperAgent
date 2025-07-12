@@ -13,7 +13,7 @@ export const buildAgentStepMessages = async (
   page: Page,
   domState: DOMState,
   screenshot: string,
-  variables: HyperVariable[]
+  variables: HyperVariable[],
 ): Promise<BaseMessageLike[]> => {
   const messages = [...baseMessages];
 
@@ -30,10 +30,19 @@ export const buildAgentStepMessages = async (
   });
 
   // Add variables section
-  messages.push({
-    role: "user",
-    content: `=== Variables ===\n${variables.map((v) => `<<${v.key}>> - ${v.description}`).join("\n")}\n`,
-  });
+  if (variables.length > 0) {
+    messages.push({
+      role: "user",
+      content: `=== Variables ===
+      ${variables.map((v) => `<<${v.key}>> = (${v.description || "extracted value"})`).join("\n")}
+      REMINDER: Use <<variableKey>> in action parameters instead of the actual value.`,
+    });
+  } else {
+    messages.push({
+      role: "user",
+      content: `=== Variables ===\nNo variables extracted yet.\n`,
+    });
+  }
 
   // Add previous actions section if there are steps
   if (steps.length > 0) {
@@ -42,9 +51,22 @@ export const buildAgentStepMessages = async (
       content: "=== Previous Actions ===\n",
     });
     for (const step of steps) {
+      const actionOutputs = JSON.stringify({
+        actionOutputs: step.actionOutputs.map((output) => ({
+          success: output.success,
+          message: output.message,
+          extract: output.extract,
+          // Intentionally not including variableUpdates here to avoid leaking information of values
+        })),
+        thoughts: step.agentOutput.thoughts,
+        memory: step.agentOutput.memory,
+        nextGoal: step.agentOutput.nextGoal,
+        actions: step.agentOutput.actions,
+        // Intentionally not including variableUpdates here to avoid leaking information of values
+      });
       messages.push({
         role: "ai",
-        content: JSON.stringify(step.agentOutput),
+        content: JSON.stringify(actionOutputs),
       });
       for (const actionOutput of step.actionOutputs) {
         messages.push({
@@ -60,7 +82,10 @@ export const buildAgentStepMessages = async (
   // Add elements section with DOM tree
   messages.push({
     role: "user",
-    content: `=== Elements ===\n${domState.domState}\n`,
+    content: `=== Elements (FOR REFERENCE ONLY - NEVER USE ACTUAL VALUES IN YOUR RESPONSE) ===
+${domState.domState}
+CRITICAL: Any values you see here (country names, city names, etc.) must ONLY be referenced through variables.
+If you see "United Kingdom" here and you've extracted it as <<top_country_1>>, you MUST use <<top_country_1>> everywhere.`,
   });
 
   // Add page screenshot section

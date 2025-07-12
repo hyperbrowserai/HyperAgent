@@ -10,7 +10,7 @@ export const findInteractiveElements = (): InteractiveElement[] => {
     rootInfo: {
       iframe?: HTMLIFrameElement;
       shadowHost?: HTMLElement;
-    } = {}
+    } = {},
   ) => {
     const elements = root.querySelectorAll("*");
     for (let i = 0; i < elements.length; i++) {
