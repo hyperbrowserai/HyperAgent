@@ -57,6 +57,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
+  private generateScript = false;
+  private scriptPath?: string;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -105,6 +107,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     this.debug = params.debug ?? false;
+    this.generateScript = params.generateScript ?? false;
+    this.scriptPath = params.scriptPath;
     this.tokenLimit = params.tokenLimit ?? this.tokenLimit;
     this.errorEmitter = new ErrorEmitter();
   }
@@ -335,12 +339,22 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       steps: [],
     };
     this.tasks[taskId] = taskState;
+
+    const debugDir = params?.debugDir || `debug/${taskId}`;
+    const scriptFile = this.generateScript
+      ? this.scriptPath
+        ? this.scriptPath
+        : `${debugDir}/script.ts`
+      : undefined;
     runAgentTask(
       {
         llm: this.llm,
         actions: this.getActions(params?.outputSchema),
         tokenLimit: this.tokenLimit,
         debug: this.debug,
+        generateScript: this.generateScript,
+        scriptFile: scriptFile,
+        debugDir: debugDir,
         mcpClient: this.mcpClient,
         variables: this._variables,
       },
@@ -384,6 +398,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       steps: [],
     };
     this.tasks[taskId] = taskState;
+
+    const debugDir = params?.debugDir || `debug/${taskId}`;
+    const scriptFile = this.generateScript
+      ? this.scriptPath
+        ? this.scriptPath
+        : `${debugDir}/script.ts`
+      : undefined;
     try {
       return await runAgentTask(
         {
@@ -391,6 +412,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           actions: this.getActions(params?.outputSchema),
           tokenLimit: this.tokenLimit,
           debug: this.debug,
+          generateScript: this.generateScript,
+          scriptFile: scriptFile,
+          debugDir: debugDir,
           mcpClient: this.mcpClient,
           variables: this._variables,
         },
