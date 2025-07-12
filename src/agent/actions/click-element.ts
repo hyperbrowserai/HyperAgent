@@ -74,8 +74,8 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     const varPrefix = `${prefix}_clickElement`;
 
     return `
-        const ${varPrefix}_querySelector = '${locatorString}';
-        const ${varPrefix}_fallbackDescription = "${action.indexElementDescription}";
+        const ${varPrefix}_querySelector = ${JSON.stringify(locatorString)};
+        const ${varPrefix}_fallbackDescription = ${JSON.stringify(action.indexElementDescription)};
         const ${varPrefix}_locator = await ctx.page.getLocator(${varPrefix}_querySelector, ${varPrefix}_fallbackDescription);
 
         await ${varPrefix}_locator.scrollIntoViewIfNeeded({

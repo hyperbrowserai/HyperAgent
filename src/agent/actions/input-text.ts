@@ -70,8 +70,8 @@ export const InputTextActionDefinition: AgentActionDefinition = {
           );
         }
 
-        const ${varPrefix}_querySelector = '${locatorString}';
-        const ${varPrefix}_fallbackDescription = "Find the element with the text '${action.indexElementDescription}'";
+            const ${varPrefix}_querySelector = ${JSON.stringify(locatorString)};
+    const ${varPrefix}_fallbackDescription = "Find the element with the text " + ${JSON.stringify(action.indexElementDescription)};
         const ${varPrefix}_locator = await ctx.page.getLocator(${varPrefix}_querySelector, ${varPrefix}_fallbackDescription);
 
         await ${varPrefix}_locator.fill(${varPrefix}_text, { timeout: 5_000 });
