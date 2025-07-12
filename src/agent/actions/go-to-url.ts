@@ -19,7 +19,14 @@ export const GoToURLActionDefinition: AgentActionDefinition = {
   actionParams: GoToUrlAction,
 
   run: async (ctx: ActionContext, action: GoToUrlActionType) => {
-    const { url } = action;
+    let { url } = action;
+    for (const variable of Object.values(ctx.variables)) {
+      url = url.replaceAll(`<<${variable.key}>>`, variable.value as string);
+    }
+
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      url = `https://${url}`;
+    }
     await ctx.page.goto(url);
     return { success: true, message: `Navigated to ${url}` };
   },
@@ -27,7 +34,7 @@ export const GoToURLActionDefinition: AgentActionDefinition = {
   generateCode: async (
     ctx: ActionContext,
     action: GoToUrlActionType,
-    prefix: string,
+    prefix: string
   ) => {
     const varPrefix = `${prefix}_goToUrl`;
     return `
