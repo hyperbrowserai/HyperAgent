@@ -140,7 +140,7 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
         const translatedKey = translateKey(k);
         code += `
         await ctx.page.keyboard.press(${JSON.stringify(translatedKey)});
-        console.log("Pressed key: ${translatedKey}");
+        console.log(\`Pressed key: \${${JSON.stringify(translatedKey)}}\`);
         \n`;
       }
       return code;
@@ -152,21 +152,21 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
         const translatedKey = translateKey(keys[i]);
         code += `
         await ctx.page.keyboard.down(${JSON.stringify(translatedKey)});
-        console.log("Pressed key down: ${translatedKey}");
+        console.log(\`Pressed key down: \${${JSON.stringify(translatedKey)}}\`);
         \n`;
       }
 
       const lastKey = translateKey(keys[keys.length - 1]);
       code += `
       await ctx.page.keyboard.press(${JSON.stringify(lastKey)});
-      console.log("Pressed key: ${lastKey}");
+      console.log(\`Pressed key: \${${JSON.stringify(lastKey)}}\`);
       \n`;
 
       for (let i = keys.length - 2; i >= 0; i--) {
         const translatedKey = translateKey(keys[i]);
         code += `
         await ctx.page.keyboard.up(${JSON.stringify(translatedKey)});
-        console.log("Pressed key up: ${translatedKey}");
+        console.log(\`Pressed key up: \${${JSON.stringify(translatedKey)}}\`);
         \n`;
       }
 
@@ -175,7 +175,7 @@ export const KeyPressActionDefinition: AgentActionDefinition = {
       const translatedKey = translateKey(text);
       return `
       await ctx.page.keyboard.press(${JSON.stringify(translatedKey)});
-      console.log("Pressed key: ${translatedKey}");
+      console.log(\`Pressed key: \${${JSON.stringify(translatedKey)}}\`);
       \n`;
     }
   },

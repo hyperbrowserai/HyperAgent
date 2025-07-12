@@ -39,7 +39,7 @@ export const GoToURLActionDefinition: AgentActionDefinition = {
         );
       }
       await ctx.page.goto(${varPrefix}_url);
-      console.log("Navigated to ${varPrefix}_url");
+      console.log(\`Navigated to \${${varPrefix}_url}\`);
     `;
   },
 
