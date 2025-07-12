@@ -1,7 +1,12 @@
 import fs from "fs";
 import prettier from "prettier";
+import { HyperAgentConfig } from "@/types";
 
-export function initActionScript(actionLogFile: string, task: string) {
+export function initActionScript(
+  actionLogFile: string,
+  task: string,
+  agentConfig?: HyperAgentConfig<"Local" | "Hyperbrowser">,
+) {
   fs.appendFileSync(
     actionLogFile,
     `
@@ -18,17 +23,7 @@ export function initActionScript(actionLogFile: string, task: string) {
 
 
     (async () => {
-      const agent = new HyperAgent({
-        debug: true,
-        browserProvider: "Hyperbrowser",
-        // Use tokenLimit: 50000 and Proxy when needed
-        // tokenLimit: 50000,
-        // hyperbrowserConfig: {
-        //   sessionConfig: {
-        //     useProxy: true,
-        //   },
-        // },
-      });
+      const agent = new HyperAgent(${agentConfig ? JSON.stringify(agentConfig, null, 2) : ""});
       const page = await agent.newPage();
       if (!page) {
         throw new Error("No page found");

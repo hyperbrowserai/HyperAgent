@@ -53,6 +53,7 @@ export interface AgentActionDefinition<
   generateCode?(
     ctx: ActionContext,
     params: z.infer<T>,
+    prefix: string,
     expectedVariables?: HyperVariable[],
   ): Promise<string>;
   /**

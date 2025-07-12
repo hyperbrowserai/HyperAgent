@@ -84,11 +84,13 @@ const getActionCodeGenerator = (
   }
 };
 
-const runAction = async (
+const runAction = async <T extends "Local" | "Hyperbrowser">(
   action: ActionType,
   domState: DOMState,
   page: Page,
-  ctx: AgentCtx,
+  ctx: AgentCtx<T>,
+  step: number,
+  substep: number,
 ): Promise<ActionOutput> => {
   const actionCtx: ActionContext = {
     domState,
@@ -129,7 +131,7 @@ const runAction = async (
 
     // TODO: check all the actions and see which ones need ctx.variables.keys updates
     if (ctx.generateScript) {
-      updateActionScript(action, ctx, actionCtx, actionOutput);
+      updateActionScript(action, ctx, actionCtx, actionOutput, step, substep);
     }
     return actionOutput;
   } catch (error) {
@@ -142,9 +144,11 @@ const runAction = async (
 
 const updateActionScript = async (
   action: ActionType,
-  ctx: AgentCtx,
+  ctx: AgentCtx<"Local" | "Hyperbrowser">,
   actionCtx: ActionContext,
   actionOutput: ActionOutput,
+  step: number,
+  substep: number,
 ) => {
   if (actionOutput.success && ctx.scriptFile) {
     // TODO: change the order and let extract action take actionOutput as inspiration
@@ -156,6 +160,7 @@ const updateActionScript = async (
     const code = await generatedCode(
       actionCtx,
       action.params,
+      `step_${step}_${substep}_`,
       actionOutput.variableUpdates,
     );
 
@@ -175,7 +180,7 @@ const updateActionScript = async (
 };
 
 export const runAgentTask = async (
-  ctx: AgentCtx,
+  ctx: AgentCtx<"Local" | "Hyperbrowser">,
   taskState: TaskState,
   params?: TaskParams,
 ): Promise<TaskOutput> => {
@@ -187,7 +192,7 @@ export const runAgentTask = async (
   if (ctx.scriptFile) {
     const scriptDir = path.dirname(ctx.scriptFile);
     fs.mkdirSync(scriptDir, { recursive: true });
-    initActionScript(ctx.scriptFile, taskState.task);
+    initActionScript(ctx.scriptFile, taskState.task, ctx.agentConfig);
   }
 
   if (ctx.debug && ctx.debugDir) {
@@ -293,6 +298,7 @@ export const runAgentTask = async (
     // Run Actions
     const agentStepActions = agentOutput.actions;
     const actionOutputs: ActionOutput[] = [];
+    let substep = 0;
     for (const action of agentStepActions) {
       if (action.type === "complete") {
         taskState.status = TaskStatus.COMPLETED;
@@ -314,8 +320,11 @@ export const runAgentTask = async (
         domState,
         page,
         ctx,
+        currStep,
+        substep,
       );
       actionOutputs.push(actionOutput);
+      substep = substep + 1;
       await sleep(2000); // TODO: look at this - smarter page loading
     }
     const step: AgentStep = {

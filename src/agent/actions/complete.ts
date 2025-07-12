@@ -25,18 +25,22 @@ export const CompleteActionDefinition: AgentActionDefinition = {
     return { success: true, message: "Task Complete" };
   },
 
-  generateCode: async (_: ActionContext, action: CompleteActionType) => {
-    const variableName = "complete";
+  generateCode: async (
+    _: ActionContext,
+    action: CompleteActionType,
+    prefix: string,
+  ) => {
+    const varPrefix = `${prefix}_complete`;
 
     return `
-      let complete_text_${variableName} = ${JSON.stringify(action.text)};
+      let ${varPrefix}_text = ${JSON.stringify(action.text)};
       for (const variable of Object.values(ctx.variables)) {
-        complete_text_${variableName} = complete_text_${variableName}.replaceAll(
+        ${varPrefix}_text = ${varPrefix}_text.replaceAll(
           \`<<\${variable.key}>>\`,
           variable.value as string,
         );
       }
-      console.log(\`Task complete: \${complete_text_${variableName}}\`);
+      console.log(\`Task complete: \${${varPrefix}_text}\`);
     `;
   },
 

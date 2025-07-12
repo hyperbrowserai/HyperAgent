@@ -23,16 +23,16 @@ export const ExtractAction = z
           .string()
           .regex(
             /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-            "A valid TypeScript identifier that properly describes the variable.",
+            "A valid TypeScript identifier that properly describes the variable."
           )
           .describe(
-            "The name used to identify a variable. It must be a valid TypeScript identifier and distinct from others used in the same task.",
-          ),
+            "The name used to identify a variable. It must be a valid TypeScript identifier and distinct from others used in the same task."
+          )
       )
       .describe("The list of variables to extract from the page."),
   })
   .describe(
-    "Extract content from the page to create reusable variables. REQUIRED when gathering any information that will be used in subsequent steps (e.g., country names, prices, dates, etc.)",
+    "Extract content from the page to create reusable variables. REQUIRED when gathering any information that will be used in subsequent steps (e.g., country names, prices, dates, etc.)"
   );
 
 export type ExtractActionType = z.infer<typeof ExtractAction>;
@@ -43,7 +43,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
 
   run: async (
     ctx: ActionContext,
-    action: ExtractActionType,
+    action: ExtractActionType
   ): Promise<ActionOutput> => {
     try {
       const content = await ctx.page.content();
@@ -64,7 +64,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       if (ctx.debugDir) {
         fs.writeFileSync(
           `${ctx.debugDir}/extract-screenshot.png`,
-          Buffer.from(screenshot.data, "base64"),
+          Buffer.from(screenshot.data, "base64")
         );
       }
 
@@ -79,7 +79,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       if (ctx.debugDir) {
         fs.writeFileSync(
           `${ctx.debugDir}/extract-markdown-content.md`,
-          trimmedMarkdown,
+          trimmedMarkdown
         );
       }
 
@@ -108,7 +108,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
             CRITICAL RULES:
             - The 'key' MUST be the exact 'variableName' provided.
             - The 'description' MUST use the original objective's format with placeholders. NEVER include actual values (like "Paris" or "John Smith") in the description.
-            - If you cannot find the information, return an empty list of variables.
+            - If you cannot find the information, for each variable in the variables list, you should return an object with the key and a value of "Not Available".
             `,
           },
           {
@@ -138,9 +138,16 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         ]);
 
       if (response.variables.length === 0) {
+        // Add "Not Available" values for each variable requested
+        const variableUpdates = action.variables.map((variable) => ({
+          key: variable,
+          value: "Not Available",
+          description: action.objective,
+        }));
         return {
-          success: false,
+          success: true,
           message: `No variables extracted from page.`,
+          variableUpdates: variableUpdates,
         };
       }
 
@@ -156,7 +163,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         ${response.variables
           .map(
             (variable) =>
-              `${variable.key} - ${variable.description || "No description"}`,
+              `${variable.key} - ${variable.description || "No description"}`
           )
           .join("\n- ")}`,
         variableUpdates: variableUpdates,
@@ -172,7 +179,8 @@ export const ExtractActionDefinition: AgentActionDefinition = {
   generateCode: async (
     ctx: ActionContext,
     action: ExtractActionType,
-    expectedVariables?: HyperVariable[],
+    prefix: string,
+    expectedVariables?: HyperVariable[]
   ) => {
     // This generated code will take the expected variables and use them to extract the information from the page
     const expectedVar =
@@ -181,37 +189,37 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         description: variable.description,
       })) || action.variables.map((v) => ({ key: v, description: "" }));
 
-    const variablesStr = action.variables.join("_");
+    const varPrefix = `${prefix}_extract`;
 
     return `
   try {
-    const content_${variablesStr} = await ctx.page.content();
-    const markdown_${variablesStr} = await parseMarkdown(content_${variablesStr});
-    const tokenLimit_${variablesStr} = ${ctx.tokenLimit};
+    const ${varPrefix}_content = await ctx.page.content();
+    const ${varPrefix}_markdown = await parseMarkdown(${varPrefix}_content);
+    const ${varPrefix}_tokenLimit = ${ctx.tokenLimit};
 
-    const originalObjective_${variablesStr} = "${action.objective}";
-    let objective_${variablesStr} = "${action.objective}";
+    const ${varPrefix}_originalObjective = "${action.objective}";
+    let ${varPrefix}_objective = "${action.objective}";
     for (const variable of Object.values(ctx.variables)) {
-      objective_${variablesStr} = objective_${variablesStr}.replaceAll(
+      ${varPrefix}_objective = ${varPrefix}_objective.replaceAll(
         \`<<\${variable.key}>>\`,
         variable.value as string,
       );
     }
 
     // Take a screenshot of the page
-    const cdpSession_${variablesStr} = await ctx.page.context().newCDPSession(ctx.page);
-    const screenshot_${variablesStr} = await cdpSession_${variablesStr}.send("Page.captureScreenshot");
-    cdpSession_${variablesStr}.detach();
+    const ${varPrefix}_cdpSession = await ctx.page.context().newCDPSession(ctx.page);
+    const ${varPrefix}_screenshot = await ${varPrefix}_cdpSession.send("Page.captureScreenshot");
+    ${varPrefix}_cdpSession.detach();
 
-    const avgTokensPerChar_${variablesStr} = 0.75;  // Conservative estimate of tokens per character
-    const maxTokensForContent_${variablesStr} = Math.min(20000, tokenLimit_${variablesStr} * 0.3); // Use 30% of limit or 20k
-    const maxChars_${variablesStr} = Math.floor(maxTokensForContent_${variablesStr} / avgTokensPerChar_${variablesStr});
-    const trimmedMarkdown_${variablesStr} =
-      markdown_${variablesStr}.length > maxChars_${variablesStr}
-        ? markdown_${variablesStr}.slice(0, maxChars_${variablesStr}) + "\\n[Content truncated due to length]"
-        : markdown_${variablesStr};
+    const ${varPrefix}_avgTokensPerChar = 0.75;  // Conservative estimate of tokens per character
+    const ${varPrefix}_maxTokensForContent = Math.min(20000, ${varPrefix}_tokenLimit * 0.3);
+    const ${varPrefix}_maxChars = Math.floor(${varPrefix}_maxTokensForContent / ${varPrefix}_avgTokensPerChar);
+    const ${varPrefix}_trimmedMarkdown =
+      ${varPrefix}_markdown.length > ${varPrefix}_maxChars
+        ? ${varPrefix}_markdown.slice(0, ${varPrefix}_maxChars) + "\\n[Content truncated due to length]"
+        : ${varPrefix}_markdown;
 
-    const response_${variablesStr} = await ctx.llm.withStructuredOutput(VariableExtractionOutput).invoke([
+    const ${varPrefix}_response = await ctx.llm.withStructuredOutput(VariableExtractionOutput).invoke([
         {
         role: "system",
         content: \`
@@ -230,7 +238,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         CRITICAL RULES:
         - The 'key' MUST be one of the variable names provided.
         - The 'description' MUST use the original objective's format with placeholders. NEVER include actual values (like "Paris" or "John Smith") in the description.
-        - If you cannot find the information, return an empty list of variables.
+        - If you cannot find the information, for each variable in the variables list, you should return an object with the key and a value of "Not Available".
         \`,
       },
       {
@@ -239,8 +247,8 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           {
             type: "text",
             text: \`
-            Original objective (with variable references): "\${originalObjective_${variablesStr}}"
-            Resolved objective (with actual values): "\${objective_${variablesStr}}"
+            Original objective (with variable references): "\${${varPrefix}_originalObjective}"
+            Resolved objective (with actual values): "\${${varPrefix}_objective}"
             
             Extract the following information from the page according to the resolved objective.
             For each of these variables, find their values from the page content:
@@ -254,35 +262,40 @@ export const ExtractActionDefinition: AgentActionDefinition = {
             3. Use the provided descriptions exactly as given
             4. Use the RESOLVED objective to understand what to look for on the page
             
-            Page content:\\n\${trimmedMarkdown_${variablesStr}}\\n
+            Page content:\\n\${${varPrefix}_trimmedMarkdown}\\n
             Here is as screenshot of the page:\\n,
             \`
           },
           {
             type: "image_url",
             image_url: {
-              url: \`data:image/png;base64,\${screenshot_${variablesStr}.data}\`,
+              url: \`data:image/png;base64,\${${varPrefix}_screenshot.data}\`,
             },
           },
         ],
       },
     ]);
 
-    if (response_${variablesStr}.variables.length === 0) {
-      console.log(\`No variables extracted from page.\`);
+    let ${varPrefix}_variableUpdates;
+    if (${varPrefix}_response.variables.length === 0) {
+      console.log(\`No variables extracted from page. Adding "Not Available" values\`);
+      ${varPrefix}_variableUpdates = ${JSON.stringify(
+        expectedVar
+      )}.map((variable: {key: string, description: string}) => ({
+        key: variable.key,
+        value: "Not Available",
+        description: variable.description,
+      }));
+    } else {
+      console.log(\`Extracted variables from page: \${${varPrefix}_response.variables.map((v: any) => v.key).join(', ')}\`);
+      ${varPrefix}_variableUpdates = ${varPrefix}_response.variables.map((variable: any) => ({
+        key: variable.key,
+        value: variable.value,
+        description: variable.description,
+      }));
     }
 
-    const variableUpdates_${variablesStr} = response_${variablesStr}.variables.map(variable => ({ 
-      key: variable.key, 
-      value: variable.value,
-      description: variable.description,
-    }));
-
-    console.log(\`Extracted variables from page: 
-    \${response_${variablesStr}.variables.map(variable => \`\${variable.key}\`).join(', ')}\`);
-
-    // Update the ctx.variables with the new values
-    for (const variable of variableUpdates_${variablesStr}) {
+    for (const variable of ${varPrefix}_variableUpdates) {
       ctx.variables[variable.key] = {
         key: variable.key,
         value: variable.value,

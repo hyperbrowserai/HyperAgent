@@ -10,10 +10,10 @@ const ClickElementAction = z
       .string()
       .regex(
         /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-        "Must be a valid TypeScript identifier",
+        "Must be a valid TypeScript identifier"
       )
       .describe(
-        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
+        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."
       ),
     index: z.number().describe("The numeric index of the element to click."),
     indexElementDescription: z.string().describe(`
@@ -35,7 +35,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
 
   run: async function (
     ctx: ActionContext,
-    action: ClickElementActionType,
+    action: ClickElementActionType
   ): Promise<ActionOutput> {
     const { index } = action;
     const locator = getLocator(ctx, index);
@@ -65,30 +65,34 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     return { success: true, message: `Clicked element with index ${index}` };
   },
 
-  generateCode: async (ctx: ActionContext, action: ClickElementActionType) => {
+  generateCode: async (
+    ctx: ActionContext,
+    action: ClickElementActionType,
+    prefix: string
+  ) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
-    const variableName = action.variableName;
+    const varPrefix = `${prefix}_clickElement`;
 
     return `
-        const querySelector_${variableName} = '${locatorString}';
-        const fallbackDescription_${variableName} = "${action.indexElementDescription}";
-        const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
+        const ${varPrefix}_querySelector = '${locatorString}';
+        const ${varPrefix}_fallbackDescription = "${action.indexElementDescription}";
+        const ${varPrefix}_locator = await ctx.page.getLocator(${varPrefix}_querySelector, ${varPrefix}_fallbackDescription);
 
-        await locator_${variableName}.scrollIntoViewIfNeeded({
+        await ${varPrefix}_locator.scrollIntoViewIfNeeded({
           timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
         });
 
         await Promise.all([
-          locator_${variableName}.waitFor({
+          ${varPrefix}_locator.waitFor({
             state: "visible",
             timeout: ${CLICK_CHECK_TIMEOUT_PERIOD},
           }),
-          waitForElementToBeEnabled(locator_${variableName}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
-          waitForElementToBeStable(locator_${variableName}, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+          waitForElementToBeEnabled(${varPrefix}_locator, ${CLICK_CHECK_TIMEOUT_PERIOD}),
+          waitForElementToBeStable(${varPrefix}_locator, ${CLICK_CHECK_TIMEOUT_PERIOD}),
         ]);
 
-        await locator_${variableName}.click({ force: true });
-        console.log(\`Clicked element with description: \${fallbackDescription_${variableName}}\`);
+        await ${varPrefix}_locator.click({ force: true });
+        console.log(\`Clicked element with description: \${${varPrefix}_fallbackDescription}\`);
     `;
   },
 
@@ -105,7 +109,7 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
  */
 export async function waitForElementToBeEnabled(
   locator: Locator,
-  timeout: number = 5000,
+  timeout: number = 5000
 ): Promise<void> {
   return Promise.race([
     (async () => {
@@ -119,7 +123,7 @@ export async function waitForElementToBeEnabled(
     new Promise<never>((_, reject) => {
       setTimeout(
         () => reject(new Error("Timeout waiting for element to be enabled")),
-        timeout,
+        timeout
       );
     }),
   ]);
@@ -133,7 +137,7 @@ export async function waitForElementToBeEnabled(
  */
 export async function waitForElementToBeStable(
   locator: Locator,
-  timeout: number = 5000,
+  timeout: number = 5000
 ): Promise<void> {
   return Promise.race([
     (async () => {
@@ -175,7 +179,7 @@ export async function waitForElementToBeStable(
     new Promise<never>((_, reject) => {
       setTimeout(
         () => reject(new Error("Timeout waiting for element to be stable")),
-        timeout,
+        timeout
       );
     }),
   ]);

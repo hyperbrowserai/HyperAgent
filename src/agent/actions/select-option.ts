@@ -17,10 +17,10 @@ export const SelectOptionAction = z
       .string()
       .regex(
         /^[a-zA-Z_$][a-zA-Z0-9_$]*$/,
-        "Must be a valid TypeScript identifier",
+        "Must be a valid TypeScript identifier"
       )
       .describe(
-        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used.",
+        "The variable name used to identify a variable. Must be a valid TypeScript identifier and not previously used."
       ),
   })
   .describe("Select an option from a dropdown element");
@@ -49,25 +49,29 @@ export const SelectOptionActionDefinition: AgentActionDefinition = {
     };
   },
 
-  generateCode: async (ctx: ActionContext, action: SelectOptionActionType) => {
+  generateCode: async (
+    ctx: ActionContext,
+    action: SelectOptionActionType,
+    prefix: string
+  ) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
-    const variableName = action.variableName;
+    const varPrefix = `${prefix}_selectOption`;
 
     return `
-      let select_text_${variableName} = ${JSON.stringify(action.text)};
+      let ${varPrefix}_text = ${JSON.stringify(action.text)};
       for (const variable of Object.values(ctx.variables)) {
-        select_text_${variableName} = select_text_${variableName}replaceAll(
+        ${varPrefix}_text = ${varPrefix}_text.replaceAll(
         \`<<\${variable.key}>>\`,
           variable.value as string
         );
       }
 
-      const querySelector_${variableName} = '${locatorString}';
-      const fallbackDescription_${variableName} = "Find the element with the text '${action.indexElementDescription}'";
-      const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
+      const ${varPrefix}_querySelector = '${locatorString}';
+      const ${varPrefix}_fallbackDescription = "Find the element with the text '${action.indexElementDescription}'";
+      const ${varPrefix}_locator = await ctx.page.getLocator(${varPrefix}_querySelector, ${varPrefix}_fallbackDescription);
 
-      await locator_${variableName}.selectOption({ label: select_text_${variableName} });
-      console.log(\`Selected option "\${select_text_${variableName}}" from element\`);
+      await ${varPrefix}_locator.selectOption({ label: ${varPrefix}_text });
+      console.log(\`Selected option "\${${varPrefix}_text}" from element\`);
     `;
   },
 

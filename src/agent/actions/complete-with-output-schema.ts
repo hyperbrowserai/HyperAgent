@@ -47,19 +47,21 @@ export const generateCompleteActionWithOutputDefinition = (
     generateCode: async (
       ctx: ActionContext,
       action: CompeleteActionWithOutputSchema,
+      prefix: string,
     ) => {
+      const varPrefix = `${prefix}_complete_with_output_schema`;
       if (action.success && action.outputSchema) {
         return `
-        let outputSchema_complete_with_output_schema = \`${JSON.stringify(action.outputSchema, null, 2)}\`;
+        let ${varPrefix}_outputSchema = \`${JSON.stringify(action.outputSchema, null, 2)}\`;
         for (const variable of Object.values(ctx.variables)) {
-          outputSchema_complete_with_output_schema = outputSchema_complete_with_output_schema.replaceAll(
+          ${varPrefix}_outputSchema = ${varPrefix}_outputSchema.replaceAll(
             \`<<\${variable.key}>>\`,
             variable.value as string,
           );
         }
 
         console.log("The action generated an object\\n");
-        console.log(\`\${outputSchema_complete_with_output_schema}\\n\`);
+        console.log(\`\${${varPrefix}_outputSchema}\\n\`);
       `;
       } else {
         return `

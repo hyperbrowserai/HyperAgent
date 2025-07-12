@@ -52,25 +52,30 @@ export const InputTextActionDefinition: AgentActionDefinition = {
     };
   },
 
-  generateCode: async (ctx: ActionContext, action: InputTextActionType) => {
-    const variableName = action.variableName;
+  generateCode: async (
+    ctx: ActionContext,
+    action: InputTextActionType,
+    prefix: string,
+  ) => {
     const locatorString = getLocatorString(ctx, action.index) ?? "";
 
+    const varPrefix = `${prefix}_${action.variableName}`;
+
     return `
-        let input_text_${variableName} = ${JSON.stringify(action.text)};
+        let ${varPrefix}_text = ${JSON.stringify(action.text)};
         for (const variable of Object.values(ctx.variables)) {
-          input_text_${variableName} = input_text_${variableName}.replaceAll(
+          ${varPrefix}_text = ${varPrefix}_text.replaceAll(
             \`<<\${variable.key}>>\`,
             variable.value as string,
           );
         }
 
-        const querySelector_${variableName} = '${locatorString}';
-        const fallbackDescription_${variableName} = "Find the element with the text '${action.indexElementDescription}'";
-        const locator_${variableName} = await ctx.page.getLocator(querySelector_${variableName}, fallbackDescription_${variableName});
+        const ${varPrefix}_querySelector = '${locatorString}';
+        const ${varPrefix}_fallbackDescription = "Find the element with the text '${action.indexElementDescription}'";
+        const ${varPrefix}_locator = await ctx.page.getLocator(${varPrefix}_querySelector, ${varPrefix}_fallbackDescription);
 
-        await locator_${variableName}.fill(input_text_${variableName}, { timeout: 5_000 });
-        console.log(\`Inputted text "\${input_text_${variableName}}" into element\`);
+        await ${varPrefix}_locator.fill(${varPrefix}_text, { timeout: 5_000 });
+        console.log(\`Inputted text "\${${varPrefix}_text}" into element\`);
       `;
   },
 

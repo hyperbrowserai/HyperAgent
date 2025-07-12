@@ -3,7 +3,11 @@ import { ActionContext, AgentActionDefinition } from "@/types";
 
 export const GoToUrlAction = z
   .object({
-    url: z.string().describe("The URL you want to navigate to."),
+    url: z
+      .string()
+      .describe(
+        "The URL you want to navigate to. This can be a static value or the name of a variable given in the format <<variableName>>. If you're using a variable, make sure it comes from the list of variables provided to you.",
+      ),
   })
   .describe("Navigate to a specific URL in the browser");
 
@@ -19,10 +23,22 @@ export const GoToURLActionDefinition: AgentActionDefinition = {
     return { success: true, message: `Navigated to ${url}` };
   },
 
-  generateCode: async (ctx: ActionContext, action: GoToUrlActionType) => {
+  generateCode: async (
+    ctx: ActionContext,
+    action: GoToUrlActionType,
+    prefix: string,
+  ) => {
+    const varPrefix = `${prefix}_goToUrl`;
     return `
-      await ctx.page.goto("${action.url}");
-      console.log("Navigated to ${action.url}");
+      let ${varPrefix}_url = "${action.url}";
+      for (const variable of Object.values(ctx.variables)) {
+        ${varPrefix}_url = ${varPrefix}_url.replaceAll(
+          \`<<\${variable.key}>>\`,
+          variable.value as string,
+        );
+      }
+      await ctx.page.goto(${varPrefix}_url);
+      console.log("Navigated to ${varPrefix}_url");
     `;
   },
 

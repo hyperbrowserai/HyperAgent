@@ -59,6 +59,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private generateScript = false;
   private scriptPath?: string;
+  private config: HyperAgentConfig<T>;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -78,6 +79,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   constructor(params: HyperAgentConfig<T> = {}) {
+    this.config = params;
     if (!params.llm) {
       if (process.env.OPENAI_API_KEY) {
         this.llm = new ChatOpenAI({
@@ -357,6 +359,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         debugDir: debugDir,
         mcpClient: this.mcpClient,
         variables: this._variables,
+        agentConfig: this.config,
       },
       taskState,
       params,
@@ -417,6 +420,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           debugDir: debugDir,
           mcpClient: this.mcpClient,
           variables: this._variables,
+          agentConfig: this.config,
         },
         taskState,
         params,
