@@ -91,24 +91,25 @@ export const ExtractActionDefinition: AgentActionDefinition = {
             content: `
             You are a helpful assistant that extracts information from a page.
 
-            Your task is to extract a single piece of information from the provided page content and screenshot based on a given objective.
+            Your task is to extract information from the provided page content and screenshot based on a given objective and a list of variable names.
 
             CRITICAL INSTRUCTIONS:
-            1.  You will be given an "original objective" with variable placeholders (e.g., "<<variable_name>>") and a "resolved objective" with the placeholders filled in with actual values.
-            2.  Use the RESOLVED objective to locate the information on the page.
-            3.  You will also be provided with a specific "variableName" to use as the key for the extracted data.
-            4.  If you find that some critical information related to the objective is present on the page, but not in the task you are given, you should extract it and return it as a variable. But make sure it is critical to the objective or provides significant value to the objective.
+            1. You will be given an "original objective" with variable placeholders (e.g., "<<variable_name>>") and a "resolved objective" with the placeholders filled in with actual values.
+            2. Use the RESOLVED objective to locate the information on the page.
+            3. You will be provided with a list of variable names to extract.
+            4. If you find that some critical information related to the objective is present on the page, but not in the task you are given, you should extract it and return it as a variable. But make sure it is critical to the objective or provides significant value to the objective.
 
             OUTPUT FORMAT:
-            You must output a single variable object with the following fields:
-            - "key": Use the exact "variableName" provided in the prompt.
+            You must output an array of variable objects. Each object should have the following fields:
+            - "key": Use the exact variable name from the provided list.
             - "value": The text content you extracted from the page. This should be a string.
-            - "description": A description of the data. Use the ORIGINAL objective for this. For example, if the original objective was "Extract the capital of <<country_name>>", the description should be "The capital of <<country_name>>".
+            - "description": A description of the data using the ORIGINAL objective format with placeholders. For example, if the original objective was "Extract the capital of <<country_name>>", the description should be "The capital of <<country_name>>".
 
             CRITICAL RULES:
-            - The 'key' MUST be the exact 'variableName' provided.
+            - The 'key' MUST be one of the exact variable names provided in the list.
             - The 'description' MUST use the original objective's format with placeholders. NEVER include actual values (like "Paris" or "John Smith") in the description.
-            - If you cannot find the information, for each variable in the variables list, you should return an object with the key and a value of "Not Available".
+            - If you cannot find the information for a variable, return an object with that variable's key and a value of "Not Available".
+            - You MUST return one object for each variable in the provided list.
             `,
           },
           {
@@ -119,7 +120,14 @@ export const ExtractActionDefinition: AgentActionDefinition = {
                 text: `
               Original objective: "${originalObjective}"
               Resolved objective: "${objective}"
-              Variables: "${action.variables.join("\n- ")}"
+              
+              Variables to extract:
+              ${action.variables.map(v => `- ${v}`).join("\n              ")}
+
+              Instructions:
+              1. Use the RESOLVED objective to find the information on the page
+              2. For each variable listed above, extract the corresponding value
+              3. Return one object per variable with the exact key name provided
 
               Page content:
               ${trimmedMarkdown}
@@ -197,8 +205,8 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     const ${varPrefix}_markdown = await parseMarkdown(${varPrefix}_content);
     const ${varPrefix}_tokenLimit = ${ctx.tokenLimit};
 
-    const ${varPrefix}_originalObjective = "${action.objective}";
-    let ${varPrefix}_objective = "${action.objective}";
+    const ${varPrefix}_originalObjective = ${JSON.stringify(action.objective)};
+    let ${varPrefix}_objective = ${JSON.stringify(action.objective)};
     for (const variable of Object.values(ctx.variables)) {
       ${varPrefix}_objective = ${varPrefix}_objective.replaceAll(
         \`<<\${variable.key}>>\`,
@@ -224,21 +232,26 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         role: "system",
         content: \`
         You are a helpful assistant that extracts information from a page.
-        Your task is to extract information from the provided page content and screenshot based on a given objective and a list of variables.
+
+        Your task is to extract information from the provided page content and screenshot based on a given objective and a list of variable names.
+
         CRITICAL INSTRUCTIONS:
         1. You will be given an "original objective" with variable placeholders (e.g., "<<variable_name>>") and a "resolved objective" with the placeholders filled in with actual values.
         2. Use the RESOLVED objective to locate the information on the page.
-        3. You will be provided with a list of "variables" to extract.
+        3. You will be provided with a list of variable names to extract.
         4. If you find that some critical information related to the objective is present on the page, but not in the task you are given, you should extract it and return it as a variable. But make sure it is critical to the objective or provides significant value to the objective.
+
         OUTPUT FORMAT:
-        You must output a list of variable objects. Each object should have the following fields:
-        - "key": Use the exact variable name provided in the prompt.
+        You must output an array of variable objects. Each object should have the following fields:
+        - "key": Use the exact variable name from the provided list.
         - "value": The text content you extracted from the page. This should be a string.
-        - "description": A description of the data. Use the ORIGINAL objective for this.
+        - "description": A description of the data using the ORIGINAL objective format with placeholders. For example, if the original objective was "Extract the capital of <<country_name>>", the description should be "The capital of <<country_name>>".
+
         CRITICAL RULES:
-        - The 'key' MUST be one of the variable names provided.
+        - The 'key' MUST be one of the exact variable names provided in the list.
         - The 'description' MUST use the original objective's format with placeholders. NEVER include actual values (like "Paris" or "John Smith") in the description.
-        - If you cannot find the information, for each variable in the variables list, you should return an object with the key and a value of "Not Available".
+        - If you cannot find the information for a variable, return an object with that variable's key and a value of "Not Available".
+        - You MUST return one object for each variable in the provided list.
         \`,
       },
       {
@@ -247,23 +260,21 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           {
             type: "text",
             text: \`
-            Original objective (with variable references): "\${${varPrefix}_originalObjective}"
-            Resolved objective (with actual values): "\${${varPrefix}_objective}"
+            Original objective: "\${${varPrefix}_originalObjective}"
+            Resolved objective: "\${${varPrefix}_objective}"
             
-            Extract the following information from the page according to the resolved objective.
-            For each of these variables, find their values from the page content:
-            ${expectedVar
-              .map((v) => `- ${v.key}: ${v.description || "No description"}`)
-              .join("\\n            ")}
-            
-            CRITICAL RULES:
-            1. Keys MUST be EXACTLY as provided above - do not change them
-            2. Only the 'value' field should contain the actual data from the page
-            3. Use the provided descriptions exactly as given
-            4. Use the RESOLVED objective to understand what to look for on the page
-            
-            Page content:\\n\${${varPrefix}_trimmedMarkdown}\\n
-            Here is as screenshot of the page:\\n,
+            Variables to extract:
+            ${expectedVar.map(v => `- ${v.key}`).join("\\n            ")}
+
+            Instructions:
+            1. Use the RESOLVED objective to find the information on the page
+            2. For each variable listed above, extract the corresponding value
+            3. Return one object per variable with the exact key name provided
+
+            Page content:
+            \${${varPrefix}_trimmedMarkdown}
+
+            Here is a screenshot of the page:
             \`
           },
           {

@@ -87,10 +87,11 @@ ${EXAMPLE_ACTIONS}
   * Objectives MUST use <<variableKey>> references:
     - CORRECT: "Extract the capital of <<top_country_1>>"
     - WRONG: "Extract the capital of France"
-  * Extracted variable keys MUST be generic:
-    - CORRECT: "capital_of_top_country_1"
-    - WRONG: "capital_of_france" or "paris"
-  * Descriptions MUST use variable references:
+  * Variables array should contain descriptive names:
+    - CORRECT: ["capital_of_top_country_1", "capital_of_top_country_2"]
+    - WRONG: ["capital_of_france", "paris"]
+  * The extracted keys will be used as variable references later
+  * Descriptions returned by extract MUST use variable references:
     - CORRECT: "The capital of <<top_country_1>>"
     - WRONG: "The capital of France"
 
