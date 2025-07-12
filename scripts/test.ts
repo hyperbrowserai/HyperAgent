@@ -30,7 +30,7 @@ const agent = new HyperAgent({
       },
       onStep: (step: AgentStep) => {
         console.log("\n" + chalk.cyan.bold(`===== STEP =====`));
-        console.log(`Of step: ${step.idx}`);
+        console.log(`Step: ${step.idx}`);
         console.dir(step, { depth: null, colors: true });
         console.log(chalk.cyan.bold("===============") + "\n");
       },
