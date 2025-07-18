@@ -57,8 +57,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
-  private generateScript = false;
-  private scriptPath?: string;
+  public generateScript = false;
+  public scriptPath?: string;
   private config: HyperAgentConfig<T>;
 
   public browser: Browser | null = null;

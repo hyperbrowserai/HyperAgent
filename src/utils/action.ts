@@ -2,7 +2,6 @@ import fs from "fs";
 import prettier from "prettier";
 import { HyperAgentConfig } from "@/types";
 
-import { ActionContext } from "@/types";
 
 export function initActionScript(
   actionLogFile: string,
@@ -32,7 +31,7 @@ export function initActionScript(
     agentConfigString = "";
   }
 
-  fs.appendFileSync(
+  fs.writeFileSync(
     actionLogFile,
     `
     /*
