@@ -8,7 +8,9 @@ dotenv.config();
 const agent = new HyperAgent({
   debug: true,
   browserProvider: "Hyperbrowser",
-  tokenLimit: 50000,
+  // tokenLimit: 50000,
+  generateScript: true,
+  // scriptPath: "script.ts",
   hyperbrowserConfig: {
     sessionConfig: {
       useProxy: true,
@@ -18,10 +20,15 @@ const agent = new HyperAgent({
 
 (async () => {
   const result = await agent.executeTask(
-    `Go to https://hiveword.com/location-name-generator and use extract action to get the top two countries;
-    get the capitals of these two countries.
-    Then go to https://flights.google.com and find the cheapest flight from the first capital to the second capital,
-    departing on a month from today, and returning on 45 days from today.`,
+    `Go to arXiv.org and search for 'AI agents' in abstract.
+    Find the 3 most recent papers from the search results.
+    For each paper:
+    1. Extract the following information:
+       - Paper title
+       - All authors' names
+       - Summarized abstract in 2-3 sentences
+       - Submission date
+    2. Compile all extracted information in your final response.`,
     {
       debugOnAgentOutput: (agentOutput: AgentOutput) => {
         console.log("\n" + chalk.cyan.bold("===== AGENT OUTPUT ====="));
