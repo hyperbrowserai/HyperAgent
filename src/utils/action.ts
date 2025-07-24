@@ -90,7 +90,7 @@ export async function wrapUpActionScript(actionLogFile: string) {
   );
   fs.appendFileSync(actionLogFile, `})();`);
 
-  formatActionScript(actionLogFile);
+  await formatActionScript(actionLogFile);
 }
 
 export async function formatActionScript(actionLogFile: string) {
