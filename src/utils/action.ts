@@ -7,6 +7,7 @@ import { HyperAgentConfig } from "@/types";
 export type UserFeedback = {
   approved: boolean;
   message?: string;
+  lastPlannedActions?: any; // The agent output that was rejected
 };
 
 export function initActionScript(

@@ -285,6 +285,7 @@ export const runAgentTask = async (
         domState,
         trimmedScreenshot as string,
         Object.values(ctx.variables),
+        userFeedback,
       );
 
       // Store Agent Step Messages for Debugging
@@ -314,6 +315,10 @@ export const runAgentTask = async (
       // Only check user feedback if generateScript is enabled
       if (ctx.generateScript) {
         userFeedback = await getUserFeedback();
+        // If user didn't approve, add the rejected actions to feedback
+        if (!userFeedback.approved) {
+          userFeedback.lastPlannedActions = agentOutput;
+        }
         console.log(userFeedback);
       }
     } while (ctx.generateScript && userFeedback && !userFeedback.approved);

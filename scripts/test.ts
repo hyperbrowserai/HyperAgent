@@ -9,6 +9,7 @@ const agent = new HyperAgent({
   debug: true,
   browserProvider: "Hyperbrowser",
   tokenLimit: 50000,
+  generateScript: true,
   hyperbrowserConfig: {
     sessionConfig: {
       useProxy: true,
