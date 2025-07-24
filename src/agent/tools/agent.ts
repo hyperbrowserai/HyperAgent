@@ -9,7 +9,12 @@ import {
   AgentActionDefinition,
 } from "@/types";
 import { getDom } from "@/context-providers/dom";
-import { initActionScript, wrapUpActionScript } from "@/utils/action";
+import {
+  initActionScript,
+  wrapUpActionScript,
+  getUserFeedback,
+  UserFeedback,
+} from "@/utils/action";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 
@@ -266,40 +271,57 @@ export const runAgentTask = async (
       }
     }
 
-    // Build Agent Step Messages
-    const msgs = await buildAgentStepMessages(
-      baseMsgs,
-      taskState.steps,
-      taskState.task,
-      page,
-      domState,
-      trimmedScreenshot as string,
-      Object.values(ctx.variables),
-    );
+    // Invoke LLM and get user's feedback if generateScript is enabled
+    let agentOutput;
+    let userFeedback: UserFeedback | undefined;
 
-    // Store Agent Step Messages for Debugging
-    if (ctx.debug) {
-      fs.writeFileSync(
-        `${debugStepDir}/msgs.json`,
-        JSON.stringify(msgs, null, 2),
+    do {
+      // Build Agent Step Messages
+      const msgs = await buildAgentStepMessages(
+        baseMsgs,
+        taskState.steps,
+        taskState.task,
+        page,
+        domState,
+        trimmedScreenshot as string,
+        Object.values(ctx.variables),
+        userFeedback,
       );
-    }
 
-    // Invoke LLM
-    const agentOutput = await retry({
-      func: () => llmStructured.invoke(msgs),
-    });
+      // Store Agent Step Messages for Debugging
+      if (ctx.debug) {
+        fs.writeFileSync(
+          `${debugStepDir}/msgs.json`,
+          JSON.stringify(msgs, null, 2),
+        );
+      }
 
-    params?.debugOnAgentOutput?.(agentOutput);
+      // Invoke LLM
+      agentOutput = await retry({
+        func: () => llmStructured.invoke(msgs),
+      });
 
-    // Status Checks
-    if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
-      await sleep(100);
-      continue;
-    }
-    if (endTaskStatuses.has(taskState.status)) {
-      break;
-    }
+      params?.debugOnAgentOutput?.(agentOutput);
+
+      // Status Checks
+      if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
+        await sleep(100);
+        continue;
+      }
+      if (endTaskStatuses.has(taskState.status)) {
+        break;
+      }
+
+      // Only check user feedback if generateScript is enabled
+      if (ctx.generateScript) {
+        userFeedback = await getUserFeedback();
+        // If user didn't approve, add the rejected actions to feedback
+        if (!userFeedback.approved) {
+          userFeedback.lastPlannedActions = agentOutput;
+        }
+        console.log(userFeedback);
+      }
+    } while (ctx.generateScript && userFeedback && !userFeedback.approved);
 
     // Run Actions
     const agentStepActions = agentOutput.actions;

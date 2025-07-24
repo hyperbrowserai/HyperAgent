@@ -9,6 +9,7 @@ const agent = new HyperAgent({
   debug: true,
   browserProvider: "Hyperbrowser",
   tokenLimit: 50000,
+  generateScript: true,
   hyperbrowserConfig: {
     sessionConfig: {
       useProxy: true,
@@ -18,10 +19,7 @@ const agent = new HyperAgent({
 
 (async () => {
   const result = await agent.executeTask(
-    `Go to https://hiveword.com/location-name-generator and use extract action to get the top two countries;
-    get the capitals of these two countries.
-    Then go to https://flights.google.com and find the cheapest flight from the first capital to the second capital,
-    departing on a month from today, and returning on 45 days from today.`,
+    `Find the price and return policy for the Dyson Airwrap on Amazon`,
     {
       debugOnAgentOutput: (agentOutput: AgentOutput) => {
         console.log("\n" + chalk.cyan.bold("===== AGENT OUTPUT ====="));

@@ -5,6 +5,7 @@ import { getScrollInfo } from "./utils";
 import { retry } from "@/utils/retry";
 import { DOMState } from "@/context-providers/dom/types";
 import { HyperVariable } from "@/types/agent/types";
+import { UserFeedback } from "@/utils/action";
 
 export const buildAgentStepMessages = async (
   baseMessages: BaseMessageLike[],
@@ -14,6 +15,7 @@ export const buildAgentStepMessages = async (
   domState: DOMState,
   screenshot: string,
   variables: HyperVariable[],
+  userFeedback?: UserFeedback,
 ): Promise<BaseMessageLike[]> => {
   const messages = [...baseMessages];
 
@@ -77,6 +79,29 @@ export const buildAgentStepMessages = async (
         });
       }
     }
+  }
+
+  // Add user feedback if provided
+  if (userFeedback && !userFeedback.approved && userFeedback.message) {
+    let feedbackContent = `=== User Feedback ===
+IMPORTANT: The user has provided feedback about your planned actions:
+${userFeedback.message}`;
+
+    // Include the rejected actions if available
+    if (userFeedback.lastPlannedActions) {
+      feedbackContent += `\n\nThe actions you planned that the user is providing feedback on were:
+${JSON.stringify(userFeedback.lastPlannedActions.actions, null, 2)}
+
+  Your reasoning was: "${userFeedback.lastPlannedActions.thoughts}"
+  Your next goal was: "${userFeedback.lastPlannedActions.nextGoal}"`;
+    }
+
+    feedbackContent += `\n\nPlease carefully consider this feedback and adjust your approach accordingly. The user is helping you correct mistakes or improve your strategy.`;
+
+    messages.push({
+      role: "user",
+      content: feedbackContent,
+    });
   }
 
   // Add elements section with DOM tree

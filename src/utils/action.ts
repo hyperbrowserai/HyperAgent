@@ -1,8 +1,14 @@
+import * as inquirer from "@inquirer/prompts";
 import fs from "fs";
 import prettier from "prettier";
+
 import { HyperAgentConfig } from "@/types";
 
-import { ActionContext } from "@/types";
+export type UserFeedback = {
+  approved: boolean;
+  message?: string;
+  lastPlannedActions?: any; // The agent output that was rejected
+};
 
 export function initActionScript(
   actionLogFile: string,
@@ -83,9 +89,44 @@ export async function wrapUpActionScript(actionLogFile: string) {
   `,
   );
   fs.appendFileSync(actionLogFile, `})();`);
+
+  await formatActionScript(actionLogFile);
+}
+
+export async function formatActionScript(actionLogFile: string) {
   const formatted = await prettier.format(
     fs.readFileSync(actionLogFile, "utf-8"),
     { filepath: actionLogFile },
   );
   fs.writeFileSync(actionLogFile, formatted);
+}
+
+export async function getUserFeedback(
+  timeoutDuration: number = 10000,
+): Promise<UserFeedback> {
+  const userApproval = await Promise.race([
+    inquirer.select({
+      message: "Do you like this planned step?",
+      choices: [
+        { value: "yes", description: "Looks good, let's execute it" },
+        { value: "no", description: "Provide feedback for improvement" },
+      ],
+    }),
+    new Promise<string>((resolve) =>
+      setTimeout(() => resolve("yes"), timeoutDuration),
+    ),
+  ]);
+
+  if (userApproval === "yes") {
+    return { approved: true, message: "User indicated the step went well" };
+  }
+
+  const improvementFeedback = await inquirer.input({
+    message: "Please tell me what you want to improve:",
+    required: true,
+  });
+  return {
+    approved: false,
+    message: `User requested improvement with feedback: "${improvementFeedback}"`,
+  };
 }

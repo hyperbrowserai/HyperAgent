@@ -42,6 +42,7 @@ export const ScrollActionDefinition: AgentActionDefinition = {
         const scrollByUpDown = ${direction === "up" ? "-window.innerHeight" : direction === "down" ? "window.innerHeight" : "0"};
         const scrollByLeftRight = ${direction === "left" ? "-window.innerWidth" : direction === "right" ? "window.innerWidth" : "0"};
         window.scrollBy(scrollByLeftRight, scrollByUpDown);
+        console.log(\`Scrolled \${direction}\`);
       });
     `;
   },
