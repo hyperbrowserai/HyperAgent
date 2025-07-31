@@ -8,10 +8,10 @@
   "type": "commonjs",
   "license": "MIT",
   "scripts": {
-    "build": "rm -rf dist && tsc && tsc-alias && node -e \"require('fs').chmodSync('dist/cli/index.js', '755')\" && node -e \"require('fs').chmodSync('cli.sh', '755')\"",
+    "build": "rimraf dist && tsc && tsc-alias && node -e \"if (process.platform !== 'win32') { require('fs').chmodSync('dist/cli/index.js', '755'); require('fs').chmodSync('cli.sh', '755'); }\"",
     "build-dom-tree-script": "ts-node src/context-providers/dom/builder.ts",
     "lint": "eslint src/**/*.ts",
-    "prepare": "yarn build",
+    "prepare": "npm run build",
     "test": "jest",
     "format": "prettier --write 'src/**/*.ts'",
     "cli": "yarn ts-node -r tsconfig-paths/register src/cli/index.ts",
@@ -77,7 +77,8 @@
     "tsc-alias": "^1.8.15",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "rimraf": "^3.0.2"
   },
   "exports": {
     ".": {
