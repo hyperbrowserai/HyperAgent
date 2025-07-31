@@ -21,10 +21,11 @@ import {
 } from "./agent/types";
 
 // Config Types
-import { MCPServerConfig, MCPConfig, HyperAgentConfig } from "./config";
+import { MCPServerConfig, MCPConfig, HyperAgentConfig, BrowserProviders } from "./config";
 
 // Browser Provider Types
 import BrowserProvider from "./browser-providers/types";
+import { CDPBrowserConfig } from "../browser-providers/cdp";
 
 // Export all types
 export {
@@ -49,9 +50,11 @@ export {
   MCPServerConfig,
   MCPConfig,
   HyperAgentConfig,
+  BrowserProviders,
 
   // Browser Provider Types
   BrowserProvider,
+  CDPBrowserConfig,
   endTaskStatuses,
 };
 

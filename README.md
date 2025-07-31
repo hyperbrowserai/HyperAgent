@@ -128,6 +128,47 @@ console.log(response);
 await agent.closeAgent();
 ```
 
+### Using CDP (Chrome DevTools Protocol)
+
+You can connect HyperAgent to an existing Chrome/Chromium browser instance using the Chrome DevTools Protocol (CDP). This is useful when you want to connect to:
+- A remote Chrome instance
+- Chrome running in a Docker container
+- An existing browser session with specific configurations
+
+```typescript
+import { HyperAgent, CDPBrowserProvider } from "@hyperbrowser/agent";
+
+// Create a CDP browser provider
+const cdpProvider = new CDPBrowserProvider({
+  wsEndpoint: "ws://localhost:9222/devtools/browser", // Your CDP WebSocket endpoint
+  debug: true, // Optional: enable debug logging
+  options: {
+    // Optional: CDP connection options
+    timeout: 30000,
+  }
+});
+
+const agent = new HyperAgent({
+  browserProvider: cdpProvider,
+});
+
+const response = await agent.executeTask(
+  "Go to hackernews, and list me the 5 most recent article titles"
+);
+
+console.log(response);
+await agent.closeAgent();
+```
+
+To start Chrome with CDP enabled:
+```bash
+# Start Chrome with remote debugging enabled
+google-chrome --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0
+
+# Or using Docker
+docker run -d -p 9222:9222 zenika/alpine-chrome --no-sandbox --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222
+```
+
 ## Usage Guide
 
 ### Multi-Page Management

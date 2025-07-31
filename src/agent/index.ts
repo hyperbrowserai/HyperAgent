@@ -27,6 +27,7 @@ import {
 import {
   HyperbrowserProvider,
   LocalBrowserProvider,
+  CDPBrowserProvider,
 } from "../browser-providers";
 import { HyperagentError } from "./error";
 import { MCPClient } from "./mcp/client";
@@ -42,6 +43,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private mcpClient: MCPClient | undefined;
   private browserProvider: T extends "Hyperbrowser"
     ? HyperbrowserProvider
+    : T extends "CDP"
+    ? CDPBrowserProvider
     : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
@@ -84,8 +87,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             ...(params.hyperbrowserConfig ?? {}),
             debug: params.debug,
           })
+        : this.browserProviderType === "CDP"
+        ? new CDPBrowserProvider({
+            ...(params.cdpConfig ?? { wsEndpoint: "" }),
+            debug: params.debug,
+          })
         : new LocalBrowserProvider(params.localConfig)
-    ) as T extends "Hyperbrowser" ? HyperbrowserProvider : LocalBrowserProvider;
+    ) as T extends "Hyperbrowser" 
+      ? HyperbrowserProvider 
+      : T extends "CDP" 
+      ? CDPBrowserProvider 
+      : LocalBrowserProvider;
 
     if (params.customActions) {
       params.customActions.forEach(this.registerAction, this);

@@ -4,6 +4,7 @@ import { AgentActionDefinition } from "./agent/actions/types";
 import {
   HyperbrowserProvider,
   LocalBrowserProvider,
+  CDPBrowserProvider,
 } from "@/browser-providers";
 
 export interface MCPServerConfig {
@@ -54,7 +55,7 @@ export interface MCPConfig {
   servers: MCPServerConfig[];
 }
 
-export type BrowserProviders = "Local" | "Hyperbrowser";
+export type BrowserProviders = "Local" | "Hyperbrowser" | "CDP";
 
 export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
   customActions?: Array<AgentActionDefinition>;
@@ -69,4 +70,5 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
     "debug"
   >;
   localConfig?: ConstructorParameters<typeof LocalBrowserProvider>[0];
+  cdpConfig?: ConstructorParameters<typeof CDPBrowserProvider>[0];
 }
