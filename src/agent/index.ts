@@ -122,7 +122,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async initBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await this.browserProvider.start();
-      this.context = await this.browser.newContext({
+      const defaltContext =  this.browser.contexts().at(0)
+      this.context = defaltContext || await this.browser.newContext({
         viewport: null,
       });
 

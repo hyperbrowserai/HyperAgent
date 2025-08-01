@@ -130,6 +130,34 @@ await agent.closeAgent();
 
 ## Usage Guide
 
+### Config Browser with playwright endpointURL
+
+- **`endpointURL`**: A CDP WebSocket endpoint or HTTP URL to connect to. For example, `http://localhost:9222/` or `ws://127.0.0.1:9222/devtools/browser/387adf4c-243f-4051-a181-46798f4a46f4`.
+- **`slowMo`**: Slows down operations by the specified number of milliseconds for debugging purposes.
+- **`args`**: An array of custom arguments to pass to the browser instance.
+
+These options provide flexibility for connecting to remote browsers or customizing the browser's behavior during automation.
+
+```typescript
+import { HyperAgent } from "@hyperbrowser/agent";
+
+const agent = new HyperAgent({
+  options: {
+    endpointURL: "ws://localhost:3000", // or http://localhost:9222 Connect to a remote browser
+    slowMo: 50, // Slow down operations for debugging
+  },
+});
+
+// Use the agent as usual
+const result = await agent.executeTask(
+  "Navigate to example.com and extract the page title"
+);
+console.log(result.output);
+
+// Clean up
+await agent.closeAgent();
+```
+
 ### Multi-Page Management
 
 ```typescript
