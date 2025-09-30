@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graph xmlns="urn:app:graph" version="1.0" directed="true">
+  <nodes>
+    <node id="core-agent-system" title="Core Agent System" x="747.0142000095334" y="426.43320729289155" z="0">
+      <description>The central orchestration engine for HyperAgent that manages task execution, LLM interactions, and action coordination. This system handles the main agent lifecycle including task planning, step execution, and state management.</description>
+      <metadata>
+        <file>src/agent/index.ts</file>
+        <file>src/agent/tools/agent.ts</file>
+        <file>src/agent/tools/types.ts</file>
+        <file>src/agent/error.ts</file>
+        <file>src/agent/llms/structured-output.ts</file>
+      </metadata>
+      <props>
+        <prop name="llm-provider" title="LLM Provider" type="select">
+          <value>OpenAI</value>
+          <options>
+          <option>OpenAI</option>
+          <option>Anthropic</option>
+          <option>Custom</option>
+          </options>
+        </prop>
+        <prop name="token-limit" title="Token Limit" type="number" min="1000" max="500000">128000</prop>
+        <prop name="debug-mode" title="Debug Mode" type="boolean">false</prop>
+        <prop name="task-management" title="Task Management" type="object">
+        <field name="max-concurrent-tasks" title="Max Concurrent Tasks" type="number" min="1" max="10">0</field>
+        <field name="task-timeout" title="Task Timeout (ms)" type="number" min="10000">0</field>
+      </prop>
+        <prop name="error-handling" title="Error Handling Configuration" type="object">
+        <field name="retry-attempts" title="Retry Attempts" type="number" min="0" max="10">0</field>
+        <field name="error-recovery" title="Error Recovery Strategy" type="select">
+          <value></value>
+          <options>
+          <option>immediate</option>
+          <option>graceful</option>
+          <option>continue</option>
+          </options>
+        </field>
+      </prop>
+      </props>
+    </node>
+
+    <node id="browser-integration-layer" title="Browser Integration Layer" x="81.23875654241732" y="530.2691892105461" z="0">
+      <description>The browser control and interaction layer that provides abstracted access to different browser providers (Local Playwright and Hyperbrowser cloud). This layer manages browser sessions, page navigation, and browser-specific operations.</description>
+      <metadata>
+        <file>src/browser-providers/index.ts</file>
+        <file>src/browser-providers/local.ts</file>
+        <file>src/browser-providers/hyperbrowser.ts</file>
+        <file>src/types/browser-providers/types.ts</file>
+      </metadata>
+      <props>
+        <prop name="provider-type" title="Browser Provider" type="select">
+          <value>Local</value>
+          <options>
+          <option>Local</option>
+          <option>Hyperbrowser</option>
+          </options>
+        </prop>
+        <prop name="browser-config" title="Browser Configuration" type="object">
+        <field name="headless" title="Headless Mode" type="boolean">false</field>
+        <field name="viewport-width" title="Viewport Width" type="number" min="800">0</field>
+        <field name="viewport-height" title="Viewport Height" type="number" min="600">0</field>
+      </prop>
+        <prop name="hyperbrowser-config" title="Hyperbrowser Configuration" type="object">
+        <field name="api-key" title="API Key" type="text"></field>
+        <field name="region" title="Region" type="select">
+          <value></value>
+          <options>
+          <option>us-east-1</option>
+          <option>eu-west-1</option>
+          <option>ap-southeast-1</option>
+          </options>
+        </field>
+      </prop>
+        <prop name="session-management" title="Session Management" type="object">
+        <field name="session-timeout" title="Session Timeout (ms)" type="number" min="60000">0</field>
+        <field name="auto-cleanup" title="Auto Cleanup" type="boolean">false</field>
+      </prop>
+      </props>
+    </node>
+
+    <node id="context-extraction-engine" title="Context Extraction Engine" x="65.69834547226353" y="251.02096599510628" z="0">
+      <description>The data extraction and context gathering system that analyzes web pages to extract meaningful information for the agent. This includes DOM analysis, interactive element detection, screenshot processing, and content conversion to markdown.</description>
+      <metadata>
+        <file>src/context-providers/dom/index.ts</file>
+        <file>src/context-providers/dom/build-dom-view.ts</file>
+        <file>src/context-providers/dom/find-interactive-elements.ts</file>
+        <file>src/context-providers/dom/highlight.ts</file>
+        <file>src/context-providers/dom/inject/build-dom-view.ts</file>
+        <file>src/context-providers/dom/types.ts</file>
+        <file>src/utils/html-to-markdown.ts</file>
+      </metadata>
+      <props>
+        <prop name="dom-analysis" title="DOM Analysis Configuration" type="object">
+        <field name="max-elements" title="Max Elements to Analyze" type="number" min="100" max="5000">0</field>
+        <field name="element-depth" title="Maximum DOM Depth" type="number" min="3" max="20">0</field>
+      </prop>
+        <prop name="interactive-detection" title="Interactive Element Detection" type="object">
+        <field name="highlight-elements" title="Highlight Interactive Elements" type="boolean">false</field>
+        <field name="detect-listeners" title="Detect Event Listeners" type="boolean">false</field>
+      </prop>
+        <prop name="content-processing" title="Content Processing" type="object">
+        <field name="markdown-conversion" title="Convert to Markdown" type="boolean">false</field>
+        <field name="preserve-structure" title="Preserve HTML Structure" type="boolean">false</field>
+      </prop>
+        <prop name="screenshot-config" title="Screenshot Configuration" type="object">
+        <field name="full-page" title="Full Page Screenshot" type="boolean">false</field>
+        <field name="quality" title="Screenshot Quality" type="slider" min="10" max="100"></field>
+      </prop>
+      </props>
+    </node>
+
+    <node id="action-execution-system" title="Action Execution System" x="-140.12816977236864" y="859.5045627601769" z="0">
+      <description>The action execution system that provides a comprehensive set of browser automation actions including clicking, typing, navigation, and data extraction. This system handles action validation, execution, and result formatting for agent operations.</description>
+      <metadata>
+        <file>src/agent/actions/index.ts</file>
+        <file>src/agent/actions/click-element.ts</file>
+        <file>src/agent/actions/input-text.ts</file>
+        <file>src/agent/actions/go-to-url.ts</file>
+        <file>src/agent/actions/scroll.ts</file>
+        <file>src/agent/actions/extract.ts</file>
+        <file>src/agent/actions/complete.ts</file>
+        <file>src/agent/actions/key-press.ts</file>
+        <file>src/agent/actions/select-option.ts</file>
+        <file>src/agent/actions/pdf.ts</file>
+        <file>src/agent/actions/utils.ts</file>
+        <file>src/types/agent/actions/types.ts</file>
+      </metadata>
+      <props>
+        <prop name="default-actions" title="Default Actions Available" type="object-list">
+        <item index="0">
+          <field name="name" title="Action Name" type="text">click-element</field>
+          <field name="enabled" title="Enabled" type="boolean">true</field>
+        </item>
+        <item index="1">
+          <field name="name" title="Action Name" type="text">input-text</field>
+          <field name="enabled" title="Enabled" type="boolean">true</field>
+        </item>
+        <item index="2">
+          <field name="name" title="Action Name" type="text">go-to-url</field>
+          <field name="enabled" title="Enabled" type="boolean">true</field>
+        </item>
+        <item index="3">
+          <field name="name" title="Action Name" type="text">scroll</field>
+          <field name="enabled" title="Enabled" type="boolean">true</field>
+        </item>
+        <item index="4">
+          <field name="name" title="Action Name" type="text">extract</field>
+          <field name="enabled" title="Enabled" type="boolean">true</field>
+        </item>
+      </prop>
+        <prop name="action-timeout" title="Action Timeout (ms)" type="number" min="1000" max="120000">30000</prop>
+        <prop name="retry-config" title="Retry Configuration" type="object">
+        <field name="max-retries" title="Max Retries per Action" type="number" min="0" max="10">0</field>
+        <field name="retry-delay" title="Retry Delay (ms)" type="number" min="100" max="10000">0</field>
+      </prop>
+        <prop name="validation" title="Action Validation" type="object">
+        <field name="strict-validation" title="Strict Parameter Validation" type="boolean">false</field>
+        <field name="element-visibility" title="Check Element Visibility" type="boolean">false</field>
+      </prop>
+      </props>
+    </node>
+
+    <node id="cli-interface-system" title="CLI Interface System" x="515.7368944696899" y="137.6932709830838" z="0">
+      <description>The command-line interface that provides user interaction capabilities for HyperAgent. This system handles user input, task management controls, progress visualization, and interactive prompts for a seamless terminal-based experience.</description>
+      <metadata>
+        <file>src/cli/index.ts</file>
+      </metadata>
+      <props>
+        <prop name="interaction-mode" title="Interaction Mode" type="select">
+          <value>interactive</value>
+          <options>
+          <option>interactive</option>
+          <option>command</option>
+          <option>file</option>
+          </options>
+        </prop>
+        <prop name="display-config" title="Display Configuration" type="object">
+        <field name="show-progress" title="Show Progress Spinner" type="boolean">false</field>
+        <field name="colored-output" title="Colored Output" type="boolean">false</field>
+        <field name="boxed-results" title="Boxed Results" type="boolean">false</field>
+      </prop>
+        <prop name="controls" title="Task Controls" type="object">
+        <field name="pause-key" title="Pause Key Combination" type="text"></field>
+        <field name="resume-key" title="Resume Key Combination" type="text"></field>
+        <field name="cancel-key" title="Cancel Key Combination" type="text"></field>
+      </prop>
+        <prop name="input-validation" title="Input Validation" type="object">
+        <field name="require-confirmation" title="Require Confirmation for Actions" type="boolean">false</field>
+        <field name="validate-files" title="Validate File Paths" type="boolean">false</field>
+      </prop>
+      </props>
+    </node>
+
+    <node id="mcp-integration-layer" title="MCP Integration Layer" x="713.9171452106307" y="813.2572261536488" z="0">
+      <description>The Model Context Protocol (MCP) integration system that enables HyperAgent to connect with external tools and services. This layer manages MCP server connections, tool registration, and provides extensible capabilities through protocol-based integrations.</description>
+      <metadata>
+        <file>src/agent/mcp/client.ts</file>
+        <file>src/types/config.ts</file>
+      </metadata>
+      <props>
+        <prop name="connection-types" title="Supported Connection Types" type="object-list">
+        <item index="0">
+          <field name="type" title="Type" type="select">
+          <value>stdio</value>
+          <options>
+          <option>stdio</option>
+          <option>sse</option>
+          </options>
+        </field>
+          <field name="enabled" title="Enabled" type="boolean">true</field>
+        </item>
+        <item index="1">
+          <field name="type" title="Type" type="select">
+          <value>sse</value>
+          <options>
+          <option>stdio</option>
+          <option>sse</option>
+          </options>
+        </field>
+          <field name="enabled" title="Enabled" type="boolean">true</field>
+        </item>
+      </prop>
+        <prop name="server-config" title="Server Configuration" type="object">
+        <field name="max-servers" title="Max Concurrent Servers" type="number" min="1" max="50">0</field>
+        <field name="connection-timeout" title="Connection Timeout (ms)" type="number" min="5000" max="120000">0</field>
+      </prop>
+        <prop name="tool-filtering" title="Tool Filtering" type="object">
+        <field name="allow-include-exclude" title="Allow Include/Exclude Lists" type="boolean">false</field>
+        <field name="default-include-all" title="Include All Tools by Default" type="boolean">false</field>
+      </prop>
+        <prop name="mcp-integration-layer-error-handling" title="Error Handling" type="object">
+        <field name="auto-reconnect" title="Auto Reconnect on Failure" type="boolean">false</field>
+        <field name="retry-attempts" title="Retry Attempts" type="number" min="0" max="10">0</field>
+      </prop>
+      </props>
+    </node>
+
+    <node id="custom-actions-framework" title="Custom Actions Framework" x="883.1099044647117" y="-111.73012848411696" z="0">
+      <description>The extensible custom actions framework that allows users to define and register custom automation behaviors. This system provides user interaction capabilities and serves as a foundation for extending HyperAgent&apos;s functionality beyond built-in actions.</description>
+      <metadata>
+        <file>src/custom-actions/index.ts</file>
+        <file>src/custom-actions/user-interaction.ts</file>
+      </metadata>
+      <props>
+        <prop name="user-interaction" title="User Interaction Support" type="object">
+        <field name="text-input" title="Text Input" type="boolean">false</field>
+        <field name="password-input" title="Password Input" type="boolean">false</field>
+        <field name="confirmation" title="Confirmation Dialogs" type="boolean">false</field>
+        <field name="choice-selection" title="Choice Selection" type="boolean">false</field>
+      </prop>
+        <prop name="action-registration" title="Action Registration" type="object">
+        <field name="allow-override" title="Allow Action Override" type="boolean">false</field>
+        <field name="validate-schema" title="Validate Action Schema" type="boolean">false</field>
+        <field name="max-custom-actions" title="Max Custom Actions" type="number" min="1" max="200">0</field>
+      </prop>
+        <prop name="execution-context" title="Execution Context" type="object">
+        <field name="isolated-execution" title="Isolated Execution" type="boolean">false</field>
+        <field name="timeout" title="Action Timeout (ms)" type="number" min="1000" max="300000">0</field>
+      </prop>
+        <prop name="security" title="Security Configuration" type="object">
+        <field name="sandbox-mode" title="Sandbox Mode" type="boolean">false</field>
+        <field name="restrict-file-access" title="Restrict File Access" type="boolean">false</field>
+      </prop>
+      </props>
+    </node>
+
+    <node id="utilities-infrastructure" title="Utilities &amp; Infrastructure" x="-145.5874175495463" y="-130.88433874077162" z="0">
+      <description>The supporting infrastructure and utility components that provide foundational services across HyperAgent. This includes error handling, retry mechanisms, HTML processing, type definitions, and other shared utilities that enable the core functionality.</description>
+      <metadata>
+        <file>src/utils/index.ts</file>
+        <file>src/utils/error-emitter.ts</file>
+        <file>src/utils/retry.ts</file>
+        <file>src/utils/sleep.ts</file>
+        <file>src/utils/html-to-markdown.ts</file>
+        <file>src/types/index.ts</file>
+        <file>src/types/agent/types.ts</file>
+        <file>src/types/config.ts</file>
+      </metadata>
+      <props>
+        <prop name="error-management" title="Error Management" type="object">
+        <field name="error-emitter" title="Error Emitter Enabled" type="boolean">false</field>
+        <field name="stack-traces" title="Include Stack Traces" type="boolean">false</field>
+        <field name="error-logging" title="Error Logging" type="boolean">false</field>
+      </prop>
+        <prop name="retry-mechanisms" title="Retry Mechanisms" type="object">
+        <field name="default-retries" title="Default Retry Count" type="number" min="0" max="10">0</field>
+        <field name="exponential-backoff" title="Exponential Backoff" type="boolean">false</field>
+        <field name="max-delay" title="Max Delay (ms)" type="number" min="100" max="60000">0</field>
+      </prop>
+        <prop name="utilities-infrastructure-content-processing" title="Content Processing" type="object">
+        <field name="html-to-markdown" title="HTML to Markdown Conversion" type="boolean">false</field>
+        <field name="preserve-links" title="Preserve Links" type="boolean">false</field>
+        <field name="clean-whitespace" title="Clean Whitespace" type="boolean">false</field>
+      </prop>
+        <prop name="type-safety" title="Type Safety" type="object">
+        <field name="strict-types" title="Strict Type Checking" type="boolean">false</field>
+        <field name="runtime-validation" title="Runtime Validation" type="boolean">false</field>
+      </prop>
+      </props>
+    </node>
+
+    <node id="examples-documentation" title="Examples &amp; Documentation" x="1158.4964464308791" y="322.7680094431557" z="0">
+      <description>The examples and documentation system that provides usage patterns, integration samples, and implementation guides for HyperAgent. This includes examples for different LLM providers, browser configurations, MCP integrations, and custom tool implementations.</description>
+      <metadata>
+        <file>examples/llms/anthropic.ts</file>
+        <file>examples/llms/openai.ts</file>
+        <file>examples/browser-providers/hyperbrowser.ts</file>
+        <file>examples/mcp/google-sheets/best-buy-reviews.ts</file>
+        <file>examples/mcp/google-sheets/car-price-comparison.ts</file>
+        <file>examples/mcp/notion/create-shopping-list.ts</file>
+        <file>examples/custom-tool/search/exa.ts</file>
+        <file>examples/simple/add-to-amazon-cart.ts</file>
+        <file>examples/output-to-schema/output-to-schema.ts</file>
+      </metadata>
+      <props>
+        <prop name="example-categories" title="Example Categories" type="object-list">
+        <item index="0">
+          <field name="name" title="Category Name" type="text">LLM Providers</field>
+          <field name="count" title="Example Count" type="number">2</field>
+        </item>
+        <item index="1">
+          <field name="name" title="Category Name" type="text">Browser Providers</field>
+          <field name="count" title="Example Count" type="number">1</field>
+        </item>
+        <item index="2">
+          <field name="name" title="Category Name" type="text">MCP Integrations</field>
+          <field name="count" title="Example Count" type="number">5</field>
+        </item>
+        <item index="3">
+          <field name="name" title="Category Name" type="text">Custom Tools</field>
+          <field name="count" title="Example Count" type="number">2</field>
+        </item>
+        <item index="4">
+          <field name="name" title="Category Name" type="text">Simple Tasks</field>
+          <field name="count" title="Example Count" type="number">1</field>
+        </item>
+      </prop>
+        <prop name="documentation-format" title="Documentation Format" type="object">
+        <field name="typescript-examples" title="TypeScript Examples" type="boolean">false</field>
+        <field name="inline-comments" title="Inline Comments" type="boolean">false</field>
+        <field name="step-by-step" title="Step-by-Step Guides" type="boolean">false</field>
+      </prop>
+        <prop name="integration-examples" title="Integration Examples" type="object">
+        <field name="mcp-servers" title="MCP Server Examples" type="boolean">false</field>
+        <field name="custom-actions" title="Custom Action Examples" type="boolean">false</field>
+        <field name="schema-output" title="Schema Output Examples" type="boolean">false</field>
+      </prop>
+        <prop name="maintenance" title="Example Maintenance" type="object">
+        <field name="auto-testing" title="Automated Testing" type="boolean">false</field>
+        <field name="version-sync" title="Version Synchronization" type="boolean">false</field>
+      </prop>
+      </props>
+    </node>
+  </nodes>
+
+  <edges>
+    <edge id="core-agent-system-browser-integration-layer" source="core-agent-system" target="browser-integration-layer" role="controls"/>
+    <edge id="core-agent-system-action-execution-system" source="core-agent-system" target="action-execution-system" role="orchestrates"/>
+    <edge id="core-agent-system-context-extraction-engine" source="core-agent-system" target="context-extraction-engine" role="uses"/>
+    <edge id="core-agent-system-mcp-integration-layer" source="core-agent-system" target="mcp-integration-layer" role="integrates"/>
+    <edge id="core-agent-system-custom-actions-framework" source="core-agent-system" target="custom-actions-framework" role="extends"/>
+    <edge id="core-agent-system-utilities-infrastructure" source="core-agent-system" target="utilities-infrastructure" role="depends_on"/>
+    <edge id="cli-interface-system-core-agent-system" source="cli-interface-system" target="core-agent-system" role="interfaces_with"/>
+    <edge id="cli-interface-system-custom-actions-framework" source="cli-interface-system" target="custom-actions-framework" role="uses"/>
+    <edge id="action-execution-system-browser-integration-layer" source="action-execution-system" target="browser-integration-layer" role="executes_on"/>
+    <edge id="context-extraction-engine-browser-integration-layer" source="context-extraction-engine" target="browser-integration-layer" role="analyzes"/>
+    <edge id="context-extraction-engine-utilities-infrastructure" source="context-extraction-engine" target="utilities-infrastructure" role="depends_on"/>
+    <edge id="action-execution-system-utilities-infrastructure" source="action-execution-system" target="utilities-infrastructure" role="depends_on"/>
+    <edge id="custom-actions-framework-utilities-infrastructure" source="custom-actions-framework" target="utilities-infrastructure" role="depends_on"/>
+    <edge id="mcp-integration-layer-action-execution-system" source="mcp-integration-layer" target="action-execution-system" role="provides_actions_to"/>
+    <edge id="examples-documentation-core-agent-system" source="examples-documentation" target="core-agent-system" role="demonstrates"/>
+    <edge id="examples-documentation-mcp-integration-layer" source="examples-documentation" target="mcp-integration-layer" role="demonstrates"/>
+    <edge id="examples-documentation-custom-actions-framework" source="examples-documentation" target="custom-actions-framework" role="demonstrates"/>
+  </edges>
+</graph>
