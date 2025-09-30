@@ -149,12 +149,13 @@ export const runAgentTask = async (
     }
 
     // Get DOM State
-    const domState = await retry({ func: () => getDom(page) });
-    if (!domState) {
-      console.log("no dom state, waiting 1 second.");
-      await sleep(1000);
-      continue;
-    }
+    const domState = await retry({
+      func: async () => {
+        const s = await getDom(page);
+        if (!s) throw new Error("no dom state");
+        return s;
+      },
+    });
 
     const trimmedScreenshot = await compositeScreenshot(
       page,
