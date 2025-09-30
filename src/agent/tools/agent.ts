@@ -155,6 +155,9 @@ export const runAgentTask = async (
         if (!s) throw new Error("no dom state");
         return s;
       },
+      params: {
+        retryCount: 3,
+      },
     });
 
     const trimmedScreenshot = await compositeScreenshot(
