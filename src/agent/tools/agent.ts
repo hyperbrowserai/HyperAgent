@@ -149,16 +149,35 @@ export const runAgentTask = async (
     }
 
     // Get DOM State
-    const domState = await retry({
-      func: async () => {
-        const s = await getDom(page);
-        if (!s) throw new Error("no dom state");
-        return s;
-      },
-      params: {
-        retryCount: 3,
-      },
-    });
+    let domState: DOMState | null = null;
+    try {
+      domState = await retry({
+        func: async () => {
+          const s = await getDom(page);
+          if (!s) throw new Error("no dom state");
+          return s;
+        },
+        params: {
+          retryCount: 3,
+        },
+      });
+    } catch (error) {
+      if (ctx.debug) {
+        console.log(
+          "Failed to retrieve DOM state after 3 retries. Cancelling task.",
+          error
+        );
+      }
+      taskState.status = TaskStatus.FAILED;
+      taskState.error = "Failed to retrieve DOM state";
+      break;
+    }
+
+    if (!domState) {
+      taskState.status = TaskStatus.FAILED;
+      taskState.error = "Failed to retrieve DOM state";
+      break;
+    }
 
     const trimmedScreenshot = await compositeScreenshot(
       page,
