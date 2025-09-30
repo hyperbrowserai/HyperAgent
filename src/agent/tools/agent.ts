@@ -164,7 +164,7 @@ export const runAgentTask = async (
     } catch (error) {
       if (ctx.debug) {
         console.log(
-          "Failed to retrieve DOM state after 3 retries. Cancelling task.",
+          "Failed to retrieve DOM state after 3 retries. Failing task.",
           error
         );
       }
