@@ -43,9 +43,6 @@ ${EXAMPLE_ACTIONS}
 - Before using "complete", verify you have gathered all requested information and met all task requirements
 - Include detailed results in the "complete" action's text parameter to show how you satisfied each requirement
 
-2. Validation:
-- Before you finish up your task, call the taskCompleteValidation. It will double check your task and it's subtasks. That will be used to see if you're done with all tasks and subtasks of that at this point. You **MUST** run this before performing a tool call to the "complete" tool.
-
 # Guidelines
 1. NAVIGATION
 - If no suitable elements exist, use other functions to complete the task
