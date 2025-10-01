@@ -3,6 +3,7 @@ import { ClickElementActionDefinition } from "./click-element";
 import { InputTextActionDefinition } from "./input-text";
 import { CompleteActionDefinition } from "./complete";
 import { generateCompleteActionWithOutputDefinition } from "./complete-with-output-schema";
+import { CompletionValidateActionDefinition } from "./complete-validator";
 import { ExtractActionDefinition } from "./extract";
 import { SelectOptionActionDefinition } from "./select-option";
 import { ScrollActionDefinition } from "./scroll";
@@ -41,6 +42,7 @@ const DEFAULT_ACTIONS = [
   InputTextActionDefinition,
   KeyPressActionDefinition,
   ThinkingActionDefinition,
+  CompletionValidateActionDefinition,
 ];
 
 if (process.env.GEMINI_API_KEY) {
@@ -49,6 +51,7 @@ if (process.env.GEMINI_API_KEY) {
 
 export {
   DEFAULT_ACTIONS,
+  CompletionValidateActionDefinition,
   CompleteActionDefinition,
   generateCompleteActionWithOutputDefinition,
 };

@@ -152,6 +152,10 @@ const pages = await agent.getPages();
 await agent.closeAgent();
 ```
 
+### Task Completion Validation
+
+HyperAgent now registers a `taskCompleteValidation` action in the default toolset. The system prompt expects this action to run right before the final `complete` call so the agent can report how each subtask was satisfied. The action is always present, including when you supply an output schema, so you do not need to inject it manually.
+
 ## Customization
 
 ### Output Schema Definition
