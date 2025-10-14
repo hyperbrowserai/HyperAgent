@@ -1,25 +1,25 @@
 /**
- * # OpenAI LLM Integration Example
+ * # Google Gemini LLM Integration Example
  *
- * This example demonstrates how to configure and use HyperAgent with OpenAI's
- * language models for web automation tasks.
+ * This example demonstrates how to configure and use HyperAgent with Google's
+ * Gemini language models for web automation tasks.
  *
  * ## What This Example Does
  *
  * The agent performs a web scraping task that:
- * 1. Configures HyperAgent with OpenAI's GPT-4 model
+ * 1. Configures HyperAgent with Google's Gemini model
  * 2. Navigates to Hacker News
  * 3. Searches for and extracts information about "Show HN" posts
  *
  * ## Prerequisites
  *
  * 1. Node.js environment
- * 2. OpenAI API key set in your .env file (OPENAI_API_KEY)
+ * 2. Google API key set in your .env file (GEMINI_API_KEY or GOOGLE_API_KEY)
  *
  * ## Running the Example
  *
  * ```bash
- * yarn ts-node -r tsconfig-paths/register examples/llms/openai.ts
+ * yarn ts-node -r tsconfig-paths/register examples/llms/gemini.ts
  * ```
  */
 
@@ -34,13 +34,12 @@ const TASK =
 async function runEval() {
   const agent = new HyperAgent({
     llm: {
-      provider: "openai",
-      model: "gpt-4o",
+      provider: "gemini",
+      model: "gemini-2.5-pro-preview-03-25",
     },
-    debug: true,
   });
 
-  console.log(`\n${chalk.green("Running agent with GPT-4o")}\n`);
+  console.log(`\n${chalk.green("Running agent with Gemini 2.5 Pro")}\n`);
 
   const result = await agent.executeTask(TASK, {
     debugOnAgentOutput: (agentOutput) => {

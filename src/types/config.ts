@@ -1,5 +1,5 @@
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AgentActionDefinition } from "./agent/actions/types";
+import { HyperAgentLLM, LLMConfig } from "@/llm/providers";
 
 import {
   HyperbrowserProvider,
@@ -62,7 +62,7 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
   browserProvider?: T;
 
   debug?: boolean;
-  llm?: BaseChatModel;
+  llm?: HyperAgentLLM | LLMConfig;
 
   hyperbrowserConfig?: Omit<
     NonNullable<ConstructorParameters<typeof HyperbrowserProvider>[0]>,

@@ -27,19 +27,16 @@ import "dotenv/config";
 import HyperAgent from "@hyperbrowser/agent";
 
 import chalk from "chalk";
-import { ChatAnthropic } from "@langchain/anthropic";
 
 const TASK =
   "Go to hackernews, and find if there's any SHOW HN post up there. If it is, then tell me the title of the post.";
 
 async function runEval() {
-  const llm = new ChatAnthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    model: "claude-3-7-sonnet-latest",
-  });
-
   const agent = new HyperAgent({
-    llm: llm,
+    llm: {
+      provider: "anthropic",
+      model: "claude-3-7-sonnet-latest",
+    },
   });
 
   console.log(`\n${chalk.green("Running agent with Claude Sonnet 3.7")}\n`);

@@ -1,6 +1,6 @@
 import { AgentActionDefinition } from "@/types/agent/actions/types";
 import { MCPClient } from "../mcp/client";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { HyperAgentLLM } from "@/llm/types";
 import { HyperVariable } from "@/types/agent/types";
 
 export interface AgentCtx {
@@ -10,5 +10,5 @@ export interface AgentCtx {
   variables: Record<string, HyperVariable>;
   actions: Array<AgentActionDefinition>;
   tokenLimit: number;
-  llm: BaseChatModel;
+  llm: HyperAgentLLM;
 }

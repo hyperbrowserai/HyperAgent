@@ -1,11 +1,11 @@
 import { HyperAgent } from "../src/agent";
+import { createLLMClient } from "../src/llm/providers";
 import dotenv from "dotenv";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
 import { sleep } from "../src/utils/sleep";
 import { retry } from "../src/utils/retry";
-import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
 import { minimatch } from "minimatch";
 
@@ -131,15 +131,15 @@ async function checkAnswerAgainstReference(
 
   const messages = [
     {
-      role: "system",
+      role: "system" as const,
       content:
         "You are an evaluator checking if a web navigation agent correctly answered a question. Your task is to verify the agent's answer by examining the final webpage screenshot and comparing it to a reference answer. Focus primarily on the visual evidence in the screenshot rather than just comparing text answers.",
     },
     {
-      role: "user",
+      role: "user" as const,
       content: [
         {
-          type: "text",
+          type: "text" as const,
           text: `Question: ${question}
 
 Reference Answer: ${reference}
@@ -156,22 +156,31 @@ Please evaluate if the generated answer is correct by:
 Respond in JSON format with { isCorrect: true | false, reason: string }`,
         },
         {
-          type: "image_url",
-          image_url: {
-            url: imageUrl,
-          },
+          type: "image" as const,
+          url: imageUrl,
+          mimeType: "image/png",
         },
       ],
     },
   ];
 
-  const llm = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+  const llm = createLLMClient({
+    provider: "openai",
     model: "gpt-4o",
   });
-  return await llm
-    .withStructuredOutput(AnswerEvaluationSchema)
-    .invoke(messages);
+
+  const result = await llm.invokeStructured(
+    {
+      schema: AnswerEvaluationSchema,
+    },
+    messages
+  );
+
+  if (!result.parsed) {
+    throw new Error("Failed to get structured output from LLM");
+  }
+
+  return result.parsed;
 }
 
 async function runEvalHelper(
@@ -287,14 +296,13 @@ const runEval = async (
   runId: string
 ): Promise<EvalResult> => {
   const logger = new Logger(runId, eval_data.id);
-  const llm = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-4o",
-  });
   const agent = new HyperAgent({
-    llm: llm,
+    llm: {
+      provider: "openai",
+      model: "gpt-4o",
+    },
     hyperbrowserConfig: {
-      hyperbrowserSessionOptions: {
+      sessionConfig: {
         screen: { width: 1500, height: 1500 },
       },
     },

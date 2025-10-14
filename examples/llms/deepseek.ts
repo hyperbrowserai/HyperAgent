@@ -1,25 +1,25 @@
 /**
- * # OpenAI LLM Integration Example
+ * # DeepSeek LLM Integration Example
  *
- * This example demonstrates how to configure and use HyperAgent with OpenAI's
+ * This example demonstrates how to configure and use HyperAgent with DeepSeek's
  * language models for web automation tasks.
  *
  * ## What This Example Does
  *
  * The agent performs a web scraping task that:
- * 1. Configures HyperAgent with OpenAI's GPT-4 model
+ * 1. Configures HyperAgent with DeepSeek's model
  * 2. Navigates to Hacker News
  * 3. Searches for and extracts information about "Show HN" posts
  *
  * ## Prerequisites
  *
  * 1. Node.js environment
- * 2. OpenAI API key set in your .env file (OPENAI_API_KEY)
+ * 2. DeepSeek API key set in your .env file (DEEPSEEK_API_KEY)
  *
  * ## Running the Example
  *
  * ```bash
- * yarn ts-node -r tsconfig-paths/register examples/llms/openai.ts
+ * yarn ts-node -r tsconfig-paths/register examples/llms/deepseek.ts
  * ```
  */
 
@@ -34,13 +34,13 @@ const TASK =
 async function runEval() {
   const agent = new HyperAgent({
     llm: {
-      provider: "openai",
-      model: "gpt-4o",
+      provider: "deepseek",
+      model: "deepseek-chat",
     },
     debug: true,
   });
 
-  console.log(`\n${chalk.green("Running agent with GPT-4o")}\n`);
+  console.log(`\n${chalk.green("Running agent with DeepSeek")}\n`);
 
   const result = await agent.executeTask(TASK, {
     debugOnAgentOutput: (agentOutput) => {

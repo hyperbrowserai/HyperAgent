@@ -1,5 +1,3 @@
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { ChatOpenAI } from "@langchain/openai";
 import { Browser, BrowserContext, Page } from "patchright";
 import { v4 as uuidv4 } from "uuid";
 
@@ -9,6 +7,7 @@ import {
   MCPConfig,
   MCPServerConfig,
 } from "@/types/config";
+import { HyperAgentLLM, createLLMClient } from "@/llm/providers";
 import {
   ActionType,
   AgentActionDefinition,
@@ -36,7 +35,7 @@ import { z } from "zod";
 import { ErrorEmitter } from "@/utils";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
-  private llm: BaseChatModel;
+  private llm: HyperAgentLLM;
   private tasks: Record<string, TaskState> = {};
   private tokenLimit = 128000;
   private debug = false;
@@ -67,15 +66,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   constructor(params: HyperAgentConfig<T> = {}) {
     if (!params.llm) {
       if (process.env.OPENAI_API_KEY) {
-        this.llm = new ChatOpenAI({
-          openAIApiKey: process.env.OPENAI_API_KEY,
-          modelName: "gpt-4o",
+        this.llm = createLLMClient({
+          provider: "openai",
+          model: "gpt-4o",
           temperature: 0,
         });
       } else {
         throw new HyperagentError("No LLM provider provided", 400);
       }
+    } else if (typeof params.llm === "object" && "provider" in params.llm) {
+      // It's an LLMConfig
+      this.llm = createLLMClient(params.llm);
     } else {
+      // It's already a HyperAgentLLM instance
       this.llm = params.llm;
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;

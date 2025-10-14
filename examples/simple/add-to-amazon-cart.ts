@@ -26,18 +26,15 @@
 import "dotenv/config";
 import { HyperAgent } from "@hyperbrowser/agent";
 import chalk from "chalk";
-import { ChatOpenAI } from "@langchain/openai";
 
 async function runEval() {
   console.log(chalk.cyan.bold("\n===== Running Add to amazon Example ====="));
 
-  const llm = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-4o",
-  });
-
   const agent = new HyperAgent({
-    llm: llm,
+    llm: {
+      provider: "openai",
+      model: "gpt-4o",
+    },
   });
 
   const result = await agent.executeTask(

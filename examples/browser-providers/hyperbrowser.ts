@@ -25,21 +25,19 @@
 
 import "dotenv/config";
 import { HyperAgent } from "@hyperbrowser/agent";
-import { ChatOpenAI } from "@langchain/openai";
+// Removed LangChain import - using native SDK configuration
 import chalk from "chalk";
 
 async function runEval() {
-  const llm = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-4o",
-  });
-
   const agent = new HyperAgent({
-    llm: llm,
+    llm: {
+      provider: "openai",
+      model: "gpt-4o",
+    },
     debug: true,
     browserProvider: "Hyperbrowser",
     hyperbrowserConfig: {
-      hyperbrowserSessionOptions: {
+      sessionConfig: {
         useProxy: true,
       },
     },

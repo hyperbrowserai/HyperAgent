@@ -9,7 +9,7 @@ export const ExtractAction = z
   })
   .describe(
     "Extract content from the page according to the objective, e.g. product prices, contact information, article text, table data, or specific metadata fields"
-  )
+  );
 
 export type ExtractActionType = z.infer<typeof ExtractAction>;
 
@@ -62,15 +62,26 @@ export const ExtractActionDefinition: AgentActionDefinition = {
               text: `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nHere is as screenshot of the page:\n`,
             },
             {
-              type: "image_url",
-              image_url: {
-                url: `data:image/png;base64,${screenshot.data}`,
-              },
+              type: "image",
+              url: `data:image/png;base64,${screenshot.data}`,
+              mimeType: "image/png",
             },
           ],
         },
       ]);
-      if (response.content.length === 0) {
+      // Handle both string and HyperAgentContentPart[] responses
+      let extractedContent = "";
+      if (typeof response.content === "string") {
+        extractedContent = response.content;
+      } else if (Array.isArray(response.content)) {
+        // Extract text from content parts
+        extractedContent = response.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("");
+      }
+
+      if (extractedContent.length === 0) {
         return {
           success: false,
           message: `No content extracted from page.`,
@@ -78,7 +89,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       }
       return {
         success: true,
-        message: `Extracted content from page:\n${response.content}`,
+        message: `Extracted content from page:\n${extractedContent}`,
       };
     } catch (error) {
       return {
@@ -87,7 +98,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       };
     }
   },
-  pprintAction: function(params: ExtractActionType): string {
+  pprintAction: function (params: ExtractActionType): string {
     return `Extract content from page with objective: "${params.objective}"`;
   },
 };

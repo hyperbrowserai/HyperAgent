@@ -43,7 +43,7 @@
 import dotenv from "dotenv";
 import chalk from "chalk";
 import path from "path";
-import { ChatOpenAI } from "@langchain/openai";
+// Removed LangChain import - using native SDK configuration
 import HyperAgent from "@hyperbrowser/agent";
 
 dotenv.config();
@@ -56,10 +56,7 @@ async function run() {
   console.log(chalk.white(`Task: ${TASK}`));
   console.log(chalk.cyan.bold("=======================\n"));
 
-  const llm = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-4o",
-  });
+  // Using native SDK configuration
 
   const mcpServerPath = path.join(__dirname, "/servers/weather-server.js");
 
@@ -67,7 +64,10 @@ async function run() {
 
   try {
     const agent = new HyperAgent({
-      llm: llm,
+      llm: {
+        provider: "openai",
+        model: "gpt-4o",
+      },
       debug: true,
     });
 

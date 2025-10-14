@@ -1,5 +1,5 @@
 import { AgentStep } from "@/types";
-import { BaseMessageLike } from "@langchain/core/messages";
+import { HyperAgentMessage } from "@/llm/types";
 import { Page } from "patchright";
 import { getScrollInfo } from "./utils";
 import { retry } from "@/utils/retry";
@@ -7,14 +7,14 @@ import { DOMState } from "@/context-providers/dom/types";
 import { HyperVariable } from "@/types/agent/types";
 
 export const buildAgentStepMessages = async (
-  baseMessages: BaseMessageLike[],
+  baseMessages: HyperAgentMessage[],
   steps: AgentStep[],
   task: string,
   page: Page,
   domState: DOMState,
   screenshot: string,
   variables: HyperVariable[]
-): Promise<BaseMessageLike[]> => {
+): Promise<HyperAgentMessage[]> => {
   const messages = [...baseMessages];
 
   // Add the final goal section
@@ -43,7 +43,7 @@ export const buildAgentStepMessages = async (
     });
     for (const step of steps) {
       messages.push({
-        role: "ai",
+        role: "assistant",
         content: JSON.stringify(step.agentOutput),
       });
       for (const actionOutput of step.actionOutputs) {
@@ -73,10 +73,9 @@ export const buildAgentStepMessages = async (
         text: "=== Page Screenshot ===\n",
       },
       {
-        type: "image_url",
-        image_url: {
-          url: `data:image/png;base64,${screenshot}`,
-        },
+        type: "image",
+        url: `data:image/png;base64,${screenshot}`,
+        mimeType: "image/png",
       },
       {
         type: "text",

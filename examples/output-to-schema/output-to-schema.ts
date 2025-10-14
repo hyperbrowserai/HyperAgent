@@ -28,20 +28,18 @@ import { HyperAgent } from "@hyperbrowser/agent";
 
 import chalk from "chalk";
 import { sleep } from "../../src/utils/sleep";
-import { ChatOpenAI } from "@langchain/openai";
+// Removed LangChain import - using native SDK configuration
 import { z } from "zod";
 
 const TASK =
   "Navigate to imdb.com, search for 'The Matrix', and extract the director, release year, and rating";
 
 async function runEval() {
-  const llm = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-4o",
-  });
-
   const agent = new HyperAgent({
-    llm: llm,
+    llm: {
+      provider: "openai",
+      model: "gpt-4o",
+    },
     debug: true,
   });
 

@@ -37,10 +37,10 @@
     "ai"
   ],
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
     "@google/genai": "^0.8.0",
     "@hyperbrowser/sdk": "^0.46.0",
     "@inquirer/prompts": "^7.4.1",
-    "@langchain/core": "^0.3.43",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "@types/crypto-js": "^4.2.2",
     "boxen": "5.1.2",
@@ -50,9 +50,9 @@
     "dotenv": "^16.4.5",
     "jimp": "^1.6.0",
     "joplin-turndown-plugin-gfm": "^1.0.12",
-    "langchain": "^0.3.19",
     "lodash": "^4.17.21",
     "minimatch": "^9.0.3",
+    "openai": "^4.73.0",
     "ora": "5.4.1",
     "patchright": "^1.55.1",
     "readline": "^1.3.0",
@@ -61,7 +61,6 @@
     "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
-    "@langchain/anthropic": "^0.3.17",
     "@types/lodash": "^4.17.16",
     "@types/node": "^22.9.1",
     "@types/turndown": "^5.0.5",
@@ -99,6 +98,10 @@
     "./utils": {
       "types": "./dist/utils/index.d.ts",
       "default": "./dist/utils/index.js"
+    },
+    "./llm/providers": {
+      "types": "./dist/llm/providers/index.d.ts",
+      "default": "./dist/llm/providers/index.js"
     }
   },
   "typesVersions": {

@@ -21,13 +21,13 @@ import {
 
 import { HyperagentError } from "../error";
 import { buildAgentStepMessages } from "../messages/builder";
-import { getStructuredOutputMethod } from "../llms/structured-output";
 import { SYSTEM_PROMPT } from "../messages/system-prompt";
 import { z } from "zod";
 import { DOMState } from "@/context-providers/dom/types";
 import { Page } from "patchright";
 import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
+import { HyperAgentMessage } from "@/llm/types";
 import { Jimp } from "jimp";
 
 const compositeScreenshot = async (page: Page, overlay: string) => {
@@ -119,13 +119,11 @@ export const runAgentTask = async (
   if (!ctx.llm) {
     throw new HyperagentError("LLM not initialized");
   }
-  const llmStructured = ctx.llm.withStructuredOutput(
-    AgentOutputFn(getActionSchema(ctx.actions)),
-    {
-      method: getStructuredOutputMethod(ctx.llm),
-    }
-  );
-  const baseMsgs = [{ role: "system", content: SYSTEM_PROMPT }];
+  // Use the new structured output interface
+  const actionSchema = getActionSchema(ctx.actions);
+  const baseMsgs: HyperAgentMessage[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+  ];
 
   let output = "";
   const page = taskState.startingPage;
@@ -217,10 +215,25 @@ export const runAgentTask = async (
       );
     }
 
-    // Invoke LLM
-    const agentOutput = await retry({
-      func: () => llmStructured.invoke(msgs),
+    // Invoke LLM with structured output
+    const structuredResult = await retry({
+      func: () =>
+        ctx.llm.invokeStructured(
+          {
+            schema: AgentOutputFn(actionSchema),
+            options: {
+              temperature: 0,
+            },
+          },
+          msgs
+        ),
     });
+
+    if (!structuredResult.parsed) {
+      throw new Error("Failed to get structured output from LLM");
+    }
+
+    const agentOutput = structuredResult.parsed;
 
     params?.debugOnAgentOutput?.(agentOutput);
 

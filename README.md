@@ -68,15 +68,14 @@ The CLI supports options for debugging or using hyperbrowser instead of a local 
 
 ```typescript
 import { HyperAgent } from "@hyperbrowser/agent";
-import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
 
 // Initialize the agent
 const agent = new HyperAgent({
-  llm: new ChatOpenAI({
-    openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: "gpt-4o",
-  }),
+  llm: {
+    provider: "openai",
+    model: "gpt-4o",
+  },
 });
 
 // Execute a task
@@ -186,24 +185,40 @@ await agent.closeAgent();
 
 ### Using Different LLM Providers
 
-Hyperagent supports multiple LLM providers. A provider can be anything that extends to the Langchain `BaseChatModel` class.
+Hyperagent supports multiple LLM providers with native SDKs for better performance and reliability.
 
 ```typescript
 // Using OpenAI
 const agent = new HyperAgent({
-  llm: new ChatOpenAI({
-    openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: "gpt-4o",
-  }),
+  llm: {
+    provider: "openai",
+    model: "gpt-4o",
+  },
 });
 
 // Using Anthropic's Claude
 const agent = new HyperAgent({
-  llm: new ChatAnthropic({
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-    modelName: "claude-3-7-sonnet-latest",
-  }),
+  llm: {
+    provider: "anthropic",
+    model: "claude-3-7-sonnet-latest",
+  },
 });
+
+    // Using Google Gemini
+    const agent = new HyperAgent({
+      llm: {
+        provider: "gemini",
+        model: "gemini-2.5-pro-preview-03-25",
+      },
+    });
+
+    // Using DeepSeek
+    const agent = new HyperAgent({
+      llm: {
+        provider: "deepseek",
+        model: "deepseek-chat",
+      },
+    });
 ```
 
 ### MCP Support
