@@ -42,6 +42,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "debug"
+    "debug",
+    "src/**/__tests__"
   ]
 }

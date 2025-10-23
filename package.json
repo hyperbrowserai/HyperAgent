@@ -61,6 +61,7 @@
     "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.16",
     "@types/node": "^22.9.1",
     "@types/turndown": "^5.0.5",
@@ -71,8 +72,10 @@
     "eslint": "^9.15.0",
     "eslint-config-prettier": "^9.1.0",
     "exa-js": "^1.5.13",
+    "jest": "^30.2.0",
     "prettier": "^3.3.3",
     "ts-node": "^10.9.2",
+    "ts-jest": "^29.4.5",
     "tsc-alias": "^1.8.15",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.19.3",
