@@ -2,7 +2,7 @@ import { AgentActionDefinition } from "@/types/agent/actions/types";
 import { MCPClient } from "../mcp/client";
 import { HyperAgentLLM } from "@/llm/types";
 import { HyperVariable } from "@/types/agent/types";
-import { ActionConfig } from "@/types/config";
+import { ActionConfig, DOMConfig } from "@/types/config";
 
 export interface AgentCtx {
   mcpClient?: MCPClient;
@@ -13,4 +13,5 @@ export interface AgentCtx {
   tokenLimit: number;
   llm: HyperAgentLLM;
   actionConfig?: ActionConfig;
+  domConfig?: DOMConfig;
 }

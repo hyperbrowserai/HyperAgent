@@ -12,7 +12,7 @@ export const buildAgentStepMessages = async (
   task: string,
   page: Page,
   domState: DOMState,
-  screenshot: string,
+  screenshot: string | undefined,
   variables: HyperVariable[]
 ): Promise<HyperAgentMessage[]> => {
   const messages = [...baseMessages];
@@ -63,26 +63,35 @@ export const buildAgentStepMessages = async (
     content: `=== Elements ===\n${domState.domState}\n`,
   });
 
-  // Add page screenshot section
-  const scrollInfo = await retry({ func: () => getScrollInfo(page) });
-  messages.push({
-    role: "user",
-    content: [
-      {
-        type: "text",
-        text: "=== Page Screenshot ===\n",
-      },
-      {
-        type: "image",
-        url: `data:image/png;base64,${screenshot}`,
-        mimeType: "image/png",
-      },
-      {
-        type: "text",
-        text: `=== Page State ===\nPixels above: ${scrollInfo[0]}\nPixels below: ${scrollInfo[1]}\n`,
-      },
-    ],
-  });
+  // Add page screenshot section (optional for a11y mode)
+  if (screenshot) {
+    const scrollInfo = await retry({ func: () => getScrollInfo(page) });
+    messages.push({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "=== Page Screenshot ===\n",
+        },
+        {
+          type: "image",
+          url: `data:image/png;base64,${screenshot}`,
+          mimeType: "image/png",
+        },
+        {
+          type: "text",
+          text: `=== Page State ===\nPixels above: ${scrollInfo[0]}\nPixels below: ${scrollInfo[1]}\n`,
+        },
+      ],
+    });
+  } else {
+    // A11y mode without screenshot - just add page state info
+    const scrollInfo = await retry({ func: () => getScrollInfo(page) });
+    messages.push({
+      role: "user",
+      content: `=== Page State ===\nPixels above: ${scrollInfo[0]}\nPixels below: ${scrollInfo[1]}\n`,
+    });
+  }
 
   return messages;
 };

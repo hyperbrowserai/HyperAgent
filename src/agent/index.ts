@@ -46,6 +46,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private actionConfig: HyperAgentConfig["actionConfig"];
+  private domConfig: HyperAgentConfig["domConfig"];
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -99,6 +100,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     this.debug = params.debug ?? false;
     this.actionConfig = params.actionConfig;
+    this.domConfig = params.domConfig;
     this.errorEmitter = new ErrorEmitter();
   }
 
@@ -337,6 +339,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mcpClient: this.mcpClient,
         variables: this._variables,
         actionConfig: this.actionConfig,
+        domConfig: this.domConfig,
       },
       taskState,
       params
@@ -388,6 +391,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           actionConfig: this.actionConfig,
+          domConfig: this.domConfig,
         },
         taskState,
         params

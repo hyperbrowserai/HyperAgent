@@ -7,7 +7,7 @@ import {
   ActionType,
   AgentActionDefinition,
 } from "@/types";
-import { getDom } from "@/context-providers/dom";
+import { getUnifiedDOM } from "@/context-providers/unified-dom";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 
@@ -22,8 +22,11 @@ import {
 import { HyperagentError } from "../error";
 import { buildAgentStepMessages } from "../messages/builder";
 import { SYSTEM_PROMPT } from "../messages/system-prompt";
+import { A11Y_SYSTEM_PROMPT } from "../messages/a11y-system-prompt";
+import { SIMPLE_SYSTEM_PROMPT } from "../messages/simple-system-prompt";
 import { z } from "zod";
 import { DOMState } from "@/context-providers/dom/types";
+import { UnifiedDOMState } from "@/context-providers/unified-dom";
 import { Page } from "patchright";
 import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
@@ -70,12 +73,12 @@ const getActionHandler = (
 
 const runAction = async (
   action: ActionType,
-  domState: DOMState,
+  domState: UnifiedDOMState,
   page: Page,
   ctx: AgentCtx
 ): Promise<ActionOutput> => {
   const actionCtx: ActionContext = {
-    domState,
+    domState: domState as any, // Cast to DOMState for action compatibility
     page,
     tokenLimit: ctx.tokenLimit,
     llm: ctx.llm,
@@ -122,8 +125,18 @@ export const runAgentTask = async (
   }
   // Use the new structured output interface
   const actionSchema = getActionSchema(ctx.actions);
+
+  // Choose system prompt based on DOM mode
+  const domMode = ctx.domConfig?.mode ?? 'visual';
+
+  // For a11y modes, use simplified Stagehand-style prompt
+  let systemPrompt = SYSTEM_PROMPT;
+  if (domMode === 'a11y' || domMode === 'hybrid' || domMode === 'visual-debug') {
+    systemPrompt = SIMPLE_SYSTEM_PROMPT;
+  }
+
   const baseMsgs: HyperAgentMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
   ];
 
   let output = "";
@@ -147,12 +160,12 @@ export const runAgentTask = async (
       fs.mkdirSync(debugStepDir, { recursive: true });
     }
 
-    // Get DOM State
-    let domState: DOMState | null = null;
+    // Get DOM State (using unified provider that supports both visual and a11y modes)
+    let domState: UnifiedDOMState | null = null;
     try {
       domState = await retry({
         func: async () => {
-          const s = await getDom(page);
+          const s = await getUnifiedDOM(page, ctx.domConfig);
           if (!s) throw new Error("no dom state");
           return s;
         },
@@ -178,12 +191,23 @@ export const runAgentTask = async (
       break;
     }
 
-    const trimmedScreenshot = await compositeScreenshot(
-      page,
-      domState.screenshot.startsWith("data:image/png;base64,")
+    // Handle screenshot based on mode
+    let trimmedScreenshot: string | undefined;
+    if (domState.mode === 'visual' && domState.screenshot) {
+      // Visual mode: composite screenshot with overlays
+      trimmedScreenshot = await compositeScreenshot(
+        page,
+        domState.screenshot.startsWith("data:image/png;base64,")
+          ? domState.screenshot.slice("data:image/png;base64,".length)
+          : domState.screenshot
+      );
+    } else if (domState.screenshot) {
+      // A11y/hybrid/visual-debug mode: use screenshot directly (no overlay)
+      trimmedScreenshot = domState.screenshot.startsWith("data:image/png;base64,")
         ? domState.screenshot.slice("data:image/png;base64,".length)
-        : domState.screenshot
-    );
+        : domState.screenshot;
+    }
+    // If no screenshot (pure a11y mode), trimmedScreenshot remains undefined
 
     // Store Dom State for Debugging
     if (ctx.debug) {
@@ -203,8 +227,8 @@ export const runAgentTask = async (
       taskState.steps,
       taskState.task,
       page,
-      domState,
-      trimmedScreenshot as string,
+      domState as any, // Cast for compatibility
+      trimmedScreenshot,
       Object.values(ctx.variables)
     );
 

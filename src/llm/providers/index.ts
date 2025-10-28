@@ -62,8 +62,8 @@ export { createAnthropicClient } from "./anthropic";
 export { createGeminiClient } from "./gemini";
 export { createDeepSeekClient } from "./deepseek";
 
-// Export types
-export { HyperAgentLLM } from "../types";
+// Export types (use type-only export for interface)
+export type { HyperAgentLLM } from "../types";
 
 // Export utility functions
 export * from "../utils/message-converter";

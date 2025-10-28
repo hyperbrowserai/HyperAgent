@@ -67,7 +67,7 @@ export class OpenAIClient implements HyperAgentLLM {
       baseURL: config.baseURL,
     });
     this.model = config.model;
-    this.temperature = config.temperature ?? 0;
+    this.temperature = config.temperature ?? 1;
     this.maxTokens = config.maxTokens;
   }
 
@@ -86,10 +86,15 @@ export class OpenAIClient implements HyperAgentLLM {
   }> {
     const openAIMessages = convertToOpenAIMessages(messages);
 
+    // GPT-5 only supports temperature=1 (default), so omit temperature for this model
+    const temperature = options?.temperature ?? this.temperature;
+    const shouldIncludeTemperature =
+      !this.model.startsWith("gpt-5") || temperature === 1;
+
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: openAIMessages as any,
-      temperature: options?.temperature ?? this.temperature,
+      ...(shouldIncludeTemperature ? { temperature } : {}),
       max_tokens: options?.maxTokens ?? this.maxTokens,
       ...options?.providerOptions,
     });
@@ -100,11 +105,23 @@ export class OpenAIClient implements HyperAgentLLM {
     }
 
     const message = choice.message;
-    const toolCalls = message.tool_calls?.map((tc) => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: JSON.parse(tc.function.arguments),
-    }));
+    const toolCalls = message.tool_calls?.map((tc) => {
+      // Handle both function and custom tool calls in OpenAI v6
+      if (tc.type === "function") {
+        return {
+          id: tc.id,
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments),
+        };
+      } else if (tc.type === "custom") {
+        return {
+          id: tc.id,
+          name: tc.custom.name,
+          arguments: JSON.parse(tc.custom.input),
+        };
+      }
+      throw new Error(`Unknown tool call type: ${(tc as any).type}`);
+    });
 
     return {
       role: "assistant",
@@ -124,10 +141,15 @@ export class OpenAIClient implements HyperAgentLLM {
     const openAIMessages = convertToOpenAIMessages(messages);
     const responseFormat = convertToOpenAIJsonSchema(request.schema);
 
+    // GPT-5 only supports temperature=1 (default), so omit temperature for this model
+    const temperature = request.options?.temperature ?? this.temperature;
+    const shouldIncludeTemperature =
+      !this.model.startsWith("gpt-5") || temperature === 1;
+
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: openAIMessages as any,
-      temperature: request.options?.temperature ?? this.temperature,
+      ...(shouldIncludeTemperature ? { temperature } : {}),
       max_tokens: request.options?.maxTokens ?? this.maxTokens,
       response_format: responseFormat as any,
       ...request.options?.providerOptions,

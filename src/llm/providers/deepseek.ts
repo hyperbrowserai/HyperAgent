@@ -77,11 +77,23 @@ export class DeepSeekClient implements HyperAgentLLM {
     }
 
     const content = choice.message.content || "";
-    const toolCalls = choice.message.tool_calls?.map((tc) => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: JSON.parse(tc.function.arguments),
-    }));
+    const toolCalls = choice.message.tool_calls?.map((tc) => {
+      // Handle both function and custom tool calls in OpenAI v6
+      if (tc.type === "function") {
+        return {
+          id: tc.id,
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments),
+        };
+      } else if (tc.type === "custom") {
+        return {
+          id: tc.id,
+          name: tc.custom.name,
+          arguments: JSON.parse(tc.custom.input),
+        };
+      }
+      throw new Error(`Unknown tool call type: ${(tc as any).type}`);
+    });
 
     return {
       role: "assistant",
