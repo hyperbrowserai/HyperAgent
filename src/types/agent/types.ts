@@ -86,7 +86,20 @@ export interface HyperVariable {
 }
 
 export interface HyperPage extends Page {
+  /**
+   * Execute a complex multi-step task using visual mode
+   * Best for: Complex workflows, multi-step tasks, exploratory automation
+   * Mode: Always visual (screenshots with overlays)
+   */
   ai: (task: string, params?: TaskParams) => Promise<TaskOutput>;
+
+  /**
+   * Execute a single granular action using a11y mode
+   * Best for: Single actions like "click login", "fill email with test@example.com"
+   * Mode: Always a11y (accessibility tree, faster and more reliable)
+   */
+  aiAction: (instruction: string) => Promise<TaskOutput>;
+
   aiAsync: (task: string, params?: TaskParams) => Promise<Task>;
   extract<T extends z.ZodType<any> | undefined = undefined>(
     task?: string,

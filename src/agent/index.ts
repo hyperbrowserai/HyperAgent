@@ -29,7 +29,7 @@ import {
 } from "../browser-providers";
 import { HyperagentError } from "./error";
 import { MCPClient } from "./mcp/client";
-import { runAgentTask } from "./tools-new/agent";
+import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "@/types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "@/utils";
@@ -46,7 +46,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private actionConfig: HyperAgentConfig["actionConfig"];
-  private domConfig: HyperAgentConfig["domConfig"];
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -100,7 +99,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     this.debug = params.debug ?? false;
     this.actionConfig = params.actionConfig;
-    this.domConfig = params.domConfig;
     this.errorEmitter = new ErrorEmitter();
   }
 
@@ -146,7 +144,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       });
 
       // Listen for new pages (tabs/popups) and automatically switch to them
-      // Following Stagehand's approach: set active page immediately without waiting
       this.context.on("page", (newPage) => {
         if (this.debug) {
           console.log("New tab/popup detected, switching focus immediately");
@@ -377,7 +374,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mcpClient: this.mcpClient,
         variables: this._variables,
         actionConfig: this.actionConfig,
-        domConfig: this.domConfig,
       },
       taskState,
       params
@@ -429,7 +425,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           actionConfig: this.actionConfig,
-          domConfig: this.domConfig,
         },
         taskState,
         params
@@ -437,6 +432,183 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       taskState.status = TaskStatus.FAILED;
       throw error;
+    }
+  }
+
+  /**
+   * Execute a single granular action using a11y mode
+   * Internal method used by page.aiAction()
+   *
+   * Architecture: Matches Stagehand's simple observe→act flow
+   * - 1 LLM call (examineDom finds element and suggests method)
+   * - Direct execution (no agent loop)
+   *
+   * @param instruction Natural language instruction for a single action
+   * @param page The page to execute the action on
+   * @returns A promise that resolves to the task output
+   */
+  private async executeSingleAction(
+    instruction: string,
+    page: Page
+  ): Promise<TaskOutput> {
+    const { examineDom } = await import("./examine-dom");
+    const { getUnifiedDOM } = await import("../context-providers/unified-dom");
+    const { waitForSettledDOM } = await import("../utils/waitForSettledDOM");
+
+    if (this.debug) {
+      console.log(`[aiAction] Instruction: ${instruction}`);
+    }
+
+    try {
+      // Step 1: Wait for DOM to settle
+      // This ensures dynamic content like dropdowns have finished loading
+      await waitForSettledDOM(page, 5000);
+
+      // Step 2: Fetch a11y tree
+      const domState = await getUnifiedDOM(page, { mode: "a11y" });
+
+      if (!domState) {
+        return {
+          status: TaskStatus.FAILED,
+          steps: [],
+          output: "Failed to fetch page structure",
+        };
+      }
+
+      if (this.debug) {
+        console.log(
+          `[aiAction] Fetched a11y tree: ${domState.elements.size} elements`
+        );
+      }
+
+      // Step 3: Call examineDom to find element and determine method
+      // (Like Stagehand's observe with returnAction: true)
+
+      // Convert elements map to string-only keys (a11y mode uses string keys)
+      const stringElements = new Map<string, any>();
+      for (const [key, value] of domState.elements) {
+        stringElements.set(String(key), value);
+      }
+
+      const elements = await examineDom(
+        instruction,
+        {
+          tree: domState.domState,
+          xpathMap: domState.xpathMap || {},
+          elements: stringElements,
+          url: page.url(),
+        },
+        this.llm
+      );
+
+      if (!elements || elements.length === 0) {
+        return {
+          status: TaskStatus.FAILED,
+          steps: [],
+          output:
+            "No elements found to act on. The instruction may be too vague or the element may not exist on the page.",
+        };
+      }
+
+      const element = elements[0];
+
+      if (this.debug) {
+        console.log(`[aiAction] Found element: ${element.elementId}`);
+        console.log(`[aiAction] Method: ${element.method}`);
+        console.log(`[aiAction] Arguments:`, element.arguments);
+      }
+
+      // Step 4: Execute the Playwright action directly
+      const xpathMap = domState.xpathMap || {};
+      const rawXpath = xpathMap[element.elementId as keyof typeof xpathMap];
+      if (!rawXpath) {
+        return {
+          status: TaskStatus.FAILED,
+          steps: [],
+          output: `Element ${element.elementId} not found in xpath map`,
+        };
+      }
+
+      // Trim trailing text nodes (exactly like Stagehand's trimTrailingTextNode)
+      const xpath = rawXpath.replace(/\/text\(\)(\[\d+\])?$/iu, "");
+
+      const locator = page.locator(`xpath=${xpath}`);
+
+      // Execute the method (default to 'click' if not specified)
+      const method = element.method || "click";
+      const args = element.arguments || [];
+
+      switch (method) {
+        case "click":
+          // Match Stagehand exactly: no explicit scroll, rely on Playwright's auto-scroll
+          try {
+            await locator.click({ timeout: 3500 });
+          } catch (error) {
+            // Fallback to JS click
+            if (this.debug) {
+              console.log(
+                `[aiAction] Playwright click failed, trying JS click`
+              );
+            }
+            try {
+              await locator.evaluate(
+                (el: HTMLElement) => el.click(),
+                undefined,
+                { timeout: 3500 }
+              );
+            } catch {
+              throw error; // Throw original error if JS click also fails
+            }
+          }
+          break;
+        case "fill":
+          await locator.fill(args[0] || "");
+          break;
+        case "selectOption":
+          await locator.selectOption(args[0] || "");
+          break;
+        case "hover":
+          await locator.hover();
+          break;
+        case "press":
+          await locator.press(args[0] || "Enter");
+          break;
+        case "check":
+          await locator.check();
+          break;
+        case "uncheck":
+          await locator.uncheck();
+          break;
+        default:
+          return {
+            status: TaskStatus.FAILED,
+            steps: [],
+            output: `Unknown method: ${method}`,
+          };
+      }
+
+      if (this.debug) {
+        console.log(`[aiAction] Successfully executed ${method}`);
+      }
+
+      // Step 5: Wait for DOM to settle after action (like Stagehand does after each action)
+      await waitForSettledDOM(page, 5000);
+
+      return {
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: `Successfully executed: ${instruction}`,
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (this.debug) {
+        console.error(`[aiAction] Error:`, error);
+      }
+      return {
+        status: TaskStatus.FAILED,
+        steps: [],
+        output: `Failed to execute action: ${errorMsg}`,
+      };
     }
   }
 
@@ -610,6 +782,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const hyperPage = page as HyperPage;
     hyperPage.ai = (task: string, params?: TaskParams) =>
       this.executeTask(task, params, page);
+    hyperPage.aiAction = (instruction: string) =>
+      this.executeSingleAction(instruction, page);
     hyperPage.aiAsync = (task: string, params?: TaskParams) =>
       this.executeTaskAsync(task, params, page);
     hyperPage.extract = async (task, outputSchema, params) => {

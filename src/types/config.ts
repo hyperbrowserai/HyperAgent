@@ -72,17 +72,10 @@ export interface ActionConfig {
 
 /**
  * DOM extraction mode configuration
+ * @internal - Used internally, mode selection is now handled by API choice
  */
 export interface DOMConfig {
-  /**
-   * Mode for DOM extraction
-   * - 'visual': Current implementation with canvas overlays (default)
-   * - 'a11y': Accessibility tree (text-only, fastest)
-   * - 'hybrid': Accessibility tree + clean screenshot
-   * - 'visual-debug': Accessibility tree + DOM injection + bounding boxes
-   * @default 'visual'
-   */
-  mode?: 'visual' | 'a11y' | 'hybrid' | 'visual-debug';
+  mode?: 'visual' | 'a11y';
 }
 
 export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
@@ -103,9 +96,4 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
    * Configuration for agent actions
    */
   actionConfig?: ActionConfig;
-
-  /**
-   * Configuration for DOM extraction
-   */
-  domConfig?: DOMConfig;
 }

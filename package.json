@@ -70,6 +70,7 @@
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
     "axios": "^1.8.4",
+    "devtools-protocol": "^0.0.1537100",
     "esbuild": "^0.25.2",
     "eslint": "^9.15.0",
     "eslint-config-prettier": "^9.1.0",

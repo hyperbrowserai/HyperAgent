@@ -5,188 +5,35 @@
 
 /**
  * System prompt for element finding
- * Teaches LLM how to match natural language instructions to accessibility tree elements
+ * Based on Stagehand's simple and effective approach
  */
 export function buildExamineDomSystemPrompt(): string {
-  return `You are an expert element finder for web automation. Given an accessibility tree and a natural language instruction, find the best matching element(s).
+  return `You are helping the user automate the browser by finding elements based on what the user wants to observe in the page.
 
-# Accessibility Tree Format
+You will be given:
+1. an instruction of elements to observe
+2. a hierarchical accessibility tree showing the semantic structure of the page. The tree is a hybrid of the DOM and the accessibility tree.
 
-Each line represents an element:
-[elementId] role: name
-
-Example:
-[0-1234] button: Login
-[0-5678] textbox: Email address
-[0-9012] link: Sign up
-[0-3456] checkbox: Remember me
-
-# Your Task
-
-Find the element(s) that best match the given instruction and return them with confidence scores.
-
-# Matching Rules
-
-1. **Role-based matching** (highest priority)
-   - "click button" → look for role="button"
-   - "fill email" → look for role="textbox" or role="searchbox"
-   - "select option" → look for role="combobox" or role="listbox"
-   - "check box" → look for role="checkbox"
-
-2. **Semantic name matching**
-   - "login button" matches: "Sign In", "Log In", "Login", "Enter"
-   - "email field" matches: "Email address", "Your email", "E-mail", "Email"
-   - "search box" matches: "Search", "Find", "Query"
-   - Be flexible with synonyms and variations
-
-3. **Context awareness**
-   - If multiple matches exist, prefer the most prominent (usually earlier in tree)
-   - Consider parent-child relationships (indentation shows hierarchy)
-   - Buttons inside forms are usually submit buttons
-
-4. **Return multiple if ambiguous**
-   - If uncertain between 2-3 elements, return all with different confidence scores
-   - Higher confidence = better match
-   - Return up to 3 matches maximum
-
-# Confidence Scoring
-
-- **0.9-1.0**: Perfect match (exact role + exact name)
-- **0.7-0.9**: Very good match (correct role + similar name)
-- **0.5-0.7**: Good match (correct role OR very similar name)
-- **0.3-0.5**: Possible match (loose connection)
-- **Below 0.3**: Don't return (too uncertain)
-
-# Method Suggestion
-
-Based on the element role, suggest the appropriate Playwright method:
-
-- **button, link** → "click"
-- **textbox, searchbox** → "fill" (with arguments: ["<value>"])
-- **combobox, listbox** → "selectOption" (with arguments: ["<option>"])
-- **checkbox** → "check" or "uncheck"
-
-# Response Format
-
-Return a JSON object with an "elements" array:
-
-{
-  "elements": [
-    {
-      "elementId": "0-1234",
-      "description": "Login button",
-      "confidence": 0.95,
-      "method": "click"
-    }
-  ]
+Return an array of elements that match the instruction if they exist, otherwise return an empty array.`;
 }
 
-# Examples
+/**
+ * Build detailed instruction for action-based element finding
+ * Based on Stagehand's buildActObservePrompt - provides specific guidance
+ */
+export function buildActionInstruction(action: string): string {
+  const supportedActions = ['click', 'fill', 'selectOption', 'hover', 'press', 'check', 'uncheck'];
 
-## Example 1: Exact Match
+  const instruction = `Find the most relevant element to perform an action on given the following action: ${action}.
+Provide an action for this element such as ${supportedActions.join(", ")}, or any other playwright locator method. Remember that to users, buttons and links look the same in most cases.
+If the action is completely unrelated to a potential action to be taken on the page, return an empty array.
+ONLY return one action. If multiple actions are relevant, return the most relevant one.
+If the user is asking to scroll to a position on the page, e.g., 'halfway' or 0.75, etc, you must return the argument formatted as the correct percentage, e.g., '50%' or '75%', etc.
+If the action implies a key press, e.g., 'press enter', 'press a', 'press space', etc., always choose the press method with the appropriate key as argument — e.g. 'a', 'Enter', 'Space'. Do not choose a click action on an on-screen keyboard. Capitalize the first character like 'Enter', 'Tab', 'Escape' only for special keys.
+If the action implies choosing an option from a dropdown, AND the corresponding element is a 'select' element, choose the selectOption method. The argument should be the text of the option to select.
+If the action implies choosing an option from a dropdown, and the corresponding element is NOT a 'select' element, choose the click method.`;
 
-Instruction: "click the login button"
-Tree:
-[0-1234] button: Login
-[0-5678] button: Sign Up
-
-Response:
-{
-  "elements": [{
-    "elementId": "0-1234",
-    "description": "Login button",
-    "confidence": 0.95,
-    "method": "click"
-  }]
-}
-
-## Example 2: Semantic Match
-
-Instruction: "click the login button"
-Tree:
-[0-1234] button: Sign In
-[0-5678] button: Create Account
-
-Response:
-{
-  "elements": [{
-    "elementId": "0-1234",
-    "description": "Sign In button (login)",
-    "confidence": 0.9,
-    "method": "click"
-  }]
-}
-
-## Example 3: Fill Action
-
-Instruction: "fill the email field with test@example.com"
-Tree:
-[0-5678] textbox: Email address
-[0-9012] textbox: Password
-
-Response:
-{
-  "elements": [{
-    "elementId": "0-5678",
-    "description": "Email address input field",
-    "confidence": 0.95,
-    "method": "fill",
-    "arguments": ["test@example.com"]
-  }]
-}
-
-## Example 4: Ambiguous (Multiple Matches)
-
-Instruction: "click the button"
-Tree:
-[0-1234] button: Submit
-[0-5678] button: Cancel
-[0-9012] button: Save
-
-Response:
-{
-  "elements": [
-    {
-      "elementId": "0-1234",
-      "description": "Submit button",
-      "confidence": 0.6,
-      "method": "click"
-    },
-    {
-      "elementId": "0-5678",
-      "description": "Cancel button",
-      "confidence": 0.55,
-      "method": "click"
-    },
-    {
-      "elementId": "0-9012",
-      "description": "Save button",
-      "confidence": 0.55,
-      "method": "click"
-    }
-  ]
-}
-
-## Example 5: No Match
-
-Instruction: "click the delete button"
-Tree:
-[0-1234] button: Submit
-[0-5678] button: Cancel
-
-Response:
-{
-  "elements": []
-}
-
-# Important Notes
-
-- Always return "elements" array (empty if no matches)
-- elementId must be EXACT string from tree (including dash)
-- Confidence must be between 0 and 1
-- Sort results by confidence (highest first)
-- Return at most 3 matches
-- If instruction includes a value (e.g., "fill X with Y"), extract Y into arguments`;
+  return instruction;
 }
 
 /**
@@ -205,10 +52,11 @@ export function buildExamineDomUserPrompt(
     truncatedTree = tree.substring(0, MAX_TREE_LENGTH) + '\n\n[TREE TRUNCATED: Too large]';
   }
 
-  return `Instruction: ${instruction}
+  // Build detailed instruction for actions (like Stagehand does)
+  const detailedInstruction = buildActionInstruction(instruction);
+
+  return `instruction: ${detailedInstruction}
 
 Accessibility Tree:
-${truncatedTree}
-
-Find the element(s) that best match this instruction. Return them in the JSON format specified.`;
+${truncatedTree}`;
 }

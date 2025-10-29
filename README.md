@@ -106,6 +106,71 @@ console.log(res);
 await agent.closeAgent();
 ```
 
+## Two Modes of Operation
+
+HyperAgent provides two complementary APIs optimized for different use cases:
+
+### 🎯 `page.aiAction()` - Single Granular Actions
+
+**Best for**: Single, specific actions like "click login", "fill email with test@example.com"
+
+**Advantages**:
+- ⚡ **Fast** - Uses accessibility tree (no screenshots)
+- 💰 **Cheap** - Single LLM call per action
+- 🎯 **Reliable** - Direct element finding and execution
+- 📊 **Efficient** - Text-based DOM analysis
+
+**Example**:
+```typescript
+const page = await agent.newPage();
+await page.goto("https://example.com/login");
+
+// Fast, reliable single actions
+await page.aiAction("fill email with user@example.com");
+await page.aiAction("fill password with mypassword");
+await page.aiAction("click the login button");
+```
+
+### 🧠 `page.ai()` - Complex Multi-Step Tasks
+
+**Best for**: Complex workflows requiring multiple steps and visual context
+
+**Advantages**:
+- 🖼️ **Visual Understanding** - Uses screenshots with element overlays
+- 🎭 **Complex Tasks** - Handles multi-step workflows automatically
+- 🧠 **Context-Aware** - Better at understanding page layout and relationships
+- 🔄 **Adaptive** - Can adjust strategy based on page state
+
+**Example**:
+```typescript
+const page = await agent.newPage();
+await page.goto("https://flights.google.com");
+
+// Complex task with multiple steps handled automatically
+await page.ai("search for flights from Miami to New Orleans on July 16");
+```
+
+### 🎨 Mix and Match
+
+Combine both APIs for optimal performance:
+
+```typescript
+// Use aiAction for fast, reliable individual actions
+await page.aiAction("click the search button");
+await page.aiAction("type laptop into search");
+
+// Use ai() for complex, multi-step workflows
+await page.ai("filter results by price under $1000 and sort by rating");
+
+// Extract structured data
+const products = await page.extract(
+  "get the top 5 products",
+  z.object({
+    products: z.array(z.object({ name: z.string(), price: z.number() }))
+  })
+);
+```
+
 ## ☁️ Cloud
 
 You can scale HyperAgent with cloud headless browsers using Hyperbrowser
