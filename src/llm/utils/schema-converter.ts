@@ -1,14 +1,17 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
 /**
  * Utility functions for converting Zod schemas to provider-specific formats
+ * Uses Zod v4's native toJSONSchema() method
  */
 
 export function convertToOpenAIJsonSchema(
   schema: z.ZodTypeAny
 ): Record<string, unknown> {
-  const jsonSchema = zodToJsonSchema(schema);
+  const jsonSchema = z.toJSONSchema(schema, {
+    target: "draft-7",
+    io: "output",
+  });
   return {
     type: "json_schema",
     json_schema: {
@@ -22,7 +25,10 @@ export function convertToOpenAIJsonSchema(
 export function convertToAnthropicTool(
   schema: z.ZodTypeAny
 ): Record<string, unknown> {
-  const jsonSchema = zodToJsonSchema(schema);
+  const jsonSchema = z.toJSONSchema(schema, {
+    target: "draft-7",
+    io: "output",
+  });
 
   return {
     name: "structured_output",
@@ -40,7 +46,10 @@ export function convertToAnthropicTool(
 export function convertToGeminiResponseSchema(
   schema: z.ZodTypeAny
 ): Record<string, unknown> {
-  const jsonSchema = zodToJsonSchema(schema);
+  const jsonSchema = z.toJSONSchema(schema, {
+    target: "draft-7",
+    io: "output",
+  });
   return {
     type: "object",
     properties: {

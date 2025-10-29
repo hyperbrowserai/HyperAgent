@@ -47,7 +47,7 @@ const compositeScreenshot = async (page: Page, overlay: string) => {
 const getActionSchema = (actions: Array<AgentActionDefinition>) => {
   const zodDefs = actions.map((action) =>
     z.object({
-      type: z.nativeEnum([action.type] as unknown as z.EnumLike),
+      type: z.literal(action.type),
       params: action.actionParams,
       actionDescription: z
         .string()
@@ -56,7 +56,7 @@ const getActionSchema = (actions: Array<AgentActionDefinition>) => {
         ),
     })
   );
-  return z.union([zodDefs[0], zodDefs[1], ...zodDefs.splice(2)]);
+  return z.union([zodDefs[0], zodDefs[1], ...zodDefs.splice(2)] as any);
 };
 
 const getActionHandler = (

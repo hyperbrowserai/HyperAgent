@@ -17,12 +17,12 @@ export const ExamineDomResultSchema = z.object({
     .describe('Confidence score 0-1 indicating match quality'),
   method: z
     .enum(['click', 'fill', 'selectOption', 'hover', 'press', 'check', 'uncheck'])
-    .optional()
+    .default('click')
     .describe('Suggested Playwright method to use'),
   arguments: z
-    .array(z.any())
-    .optional()
-    .describe('Suggested arguments for the method'),
+    .array(z.string())
+    .default([])
+    .describe('Suggested arguments for the method (as strings)'),
 });
 
 /**

@@ -29,7 +29,7 @@ import {
 } from "../browser-providers";
 import { HyperagentError } from "./error";
 import { MCPClient } from "./mcp/client";
-import { runAgentTask } from "./tools/agent";
+import { runAgentTask } from "./tools-new/agent";
 import { HyperPage, HyperVariable } from "@/types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "@/utils";
@@ -195,7 +195,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns
    */
   private getActions(
-    outputSchema?: z.AnyZodObject
+    outputSchema?: z.ZodType<any>
   ): Array<AgentActionDefinition> {
     if (outputSchema) {
       return [

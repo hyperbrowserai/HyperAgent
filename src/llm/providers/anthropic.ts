@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import {
   HyperAgentLLM,
   HyperAgentMessage,
@@ -132,6 +133,17 @@ export class AnthropicClient implements HyperAgentLLM {
       toolCalling: true,
       jsonMode: false, // Anthropic uses tool calling for structured output
     };
+  }
+
+  /**
+   * Get AI SDK LanguageModel for tool-based agent
+   * Returns a compatible model for use with AI SDK's generateText
+   */
+  getLanguageModel(): any {
+    const aiSDK = createAnthropic({
+      apiKey: this.client.apiKey || undefined,
+    });
+    return aiSDK(this.model);
   }
 }
 

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 
 export const generateCompleteActionWithOutputDefinition = (
-  outputSchema: z.AnyZodObject
+  outputSchema: z.ZodType<any>
 ): AgentActionDefinition => {
   const actionParamsSchema = z
     .object({

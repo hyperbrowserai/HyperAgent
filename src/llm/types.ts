@@ -90,4 +90,10 @@ export interface HyperAgentLLM {
   getProviderId(): string;
   getModelId(): string;
   getCapabilities(): HyperAgentCapabilities;
+
+  /**
+   * Get AI SDK LanguageModel for tool-based agent
+   * Optional method for providers that support AI SDK integration
+   */
+  getLanguageModel?(): any;
 }

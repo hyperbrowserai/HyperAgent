@@ -23,30 +23,14 @@ export interface ActionOutput {
   extract?: object;
 }
 
-export type ActionSchemaType = z.ZodObject<
-  {
-    type: z.ZodLiteral<string>;
-
-    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-    params: z.ZodObject<{}, "strip", z.ZodTypeAny, {}, {}>;
-  },
-  "strip",
-  z.ZodTypeAny,
-  {
-    params: object;
-    type: string;
-  },
-  {
-    params: object;
-    type: string;
-  }
->;
+export type ActionSchemaType = z.ZodObject<{
+  type: z.ZodLiteral<string>;
+  params: z.ZodObject<any>;
+}>;
 
 export type ActionType = z.infer<ActionSchemaType>;
 
-export interface AgentActionDefinition<
-  T extends z.AnyZodObject = z.AnyZodObject,
-> {
+export interface AgentActionDefinition<T extends z.ZodType<any> = z.ZodType<any>> {
   readonly type: string;
   actionParams: T;
 

@@ -20,7 +20,7 @@ async function runWorkflow() {
     agent = new HyperAgent({
       llm: {
         provider: "openai",
-        model: "gpt-5",
+        model: "gpt-4o",
       },
       domConfig: {
         mode: "a11y",

@@ -3,9 +3,7 @@ import { ActionOutput } from "./actions/types";
 import { Page } from "patchright";
 import { ErrorEmitter } from "@/utils";
 
-export const AgentOutputFn = (
-  actionsSchema: z.ZodUnion<readonly [z.AnyZodObject, ...z.AnyZodObject[]]>
-) =>
+export const AgentOutputFn = (actionsSchema: z.ZodUnion<readonly [z.ZodType<any>, ...z.ZodType<any>[]]>) =>
   z.object({
     thoughts: z
       .string()
@@ -36,7 +34,7 @@ export interface AgentStep {
 export interface TaskParams {
   maxSteps?: number;
   debugDir?: string;
-  outputSchema?: z.AnyZodObject;
+  outputSchema?: z.ZodType<any>;
   onStep?: (step: AgentStep) => Promise<void> | void;
   onComplete?: (output: TaskOutput) => Promise<void> | void;
   debugOnAgentOutput?: (step: AgentOutput) => void;
@@ -90,9 +88,9 @@ export interface HyperVariable {
 export interface HyperPage extends Page {
   ai: (task: string, params?: TaskParams) => Promise<TaskOutput>;
   aiAsync: (task: string, params?: TaskParams) => Promise<Task>;
-  extract<T extends z.AnyZodObject | undefined = undefined>(
+  extract<T extends z.ZodType<any> | undefined = undefined>(
     task?: string,
     outputSchema?: T,
     params?: Omit<TaskParams, "outputSchema">
-  ): Promise<T extends z.AnyZodObject ? z.infer<T> : string>;
+  ): Promise<T extends z.ZodType<any> ? z.infer<T> : string>;
 }
