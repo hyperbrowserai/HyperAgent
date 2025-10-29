@@ -145,6 +145,44 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         };
       });
 
+      // Listen for new pages (tabs/popups) and automatically switch to them
+      // Following Stagehand's approach: set active page immediately without waiting
+      this.context.on("page", (newPage) => {
+        if (this.debug) {
+          console.log("New tab/popup detected, switching focus immediately");
+        }
+
+        // Immediately switch to the new page (like Stagehand does)
+        // Don't wait for load - Playwright will handle that when actions are performed
+        this._currentPage = newPage;
+
+        if (this.debug) {
+          console.log(`Now focused on new page (URL will load shortly)`);
+        }
+
+        // Set up close handler for this page
+        newPage.on("close", () => {
+          if (this.debug) {
+            console.log("Page closed, switching to another available page");
+          }
+
+          // If the closed page was the current page, switch to another
+          if (this._currentPage === newPage) {
+            const pages = this.context?.pages() || [];
+            if (pages.length > 0) {
+              this._currentPage = pages[pages.length - 1];
+              if (this.debug) {
+                console.log(
+                  `Switched to page: ${this._currentPage?.url() || "unknown"}`
+                );
+              }
+            } else {
+              this._currentPage = null;
+            }
+          }
+        });
+      });
+
       return this.browser;
     }
     return this.browser;
