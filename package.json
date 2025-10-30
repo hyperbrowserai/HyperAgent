@@ -40,7 +40,7 @@
     "@ai-sdk/anthropic": "^2.0.38",
     "@ai-sdk/google": "^2.0.24",
     "@ai-sdk/openai": "^2.0.56",
-    "@anthropic-ai/sdk": "^0.32.0",
+    "@anthropic-ai/sdk": "^0.68.0",
     "@google/genai": "^0.8.0",
     "@hyperbrowser/sdk": "^0.46.0",
     "@inquirer/prompts": "^7.4.1",

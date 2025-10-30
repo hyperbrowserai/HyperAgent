@@ -1,11 +1,10 @@
 /**
  * Prompts for examineDom function
- * Based on Stagehand's observe prompts, optimized for element finding
+ * Optimized for element finding in accessibility trees
  */
 
 /**
  * System prompt for element finding
- * Based on Stagehand's simple and effective approach
  */
 export function buildExamineDomSystemPrompt(): string {
   return `You are helping the user automate the browser by finding elements based on what the user wants to observe in the page.
@@ -19,7 +18,7 @@ Return an array of elements that match the instruction if they exist, otherwise 
 
 /**
  * Build detailed instruction for action-based element finding
- * Based on Stagehand's buildActObservePrompt - provides specific guidance
+ * Provides specific guidance for different action types
  */
 export function buildActionInstruction(action: string): string {
   const supportedActions = ['click', 'fill', 'type', 'press', 'scrollTo', 'nextChunk', 'prevChunk', 'selectOptionFromDropdown', 'hover', 'check', 'uncheck'];
@@ -54,7 +53,7 @@ export function buildExamineDomUserPrompt(
     truncatedTree = tree.substring(0, MAX_TREE_LENGTH) + '\n\n[TREE TRUNCATED: Too large]';
   }
 
-  // Build detailed instruction for actions (like Stagehand does)
+  // Build detailed instruction for actions
   const detailedInstruction = buildActionInstruction(instruction);
 
   return `instruction: ${detailedInstruction}

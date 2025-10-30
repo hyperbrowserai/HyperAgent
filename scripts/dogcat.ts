@@ -16,7 +16,7 @@ async function runWorkflow() {
   let agent: HyperAgent | null = null;
 
   try {
-    // Initialize Stagehand
+    // Initialize HyperAgent
     console.log("Initializing HyperAgent...");
     agent = new HyperAgent({
       llm: {
@@ -29,7 +29,7 @@ async function runWorkflow() {
     // Get the page instance
     const page: HyperPage = await agent.newPage();
     if (!page) {
-      throw new Error("Failed to get page instance from Stagehand");
+      throw new Error("Failed to get page instance from HyperAgent");
     }
 
     const variables = {
@@ -86,11 +86,11 @@ async function runWorkflow() {
   } finally {
     // Clean up
     if (agent) {
-      console.log("Closing Stagehand connection.");
+      console.log("Closing HyperAgent connection.");
       try {
         await agent.closeAgent();
       } catch (err) {
-        console.error("Error closing Stagehand:", err);
+        console.error("Error closing HyperAgent:", err);
       }
     }
   }

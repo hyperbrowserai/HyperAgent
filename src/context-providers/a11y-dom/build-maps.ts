@@ -1,6 +1,5 @@
 /**
  * Build backend ID maps for DOM traversal and xpath generation
- * Based on Stagehand's buildBackendIdMaps implementation
  */
 
 import { CDPSession } from 'patchright';

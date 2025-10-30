@@ -17,10 +17,7 @@ export type PlaywrightMethod =
   | 'selectOptionFromDropdown'
   | 'hover'
   | 'check'
-  | 'uncheck'
-  // Legacy aliases (kept for backward compatibility)
-  | 'selectOption'
-  | 'scroll';
+  | 'uncheck';
 
 /**
  * Result from examineDom function - represents a matching element
@@ -53,7 +50,7 @@ export interface ExamineDomContext {
   xpathMap: Record<string, string>;
 
   /** Map of elementIds to accessibility node objects */
-  elements: Map<string, any>;
+  elements: Map<string, unknown>;
 
   /** Current page URL */
   url: string;

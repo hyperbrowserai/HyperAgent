@@ -1,5 +1,5 @@
 /**
- * Simplified system prompt based on Stagehand's approach
+ * Simplified system prompt for browser automation
  * Key principles:
  * 1. Short and focused
  * 2. Clear task-driven instructions

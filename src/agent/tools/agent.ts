@@ -10,6 +10,7 @@ import {
 import { getUnifiedDOM } from "@/context-providers/unified-dom";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
+import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 
 import { AgentOutputFn, endTaskStatuses } from "@hyperbrowser/agent/types";
 import {
@@ -280,7 +281,8 @@ export const runAgentTask = async (
         ctx
       );
       actionOutputs.push(actionOutput);
-      await sleep(2000); // TODO: look at this - smarter page loading
+      // Wait for DOM to settle after action
+      await waitForSettledDOM(page);
     }
     const step: AgentStep = {
       idx: currStep,

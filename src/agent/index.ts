@@ -28,6 +28,7 @@ import {
   LocalBrowserProvider,
 } from "../browser-providers";
 import { HyperagentError } from "./error";
+import { toEncodedId } from "@/context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "@/types/agent/types";
@@ -35,6 +36,13 @@ import { z } from "zod";
 import { ErrorEmitter } from "@/utils";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
+  // aiAction configuration constants
+  private static readonly AIACTION_CONFIG = {
+    MAX_RETRIES: 10,
+    RETRY_DELAY_MS: 1000,
+    CLICK_TIMEOUT: 3500,
+  };
+
   private llm: HyperAgentLLM;
   private tasks: Record<string, TaskState> = {};
   private tokenLimit = 128000;
@@ -149,7 +157,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           console.log("New tab/popup detected, switching focus immediately");
         }
 
-        // Immediately switch to the new page (like Stagehand does)
+        // Immediately switch to the new page
         // Don't wait for load - Playwright will handle that when actions are performed
         this._currentPage = newPage;
 
@@ -439,7 +447,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Execute a single granular action using a11y mode
    * Internal method used by page.aiAction()
    *
-   * Architecture: Matches Stagehand's simple observe→act flow
+   * Architecture: Simple observe→act flow
    * - 1 LLM call (examineDom finds element and suggests method)
    * - Direct execution (no agent loop)
    *
@@ -463,23 +471,24 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     let domState: Awaited<ReturnType<typeof getUnifiedDOM>> = null;
-    let stringElements: Map<string, Record<string, unknown>> | null = null;
+    let elementMap: Map<string, unknown> | null = null;
     let elements: Awaited<ReturnType<typeof examineDom>> | null = null;
 
     // Retry configuration
-    const MAX_RETRIES = 10;
-    const RETRY_DELAY_MS = 1000;
+    const MAX_RETRIES = HyperAgent.AIACTION_CONFIG.MAX_RETRIES;
+    const RETRY_DELAY_MS = HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS;
 
     try {
       // Retry loop for element finding
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        // Step 1: Wait for DOM to settle
-        // This ensures dynamic content like dropdowns have finished loading
+        // Wait for DOM to settle (ensures dynamic content like dropdowns have finished loading)
         if (this.debug) {
           if (attempt === 0) {
             console.log(`[aiAction] Waiting for DOM to settle...`);
           } else {
-            console.log(`[aiAction] Retry ${attempt + 1}/${MAX_RETRIES}: Waiting for DOM to settle...`);
+            console.log(
+              `[aiAction] Retry ${attempt + 1}/${MAX_RETRIES}: Waiting for DOM to settle...`
+            );
           }
         }
         await waitForSettledDOM(page);
@@ -487,7 +496,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           console.log(`[aiAction] DOM settled`);
         }
 
-        // Step 2: Fetch a11y tree
+        // Fetch a11y tree
         domState = await getUnifiedDOM(page, { mode: "a11y" });
 
         if (!domState) {
@@ -504,17 +513,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           );
         }
 
-        // Step 3: Call examineDom to find element and determine method
-        // (Like Stagehand's observe with returnAction: true)
-
-        // Convert elements map to string-only keys (a11y mode uses string keys)
-        stringElements = new Map<string, Record<string, unknown>>();
-        for (const [key, value] of domState.elements) {
-          stringElements.set(String(key), value as Record<string, unknown>);
-        }
+        // Convert elements map to string-only keys for examineDom
+        elementMap = new Map(
+          Array.from(domState.elements).map(([k, v]) => [String(k), v])
+        );
 
         if (this.debug) {
-          console.log(`[aiAction] Calling examineDom to find element for: "${instruction}"`);
+          console.log(
+            `[aiAction] Calling examineDom to find element for: "${instruction}"`
+          );
         }
 
         elements = await examineDom(
@@ -522,7 +529,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           {
             tree: domState.domState,
             xpathMap: domState.xpathMap || {},
-            elements: stringElements,
+            elements: elementMap,
             url: page.url(),
           },
           this.llm
@@ -540,47 +547,79 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         // Element not found - retry or fail
         if (attempt < MAX_RETRIES - 1) {
           if (this.debug) {
-            console.log(`[aiAction] Element not found, retrying in ${RETRY_DELAY_MS}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+            console.log(
+              `[aiAction] Element not found, retrying in ${RETRY_DELAY_MS}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`
+            );
           }
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
         }
       }
 
       // After all retries, check if element was found
       if (!elements || elements.length === 0) {
-        if (this.debug && domState && stringElements) {
-          console.error(`[aiAction] No elements found for instruction: "${instruction}" after ${MAX_RETRIES} attempts`);
+        if (this.debug && domState && elementMap) {
+          console.error(
+            `[aiAction] No elements found for instruction: "${instruction}" after ${MAX_RETRIES} attempts`
+          );
           console.error(`[aiAction] Current URL: ${page.url()}`);
-          console.error(`[aiAction] Total elements in final a11y tree: ${domState.elements.size}`);
+          console.error(
+            `[aiAction] Total elements in final a11y tree: ${domState.elements.size}`
+          );
 
           // Show a sample of available interactive elements
           const interactiveElements: string[] = [];
-          for (const [id, elem] of stringElements) {
-            const role = elem.role as string | undefined;
-            if (role && ['button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'tab', 'menuitem'].includes(role)) {
-              const name = elem.name as string | undefined;
-              const description = elem.description as string | undefined;
-              const value = elem.value as string | undefined;
-              const label = name || description || value || '';
+          for (const [id, elem] of elementMap) {
+            // Type guard: ensure elem is an object with expected properties
+            if (!elem || typeof elem !== 'object') continue;
+
+            const node = elem as Record<string, unknown>;
+            const role = typeof node.role === 'string' ? node.role : undefined;
+
+            if (
+              role &&
+              [
+                "button",
+                "link",
+                "textbox",
+                "searchbox",
+                "combobox",
+                "checkbox",
+                "tab",
+                "menuitem",
+              ].includes(role)
+            ) {
+              const name = typeof node.name === 'string' ? node.name : undefined;
+              const description = typeof node.description === 'string' ? node.description : undefined;
+              const value = typeof node.value === 'string' ? node.value : undefined;
+              const label = name || description || value || "";
               if (label) {
-                interactiveElements.push(`  - ${role}: "${label.slice(0, 60)}${label.length > 60 ? '...' : ''}" [${id}]`);
+                interactiveElements.push(
+                  `  - ${role}: "${label.slice(0, 60)}${label.length > 60 ? "..." : ""}" [${id}]`
+                );
               }
             }
             if (interactiveElements.length >= 20) break; // Limit to first 20
           }
 
           if (interactiveElements.length > 0) {
-            console.error(`[aiAction] Available interactive elements (first ${interactiveElements.length}):`);
-            console.error(interactiveElements.join('\n'));
-            console.error(`[aiAction] Try using one of the exact labels above in your instruction`);
+            console.error(
+              `[aiAction] Available interactive elements (first ${interactiveElements.length}):`
+            );
+            console.error(interactiveElements.join("\n"));
+            console.error(
+              `[aiAction] Try using one of the exact labels above in your instruction`
+            );
           } else {
-            console.error(`[aiAction] No interactive elements found in a11y tree`);
-            console.error(`[aiAction] The page may not have fully loaded, or the element might be in an iframe`);
+            console.error(
+              `[aiAction] No interactive elements found in a11y tree`
+            );
+            console.error(
+              `[aiAction] The page may not have fully loaded, or the element might be in an iframe`
+            );
           }
         }
 
-        const errorMsg =
-          `No elements found for instruction: "${instruction}" after ${MAX_RETRIES} retry attempts. The instruction may be too vague, the element may not exist, or the page may not have fully loaded.`;
+        const errorMsg = `No elements found for instruction: "${instruction}" after ${MAX_RETRIES} retry attempts. The instruction may be too vague, the element may not exist, or the page may not have fully loaded.`;
         throw new HyperagentError(errorMsg, 404);
       }
 
@@ -592,31 +631,28 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         console.log(`[aiAction] Arguments:`, element.arguments);
       }
 
-      // Step 4: Execute the Playwright action directly
+      // Execute the Playwright action
       const xpathMap = domState?.xpathMap || {};
 
-      if (this.debug) {
-        console.log(`[aiAction] xpathMap sample:`, JSON.stringify(
-          Object.fromEntries(Object.entries(xpathMap).slice(0, 3)),
-          null,
-          2
-        ));
-      }
-
-      // Cast elementId to the correct type for lookup
-      const rawXpath = xpathMap[element.elementId as `${number}-${number}`];
+      // Convert elementId to EncodedId format for xpath lookup
+      const encodedId = toEncodedId(element.elementId);
+      const rawXpath = xpathMap[encodedId];
       if (!rawXpath) {
         const errorMsg = `Element ${element.elementId} not found in xpath map`;
         if (this.debug) {
           console.error(`[aiAction] ${errorMsg}`);
-          console.error(`[aiAction] Available element IDs in xpathMap:`, Object.keys(xpathMap).slice(0, 20));
-          console.error(`[aiAction] Looking for element with ID: ${element.elementId} (type: ${typeof element.elementId})`);
-          console.error(`[aiAction] Direct lookup result:`, xpathMap[element.elementId as `${number}-${number}`]);
+          console.error(
+            `[aiAction] Looking for element with ID: ${element.elementId} (type: ${typeof element.elementId})`
+          );
+          console.error(
+            `[aiAction] Direct lookup result:`,
+            xpathMap[encodedId]
+          );
         }
         throw new HyperagentError(errorMsg, 404);
       }
 
-      // Trim trailing text nodes (exactly like Stagehand's trimTrailingTextNode)
+      // Trim trailing text nodes from xpath
       const xpath = rawXpath.replace(/\/text\(\)(\[\d+\])?$/iu, "");
 
       const locator = page.locator(`xpath=${xpath}`);
@@ -627,32 +663,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       switch (method) {
         case "click":
-          // Match Stagehand exactly: no explicit scroll, rely on Playwright's auto-scroll
-          try {
-            await locator.click({ timeout: 3500 });
-          } catch (error) {
-            // Fallback to JS click
-            if (this.debug) {
-              console.log(
-                `[aiAction] Playwright click failed, trying JS click`
-              );
-            }
-            try {
-              await locator.evaluate(
-                (el: HTMLElement) => el.click(),
-                undefined,
-                { timeout: 3500 }
-              );
-            } catch {
-              throw error; // Throw original error if JS click also fails
-            }
-          }
+          await locator.click({ timeout: HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT });
           break;
         case "type":
         case "fill":
           await locator.fill(args[0] || "");
           break;
-        case "selectOption":
         case "selectOptionFromDropdown":
           await locator.selectOption(args[0] || "");
           break;
@@ -668,44 +684,50 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         case "uncheck":
           await locator.uncheck();
           break;
-        case "scroll":
         case "scrollTo":
           {
-            // Scroll to percentage - matches Stagehand's scrollElementToPercentage
+            // Scroll to percentage of element or viewport height
             const scrollArg = (args[0] || "50%").toString();
-            await locator.evaluate((element, { yArg }) => {
-              function parsePercent(val: string): number {
-                const cleaned = val.trim().replace("%", "");
-                const num = parseFloat(cleaned);
-                return Number.isNaN(num) ? 0 : Math.max(0, Math.min(num, 100));
-              }
+            await locator.evaluate(
+              (element, { yArg }) => {
+                function parsePercent(val: string): number {
+                  const cleaned = val.trim().replace("%", "");
+                  const num = parseFloat(cleaned);
+                  return Number.isNaN(num)
+                    ? 0
+                    : Math.max(0, Math.min(num, 100));
+                }
 
-              const yPct = parsePercent(yArg);
+                const yPct = parsePercent(yArg);
 
-              if (element.tagName.toLowerCase() === "html") {
-                const scrollHeight = document.body.scrollHeight;
-                const viewportHeight = window.innerHeight;
-                const scrollTop = (scrollHeight - viewportHeight) * (yPct / 100);
-                window.scrollTo({
-                  top: scrollTop,
-                  left: window.scrollX,
-                  behavior: "smooth",
-                });
-              } else {
-                const scrollHeight = element.scrollHeight;
-                const clientHeight = element.clientHeight;
-                const scrollTop = (scrollHeight - clientHeight) * (yPct / 100);
-                element.scrollTo({
-                  top: scrollTop,
-                  left: element.scrollLeft,
-                  behavior: "smooth",
-                });
-              }
-            }, { yArg: scrollArg });
+                if (element.tagName.toLowerCase() === "html") {
+                  const scrollHeight = document.body.scrollHeight;
+                  const viewportHeight = window.innerHeight;
+                  const scrollTop =
+                    (scrollHeight - viewportHeight) * (yPct / 100);
+                  window.scrollTo({
+                    top: scrollTop,
+                    left: window.scrollX,
+                    behavior: "smooth",
+                  });
+                } else {
+                  const scrollHeight = element.scrollHeight;
+                  const clientHeight = element.clientHeight;
+                  const scrollTop =
+                    (scrollHeight - clientHeight) * (yPct / 100);
+                  element.scrollTo({
+                    top: scrollTop,
+                    left: element.scrollLeft,
+                    behavior: "smooth",
+                  });
+                }
+              },
+              { yArg: scrollArg }
+            );
           }
           break;
         case "nextChunk":
-          // Matches Stagehand's scrollToNextChunk
+          // Scroll by one viewport/element height
           await locator.evaluate((element) => {
             const waitForScrollEnd = (el: HTMLElement | Element) =>
               new Promise<void>((resolve) => {
@@ -722,13 +744,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             const tagName = element.tagName.toLowerCase();
 
             if (tagName === "html" || tagName === "body") {
-              const height = window.visualViewport?.height ?? window.innerHeight;
+              const height =
+                window.visualViewport?.height ?? window.innerHeight;
               window.scrollBy({ top: height, left: 0, behavior: "smooth" });
-              const scrollingRoot = (document.scrollingElement ?? document.documentElement) as HTMLElement;
+              const scrollingRoot = (document.scrollingElement ??
+                document.documentElement) as HTMLElement;
               return waitForScrollEnd(scrollingRoot);
             }
 
-            const height = (element as HTMLElement).getBoundingClientRect().height;
+            const height = (element as HTMLElement).getBoundingClientRect()
+              .height;
             (element as HTMLElement).scrollBy({
               top: height,
               left: 0,
@@ -738,7 +763,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           });
           break;
         case "prevChunk":
-          // Matches Stagehand's scrollToPreviousChunk
+          // Scroll up by one viewport/element height
           await locator.evaluate((element) => {
             const waitForScrollEnd = (el: HTMLElement | Element) =>
               new Promise<void>((resolve) => {
@@ -755,13 +780,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             const tagName = element.tagName.toLowerCase();
 
             if (tagName === "html" || tagName === "body") {
-              const height = window.visualViewport?.height ?? window.innerHeight;
+              const height =
+                window.visualViewport?.height ?? window.innerHeight;
               window.scrollBy({ top: -height, left: 0, behavior: "smooth" });
-              const rootScrollingEl = (document.scrollingElement ?? document.documentElement) as HTMLElement;
+              const rootScrollingEl = (document.scrollingElement ??
+                document.documentElement) as HTMLElement;
               return waitForScrollEnd(rootScrollingEl);
             }
 
-            const height = (element as HTMLElement).getBoundingClientRect().height;
+            const height = (element as HTMLElement).getBoundingClientRect()
+              .height;
             (element as HTMLElement).scrollBy({
               top: -height,
               left: 0,
@@ -783,11 +811,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         console.log(`[aiAction] Successfully executed ${method}`);
       }
 
-      // Step 5: Wait for DOM to settle after action (like Stagehand does after each action)
+      // Step 5: Wait for DOM to settle after action
       await waitForSettledDOM(page);
 
       // Write debug data on success
-      if (this.debug && domState && stringElements) {
+      if (this.debug && domState && elementMap) {
         try {
           const screenshot = await page.screenshot({ type: "png" });
           await writeAiActionDebug({
@@ -820,19 +848,42 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         console.error(`[aiAction] Error:`, error);
 
         // Write debug data on error
-        if (domState && stringElements) {
+        if (domState && elementMap) {
           try {
-            const screenshot = await page.screenshot({ type: "png" }).catch(() => null);
+            const screenshot = await page
+              .screenshot({ type: "png" })
+              .catch(() => null);
 
             // Collect available elements for debugging
-            const availableElements: Array<{ id: string; role: string; label: string }> = [];
-            for (const [id, elem] of stringElements) {
-              const role = elem.role as string | undefined;
-              if (role && ['button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'tab', 'menuitem'].includes(role)) {
-                const name = elem.name as string | undefined;
-                const description = elem.description as string | undefined;
-                const value = elem.value as string | undefined;
-                const label = name || description || value || '';
+            const availableElements: Array<{
+              id: string;
+              role: string;
+              label: string;
+            }> = [];
+            for (const [id, elem] of elementMap) {
+              // Type guard: ensure elem is an object with expected properties
+              if (!elem || typeof elem !== 'object') continue;
+
+              const node = elem as Record<string, unknown>;
+              const role = typeof node.role === 'string' ? node.role : undefined;
+
+              if (
+                role &&
+                [
+                  "button",
+                  "link",
+                  "textbox",
+                  "searchbox",
+                  "combobox",
+                  "checkbox",
+                  "tab",
+                  "menuitem",
+                ].includes(role)
+              ) {
+                const name = typeof node.name === 'string' ? node.name : undefined;
+                const description = typeof node.description === 'string' ? node.description : undefined;
+                const value = typeof node.value === 'string' ? node.value : undefined;
+                const label = name || description || value || "";
                 if (label) {
                   availableElements.push({ id, role, label });
                 }

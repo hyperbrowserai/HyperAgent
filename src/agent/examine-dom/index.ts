@@ -1,8 +1,7 @@
 /**
  * ExamineDom - Find elements in accessibility tree based on natural language
  *
- * This is inspired by Stagehand's observe function but optimized for our architecture.
- * It takes a natural language instruction (e.g., "click the login button") and returns
+ * Takes a natural language instruction (e.g., "click the login button") and returns
  * matching elements from the accessibility tree with confidence scores.
  */
 

@@ -1,5 +1,6 @@
 // workflow.ts
 
+import "dotenv/config";
 import { HyperPage } from "../src/types/agent/types";
 import { HyperAgent } from "../src/agent";
 import { z } from "zod";
@@ -17,12 +18,12 @@ async function runWorkflow() {
   let agent: HyperAgent | null = null;
 
   try {
-    // Initialize Stagehand
+    // Initialize HyperAgent
     console.log("Initializing HyperAgent...");
     agent = new HyperAgent({
       llm: {
-        provider: "openai",
-        model: "gpt-5",
+        provider: "anthropic",
+        model: "claude-sonnet-4-0",
       },
       debug: true,
     });
@@ -30,7 +31,7 @@ async function runWorkflow() {
     // Get the page instance
     const page: HyperPage = await agent.newPage();
     if (!page) {
-      throw new Error("Failed to get page instance from Stagehand");
+      throw new Error("Failed to get page instance from HyperAgent");
     }
 
     await page.goto("https://www.google.com/maps");
@@ -98,11 +99,11 @@ async function runWorkflow() {
   } finally {
     // Clean up
     if (agent) {
-      console.log("Closing Stagehand connection.");
+      console.log("Closing HyperAgent connection.");
       try {
         await agent.closeAgent();
       } catch (err) {
-        console.error("Error closing Stagehand:", err);
+        console.error("Error closing HyperAgent:", err);
       }
     }
   }

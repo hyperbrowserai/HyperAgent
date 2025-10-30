@@ -1,7 +1,6 @@
 /**
  * A11y-specific system prompt additions for accessibility tree mode
  * This is appended to the base SYSTEM_PROMPT to add a11y-specific instructions
- * Based on Stagehand's proven approach and Phase 1 specifications
  */
 
 export const A11Y_SYSTEM_PROMPT = `When using accessibility tree mode, the page DOM is represented as a text-based accessibility tree instead of visual element indices.

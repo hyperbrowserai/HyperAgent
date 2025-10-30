@@ -1,6 +1,5 @@
 /**
  * Build hierarchical accessibility tree from flat CDP nodes
- * Based on Stagehand's buildHierarchicalTree implementation
  */
 
 import {
@@ -117,7 +116,7 @@ export async function buildHierarchicalTree(
     .filter((n) => !n.parentId && n.nodeId && nodeMap.has(n.nodeId))
     .map((n) => nodeMap.get(n.nodeId!)!) as RichNode[];
 
-  // Pass 4: Clean structural nodes (Stagehand's enhancement)
+  // Pass 4: Clean structural nodes
   const cleanedRoots = (
     await Promise.all(
       roots.map((n) => cleanStructuralNodes(n, tagNameMap)),

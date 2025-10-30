@@ -1,13 +1,11 @@
 /**
  * Utility functions for accessibility tree processing
- * Based on Stagehand's implementation
  */
 
 import { AccessibilityNode, EncodedId, RichNode, STRUCTURAL_ROLES } from './types';
 
 /**
  * Clean text by removing private-use unicode characters and normalizing whitespace
- * Based on Stagehand's cleanText implementation
  */
 export function cleanText(input: string): string {
   if (!input) return '';
@@ -79,7 +77,6 @@ export function formatSimplifiedTree(
 
 /**
  * Check if a node is interactive based on role and properties
- * Based on Stagehand's isInteractive check
  */
 export function isInteractive(node: AccessibilityNode): boolean {
   // Skip structural-only roles
@@ -92,7 +89,6 @@ export function isInteractive(node: AccessibilityNode): boolean {
 
 /**
  * Remove redundant StaticText children when parent has same name
- * Based on Stagehand's removeRedundantStaticTextChildren
  */
 export function removeRedundantStaticTextChildren(
   parent: AccessibilityNode,
@@ -114,7 +110,6 @@ export function removeRedundantStaticTextChildren(
 
 /**
  * Clean structural nodes by replacing generic roles with tag names
- * Based on Stagehand's cleanStructuralNodes
  */
 export async function cleanStructuralNodes(
   node: AccessibilityNode & { encodedId?: EncodedId },
@@ -148,7 +143,7 @@ export async function cleanStructuralNodes(
     }
   }
 
-  // Replace generic role with real tag name (Stagehand's key enhancement!)
+  // Replace generic role with real tag name for better context
   if (
     (node.role === 'generic' || node.role === 'none') &&
     node.encodedId !== undefined

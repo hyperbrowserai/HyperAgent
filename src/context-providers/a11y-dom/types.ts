@@ -1,6 +1,5 @@
 /**
  * Types for accessibility tree extraction using Chrome DevTools Protocol
- * Based on Stagehand's implementation
  */
 
 /**
@@ -193,7 +192,7 @@ export const INTERACTIVE_ROLES = new Set([
 ]);
 
 /**
- * Structural roles to replace with tag names (Stagehand's approach)
+ * Structural roles to replace with tag names
  */
 export const STRUCTURAL_ROLES = new Set(['generic', 'none', 'StaticText']);
 
@@ -201,3 +200,28 @@ export const STRUCTURAL_ROLES = new Set(['generic', 'none', 'StaticText']);
  * Pattern to validate encoded IDs (frameIndex-nodeIndex)
  */
 export const ID_PATTERN = /^\d+-\d+$/;
+
+/**
+ * Type guard to check if a string is a valid EncodedId
+ */
+export function isEncodedId(id: string): id is EncodedId {
+  return ID_PATTERN.test(id);
+}
+
+/**
+ * Type assertion to convert string to EncodedId with validation
+ * @throws Error if the string is not a valid EncodedId format
+ */
+export function toEncodedId(id: string): EncodedId {
+  if (!isEncodedId(id)) {
+    throw new Error(`Invalid EncodedId format: "${id}". Expected format: "number-number"`);
+  }
+  return id;
+}
+
+/**
+ * Safe conversion that returns undefined if invalid
+ */
+export function asEncodedId(id: string): EncodedId | undefined {
+  return isEncodedId(id) ? id : undefined;
+}

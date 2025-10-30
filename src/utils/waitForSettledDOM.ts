@@ -1,5 +1,5 @@
 /**
- * Wait for DOM to settle - based on Stagehand's _waitForSettledDom implementation
+ * Wait for DOM to settle by monitoring network activity
  *
  * Definition of "settled":
  * - No in-flight network requests (except WebSocket / Server-Sent-Events)

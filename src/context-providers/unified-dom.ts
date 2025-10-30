@@ -16,10 +16,10 @@ import { DOMConfig } from '@/types/config';
 export interface UnifiedDOMState {
   /**
    * Map of element IDs to element data
-   * - Visual mode: numeric indices (1, 2, 3...)
-   * - A11y mode: encoded IDs ("0-1234", "0-5678"...)
+   * - Visual mode: numeric indices (1, 2, 3...) → InteractiveElement
+   * - A11y mode: encoded IDs ("0-1234", "0-5678"...) → AccessibilityNode
    */
-  elements: Map<number | string, any>;
+  elements: Map<number | string, Record<string, unknown> | unknown>;
 
   /**
    * Text representation of the DOM sent to LLM

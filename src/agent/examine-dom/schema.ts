@@ -28,9 +28,6 @@ export const ExamineDomResultSchema = z.object({
       'hover',
       'check',
       'uncheck',
-      // Legacy aliases (kept for backward compatibility)
-      'selectOption',
-      'scroll',
     ])
     .default('click')
     .describe('Suggested Playwright method to use'),
