@@ -6,9 +6,9 @@ import { getLocator } from "./utils";
 
 const ClickElementAction = z
   .object({
-    elementId: z.union([z.number(), z.string()]).describe("The element ID (numeric index in visual mode or encoded ID like '0-1234' in a11y mode)"),
+    index: z.number().describe("The numeric index of the element to click."),
   })
-  .describe("Click on an element identified by its ID");
+  .describe("Click on an element identified by its index");
 
 type ClickElementActionType = z.infer<typeof ClickElementAction>;
 
@@ -22,9 +22,9 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     ctx: ActionContext,
     action: ClickElementActionType
   ): Promise<ActionOutput> {
-    const id = action.elementId;
+    const { index } = action;
 
-    const locator = getLocator(ctx, id);
+    const locator = getLocator(ctx, index);
     if (!locator) {
       return { success: false, message: "Element not found" };
     }
@@ -50,10 +50,10 @@ export const ClickElementActionDefinition: AgentActionDefinition = {
     ]);
 
     await locator.click({ force: true });
-    return { success: true, message: `Clicked element with ID ${id}` };
+    return { success: true, message: `Clicked element with index ${index}` };
   },
   pprintAction: function (params: ClickElementActionType): string {
-    return `Click element at ID ${params.elementId}`;
+    return `Click element at index ${params.index}`;
   },
 };
 

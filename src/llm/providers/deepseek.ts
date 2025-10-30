@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { createOpenAI as createAISDKOpenAI } from "@ai-sdk/openai";
 import {
   HyperAgentLLM,
   HyperAgentMessage,
@@ -51,19 +50,6 @@ export class DeepSeekClient implements HyperAgentLLM {
       toolCalling: true,
       jsonMode: true,
     };
-  }
-
-  /**
-   * Get AI SDK LanguageModel for tool-based agent
-   * Returns a compatible model for use with AI SDK's generateText
-   * DeepSeek uses OpenAI-compatible API
-   */
-  getLanguageModel(): any {
-    const aiSDK = createAISDKOpenAI({
-      apiKey: this.client.apiKey,
-      baseURL: (this.client as any).baseURL || "https://api.deepseek.com",
-    });
-    return aiSDK(this.model);
   }
 
   async invoke(

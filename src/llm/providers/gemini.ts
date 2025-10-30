@@ -1,6 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import {
   HyperAgentLLM,
   HyperAgentMessage,
@@ -20,15 +19,13 @@ export interface GeminiClientConfig {
 
 export class GeminiClient implements HyperAgentLLM {
   private client: GoogleGenAI;
-  private apiKey: string | undefined;
   private model: string;
   private temperature: number;
   private maxTokens?: number;
 
   constructor(config: GeminiClientConfig) {
-    this.apiKey = config.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     this.client = new GoogleGenAI({
-      apiKey: this.apiKey,
+      apiKey: config.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
     });
     this.model = config.model;
     this.temperature = config.temperature ?? 0;
@@ -129,17 +126,6 @@ export class GeminiClient implements HyperAgentLLM {
       toolCalling: false, // Gemini has limited tool calling support
       jsonMode: true,
     };
-  }
-
-  /**
-   * Get AI SDK LanguageModel for tool-based agent
-   * Returns a compatible model for use with AI SDK's generateText
-   */
-  getLanguageModel(): any {
-    const aiSDK = createGoogleGenerativeAI({
-      apiKey: this.apiKey,
-    });
-    return aiSDK(this.model);
   }
 }
 

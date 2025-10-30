@@ -4,7 +4,9 @@ import { getLocator } from "./utils";
 
 export const InputTextAction = z
   .object({
-    elementId: z.union([z.number(), z.string()]).describe("The element ID (numeric index in visual mode or encoded ID like '0-1234' in a11y mode)"),
+    index: z
+      .number()
+      .describe("The numeric index of the element to input text."),
     text: z.string().describe("The text to input."),
   })
   .describe("Input text into a input interactive element");
@@ -15,9 +17,8 @@ export const InputTextActionDefinition: AgentActionDefinition = {
     type: "inputText" as const,
     actionParams: InputTextAction,
     run: async (ctx: ActionContext, action: InputTextActionType) => {
-      const id = action.elementId;
-      let { text } = action;
-      const locator = getLocator(ctx, id);
+      let { index, text } = action;
+      const locator = getLocator(ctx, index);
       for (const variable of ctx.variables) {
         text = text.replace(`<<${variable.key}>>`, variable.value);
       }
@@ -27,10 +28,10 @@ export const InputTextActionDefinition: AgentActionDefinition = {
       await locator.fill(text, { timeout: 5_000 });
       return {
         success: true,
-        message: `Inputted text "${text}" into element with ID ${id}`,
+        message: `Inputted text "${text}" into element with index ${index}`,
       };
     },
     pprintAction: function (params: InputTextActionType): string {
-      return `Input text "${params.text}" into element at ID ${params.elementId}`;
+      return `Input text "${params.text}" into element at index ${params.index}`;
     },
   };

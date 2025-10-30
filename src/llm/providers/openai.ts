@@ -1,6 +1,5 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import { createOpenAI as createAISDKOpenAI } from "@ai-sdk/openai";
 import {
   HyperAgentLLM,
   HyperAgentMessage,
@@ -68,7 +67,7 @@ export class OpenAIClient implements HyperAgentLLM {
       baseURL: config.baseURL,
     });
     this.model = config.model;
-    this.temperature = config.temperature ?? 1;
+    this.temperature = config.temperature ?? 0;
     this.maxTokens = config.maxTokens;
   }
 
@@ -198,18 +197,6 @@ export class OpenAIClient implements HyperAgentLLM {
       toolCalling: true,
       jsonMode: true,
     };
-  }
-
-  /**
-   * Get AI SDK LanguageModel for tool-based agent
-   * Returns a compatible model for use with AI SDK's generateText
-   */
-  getLanguageModel(): any {
-    const aiSDK = createAISDKOpenAI({
-      apiKey: this.client.apiKey,
-      baseURL: (this.client as any).baseURL,
-    });
-    return aiSDK(this.model);
   }
 }
 
