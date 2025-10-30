@@ -3,7 +3,6 @@
 import "dotenv/config";
 import { HyperPage } from "../src/types/agent/types";
 import { HyperAgent } from "../src/agent";
-import { z } from "zod";
 
 // Install all dependencies:
 // pnpm add -D playwright tsx typescript @types/node
@@ -65,13 +64,13 @@ async function runWorkflow() {
     await page.aiAction(`click the Gas button`);
 
     // Scroll: Scrolled down 300 pixels
-    await page.aiAction(`Scrolled down 300 pixels`);
+    await page.aiAction(`Scroll down 300 pixels`);
 
     // Scroll: Scrolled down 500 pixels
-    await page.aiAction(`Scrolled down 500 pixels`);
+    await page.aiAction(`Scroll down 500 pixels`);
 
     // Scroll: Scrolled down 800 pixels
-    await page.aiAction(`Scrolled down 800 pixels`);
+    await page.aiAction(`Scroll down 800 pixels`);
 
     // Step 11: Extract data
     console.log(

@@ -7,6 +7,10 @@ import { Page } from 'patchright';
 import { A11yDOMState, A11yDOMConfig, AXNode } from './types';
 import { buildBackendIdMaps } from './build-maps';
 import { buildHierarchicalTree } from './build-tree';
+import {
+  injectScrollableDetection,
+  findScrollableElementIds,
+} from './scrollable-detection';
 
 /**
  * Get accessibility tree state from a page
@@ -29,22 +33,28 @@ export async function getA11yDOM(
   const mode = config.mode ?? 'a11y';
 
   try {
-    // Step 1: Create CDP session
+    // Step 1: Inject scrollable detection script into page
+    await injectScrollableDetection(page);
+
+    // Step 2: Create CDP session
     const client = await page.context().newCDPSession(page);
 
     try {
-      // Step 2: Get accessibility tree from Chrome
+      // Step 3: Get accessibility tree from Chrome
       const { nodes } = (await client.send('Accessibility.getFullAXTree')) as {
         nodes: AXNode[];
       };
 
-      // Step 3: Build backend ID maps (tag names and XPaths)
+      // Step 4: Build backend ID maps (tag names and XPaths)
       const maps = await buildBackendIdMaps(client);
 
-      // Step 4: Build hierarchical tree with enhancements
-      const treeResult = await buildHierarchicalTree(nodes, maps);
+      // Step 5: Detect scrollable elements
+      const scrollableIds = await findScrollableElementIds(page, client);
 
-      // Step 5: Optionally take screenshot
+      // Step 6: Build hierarchical tree with enhancements and scrollable marking
+      const treeResult = await buildHierarchicalTree(nodes, maps, 0, scrollableIds);
+
+      // Step 7: Optionally take screenshot
       let screenshot: string | undefined;
       if (mode === 'hybrid' || mode === 'visual-debug') {
         const screenshotBuffer = await page.screenshot({
@@ -54,7 +64,7 @@ export async function getA11yDOM(
         screenshot = screenshotBuffer.toString('base64');
       }
 
-      // Step 6: Optionally inject identifiers and draw boxes (visual-debug mode)
+      // Step 8: Optionally inject identifiers and draw boxes (visual-debug mode)
       if (mode === 'visual-debug' && config.injectIdentifiers) {
         // TODO: Implement DOM injection and bounding boxes
         // This is Phase 1's optional feature for debugging
@@ -91,3 +101,4 @@ export * from './types';
 export * from './utils';
 export * from './build-maps';
 export * from './build-tree';
+export * from './scrollable-detection';

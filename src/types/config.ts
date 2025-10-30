@@ -70,14 +70,6 @@ export interface ActionConfig {
   };
 }
 
-/**
- * DOM extraction mode configuration
- * @internal - Used internally, mode selection is now handled by API choice
- */
-export interface DOMConfig {
-  mode?: 'visual' | 'a11y';
-}
-
 export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
   customActions?: Array<AgentActionDefinition>;
 

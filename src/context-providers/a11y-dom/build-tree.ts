@@ -11,13 +11,22 @@ import {
   BackendIdMaps,
 } from './types';
 import { cleanStructuralNodes, formatSimplifiedTree, isInteractive, createEncodedId } from './utils';
+import { decorateRoleIfScrollable } from './scrollable-detection';
 
 /**
  * Convert raw CDP AXNode to simplified AccessibilityNode
+ * Optionally decorates role with "scrollable" prefix if element is scrollable
  */
-function convertAXNode(node: AXNode): AccessibilityNode {
+function convertAXNode(node: AXNode, scrollableIds?: Set<number>): AccessibilityNode {
+  const baseRole = node.role?.value ?? 'unknown';
+
+  // Decorate role if element is scrollable
+  const role = scrollableIds
+    ? decorateRoleIfScrollable(baseRole, node.backendDOMNodeId, scrollableIds)
+    : baseRole;
+
   return {
-    role: node.role?.value ?? 'unknown',
+    role,
     name: node.name?.value,
     description: node.description?.value,
     value: node.value?.value,
@@ -36,15 +45,17 @@ function convertAXNode(node: AXNode): AccessibilityNode {
  * @param tagNameMap - Map of encoded IDs to tag names
  * @param xpathMap - Map of encoded IDs to XPaths
  * @param frameIndex - Frame index for encoded ID generation
+ * @param scrollableIds - Set of backend node IDs that are scrollable
  * @returns TreeResult with cleaned tree, simplified text, and maps
  */
 export async function buildHierarchicalTree(
   nodes: AXNode[],
   { tagNameMap, xpathMap }: BackendIdMaps,
   frameIndex = 0,
+  scrollableIds?: Set<number>,
 ): Promise<TreeResult> {
-  // Convert raw AX nodes to simplified format
-  const accessibilityNodes = nodes.map(convertAXNode);
+  // Convert raw AX nodes to simplified format, decorating scrollable elements
+  const accessibilityNodes = nodes.map((node) => convertAXNode(node, scrollableIds));
 
   // Build "backendId → EncodedId[]" lookup
   const backendToIds = new Map<number, EncodedId[]>();

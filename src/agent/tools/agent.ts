@@ -7,7 +7,7 @@ import {
   ActionType,
   AgentActionDefinition,
 } from "@/types";
-import { getUnifiedDOM } from "@/context-providers/unified-dom";
+import { getDom } from "@/context-providers/dom";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
@@ -25,7 +25,6 @@ import { buildAgentStepMessages } from "../messages/builder";
 import { SYSTEM_PROMPT } from "../messages/system-prompt";
 import { z } from "zod";
 import { DOMState } from "@/context-providers/dom/types";
-import { UnifiedDOMState } from "@/context-providers/unified-dom";
 import { Page } from "patchright";
 import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
@@ -72,12 +71,12 @@ const getActionHandler = (
 
 const runAction = async (
   action: ActionType,
-  domState: UnifiedDOMState,
+  domState: DOMState,
   page: Page,
   ctx: AgentCtx
 ): Promise<ActionOutput> => {
   const actionCtx: ActionContext = {
-    domState: domState as any, // Cast to DOMState for action compatibility
+    domState,
     page,
     tokenLimit: ctx.tokenLimit,
     llm: ctx.llm,
@@ -154,11 +153,11 @@ export const runAgentTask = async (
     }
 
     // Get DOM State (V1 always uses visual mode)
-    let domState: UnifiedDOMState | null = null;
+    let domState: DOMState | null = null;
     try {
       domState = await retry({
         func: async () => {
-          const s = await getUnifiedDOM(page, { mode: "visual" });
+          const s = await getDom(page);
           if (!s) throw new Error("no dom state");
           return s;
         },
@@ -213,7 +212,7 @@ export const runAgentTask = async (
       taskState.steps,
       taskState.task,
       page,
-      domState as any, // Cast for compatibility
+      domState,
       trimmedScreenshot,
       Object.values(ctx.variables)
     );
