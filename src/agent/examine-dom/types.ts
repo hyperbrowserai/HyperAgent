@@ -9,11 +9,18 @@
 export type PlaywrightMethod =
   | 'click'
   | 'fill'
-  | 'selectOption'
-  | 'hover'
+  | 'type'
   | 'press'
+  | 'scrollTo'
+  | 'nextChunk'
+  | 'prevChunk'
+  | 'selectOptionFromDropdown'
+  | 'hover'
   | 'check'
-  | 'uncheck';
+  | 'uncheck'
+  // Legacy aliases (kept for backward compatibility)
+  | 'selectOption'
+  | 'scroll';
 
 /**
  * Result from examineDom function - represents a matching element

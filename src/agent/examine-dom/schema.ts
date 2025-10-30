@@ -16,7 +16,22 @@ export const ExamineDomResultSchema = z.object({
     .max(1)
     .describe('Confidence score 0-1 indicating match quality'),
   method: z
-    .enum(['click', 'fill', 'selectOption', 'hover', 'press', 'check', 'uncheck'])
+    .enum([
+      'click',
+      'fill',
+      'type',
+      'press',
+      'scrollTo',
+      'nextChunk',
+      'prevChunk',
+      'selectOptionFromDropdown',
+      'hover',
+      'check',
+      'uncheck',
+      // Legacy aliases (kept for backward compatibility)
+      'selectOption',
+      'scroll',
+    ])
     .default('click')
     .describe('Suggested Playwright method to use'),
   arguments: z

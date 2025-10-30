@@ -454,60 +454,134 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const { examineDom } = await import("./examine-dom");
     const { getUnifiedDOM } = await import("../context-providers/unified-dom");
     const { waitForSettledDOM } = await import("../utils/waitForSettledDOM");
+    const { writeAiActionDebug } = await import("../utils/debugWriter");
+
+    const startTime = new Date().toISOString();
 
     if (this.debug) {
       console.log(`[aiAction] Instruction: ${instruction}`);
     }
 
+    let domState: Awaited<ReturnType<typeof getUnifiedDOM>> = null;
+    let stringElements: Map<string, Record<string, unknown>> | null = null;
+    let elements: Awaited<ReturnType<typeof examineDom>> | null = null;
+
+    // Retry configuration
+    const MAX_RETRIES = 10;
+    const RETRY_DELAY_MS = 1000;
+
     try {
-      // Step 1: Wait for DOM to settle
-      // This ensures dynamic content like dropdowns have finished loading
-      await waitForSettledDOM(page, 5000);
+      // Retry loop for element finding
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        // Step 1: Wait for DOM to settle
+        // This ensures dynamic content like dropdowns have finished loading
+        if (this.debug) {
+          if (attempt === 0) {
+            console.log(`[aiAction] Waiting for DOM to settle...`);
+          } else {
+            console.log(`[aiAction] Retry ${attempt + 1}/${MAX_RETRIES}: Waiting for DOM to settle...`);
+          }
+        }
+        await waitForSettledDOM(page);
+        if (this.debug) {
+          console.log(`[aiAction] DOM settled`);
+        }
 
-      // Step 2: Fetch a11y tree
-      const domState = await getUnifiedDOM(page, { mode: "a11y" });
+        // Step 2: Fetch a11y tree
+        domState = await getUnifiedDOM(page, { mode: "a11y" });
 
-      if (!domState) {
-        return {
-          status: TaskStatus.FAILED,
-          steps: [],
-          output: "Failed to fetch page structure",
-        };
-      }
+        if (!domState) {
+          return {
+            status: TaskStatus.FAILED,
+            steps: [],
+            output: "Failed to fetch page structure",
+          };
+        }
 
-      if (this.debug) {
-        console.log(
-          `[aiAction] Fetched a11y tree: ${domState.elements.size} elements`
+        if (this.debug) {
+          console.log(
+            `[aiAction] Fetched a11y tree: ${domState.elements.size} elements`
+          );
+        }
+
+        // Step 3: Call examineDom to find element and determine method
+        // (Like Stagehand's observe with returnAction: true)
+
+        // Convert elements map to string-only keys (a11y mode uses string keys)
+        stringElements = new Map<string, Record<string, unknown>>();
+        for (const [key, value] of domState.elements) {
+          stringElements.set(String(key), value as Record<string, unknown>);
+        }
+
+        if (this.debug) {
+          console.log(`[aiAction] Calling examineDom to find element for: "${instruction}"`);
+        }
+
+        elements = await examineDom(
+          instruction,
+          {
+            tree: domState.domState,
+            xpathMap: domState.xpathMap || {},
+            elements: stringElements,
+            url: page.url(),
+          },
+          this.llm
         );
+
+        // Check if element was found
+        if (elements && elements.length > 0) {
+          // Found it! Break out of retry loop
+          if (this.debug && attempt > 0) {
+            console.log(`[aiAction] Element found on attempt ${attempt + 1}`);
+          }
+          break;
+        }
+
+        // Element not found - retry or fail
+        if (attempt < MAX_RETRIES - 1) {
+          if (this.debug) {
+            console.log(`[aiAction] Element not found, retrying in ${RETRY_DELAY_MS}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+          }
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        }
       }
 
-      // Step 3: Call examineDom to find element and determine method
-      // (Like Stagehand's observe with returnAction: true)
-
-      // Convert elements map to string-only keys (a11y mode uses string keys)
-      const stringElements = new Map<string, any>();
-      for (const [key, value] of domState.elements) {
-        stringElements.set(String(key), value);
-      }
-
-      const elements = await examineDom(
-        instruction,
-        {
-          tree: domState.domState,
-          xpathMap: domState.xpathMap || {},
-          elements: stringElements,
-          url: page.url(),
-        },
-        this.llm
-      );
-
+      // After all retries, check if element was found
       if (!elements || elements.length === 0) {
-        return {
-          status: TaskStatus.FAILED,
-          steps: [],
-          output:
-            "No elements found to act on. The instruction may be too vague or the element may not exist on the page.",
-        };
+        if (this.debug && domState && stringElements) {
+          console.error(`[aiAction] No elements found for instruction: "${instruction}" after ${MAX_RETRIES} attempts`);
+          console.error(`[aiAction] Current URL: ${page.url()}`);
+          console.error(`[aiAction] Total elements in final a11y tree: ${domState.elements.size}`);
+
+          // Show a sample of available interactive elements
+          const interactiveElements: string[] = [];
+          for (const [id, elem] of stringElements) {
+            const role = elem.role as string | undefined;
+            if (role && ['button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'tab', 'menuitem'].includes(role)) {
+              const name = elem.name as string | undefined;
+              const description = elem.description as string | undefined;
+              const value = elem.value as string | undefined;
+              const label = name || description || value || '';
+              if (label) {
+                interactiveElements.push(`  - ${role}: "${label.slice(0, 60)}${label.length > 60 ? '...' : ''}" [${id}]`);
+              }
+            }
+            if (interactiveElements.length >= 20) break; // Limit to first 20
+          }
+
+          if (interactiveElements.length > 0) {
+            console.error(`[aiAction] Available interactive elements (first ${interactiveElements.length}):`);
+            console.error(interactiveElements.join('\n'));
+            console.error(`[aiAction] Try using one of the exact labels above in your instruction`);
+          } else {
+            console.error(`[aiAction] No interactive elements found in a11y tree`);
+            console.error(`[aiAction] The page may not have fully loaded, or the element might be in an iframe`);
+          }
+        }
+
+        const errorMsg =
+          `No elements found for instruction: "${instruction}" after ${MAX_RETRIES} retry attempts. The instruction may be too vague, the element may not exist, or the page may not have fully loaded.`;
+        throw new HyperagentError(errorMsg, 404);
       }
 
       const element = elements[0];
@@ -519,14 +593,27 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
 
       // Step 4: Execute the Playwright action directly
-      const xpathMap = domState.xpathMap || {};
-      const rawXpath = xpathMap[element.elementId as keyof typeof xpathMap];
+      const xpathMap = domState?.xpathMap || {};
+
+      if (this.debug) {
+        console.log(`[aiAction] xpathMap sample:`, JSON.stringify(
+          Object.fromEntries(Object.entries(xpathMap).slice(0, 3)),
+          null,
+          2
+        ));
+      }
+
+      // Cast elementId to the correct type for lookup
+      const rawXpath = xpathMap[element.elementId as `${number}-${number}`];
       if (!rawXpath) {
-        return {
-          status: TaskStatus.FAILED,
-          steps: [],
-          output: `Element ${element.elementId} not found in xpath map`,
-        };
+        const errorMsg = `Element ${element.elementId} not found in xpath map`;
+        if (this.debug) {
+          console.error(`[aiAction] ${errorMsg}`);
+          console.error(`[aiAction] Available element IDs in xpathMap:`, Object.keys(xpathMap).slice(0, 20));
+          console.error(`[aiAction] Looking for element with ID: ${element.elementId} (type: ${typeof element.elementId})`);
+          console.error(`[aiAction] Direct lookup result:`, xpathMap[element.elementId as `${number}-${number}`]);
+        }
+        throw new HyperagentError(errorMsg, 404);
       }
 
       // Trim trailing text nodes (exactly like Stagehand's trimTrailingTextNode)
@@ -561,10 +648,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             }
           }
           break;
+        case "type":
         case "fill":
           await locator.fill(args[0] || "");
           break;
         case "selectOption":
+        case "selectOptionFromDropdown":
           await locator.selectOption(args[0] || "");
           break;
         case "hover":
@@ -579,12 +668,115 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         case "uncheck":
           await locator.uncheck();
           break;
-        default:
-          return {
-            status: TaskStatus.FAILED,
-            steps: [],
-            output: `Unknown method: ${method}`,
-          };
+        case "scroll":
+        case "scrollTo":
+          {
+            // Scroll to percentage - matches Stagehand's scrollElementToPercentage
+            const scrollArg = (args[0] || "50%").toString();
+            await locator.evaluate((element, { yArg }) => {
+              function parsePercent(val: string): number {
+                const cleaned = val.trim().replace("%", "");
+                const num = parseFloat(cleaned);
+                return Number.isNaN(num) ? 0 : Math.max(0, Math.min(num, 100));
+              }
+
+              const yPct = parsePercent(yArg);
+
+              if (element.tagName.toLowerCase() === "html") {
+                const scrollHeight = document.body.scrollHeight;
+                const viewportHeight = window.innerHeight;
+                const scrollTop = (scrollHeight - viewportHeight) * (yPct / 100);
+                window.scrollTo({
+                  top: scrollTop,
+                  left: window.scrollX,
+                  behavior: "smooth",
+                });
+              } else {
+                const scrollHeight = element.scrollHeight;
+                const clientHeight = element.clientHeight;
+                const scrollTop = (scrollHeight - clientHeight) * (yPct / 100);
+                element.scrollTo({
+                  top: scrollTop,
+                  left: element.scrollLeft,
+                  behavior: "smooth",
+                });
+              }
+            }, { yArg: scrollArg });
+          }
+          break;
+        case "nextChunk":
+          // Matches Stagehand's scrollToNextChunk
+          await locator.evaluate((element) => {
+            const waitForScrollEnd = (el: HTMLElement | Element) =>
+              new Promise<void>((resolve) => {
+                let last = el.scrollTop ?? 0;
+                const check = () => {
+                  const cur = el.scrollTop ?? 0;
+                  if (cur === last) return resolve();
+                  last = cur;
+                  requestAnimationFrame(check);
+                };
+                requestAnimationFrame(check);
+              });
+
+            const tagName = element.tagName.toLowerCase();
+
+            if (tagName === "html" || tagName === "body") {
+              const height = window.visualViewport?.height ?? window.innerHeight;
+              window.scrollBy({ top: height, left: 0, behavior: "smooth" });
+              const scrollingRoot = (document.scrollingElement ?? document.documentElement) as HTMLElement;
+              return waitForScrollEnd(scrollingRoot);
+            }
+
+            const height = (element as HTMLElement).getBoundingClientRect().height;
+            (element as HTMLElement).scrollBy({
+              top: height,
+              left: 0,
+              behavior: "smooth",
+            });
+            return waitForScrollEnd(element);
+          });
+          break;
+        case "prevChunk":
+          // Matches Stagehand's scrollToPreviousChunk
+          await locator.evaluate((element) => {
+            const waitForScrollEnd = (el: HTMLElement | Element) =>
+              new Promise<void>((resolve) => {
+                let last = el.scrollTop ?? 0;
+                const check = () => {
+                  const cur = el.scrollTop ?? 0;
+                  if (cur === last) return resolve();
+                  last = cur;
+                  requestAnimationFrame(check);
+                };
+                requestAnimationFrame(check);
+              });
+
+            const tagName = element.tagName.toLowerCase();
+
+            if (tagName === "html" || tagName === "body") {
+              const height = window.visualViewport?.height ?? window.innerHeight;
+              window.scrollBy({ top: -height, left: 0, behavior: "smooth" });
+              const rootScrollingEl = (document.scrollingElement ?? document.documentElement) as HTMLElement;
+              return waitForScrollEnd(rootScrollingEl);
+            }
+
+            const height = (element as HTMLElement).getBoundingClientRect().height;
+            (element as HTMLElement).scrollBy({
+              top: -height,
+              left: 0,
+              behavior: "smooth",
+            });
+            return waitForScrollEnd(element);
+          });
+          break;
+        default: {
+          const errorMsg = `Unknown method: ${method}`;
+          if (this.debug) {
+            console.error(`[aiAction] ${errorMsg}`);
+          }
+          throw new HyperagentError(errorMsg, 400);
+        }
       }
 
       if (this.debug) {
@@ -592,7 +784,31 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
 
       // Step 5: Wait for DOM to settle after action (like Stagehand does after each action)
-      await waitForSettledDOM(page, 5000);
+      await waitForSettledDOM(page);
+
+      // Write debug data on success
+      if (this.debug && domState && stringElements) {
+        try {
+          const screenshot = await page.screenshot({ type: "png" });
+          await writeAiActionDebug({
+            instruction,
+            url: page.url(),
+            timestamp: startTime,
+            domElementCount: domState.elements.size,
+            domTree: domState.domState,
+            screenshot,
+            foundElement: {
+              elementId: element.elementId as string,
+              method: element.method || "click",
+              arguments: element.arguments || [],
+              xpath,
+            },
+            success: true,
+          });
+        } catch (debugError) {
+          console.error(`[aiAction] Failed to write debug data:`, debugError);
+        }
+      }
 
       return {
         status: TaskStatus.COMPLETED,
@@ -600,15 +816,57 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         output: `Successfully executed: ${instruction}`,
       };
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
       if (this.debug) {
         console.error(`[aiAction] Error:`, error);
+
+        // Write debug data on error
+        if (domState && stringElements) {
+          try {
+            const screenshot = await page.screenshot({ type: "png" }).catch(() => null);
+
+            // Collect available elements for debugging
+            const availableElements: Array<{ id: string; role: string; label: string }> = [];
+            for (const [id, elem] of stringElements) {
+              const role = elem.role as string | undefined;
+              if (role && ['button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'tab', 'menuitem'].includes(role)) {
+                const name = elem.name as string | undefined;
+                const description = elem.description as string | undefined;
+                const value = elem.value as string | undefined;
+                const label = name || description || value || '';
+                if (label) {
+                  availableElements.push({ id, role, label });
+                }
+              }
+              if (availableElements.length >= 50) break; // Store more in file than console
+            }
+
+            await writeAiActionDebug({
+              instruction,
+              url: page.url(),
+              timestamp: startTime,
+              domElementCount: domState.elements.size,
+              domTree: domState.domState,
+              screenshot: screenshot || undefined,
+              availableElements,
+              error: {
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              },
+              success: false,
+            });
+          } catch (debugError) {
+            console.error(`[aiAction] Failed to write debug data:`, debugError);
+          }
+        }
       }
-      return {
-        status: TaskStatus.FAILED,
-        steps: [],
-        output: `Failed to execute action: ${errorMsg}`,
-      };
+
+      // Re-throw HyperagentErrors as-is
+      if (error instanceof HyperagentError) {
+        throw error;
+      }
+      // Wrap other errors
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new HyperagentError(`Failed to execute action: ${errorMsg}`, 500);
     }
   }
 

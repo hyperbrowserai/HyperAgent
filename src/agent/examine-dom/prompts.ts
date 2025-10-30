@@ -22,15 +22,17 @@ Return an array of elements that match the instruction if they exist, otherwise 
  * Based on Stagehand's buildActObservePrompt - provides specific guidance
  */
 export function buildActionInstruction(action: string): string {
-  const supportedActions = ['click', 'fill', 'selectOption', 'hover', 'press', 'check', 'uncheck'];
+  const supportedActions = ['click', 'fill', 'type', 'press', 'scrollTo', 'nextChunk', 'prevChunk', 'selectOptionFromDropdown', 'hover', 'check', 'uncheck'];
 
   const instruction = `Find the most relevant element to perform an action on given the following action: ${action}.
 Provide an action for this element such as ${supportedActions.join(", ")}, or any other playwright locator method. Remember that to users, buttons and links look the same in most cases.
 If the action is completely unrelated to a potential action to be taken on the page, return an empty array.
 ONLY return one action. If multiple actions are relevant, return the most relevant one.
-If the user is asking to scroll to a position on the page, e.g., 'halfway' or 0.75, etc, you must return the argument formatted as the correct percentage, e.g., '50%' or '75%', etc.
+CRITICAL: Never return the RootWebArea element as it cannot be interacted with. For scroll actions (scrollTo, nextChunk, prevChunk), choose an actual DOM element like the html element, body element, or a scrollable container - NOT the RootWebArea.
+If the user is asking to scroll to a position on the page, e.g., 'halfway' or 0.75, etc, you must return the scrollTo method with the argument formatted as the correct percentage, e.g., '50%' or '75%', etc.
+If the user is asking to scroll to the next chunk/previous chunk, choose the nextChunk/prevChunk method. No arguments are required here.
 If the action implies a key press, e.g., 'press enter', 'press a', 'press space', etc., always choose the press method with the appropriate key as argument — e.g. 'a', 'Enter', 'Space'. Do not choose a click action on an on-screen keyboard. Capitalize the first character like 'Enter', 'Tab', 'Escape' only for special keys.
-If the action implies choosing an option from a dropdown, AND the corresponding element is a 'select' element, choose the selectOption method. The argument should be the text of the option to select.
+If the action implies choosing an option from a dropdown, AND the corresponding element is a 'select' element, choose the selectOptionFromDropdown method. The argument should be the text of the option to select.
 If the action implies choosing an option from a dropdown, and the corresponding element is NOT a 'select' element, choose the click method.`;
 
   return instruction;

@@ -1,6 +1,7 @@
 // workflow.ts
 
 import { HyperAgent } from "../src/agent";
+import { HyperPage } from "../src/types/agent/types";
 
 // Install all dependencies:
 // pnpm add -D playwright tsx typescript @types/node
@@ -26,7 +27,7 @@ async function runWorkflow() {
     });
 
     // Get the page instance
-    const page = await agent.newPage();
+    const page: HyperPage = await agent.newPage();
     if (!page) {
       throw new Error("Failed to get page instance from Stagehand");
     }
