@@ -72,18 +72,17 @@ export class GeminiClient implements HyperAgentLLM {
     messages: HyperAgentMessage[]
   ): Promise<HyperAgentStructuredResult<TSchema>> {
     const { messages: geminiMessages } = convertToGeminiMessages(messages);
-
-    // Add structured output instruction to the last message
-    const lastMessage = geminiMessages[geminiMessages.length - 1];
-    if (lastMessage && lastMessage.parts && Array.isArray(lastMessage.parts)) {
-      lastMessage.parts.push({
-        text: "\n\nPlease respond with valid JSON that matches the following schema. Do not include any text outside the JSON response.",
-      });
-    }
+    const responseSchema = convertToGeminiResponseSchema(request.schema);
 
     const response = await this.client.models.generateContent({
       model: this.model,
       contents: geminiMessages as any,
+      config: {
+        temperature: request.options?.temperature ?? this.temperature,
+        maxOutputTokens: request.options?.maxTokens ?? this.maxTokens,
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+      },
     });
 
     const text = response.text;
@@ -95,10 +94,8 @@ export class GeminiClient implements HyperAgentLLM {
     }
 
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      const jsonText = jsonMatch ? jsonMatch[0] : text;
-      const parsed = JSON.parse(jsonText);
+      // Gemini returns pure JSON when using responseJsonSchema
+      const parsed = JSON.parse(text);
       const validated = request.schema.parse(parsed);
       return {
         rawText: text,

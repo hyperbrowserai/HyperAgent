@@ -466,15 +466,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     maxRetries: number,
     retryDelayMs: number
   ): Promise<{
-    element: Awaited<ReturnType<typeof import("./examine-dom").examineDom>>[0];
+    element: Awaited<ReturnType<typeof import("./examine-dom").examineDom>>['elements'][0];
     domState: Awaited<
       ReturnType<typeof import("../context-providers/a11y-dom").getA11yDOM>
     >;
     elementMap: Map<string, unknown>;
+    llmResponse: { rawText: string; parsed: unknown };
   }> {
     let domState: Awaited<ReturnType<typeof getA11yDOM>> | null = null;
     let elementMap: Map<string, unknown> | null = null;
-    let elements: Awaited<ReturnType<typeof examineDom>> | null = null;
+    let examineResult: Awaited<ReturnType<typeof examineDom>> | null = null;
 
     // Retry loop for element finding
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -517,7 +518,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         );
       }
 
-      elements = await examineDom(
+      examineResult = await examineDom(
         instruction,
         {
           tree: domState.domState,
@@ -529,15 +530,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       );
 
       // Check if element was found
-      if (elements && elements.length > 0) {
+      if (examineResult && examineResult.elements.length > 0) {
         // Found it! Break out of retry loop
         if (this.debug && attempt > 0) {
           console.log(`[aiAction] Element found on attempt ${attempt + 1}`);
         }
         return {
-          element: elements[0],
+          element: examineResult.elements[0],
           domState,
           elementMap,
+          llmResponse: examineResult.llmResponse,
         };
       }
 
@@ -616,6 +618,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       arguments: unknown[];
       xpath?: string;
     };
+    llmResponse?: {
+      rawText: string;
+      parsed: unknown;
+    };
     error?: unknown;
     success: boolean;
   }): Promise<void> {
@@ -645,6 +651,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             arguments: params.element.arguments,
             xpath: params.element.xpath,
           },
+          llmResponse: params.llmResponse,
           success: true,
         });
       } else {
@@ -662,6 +669,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           domTree: params.domState.domState,
           screenshot: screenshot || undefined,
           availableElements,
+          llmResponse: params.llmResponse,
           error: {
             message:
               params.error instanceof Error
@@ -964,6 +972,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         element,
         domState: foundDomState,
         elementMap: foundElementMap,
+        llmResponse,
       } = await this.findElementWithRetry(
         instruction,
         page,
@@ -1010,6 +1019,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           arguments: args,
           xpath,
         },
+        llmResponse,
         success: true,
       });
 

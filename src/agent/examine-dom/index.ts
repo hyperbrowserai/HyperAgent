@@ -19,11 +19,11 @@ import { ExamineDomResultsSchema } from './schema';
  * @param instruction - Natural language instruction (e.g., "click the login button")
  * @param context - Current page context with accessibility tree
  * @param llm - LLM client for making inference calls
- * @returns Array of matching elements sorted by confidence (highest first)
+ * @returns Object with matching elements and LLM response
  *
  * @example
  * ```typescript
- * const results = await examineDom(
+ * const { elements, llmResponse } = await examineDom(
  *   "click the login button",
  *   {
  *     tree: "[0-1234] button: Login\n[0-5678] button: Sign Up",
@@ -34,14 +34,14 @@ import { ExamineDomResultsSchema } from './schema';
  *   llmClient
  * );
  *
- * // Returns: [{ elementId: "0-1234", description: "Login button", confidence: 0.95, method: "click" }]
+ * // Returns: { elements: [...], llmResponse: { rawText: "...", parsed: {...} } }
  * ```
  */
 export async function examineDom(
   instruction: string,
   context: ExamineDomContext,
   llm: HyperAgentLLM
-): Promise<ExamineDomResult[]> {
+): Promise<{ elements: ExamineDomResult[]; llmResponse: { rawText: string; parsed: unknown } }> {
   // Build prompts for element finding
   const systemPrompt = buildExamineDomSystemPrompt();
   const userPrompt = buildExamineDomUserPrompt(instruction, context.tree);
@@ -61,9 +61,14 @@ export async function examineDom(
       ]
     );
 
+    const llmResponse = {
+      rawText: response.rawText,
+      parsed: response.parsed,
+    };
+
     if (!response.parsed || !response.parsed.elements) {
       // No elements found or parsing failed
-      return [];
+      return { elements: [], llmResponse };
     }
 
     // Sort by confidence descending (highest confidence first)
@@ -87,11 +92,17 @@ export async function examineDom(
       return true;
     });
 
-    return validatedResults;
+    return { elements: validatedResults, llmResponse };
   } catch (error) {
     console.error('[examineDom] Error finding elements:', error);
-    // Return empty array on error (graceful degradation)
-    return [];
+    // Return empty result on error (graceful degradation)
+    return {
+      elements: [],
+      llmResponse: {
+        rawText: '',
+        parsed: null,
+      },
+    };
   }
 }
 

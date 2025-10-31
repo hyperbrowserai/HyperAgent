@@ -38,7 +38,7 @@
   ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
-    "@google/genai": "^0.8.0",
+    "@google/genai": "^1.28.0",
     "@hyperbrowser/sdk": "^0.46.0",
     "@inquirer/prompts": "^7.4.1",
     "@modelcontextprotocol/sdk": "^1.9.0",

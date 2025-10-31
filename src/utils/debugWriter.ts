@@ -24,6 +24,10 @@ export interface DebugData {
     role: string;
     label: string;
   }>;
+  llmResponse?: {
+    rawText: string;
+    parsed: unknown;
+  };
   error?: {
     message: string;
     stack?: string;
@@ -94,6 +98,19 @@ export async function writeAiActionDebug(
     fs.writeFileSync(
       path.join(debugDir, 'found-element.json'),
       JSON.stringify(debugData.foundElement, null, 2)
+    );
+  }
+
+  // Write LLM response if available
+  if (debugData.llmResponse) {
+    fs.writeFileSync(
+      path.join(debugDir, 'llm-response.json'),
+      JSON.stringify(debugData.llmResponse, null, 2)
+    );
+    // Also write just the raw text for easy viewing
+    fs.writeFileSync(
+      path.join(debugDir, 'llm-response.txt'),
+      debugData.llmResponse.rawText
     );
   }
 
