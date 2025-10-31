@@ -2,7 +2,6 @@ import { z } from "zod";
 
 /**
  * Utility functions for converting Zod schemas to provider-specific formats
- * Uses Zod v4's native toJSONSchema() method
  */
 
 export function convertToOpenAIJsonSchema(
@@ -45,7 +44,7 @@ export function convertToAnthropicTool(
 
 /**
  * Convert Zod schema to Gemini's OpenAPI 3.0 Schema format
- * Gemini uses a subset of OpenAPI 3.0 with custom propertyOrdering field
+ * Gemini requires: uppercase types, propertyOrdering, no empty objects
  */
 export function convertToGeminiResponseSchema(
   schema: z.ZodTypeAny
@@ -55,20 +54,18 @@ export function convertToGeminiResponseSchema(
     io: "output",
   });
 
-  // Convert JSON Schema to OpenAPI 3.0 format for Gemini
-  return convertJsonSchemaToOpenAPI(jsonSchema);
+  return convertJsonSchemaToGemini(jsonSchema);
 }
 
 /**
- * Recursively convert JSON Schema to OpenAPI 3.0 format
- * Maps JSON Schema types to Gemini's Type enum values
+ * Recursively convert JSON Schema to Gemini's OpenAPI 3.0 format
  */
-function convertJsonSchemaToOpenAPI(
+function convertJsonSchemaToGemini(
   jsonSchema: Record<string, unknown>
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
-  // Map JSON Schema type to OpenAPI type (uppercase)
+  // Map JSON Schema type to Gemini type (uppercase)
   if (jsonSchema.type) {
     const type = jsonSchema.type as string;
     result.type = type.toUpperCase();
@@ -76,25 +73,52 @@ function convertJsonSchemaToOpenAPI(
 
   // Handle object properties
   if (jsonSchema.properties && typeof jsonSchema.properties === "object") {
-    const convertedProps: Record<string, unknown> = {};
     const properties = jsonSchema.properties as Record<string, unknown>;
 
+    // If properties is empty, Gemini rejects it - skip the entire object by returning null placeholder
+    if (Object.keys(properties).length === 0) {
+      return {
+        type: "OBJECT",
+        properties: {
+          _placeholder: {
+            type: "STRING",
+            description: "Empty object placeholder",
+            nullable: true,
+          },
+        },
+        propertyOrdering: ["_placeholder"],
+        required: [],
+      };
+    }
+
+    const convertedProps: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(properties)) {
-      convertedProps[key] = convertJsonSchemaToOpenAPI(
+      convertedProps[key] = convertJsonSchemaToGemini(
         value as Record<string, unknown>
       );
     }
 
     result.properties = convertedProps;
-
-    // Add propertyOrdering for deterministic field order
     result.propertyOrdering = Object.keys(properties);
   }
 
   // Handle array items
   if (jsonSchema.items) {
-    result.items = convertJsonSchemaToOpenAPI(
+    result.items = convertJsonSchemaToGemini(
       jsonSchema.items as Record<string, unknown>
+    );
+  }
+
+  // Handle union types (anyOf, oneOf)
+  if (jsonSchema.anyOf && Array.isArray(jsonSchema.anyOf)) {
+    result.anyOf = (jsonSchema.anyOf as Array<Record<string, unknown>>).map(
+      (schema) => convertJsonSchemaToGemini(schema)
+    );
+  }
+
+  if (jsonSchema.oneOf && Array.isArray(jsonSchema.oneOf)) {
+    result.oneOf = (jsonSchema.oneOf as Array<Record<string, unknown>>).map(
+      (schema) => convertJsonSchemaToGemini(schema)
     );
   }
 
@@ -102,15 +126,18 @@ function convertJsonSchemaToOpenAPI(
   if (jsonSchema.required) result.required = jsonSchema.required;
   if (jsonSchema.description) result.description = jsonSchema.description;
   if (jsonSchema.enum) result.enum = jsonSchema.enum;
+
+  // Convert JSON Schema "const" to "enum" for Gemini
+  if (jsonSchema.const !== undefined) {
+    result.enum = [jsonSchema.const];
+  }
+
   if (jsonSchema.format) result.format = jsonSchema.format;
   if (jsonSchema.minimum !== undefined) result.minimum = jsonSchema.minimum;
   if (jsonSchema.maximum !== undefined) result.maximum = jsonSchema.maximum;
   if (jsonSchema.minItems !== undefined) result.minItems = jsonSchema.minItems;
   if (jsonSchema.maxItems !== undefined) result.maxItems = jsonSchema.maxItems;
   if (jsonSchema.nullable !== undefined) result.nullable = jsonSchema.nullable;
-
-  // Skip JSON Schema specific fields that Gemini doesn't use
-  // ($schema, additionalProperties, etc.)
 
   return result;
 }
