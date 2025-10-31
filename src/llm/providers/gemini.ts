@@ -25,7 +25,10 @@ export class GeminiClient implements HyperAgentLLM {
 
   constructor(config: GeminiClientConfig) {
     this.client = new GoogleGenAI({
-      apiKey: config.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+      apiKey:
+        config.apiKey ||
+        process.env.GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY,
     });
     this.model = config.model;
     this.temperature = config.temperature ?? 0;
