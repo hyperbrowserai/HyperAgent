@@ -110,11 +110,11 @@ program
                     message: `User responded with password: ${response}`,
                   };
                 } else {
-                  if (!choices) {
+                  if (!choices || choices.length === 0) {
                     return {
                       success: false,
                       message:
-                        "For choices kind of user interaction, an array of choices is required.",
+                        "For 'select' kind of user interaction, an array of choices is required.",
                     };
                   } else {
                     const response = await inquirer.select({
