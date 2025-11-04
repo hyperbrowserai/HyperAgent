@@ -53,6 +53,7 @@ export async function buildHierarchicalTree(
   { tagNameMap, xpathMap }: BackendIdMaps,
   frameIndex = 0,
   scrollableIds?: Set<number>,
+  debug = false,
 ): Promise<TreeResult> {
   // Convert raw AX nodes to simplified format, decorating scrollable elements
   const accessibilityNodes = nodes.map((node) => convertAXNode(node, scrollableIds));
@@ -93,30 +94,38 @@ export async function buildHierarchicalTree(
       if (matches.length === 0) {
         // Not in DOM map - generate fallback ID
         encodedId = createEncodedId(frameIndex, node.backendDOMNodeId);
-        console.log(
-          `[buildHierarchicalTree] Frame ${frameIndex}: backendNodeId=${node.backendDOMNodeId} not in DOM map, using fallback encodedId="${encodedId}" (role=${node.role}, nodeId=${node.nodeId})`
-        );
+        if (debug) {
+          console.log(
+            `[buildHierarchicalTree] Frame ${frameIndex}: backendNodeId=${node.backendDOMNodeId} not in DOM map, using fallback encodedId="${encodedId}" (role=${node.role}, nodeId=${node.nodeId})`
+          );
+        }
       } else {
         // One or more matches - filter by frameIndex to find the correct one
         const framePrefix = `${frameIndex}-`;
         const frameMatch = matches.find(id => id.startsWith(framePrefix));
 
-        console.log(
-          `[buildHierarchicalTree] Frame ${frameIndex}: backendNodeId=${node.backendDOMNodeId} has ${matches.length} DOM matches: [${matches.join(', ')}] (role=${node.role}, nodeId=${node.nodeId})`
-        );
+        if (debug) {
+          console.log(
+            `[buildHierarchicalTree] Frame ${frameIndex}: backendNodeId=${node.backendDOMNodeId} has ${matches.length} DOM matches: [${matches.join(', ')}] (role=${node.role}, nodeId=${node.nodeId})`
+          );
+        }
 
         if (frameMatch) {
           // Found exact match for this frame
           encodedId = frameMatch;
-          console.log(
-            `  ✓ Matched to encodedId="${encodedId}" for frame ${frameIndex}`
-          );
+          if (debug) {
+            console.log(
+              `  ✓ Matched to encodedId="${encodedId}" for frame ${frameIndex}`
+            );
+          }
         } else {
           // No match for this frame - generate fallback
           encodedId = createEncodedId(frameIndex, node.backendDOMNodeId);
-          console.log(
-            `  ✗ No match for frame ${frameIndex}, using fallback encodedId="${encodedId}"`
-          );
+          if (debug) {
+            console.log(
+              `  ✗ No match for frame ${frameIndex}, using fallback encodedId="${encodedId}"`
+            );
+          }
         }
       }
     }

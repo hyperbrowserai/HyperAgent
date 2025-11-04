@@ -1298,7 +1298,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           for (const action of actions) {
             this.registerAction(action);
           }
-          console.log(`MCP server ${serverId} initialized successfully`);
+          if (this.debug) {
+            console.log(`MCP server ${serverId} initialized successfully`);
+          }
         } catch (error) {
           console.error(
             `Failed to initialize MCP server ${serverConfig.id || "unknown"}:`,
@@ -1308,7 +1310,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
 
       const serverIds = this.mcpClient.getServerIds();
-      console.log(`Successfully connected to ${serverIds.length} MCP servers`);
+      if (this.debug) {
+        console.log(`Successfully connected to ${serverIds.length} MCP servers`);
+      }
     } catch (error) {
       console.error("Failed to initialize MCP client:", error);
       this.mcpClient = undefined;
@@ -1336,7 +1340,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         this.registerAction(action);
       }
 
-      console.log(`Connected to MCP server with ID: ${serverId}`);
+      if (this.debug) {
+        console.log(`Connected to MCP server with ID: ${serverId}`);
+      }
       return serverId;
     } catch (error) {
       console.error(`Failed to connect to MCP server:`, error);

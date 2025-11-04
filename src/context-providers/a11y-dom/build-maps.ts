@@ -150,9 +150,11 @@ export async function buildBackendIdMaps(
         };
         frameMap.set(iframeFrameIndex, iframeInfo);
 
-        console.log(
-          `[DOM] Iframe detected: frameIndex=${iframeFrameIndex}, parent=${currentFrameIndex}, iframeBackendNodeId=${node.backendNodeId}, contentDocBackendNodeId=${node.contentDocument.backendNodeId}, cdpFrameId="${cdpFrameId}", src="${iframeSrc}", siblingPos=${siblingPosition}`
-        );
+        if (debug) {
+          console.log(
+            `[DOM] Iframe detected: frameIndex=${iframeFrameIndex}, parent=${currentFrameIndex}, iframeBackendNodeId=${node.backendNodeId}, contentDocBackendNodeId=${node.contentDocument.backendNodeId}, cdpFrameId="${cdpFrameId}", src="${iframeSrc}", siblingPos=${siblingPosition}`
+          );
+        }
 
         // Reset path for iframe content (XPath is relative to iframe document)
         stack.push({

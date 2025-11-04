@@ -74,9 +74,11 @@ async function fetchIframeAXTrees(
 
       // Fallback to DOM when AX tree has no interactive elements
       if (!hasInteractiveElements(iframeNodes)) {
-        console.log(
-          `[A11y] Frame ${frameIndex} has no interactive elements in AX tree, falling back to DOM`
-        );
+        if (debug) {
+          console.log(
+            `[A11y] Frame ${frameIndex} has no interactive elements in AX tree, falling back to DOM`
+          );
+        }
 
         const domFallbackNodes = createDOMFallbackNodes(
           frameIndex,
@@ -277,7 +279,8 @@ export async function getA11yDOM(
             nodes,
             maps,
             frameIdx,
-            scrollableIds
+            scrollableIds,
+            debug
           );
 
           return treeResult;
