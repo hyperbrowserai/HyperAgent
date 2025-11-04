@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ActionOutput } from "./actions/types";
-import { Page } from "patchright";
+import { Page } from "playwright-core";
 import { ErrorEmitter } from "@/utils";
 
 export const AgentOutputFn = (actionsSchema: z.ZodUnion<readonly [z.ZodType<any>, ...z.ZodType<any>[]]>) =>

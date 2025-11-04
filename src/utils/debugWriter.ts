@@ -33,6 +33,20 @@ export interface DebugData {
     stack?: string;
   };
   success: boolean;
+  frameDebugInfo?: Array<{
+    frameIndex: number;
+    frameUrl: string;
+    totalNodes: number;
+    treeElementCount: number;
+    interactiveCount: number;
+    sampleNodes?: Array<{
+      role?: string;
+      name?: string;
+      nodeId?: string;
+      ignored?: boolean;
+      childIds?: number;
+    }>;
+  }>;
 }
 
 let actionCounter = 0;
@@ -132,6 +146,41 @@ export async function writeAiActionDebug(
       path.join(debugDir, 'error.json'),
       JSON.stringify(debugData.error, null, 2)
     );
+  }
+
+  // Write frame debug info if available
+  if (debugData.frameDebugInfo && debugData.frameDebugInfo.length > 0) {
+    fs.writeFileSync(
+      path.join(debugDir, 'frame-debug-info.json'),
+      JSON.stringify(debugData.frameDebugInfo, null, 2)
+    );
+
+    // Also write a human-readable summary
+    const frameSummary = debugData.frameDebugInfo
+      .map((frame) => {
+        const lines = [
+          `Frame ${frame.frameIndex}: ${frame.frameUrl}`,
+          `  Total Nodes: ${frame.totalNodes}`,
+          `  Tree Elements: ${frame.treeElementCount}`,
+          `  Interactive Elements: ${frame.interactiveCount}`,
+        ];
+
+        if (frame.sampleNodes && frame.sampleNodes.length > 0) {
+          lines.push(`  Sample Nodes (${frame.sampleNodes.length}):`);
+          frame.sampleNodes.forEach((node, idx) => {
+            const ignored = node.ignored ? ' [IGNORED]' : '';
+            const role = node.role || 'unknown';
+            const name = node.name ? ` "${node.name}"` : '';
+            const childCount = node.childIds ? ` (${node.childIds} children)` : '';
+            lines.push(`    ${idx + 1}. ${role}${name}${childCount}${ignored}`);
+          });
+        }
+
+        return lines.join('\n');
+      })
+      .join('\n\n');
+
+    fs.writeFileSync(path.join(debugDir, 'frame-debug-summary.txt'), frameSummary);
   }
 
   return debugDir;

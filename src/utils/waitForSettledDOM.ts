@@ -14,7 +14,7 @@
  * 6. Global timeout ensures we don't wait forever
  */
 
-import { Page } from "patchright";
+import { Page } from "playwright-core";
 import { Protocol } from "devtools-protocol";
 
 export async function waitForSettledDOM(

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Locator } from "patchright";
+import { Locator } from "playwright-core";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { sleep } from "@/utils";
 import { getLocator } from "./utils";

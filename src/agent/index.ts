@@ -1,4 +1,4 @@
-import { Browser, BrowserContext, Page } from "patchright";
+import { Browser, BrowserContext, Page } from "playwright-core";
 import { v4 as uuidv4 } from "uuid";
 
 import {
@@ -28,15 +28,20 @@ import {
   LocalBrowserProvider,
 } from "../browser-providers";
 import { HyperagentError } from "./error";
-import { toEncodedId } from "@/context-providers/a11y-dom/types";
+import {
+  A11yDOMState,
+  IframeInfo,
+  toEncodedId,
+} from "../context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
-import { HyperPage, HyperVariable } from "@/types/agent/types";
+import { HyperPage, HyperVariable } from "../types/agent/types";
 import { z } from "zod";
-import { ErrorEmitter } from "@/utils";
+import { ErrorEmitter } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { examineDom } from "./examine-dom";
 import { getA11yDOM } from "../context-providers/a11y-dom";
+import { ExamineDomResult } from "./examine-dom/types";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -464,18 +469,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     instruction: string,
     page: Page,
     maxRetries: number,
-    retryDelayMs: number
+    retryDelayMs: number,
+    startTime: string
   ): Promise<{
-    element: Awaited<ReturnType<typeof import("./examine-dom").examineDom>>['elements'][0];
-    domState: Awaited<
-      ReturnType<typeof import("../context-providers/a11y-dom").getA11yDOM>
-    >;
+    element: ExamineDomResult;
+    domState: A11yDOMState;
     elementMap: Map<string, unknown>;
     llmResponse: { rawText: string; parsed: unknown };
   }> {
-    let domState: Awaited<ReturnType<typeof getA11yDOM>> | null = null;
+    let domState: A11yDOMState | null = null;
     let elementMap: Map<string, unknown> | null = null;
-    let examineResult: Awaited<ReturnType<typeof examineDom>> | null = null;
+    let examineResult: {
+      elements: ExamineDomResult[];
+      llmResponse: { rawText: string; parsed: unknown };
+    } | null = null;
 
     // Retry loop for element finding
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -494,8 +501,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         console.log(`[aiAction] DOM settled`);
       }
 
-      // Fetch a11y tree
-      domState = await getA11yDOM(page, { mode: "a11y" });
+      // Fetch a11y tree (pass debug flag to avoid expensive debug info collection when not needed)
+      domState = await getA11yDOM(page, this.debug);
 
       if (!domState) {
         throw new Error("Failed to fetch page structure");
@@ -589,6 +596,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           `[aiAction] The page may not have fully loaded, or the element might be in an iframe`
         );
       }
+
+      // Write debug data to files before throwing error
+      await this.writeDebugData({
+        instruction,
+        page,
+        startTime,
+        domState,
+        elementMap,
+        llmResponse: examineResult?.llmResponse,
+        error: new HyperagentError(
+          `No elements found for instruction: "${instruction}" after ${maxRetries} retry attempts.`,
+          404
+        ),
+        success: false,
+      });
     }
 
     throw new HyperagentError(
@@ -653,6 +675,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           },
           llmResponse: params.llmResponse,
           success: true,
+          frameDebugInfo: params.domState.frameDebugInfo,
         });
       } else {
         // Error case - write available elements
@@ -679,6 +702,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               params.error instanceof Error ? params.error.stack : undefined,
           },
           success: false,
+          frameDebugInfo: params.domState.frameDebugInfo,
         });
       }
     } catch (debugError) {
@@ -852,18 +876,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   /**
    * Get Playwright locator from element ID
    * Converts element ID to EncodedId, looks up XPath, and creates Playwright locator
+   * Supports iframe elements by extracting frameIndex and using frame.locator()
    *
    * @param elementId The element ID to locate
    * @param xpathMap Map of EncodedIds to XPath strings
    * @param page The page to create the locator on
-   * @returns Playwright Locator for the element
+   * @param frameMap Optional map of frame indices to iframe metadata
+   * @returns Promise resolving to object with locator and trimmed xpath
    * @throws Error if element ID not found in xpath map
    */
-  private getElementLocator(
+  private async getElementLocator(
     elementId: string,
     xpathMap: Record<string, string>,
-    page: Page
-  ): ReturnType<Page["locator"]> {
+    page: Page,
+    frameMap?: Map<number, IframeInfo>
+  ): Promise<{ locator: ReturnType<Page["locator"]>; xpath: string }> {
     // Convert elementId to EncodedId format for xpath lookup
     const encodedId = toEncodedId(elementId);
     const rawXpath = xpathMap[encodedId];
@@ -883,7 +910,125 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     // Trim trailing text nodes from xpath
     const xpath = rawXpath.replace(/\/text\(\)(\[\d+\])?$/iu, "");
 
-    return page.locator(`xpath=${xpath}`);
+    // Extract frameIndex from encodedId (format: "frameIndex-nodeIndex")
+    const [frameIndexStr] = encodedId.split("-");
+    const frameIndex = parseInt(frameIndexStr!, 10);
+
+    // Main frame (frameIndex 0) - use page.locator()
+    if (frameIndex === 0) {
+      return { locator: page.locator(`xpath=${xpath}`), xpath };
+    }
+
+    // Iframe element - need to find the correct frame
+    if (!frameMap || !frameMap.has(frameIndex)) {
+      const errorMsg = `Frame metadata not found for frame ${frameIndex}`;
+      if (this.debug) {
+        console.error(`[aiAction] ${errorMsg}`);
+      }
+      throw new HyperagentError(errorMsg, 404);
+    }
+
+    const iframeInfo = frameMap.get(frameIndex)!;
+
+    // Find the frame by matching src/name AND parent frame
+    const frames = page.frames();
+
+    // Helper to match iframe src against frame URL
+    const matchesFrameSrc = (frameUrl: string, src: string): boolean => {
+      // Check if URL ends with src (handles relative paths like "frame.html")
+      if (frameUrl.endsWith(src)) return true;
+
+      // Extract pathname and check if it ends with src
+      try {
+        const url = new URL(frameUrl);
+        if (url.pathname.endsWith(src)) return true;
+      } catch {
+        // Invalid URL, fall back to simple check
+      }
+
+      return false;
+    };
+
+    // Filter by src or name
+    let candidateFrames = frames.filter(
+      (f) =>
+        (iframeInfo.src && matchesFrameSrc(f.url(), iframeInfo.src)) ||
+        (iframeInfo.name && f.name() === iframeInfo.name)
+    );
+
+    // If multiple candidates, filter by parent frame
+    let targetFrame: ReturnType<Page["frames"]>[number] | undefined;
+    if (
+      candidateFrames.length > 1 &&
+      iframeInfo.parentFrameIndex !== undefined
+    ) {
+      const parentInfo = frameMap.get(iframeInfo.parentFrameIndex);
+
+      if (parentInfo) {
+        // Filter candidates by parent frame
+        candidateFrames = candidateFrames.filter((f) => {
+          const parent = f.parentFrame();
+          if (!parent) return false;
+
+          // Parent is main frame
+          if (iframeInfo.parentFrameIndex === 0) {
+            return parent === page.mainFrame();
+          }
+
+          // Parent is another iframe - match by src
+          return (
+            parentInfo.src && matchesFrameSrc(parent.url(), parentInfo.src)
+          );
+        });
+      }
+
+      // Use sibling position if still multiple matches
+      if (
+        candidateFrames.length > 1 &&
+        iframeInfo.siblingPosition !== undefined
+      ) {
+        targetFrame = candidateFrames[iframeInfo.siblingPosition];
+      } else {
+        targetFrame = candidateFrames[0];
+      }
+    } else {
+      targetFrame = candidateFrames[0];
+    }
+
+    if (!targetFrame) {
+      const errorMsg = `Frame not found for element ${elementId} (src: ${iframeInfo.src}, name: ${iframeInfo.name})`;
+      if (this.debug) {
+        console.error(`[aiAction] ${errorMsg}`);
+        console.error(
+          `[aiAction] Available frames:`,
+          frames.map((f) => ({ url: f.url(), name: f.name() }))
+        );
+      }
+      throw new HyperagentError(errorMsg, 404);
+    }
+
+    // Wait for iframe content to be loaded
+    try {
+      await targetFrame.waitForLoadState("domcontentloaded", { timeout: 5000 });
+    } catch {
+      if (this.debug) {
+        console.warn(
+          `[aiAction] Timeout waiting for iframe to load (frame ${frameIndex}), proceeding anyway`
+        );
+      }
+      // Continue anyway - frame might already be loaded
+    }
+
+    if (this.debug) {
+      console.log(
+        `[aiAction] Using frame ${frameIndex} locator for element ${elementId}`
+      );
+      console.log(
+        `[aiAction] Frame URL: ${targetFrame.url()}, Name: ${targetFrame.name()}`
+      );
+    }
+
+    return { locator: targetFrame.locator(`xpath=${xpath}`), xpath };
   }
 
   /**
@@ -898,11 +1043,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     elementMap: Map<string, unknown>,
     limit: number = 20
   ): Array<{ id: string; role: string; label: string }> {
-    const interactiveElements: Array<{
-      id: string;
-      role: string;
-      label: string;
-    }> = [];
+    // Group elements by frame
+    const frameElements = new Map<
+      string,
+      Array<{ id: string; role: string; label: string }>
+    >();
 
     for (const [id, elem] of elementMap) {
       // Type guard: ensure elem is an object with expected properties
@@ -929,21 +1074,45 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           typeof node.description === "string" ? node.description : undefined;
         const value = typeof node.value === "string" ? node.value : undefined;
         const label = name || description || value || "";
+
         if (label) {
-          interactiveElements.push({ id, role, label });
+          // Extract frame index from ID (format: "frameIndex-backendNodeId")
+          const frameIndex = id.split("-")[0];
+
+          if (!frameElements.has(frameIndex)) {
+            frameElements.set(frameIndex, []);
+          }
+
+          frameElements.get(frameIndex)!.push({ id, role, label });
         }
       }
-      if (interactiveElements.length >= limit) break;
     }
 
-    return interactiveElements;
+    // Collect elements: prioritize iframe content, then main frame
+    const result: Array<{ id: string; role: string; label: string }> = [];
+
+    // First, collect ALL iframe elements (non-0 frames)
+    for (const [frameIndex, elements] of frameElements) {
+      if (frameIndex !== "0") {
+        result.push(...elements);
+      }
+    }
+
+    // Then, fill remaining slots with main frame elements
+    const mainFrameElements = frameElements.get("0") || [];
+    const remainingSlots = limit - result.length;
+    if (remainingSlots > 0) {
+      result.push(...mainFrameElements.slice(0, remainingSlots));
+    }
+
+    return result.slice(0, limit);
   }
 
   /**
    * Execute a single granular action using a11y mode
    * Internal method used by page.aiAction()
    *
-   * Architecture: Simple observe→act flow
+   * Architecture: Simple examine->act flow
    * - 1 LLM call (examineDom finds element and suggests method)
    * - Direct execution (no agent loop)
    *
@@ -961,9 +1130,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       console.log(`[aiAction] Instruction: ${instruction}`);
     }
 
-    let domState: Awaited<
-      ReturnType<typeof import("../context-providers/a11y-dom").getA11yDOM>
-    > | null = null;
+    let domState: A11yDOMState | null = null;
     let elementMap: Map<string, unknown> | null = null;
 
     try {
@@ -977,7 +1144,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         instruction,
         page,
         HyperAgent.AIACTION_CONFIG.MAX_RETRIES,
-        HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS
+        HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS,
+        startTime
       );
 
       domState = foundDomState;
@@ -989,17 +1157,22 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         console.log(`[aiAction] Arguments:`, element.arguments);
       }
 
-      // Get Playwright locator for the element
-      const xpathMap = domState?.xpathMap || {};
-      const locator = this.getElementLocator(element.elementId, xpathMap, page);
-
-      // Get xpath for debug data
-      const encodedId = toEncodedId(element.elementId);
-      const rawXpath = xpathMap[encodedId];
-      const xpath = rawXpath?.replace(/\/text\(\)(\[\d+\])?$/iu, "") || "";
+      // Get Playwright locator for the element (xpath is already trimmed by getElementLocator)
+      const { locator, xpath } = await this.getElementLocator(
+        element.elementId,
+        domState.xpathMap,
+        page,
+        domState.frameMap
+      );
 
       // Execute the Playwright method
-      const method = element.method || "click";
+      if (!element.method) {
+        throw new HyperagentError(
+          "Element method is missing from LLM response",
+          500
+        );
+      }
+      const method = element.method;
       const args = element.arguments || [];
       await this.executePlaywrightMethod(method, args, locator);
 
@@ -1243,6 +1416,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           page
         );
         if (outputSchema) {
+          if (!res.output || res.output === "") {
+            throw new Error(
+              `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
+            );
+          }
           return JSON.parse(res.output as string);
         }
         return res.output as string;
@@ -1252,6 +1430,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           taskParams,
           page
         );
+        if (!res.output || res.output === "") {
+          throw new Error(
+            `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
+          );
+        }
         return JSON.parse(res.output as string);
       }
     };

@@ -1,6 +1,6 @@
 import { AgentStep } from "@/types";
 import { HyperAgentMessage } from "@/llm/types";
-import { Page } from "patchright";
+import { Page } from "playwright-core";
 import { getScrollInfo } from "./utils";
 import { retry } from "@/utils/retry";
 import { DOMState } from "@/context-providers/dom/types";

@@ -25,7 +25,7 @@ import { buildAgentStepMessages } from "../messages/builder";
 import { SYSTEM_PROMPT } from "../messages/system-prompt";
 import { z } from "zod";
 import { DOMState } from "@/context-providers/dom/types";
-import { Page } from "patchright";
+import { Page } from "playwright-core";
 import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
 import { HyperAgentMessage } from "@/llm/types";

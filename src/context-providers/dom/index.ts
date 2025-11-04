@@ -1,4 +1,4 @@
-import { Page } from "patchright";
+import { Page } from "playwright-core";
 import { buildDomViewJs } from "./inject/build-dom-view";
 import { DOMState, DOMStateRaw, InteractiveElement } from "./types";
 

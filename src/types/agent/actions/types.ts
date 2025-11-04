@@ -1,4 +1,4 @@
-import { Page } from "patchright";
+import { Page } from "playwright-core";
 import { DOMState } from "../../../context-providers/dom/types";
 import { HyperAgentLLM } from "@/llm/types";
 import { z } from "zod";

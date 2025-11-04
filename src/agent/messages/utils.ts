@@ -1,4 +1,4 @@
-import { Page } from "patchright";
+import { Page } from "playwright-core";
 
 export const getScrollInfo = async (page: Page): Promise<[number, number]> => {
   const scrollY = (await page.evaluate("window.scrollY")) as number;

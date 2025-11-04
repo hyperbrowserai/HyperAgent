@@ -1,4 +1,4 @@
-import { Browser } from "patchright";
+import { Browser } from "playwright-core";
 
 abstract class BrowserProvider<T> {
   abstract session: unknown;

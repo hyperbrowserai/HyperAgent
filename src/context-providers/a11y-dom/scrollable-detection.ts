@@ -3,8 +3,8 @@
  * Detects elements with overflow scrolling for enhanced accessibility tree
  */
 
-import { Page } from 'patchright';
-import { CDPSession } from 'patchright';
+import { Page, Frame } from 'playwright-core';
+import { CDPSession } from 'playwright-core';
 
 /**
  * Browser-side functions to detect scrollable elements
@@ -171,14 +171,14 @@ export async function injectScrollableDetection(page: Page): Promise<void> {
 }
 
 /**
- * Get XPaths of scrollable elements from the page
+ * Get XPaths of scrollable elements from the page or frame
  */
 export async function getScrollableElementXpaths(
-  page: Page,
+  pageOrFrame: Page | Frame,
   topN?: number
 ): Promise<string[]> {
   try {
-    const xpaths = await page.evaluate((n) => {
+    const xpaths = await pageOrFrame.evaluate((n) => {
       // @ts-ignore - function injected via script
       return window.__hyperagent_getScrollableElementXpaths?.(n) ?? [];
     }, topN);
@@ -194,12 +194,12 @@ export async function getScrollableElementXpaths(
  * This is called during accessibility tree extraction to mark scrollable elements
  */
 export async function findScrollableElementIds(
-  page: Page,
+  pageOrFrame: Page | Frame,
   client: CDPSession
 ): Promise<Set<number>> {
   try {
     // Get XPaths of scrollable elements
-    const xpaths = await getScrollableElementXpaths(page);
+    const xpaths = await getScrollableElementXpaths(pageOrFrame);
 
     const backendIds = new Set<number>();
 
