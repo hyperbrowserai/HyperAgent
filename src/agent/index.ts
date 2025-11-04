@@ -885,6 +885,81 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Promise resolving to object with locator and trimmed xpath
    * @throws Error if element ID not found in xpath map
    */
+  /**
+   * Find a frame by XPath - checks which frame's iframe element matches the xpath
+   * This uniquely identifies the exact iframe element in the parent frame
+   */
+  private async findFrameByXPath(
+    parentFrame: ReturnType<Page["frames"]>[number],
+    xpath: string,
+    allFrames: ReturnType<Page["frames"]>
+  ): Promise<ReturnType<Page["frames"]>[number] | null> {
+    // Check each frame to see if its iframe element matches the xpath
+    for (const frame of allFrames) {
+      try {
+        const iframeElement = await frame.frameElement();
+        if (!iframeElement) continue;
+
+        // Check if this iframe element matches the xpath in the parent document
+        const matches = await parentFrame.evaluate(
+          ({ xpath, element }) => {
+            try {
+              const result = document.evaluate(
+                xpath,
+                document,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+              );
+              return result.singleNodeValue === element;
+            } catch {
+              return false;
+            }
+          },
+          { xpath, element: iframeElement }
+        );
+
+        if (matches) return frame;
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get parent frame for iframe elements
+   */
+  private async getParentFrame(
+    page: Page,
+    parentFrameIndex: number,
+    frameMap: Map<number, IframeInfo>
+  ): Promise<ReturnType<Page["frames"]>[number] | null> {
+    // Main frame
+    if (parentFrameIndex === 0) {
+      return page.mainFrame();
+    }
+
+    // Find parent iframe info
+    const parentInfo = frameMap.get(parentFrameIndex);
+    if (!parentInfo) return null;
+
+    // Recursively get grandparent frame
+    const grandparentFrame = await this.getParentFrame(
+      page,
+      parentInfo.parentFrameIndex,
+      frameMap
+    );
+    if (!grandparentFrame) return null;
+
+    // Find parent frame using its xpath in grandparent
+    return this.findFrameByXPath(
+      grandparentFrame,
+      parentInfo.xpath,
+      page.frames()
+    );
+  }
+
   private async getElementLocator(
     elementId: string,
     xpathMap: Record<string, string>,
@@ -930,81 +1005,41 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const iframeInfo = frameMap.get(frameIndex)!;
 
-    // Find the frame by matching src/name AND parent frame
-    const frames = page.frames();
-
-    // Helper to match iframe src against frame URL
-    const matchesFrameSrc = (frameUrl: string, src: string): boolean => {
-      // Check if URL ends with src (handles relative paths like "frame.html")
-      if (frameUrl.endsWith(src)) return true;
-
-      // Extract pathname and check if it ends with src
-      try {
-        const url = new URL(frameUrl);
-        if (url.pathname.endsWith(src)) return true;
-      } catch {
-        // Invalid URL, fall back to simple check
-      }
-
-      return false;
-    };
-
-    // Filter by src or name
-    let candidateFrames = frames.filter(
-      (f) =>
-        (iframeInfo.src && matchesFrameSrc(f.url(), iframeInfo.src)) ||
-        (iframeInfo.name && f.name() === iframeInfo.name)
+    // Get parent frame using XPath-based recursive lookup
+    const parentFrame = await this.getParentFrame(
+      page,
+      iframeInfo.parentFrameIndex,
+      frameMap
     );
 
-    // If multiple candidates, filter by parent frame
-    let targetFrame: ReturnType<Page["frames"]>[number] | undefined;
-    if (
-      candidateFrames.length > 1 &&
-      iframeInfo.parentFrameIndex !== undefined
-    ) {
-      const parentInfo = frameMap.get(iframeInfo.parentFrameIndex);
-
-      if (parentInfo) {
-        // Filter candidates by parent frame
-        candidateFrames = candidateFrames.filter((f) => {
-          const parent = f.parentFrame();
-          if (!parent) return false;
-
-          // Parent is main frame
-          if (iframeInfo.parentFrameIndex === 0) {
-            return parent === page.mainFrame();
-          }
-
-          // Parent is another iframe - match by src
-          return (
-            parentInfo.src && matchesFrameSrc(parent.url(), parentInfo.src)
-          );
-        });
-      }
-
-      // Use sibling position if still multiple matches
-      if (
-        candidateFrames.length > 1 &&
-        iframeInfo.siblingPosition !== undefined
-      ) {
-        targetFrame = candidateFrames[iframeInfo.siblingPosition];
-      } else {
-        targetFrame = candidateFrames[0];
-      }
-    } else {
-      targetFrame = candidateFrames[0];
+    if (!parentFrame) {
+      throw new HyperagentError(
+        `Parent frame not found for element ${elementId} (parent frameIndex: ${iframeInfo.parentFrameIndex})`,
+        404
+      );
     }
 
+    // Find target frame using XPath (uniquely identifies the iframe element)
+    const targetFrame = await this.findFrameByXPath(
+      parentFrame,
+      iframeInfo.xpath,
+      page.frames()
+    );
+
     if (!targetFrame) {
-      const errorMsg = `Frame not found for element ${elementId} (src: ${iframeInfo.src}, name: ${iframeInfo.name})`;
+      const errorMsg = `Frame not found for element ${elementId} using XPath: ${iframeInfo.xpath}`;
       if (this.debug) {
         console.error(`[aiAction] ${errorMsg}`);
         console.error(
           `[aiAction] Available frames:`,
-          frames.map((f) => ({ url: f.url(), name: f.name() }))
+          page.frames().map((f) => ({ url: f.url(), name: f.name() }))
         );
       }
       throw new HyperagentError(errorMsg, 404);
+    }
+
+    if (this.debug) {
+      console.log(`[aiAction] Matched frame using XPath: ${iframeInfo.xpath}`);
     }
 
     // Wait for iframe content to be loaded
