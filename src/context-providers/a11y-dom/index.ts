@@ -12,6 +12,7 @@ import {
   TreeResult,
   FrameDebugInfo,
   EncodedId,
+  IframeInfo,
 } from "./types";
 import { buildBackendIdMaps } from "./build-maps";
 import { buildHierarchicalTree } from "./build-tree";
@@ -20,6 +21,155 @@ import {
   findScrollableElementIds,
 } from "./scrollable-detection";
 import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
+
+/**
+ * Verify if an iframe element matches the frameInfo metadata
+ * Uses iframe attributes and XPath verification
+ */
+async function verifyFrameMatch(
+  parentFrame: ReturnType<Page["frames"]>[number],
+  iframeElement: any,
+  frameInfo: IframeInfo
+): Promise<boolean> {
+  try {
+    // Get iframe attributes
+    const src = await iframeElement.getAttribute("src");
+    const name = await iframeElement.getAttribute("name");
+
+    // Match by src (most reliable for loaded iframes)
+    if (frameInfo.src && src && src === frameInfo.src) {
+      return true;
+    }
+
+    // Match by name
+    if (frameInfo.name && name && name === frameInfo.name) {
+      return true;
+    }
+
+    // Match by XPath (as last resort)
+    if (frameInfo.xpath) {
+      const matchesByXPath = await parentFrame.evaluate(
+        ({ xpath, element }) => {
+          try {
+            const result = document.evaluate(
+              xpath,
+              document,
+              null,
+              XPathResult.FIRST_ORDERED_NODE_TYPE,
+              null
+            );
+            return result.singleNodeValue === element;
+          } catch {
+            return false;
+          }
+        },
+        { xpath: frameInfo.xpath, element: iframeElement }
+      );
+      return matchesByXPath;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Match Playwright Frames to frameMap entries
+ * Links each same-origin iframe in frameMap to its corresponding Playwright Frame
+ * This enables unified frame resolution using playwrightFrame for all frame types
+ */
+async function matchPlaywrightFramesToFrameMap(
+  page: Page,
+  frameMap: Map<number, IframeInfo>,
+  debug: boolean
+): Promise<void> {
+  const allFrames = page.frames();
+  const matchedPwFrames = new Set<ReturnType<typeof page.frames>[number]>();
+
+  if (debug) {
+    console.log(
+      `[A11y] Matching ${allFrames.length} Playwright Frames to ${frameMap.size} frameMap entries`
+    );
+  }
+
+  // Skip frame 0 (main frame) and frames that already have playwrightFrame (OOPIF)
+  for (const [frameIndex, frameInfo] of frameMap) {
+    if (frameIndex === 0) continue; // Main frame doesn't need matching
+    if (frameInfo.playwrightFrame) continue; // Already set (OOPIF)
+
+    // Determine expected parent frame
+    let expectedParentFrame: ReturnType<typeof page.frames>[number] | null;
+    if (frameInfo.parentFrameIndex === 0) {
+      expectedParentFrame = page.mainFrame();
+    } else {
+      const parentInfo = frameMap.get(frameInfo.parentFrameIndex);
+      expectedParentFrame = parentInfo?.playwrightFrame || null;
+
+      // If parent hasn't been matched yet, skip this frame for now
+      if (!expectedParentFrame) {
+        if (debug) {
+          console.warn(
+            `[A11y] ⊘ Skipping frame ${frameIndex} - parent frame ${frameInfo.parentFrameIndex} not matched yet`
+          );
+        }
+        continue;
+      }
+    }
+
+    let matchedFrame: ReturnType<typeof page.frames>[number] | null = null;
+
+    // Try to match this frameInfo to a Playwright Frame
+    for (const pwFrame of allFrames) {
+      try {
+        // Skip main frame
+        if (pwFrame === page.mainFrame()) continue;
+
+        // Skip frames that have already been matched to another frameInfo entry
+        if (matchedPwFrames.has(pwFrame)) continue;
+
+        // Get iframe element and its parent frame
+        const iframeElement = await pwFrame.frameElement();
+        if (!iframeElement) continue;
+
+        const pwParentFrame = pwFrame.parentFrame();
+        if (!pwParentFrame) continue;
+
+        // Verify parent matches expected parent
+        if (pwParentFrame !== expectedParentFrame) continue;
+
+        // Verify this frame matches our frameInfo (src, name, xpath)
+        const matches = await verifyFrameMatch(
+          pwParentFrame,
+          iframeElement,
+          frameInfo
+        );
+
+        if (matches) {
+          matchedFrame = pwFrame;
+          matchedPwFrames.add(pwFrame); // Mark this Playwright Frame as matched
+          break;
+        }
+      } catch (error) {
+        // Frame might be detached or inaccessible, continue
+        continue;
+      }
+    }
+
+    if (matchedFrame) {
+      frameInfo.playwrightFrame = matchedFrame;
+      if (debug) {
+        console.log(
+          `[A11y] ✓ Matched frame ${frameIndex} to Playwright Frame: ${matchedFrame.url()}`
+        );
+      }
+    } else if (debug) {
+      console.warn(
+        `[A11y] ✗ Could not match frame ${frameIndex} (src=${frameInfo.src}, name=${frameInfo.name}, parent=${frameInfo.parentFrameIndex})`
+      );
+    }
+  }
+}
 
 /**
  * Fetch accessibility trees for all iframes in the page
@@ -451,6 +601,10 @@ export async function getA11yDOM(
       // Step 3: Build backend ID maps (tag names and XPaths)
       // This traverses the full DOM including iframe content via DOM.getDocument with pierce: true
       const maps = await buildBackendIdMaps(client, 0, debug);
+
+      // Step 3.5: Match Playwright Frames to same-origin frameMap entries
+      // This enables unified frame resolution using playwrightFrame for all frame types
+      await matchPlaywrightFramesToFrameMap(page, maps.frameMap || new Map(), debug);
 
       // Step 4: Fetch accessibility trees for main frame and all iframes
       const allNodes: (AXNode & { _frameIndex: number })[] = [];

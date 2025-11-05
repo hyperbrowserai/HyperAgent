@@ -898,87 +898,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Promise resolving to object with locator and trimmed xpath
    * @throws Error if element ID not found in xpath map
    */
-  /**
-   * Find a frame by XPath - checks which frame's iframe element matches the xpath
-   * This uniquely identifies the exact iframe element in the parent frame
-   */
-  private async findFrameByXPath(
-    parentFrame: ReturnType<Page["frames"]>[number],
-    xpath: string,
-    allFrames: ReturnType<Page["frames"]>
-  ): Promise<ReturnType<Page["frames"]>[number] | null> {
-    // Check each frame to see if its iframe element matches the xpath
-    for (const frame of allFrames) {
-      try {
-        const iframeElement = await frame.frameElement();
-        if (!iframeElement) continue;
-
-        // Check if this iframe element matches the xpath in the parent document
-        const matches = await parentFrame.evaluate(
-          ({ xpath, element }) => {
-            try {
-              const result = document.evaluate(
-                xpath,
-                document,
-                null,
-                XPathResult.FIRST_ORDERED_NODE_TYPE,
-                null
-              );
-              return result.singleNodeValue === element;
-            } catch {
-              return false;
-            }
-          },
-          { xpath, element: iframeElement }
-        );
-
-        if (matches) return frame;
-      } catch {
-        continue;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Get parent frame for iframe elements
-   */
-  private async getParentFrame(
-    page: Page,
-    parentFrameIndex: number,
-    frameMap: Map<number, IframeInfo>
-  ): Promise<ReturnType<Page["frames"]>[number] | null> {
-    // Main frame
-    if (parentFrameIndex === 0) {
-      return page.mainFrame();
-    }
-
-    // Find parent iframe info
-    const parentInfo = frameMap.get(parentFrameIndex);
-    if (!parentInfo) return null;
-
-    // OOPIF frames: Return stored Playwright Frame directly
-    if (parentInfo.playwrightFrame) {
-      return parentInfo.playwrightFrame;
-    }
-
-    // Same-origin frames: Use XPath-based lookup
-    // Recursively get grandparent frame
-    const grandparentFrame = await this.getParentFrame(
-      page,
-      parentInfo.parentFrameIndex,
-      frameMap
-    );
-    if (!grandparentFrame) return null;
-
-    // Find parent frame using its xpath in grandparent
-    return this.findFrameByXPath(
-      grandparentFrame,
-      parentInfo.xpath,
-      page.frames()
-    );
-  }
-
   private async getElementLocator(
     elementId: string,
     xpathMap: Record<string, string>,
@@ -1024,70 +943,29 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const iframeInfo = frameMap.get(frameIndex)!;
 
-    // OOPIF frames: Use stored Playwright Frame directly
-    let targetFrame: ReturnType<Page["frames"]>[number] | null = null;
-
-    if (iframeInfo.playwrightFrame) {
-      // OOPIF frame - use stored reference
-      targetFrame = iframeInfo.playwrightFrame;
-      if (this.debug) {
-        console.log(
-          `[aiAction] Using stored playwrightFrame for OOPIF frame ${frameIndex}`
-        );
-      }
-    } else {
-      // Same-origin frame - use XPath lookup
-      // Get parent frame using XPath-based recursive lookup
-      const parentFrame = await this.getParentFrame(
-        page,
-        iframeInfo.parentFrameIndex,
-        frameMap
-      );
-
-      if (!parentFrame) {
-        throw new HyperagentError(
-          `Parent frame not found for element ${elementId} (parent frameIndex: ${iframeInfo.parentFrameIndex})`,
-          404
-        );
-      }
-
-      // Find target frame using XPath (uniquely identifies the iframe element)
-      targetFrame = await this.findFrameByXPath(
-        parentFrame,
-        iframeInfo.xpath,
-        page.frames()
-      );
-
-      if (!targetFrame) {
-        const errorMsg = `Frame not found for element ${elementId} using XPath: ${iframeInfo.xpath}`;
-        if (this.debug) {
-          console.error(`[aiAction] ${errorMsg}`);
-          console.error(
-            `[aiAction] Available frames:`,
-            page.frames().map((f) => ({ url: f.url(), name: f.name() }))
-          );
-        }
-        throw new HyperagentError(errorMsg, 404);
-      }
-    }
+    // Use stored Playwright Frame directly (set during frame matching in getA11yDOM)
+    const targetFrame = iframeInfo.playwrightFrame;
 
     if (!targetFrame) {
-      throw new HyperagentError(
-        `Frame not found for element ${elementId}`,
-        404
-      );
+      const errorMsg = `Playwright Frame not found for element ${elementId} (frameIndex: ${frameIndex}). Frame matching may have failed.`;
+      if (this.debug) {
+        console.error(`[aiAction] ${errorMsg}`);
+        console.error(
+          `[aiAction] Frame info:`,
+          { src: iframeInfo.src, name: iframeInfo.name, xpath: iframeInfo.xpath }
+        );
+        console.error(
+          `[aiAction] Available frames:`,
+          page.frames().map((f) => ({ url: f.url(), name: f.name() }))
+        );
+      }
+      throw new HyperagentError(errorMsg, 404);
     }
 
     if (this.debug) {
-      if (iframeInfo.playwrightFrame) {
-        console.log(
-          `[aiAction] Using OOPIF frame ${frameIndex}: ${targetFrame.url()}`
-        );
-      } else {
-        console.log(
-          `[aiAction] Matched frame using XPath: ${iframeInfo.xpath}`
-        );
-      }
+      console.log(
+        `[aiAction] Using Playwright Frame ${frameIndex}: ${targetFrame.url()}`
+      );
     }
 
     // Wait for iframe content to be loaded
