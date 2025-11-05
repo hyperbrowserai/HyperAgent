@@ -782,7 +782,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
                 if (isScrollable) {
                   // Element has scrollable content - scroll within it
-                  const scrollTop = (scrollHeight - clientHeight) * (yPct / 100);
+                  const scrollTop =
+                    (scrollHeight - clientHeight) * (yPct / 100);
                   element.scrollTo({
                     top: scrollTop,
                     left: element.scrollLeft,
@@ -956,6 +957,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const parentInfo = frameMap.get(parentFrameIndex);
     if (!parentInfo) return null;
 
+    // OOPIF frames: Return stored Playwright Frame directly
+    if (parentInfo.playwrightFrame) {
+      return parentInfo.playwrightFrame;
+    }
+
+    // Same-origin frames: Use XPath-based lookup
     // Recursively get grandparent frame
     const grandparentFrame = await this.getParentFrame(
       page,
@@ -1017,41 +1024,70 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const iframeInfo = frameMap.get(frameIndex)!;
 
-    // Get parent frame using XPath-based recursive lookup
-    const parentFrame = await this.getParentFrame(
-      page,
-      iframeInfo.parentFrameIndex,
-      frameMap
-    );
+    // OOPIF frames: Use stored Playwright Frame directly
+    let targetFrame: ReturnType<Page["frames"]>[number] | null = null;
 
-    if (!parentFrame) {
+    if (iframeInfo.playwrightFrame) {
+      // OOPIF frame - use stored reference
+      targetFrame = iframeInfo.playwrightFrame;
+      if (this.debug) {
+        console.log(
+          `[aiAction] Using stored playwrightFrame for OOPIF frame ${frameIndex}`
+        );
+      }
+    } else {
+      // Same-origin frame - use XPath lookup
+      // Get parent frame using XPath-based recursive lookup
+      const parentFrame = await this.getParentFrame(
+        page,
+        iframeInfo.parentFrameIndex,
+        frameMap
+      );
+
+      if (!parentFrame) {
+        throw new HyperagentError(
+          `Parent frame not found for element ${elementId} (parent frameIndex: ${iframeInfo.parentFrameIndex})`,
+          404
+        );
+      }
+
+      // Find target frame using XPath (uniquely identifies the iframe element)
+      targetFrame = await this.findFrameByXPath(
+        parentFrame,
+        iframeInfo.xpath,
+        page.frames()
+      );
+
+      if (!targetFrame) {
+        const errorMsg = `Frame not found for element ${elementId} using XPath: ${iframeInfo.xpath}`;
+        if (this.debug) {
+          console.error(`[aiAction] ${errorMsg}`);
+          console.error(
+            `[aiAction] Available frames:`,
+            page.frames().map((f) => ({ url: f.url(), name: f.name() }))
+          );
+        }
+        throw new HyperagentError(errorMsg, 404);
+      }
+    }
+
+    if (!targetFrame) {
       throw new HyperagentError(
-        `Parent frame not found for element ${elementId} (parent frameIndex: ${iframeInfo.parentFrameIndex})`,
+        `Frame not found for element ${elementId}`,
         404
       );
     }
 
-    // Find target frame using XPath (uniquely identifies the iframe element)
-    const targetFrame = await this.findFrameByXPath(
-      parentFrame,
-      iframeInfo.xpath,
-      page.frames()
-    );
-
-    if (!targetFrame) {
-      const errorMsg = `Frame not found for element ${elementId} using XPath: ${iframeInfo.xpath}`;
-      if (this.debug) {
-        console.error(`[aiAction] ${errorMsg}`);
-        console.error(
-          `[aiAction] Available frames:`,
-          page.frames().map((f) => ({ url: f.url(), name: f.name() }))
+    if (this.debug) {
+      if (iframeInfo.playwrightFrame) {
+        console.log(
+          `[aiAction] Using OOPIF frame ${frameIndex}: ${targetFrame.url()}`
+        );
+      } else {
+        console.log(
+          `[aiAction] Matched frame using XPath: ${iframeInfo.xpath}`
         );
       }
-      throw new HyperagentError(errorMsg, 404);
-    }
-
-    if (this.debug) {
-      console.log(`[aiAction] Matched frame using XPath: ${iframeInfo.xpath}`);
     }
 
     // Wait for iframe content to be loaded
@@ -1323,7 +1359,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       const serverIds = this.mcpClient.getServerIds();
       if (this.debug) {
-        console.log(`Successfully connected to ${serverIds.length} MCP servers`);
+        console.log(
+          `Successfully connected to ${serverIds.length} MCP servers`
+        );
       }
     } catch (error) {
       console.error("Failed to initialize MCP client:", error);
