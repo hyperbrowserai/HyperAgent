@@ -467,7 +467,7 @@ async function fetchIframeAXTrees(
 
       // Update nextFrameIndex to account for any nested frames we just merged
       // This prevents frameIndex collisions when processing subsequent OOPIF frames
-      nextFrameIndex = Math.max(nextFrameIndex, ...Array.from(maps.frameMap?.keys() || [0])) + 1;
+      nextFrameIndex = Math.max(nextFrameIndex, ...Array.from(maps.frameMap?.keys() ?? [])) + 1;
     } catch (error) {
       console.warn(
         `[A11y] Failed to fetch AX tree for OOPIF frame ${iframeFrameIndex} (url=${frameUrl}):`,
