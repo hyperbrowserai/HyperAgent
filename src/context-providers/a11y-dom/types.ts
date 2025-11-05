@@ -2,6 +2,8 @@
  * Types for accessibility tree extraction using Chrome DevTools Protocol
  */
 
+import { Frame } from "playwright-core";
+
 /**
  * Raw AX Node from CDP Accessibility.getFullAXTree
  * Matches Chrome DevTools Protocol format
@@ -82,15 +84,17 @@ export interface IframeInfo {
   siblingPosition: number;  // Position among siblings with same (parent, URL)
   iframeBackendNodeId?: number;  // backendNodeId of the <iframe> element (for debugging)
   contentDocumentBackendNodeId?: number;  // backendNodeId of the iframe's content document root (for getPartialAXTree)
+  playwrightFrame?: Frame;  // Playwright Frame object (for OOPIF frame resolution)
 }
 
 /**
- * Maps for backend node IDs to tag names and xpaths
+ * Maps for backend node IDs to tag names, xpaths, and accessible names
  * Built from the full DOM tree
  */
 export interface BackendIdMaps {
   tagNameMap: Record<EncodedId, string>;
   xpathMap: Record<EncodedId, string>;
+  accessibleNameMap: Record<EncodedId, string>;  // Maps encodedId to accessible names from aria-label/title/placeholder
   frameMap?: Map<number, IframeInfo>;  // Maps frameIndex to iframe metadata
 }
 

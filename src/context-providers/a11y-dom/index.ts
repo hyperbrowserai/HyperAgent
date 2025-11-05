@@ -19,10 +19,7 @@ import {
   injectScrollableDetection,
   findScrollableElementIds,
 } from "./scrollable-detection";
-import {
-  hasInteractiveElements,
-  createDOMFallbackNodes,
-} from "./utils";
+import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
 
 /**
  * Fetch accessibility trees for all iframes in the page
@@ -32,6 +29,7 @@ import {
  * @returns Tagged nodes and optional debug info
  */
 async function fetchIframeAXTrees(
+  page: Page,
   client: CDPSession,
   maps: BackendIdMaps,
   debug: boolean
@@ -52,19 +50,30 @@ async function fetchIframeAXTrees(
     rawNodes: AXNode[];
   }> = [];
 
-  // Iterate through each iframe found in DOM traversal
+  let nextFrameIndex = (maps.frameMap?.size ?? 0) + 1; // Continue from where DOM traversal left off
+
+  // STEP 1: Process same-origin iframes from DOM traversal
   for (const [frameIndex, frameInfo] of maps.frameMap?.entries() ?? []) {
     const { contentDocumentBackendNodeId, src } = frameInfo;
 
     if (!contentDocumentBackendNodeId) {
-      console.warn(
-        `[A11y] Frame ${frameIndex} has no contentDocumentBackendNodeId, skipping`
-      );
+      if (debug) {
+        console.warn(
+          `[A11y] Frame ${frameIndex} has no contentDocumentBackendNodeId, skipping`
+        );
+      }
       continue;
     }
 
     try {
-      // Fetch accessibility tree using the iframe's content document's backendNodeId
+      if (debug) {
+        console.log(
+          `[A11y] Processing same-origin frame ${frameIndex} from DOM traversal`
+        );
+      }
+
+      // Same-origin: Use main CDP session with contentDocumentBackendNodeId
+      // Note: contentDocumentBackendNodeId is unique per iframe
       const result = (await client.send("Accessibility.getPartialAXTree", {
         backendNodeId: contentDocumentBackendNodeId,
         fetchRelatives: true,
@@ -83,7 +92,8 @@ async function fetchIframeAXTrees(
         const domFallbackNodes = createDOMFallbackNodes(
           frameIndex,
           maps.tagNameMap,
-          maps.frameMap || new Map()
+          maps.frameMap || new Map(),
+          maps.accessibleNameMap
         );
 
         if (domFallbackNodes.length > 0) {
@@ -115,6 +125,209 @@ async function fetchIframeAXTrees(
       );
     }
   }
+
+  // STEP 2: Discover and process OOPIF frames using Playwright
+  const allPlaywrightFrames = page.frames();
+  const mergedTagNameMap = { ...maps.tagNameMap };
+  const mergedXpathMap = { ...maps.xpathMap };
+  const mergedAccessibleNameMap = { ...maps.accessibleNameMap };
+
+  for (const playwrightFrame of allPlaywrightFrames) {
+    // Skip main frame
+    if (playwrightFrame === page.mainFrame()) continue;
+
+    // Try to create CDP session - if successful, it's an OOPIF
+    let oopifSession: CDPSession | null = null;
+    try {
+      oopifSession = await page.context().newCDPSession(playwrightFrame);
+    } catch {
+      // Not an OOPIF, skip (already processed in STEP 1)
+      continue;
+    }
+
+    // This is an OOPIF - process it with separate session
+    const iframeFrameIndex = nextFrameIndex++;
+    const frameUrl = playwrightFrame.url();
+
+    try {
+      if (debug) {
+        console.log(
+          `[A11y] Processing OOPIF frame ${iframeFrameIndex} (url=${frameUrl})`
+        );
+      }
+
+      // Enable CDP domains for OOPIF session
+      await oopifSession.send("DOM.enable");
+      await oopifSession.send("Accessibility.enable");
+
+      // Build backend ID maps for this OOPIF
+      const oopifMaps = await buildBackendIdMaps(
+        oopifSession,
+        iframeFrameIndex,
+        debug
+      );
+
+      // Merge maps
+      Object.assign(mergedTagNameMap, oopifMaps.tagNameMap);
+      Object.assign(mergedXpathMap, oopifMaps.xpathMap);
+      Object.assign(mergedAccessibleNameMap, oopifMaps.accessibleNameMap);
+
+      // Fetch OOPIF root frame AX tree using getFullAXTree
+      const rootResult = (await oopifSession.send(
+        "Accessibility.getFullAXTree"
+      )) as { nodes: AXNode[] };
+
+      let oopifRootNodes = rootResult.nodes;
+
+      // Fallback to DOM when AX tree has no interactive elements
+      if (!hasInteractiveElements(oopifRootNodes)) {
+        if (debug) {
+          console.log(
+            `[A11y] OOPIF frame ${iframeFrameIndex} has no interactive elements in AX tree, falling back to DOM`
+          );
+        }
+
+        const domFallbackNodes = createDOMFallbackNodes(
+          iframeFrameIndex,
+          mergedTagNameMap,
+          oopifMaps.frameMap || new Map(),
+          mergedAccessibleNameMap
+        );
+
+        if (domFallbackNodes.length > 0) {
+          oopifRootNodes = domFallbackNodes;
+        }
+      }
+
+      // Tag root nodes with OOPIF frame index
+      const taggedRootNodes = oopifRootNodes.map((n) => ({
+        ...n,
+        _frameIndex: iframeFrameIndex,
+      }));
+
+      allNodes.push(...taggedRootNodes);
+
+      // Collect debug info for OOPIF root
+      if (debug) {
+        frameDebugInfo.push({
+          frameIndex: iframeFrameIndex,
+          frameUrl: frameUrl,
+          totalNodes: oopifRootNodes.length,
+          rawNodes: oopifRootNodes,
+        });
+      }
+
+      // Process nested same-origin iframes within OOPIF (using OOPIF session)
+      if (oopifMaps.frameMap && oopifMaps.frameMap.size > 0) {
+        if (debug) {
+          console.log(
+            `[A11y] Processing ${oopifMaps.frameMap.size} nested frames within OOPIF ${iframeFrameIndex}`
+          );
+        }
+
+        for (const [nestedFrameIndex, nestedFrameInfo] of oopifMaps.frameMap) {
+          const { contentDocumentBackendNodeId, src } = nestedFrameInfo;
+
+          if (!contentDocumentBackendNodeId) {
+            if (debug) {
+              console.warn(
+                `[A11y] Nested frame ${nestedFrameIndex} in OOPIF ${iframeFrameIndex} has no contentDocumentBackendNodeId, skipping`
+              );
+            }
+            continue;
+          }
+
+          try {
+            if (debug) {
+              console.log(
+                `[A11y] Processing nested frame ${nestedFrameIndex} within OOPIF ${iframeFrameIndex} (src=${src})`
+              );
+            }
+
+            // Use OOPIF session with nested frame's contentDocumentBackendNodeId
+            const nestedResult = (await oopifSession.send(
+              "Accessibility.getPartialAXTree",
+              {
+                backendNodeId: contentDocumentBackendNodeId,
+                fetchRelatives: true,
+              }
+            )) as { nodes: AXNode[] };
+
+            let nestedNodes = nestedResult.nodes;
+
+            // Fallback to DOM when AX tree has no interactive elements
+            if (!hasInteractiveElements(nestedNodes)) {
+              if (debug) {
+                console.log(
+                  `[A11y] Nested frame ${nestedFrameIndex} has no interactive elements in AX tree, falling back to DOM`
+                );
+              }
+
+              const domFallbackNodes = createDOMFallbackNodes(
+                nestedFrameIndex,
+                mergedTagNameMap,
+                oopifMaps.frameMap,
+                mergedAccessibleNameMap
+              );
+
+              if (domFallbackNodes.length > 0) {
+                nestedNodes = domFallbackNodes;
+              }
+            }
+
+            // Tag nodes with nested frame index
+            const taggedNestedNodes = nestedNodes.map((n) => ({
+              ...n,
+              _frameIndex: nestedFrameIndex,
+            }));
+
+            allNodes.push(...taggedNestedNodes);
+
+            // Merge nested frame into main frameMap
+            maps.frameMap?.set(nestedFrameIndex, nestedFrameInfo);
+
+            // Collect debug info
+            if (debug) {
+              frameDebugInfo.push({
+                frameIndex: nestedFrameIndex,
+                frameUrl: src || "unknown",
+                totalNodes: nestedNodes.length,
+                rawNodes: nestedNodes,
+              });
+            }
+          } catch (error) {
+            console.warn(
+              `[A11y] Failed to fetch AX tree for nested frame ${nestedFrameIndex} in OOPIF ${iframeFrameIndex}:`,
+              (error as Error).message || error
+            );
+          }
+        }
+      }
+
+      // Store OOPIF root metadata in frameMap with Playwright Frame reference
+      maps.frameMap?.set(iframeFrameIndex, {
+        frameIndex: iframeFrameIndex,
+        src: frameUrl,
+        name: playwrightFrame.name(),
+        xpath: "", // No XPath for OOPIF (cross-origin)
+        parentFrameIndex: 0, // TODO: Detect actual parent frame
+        siblingPosition: 0, // TODO: Compute sibling position
+        playwrightFrame, // Store Frame for frame resolution
+      });
+    } catch (error) {
+      console.warn(
+        `[A11y] Failed to fetch AX tree for OOPIF frame ${iframeFrameIndex} (url=${frameUrl}):`,
+        (error as Error).message || error
+      );
+    } finally {
+      await oopifSession.detach();
+    }
+  }
+
+  // Update maps with merged values
+  maps.tagNameMap = mergedTagNameMap;
+  maps.xpathMap = mergedXpathMap;
+  maps.accessibleNameMap = mergedAccessibleNameMap;
 
   return { nodes: allNodes, debugInfo: frameDebugInfo };
 }
@@ -177,13 +390,9 @@ function processFrameDebugInfo(
     const interactiveCount = treeResult
       ? Array.from(treeResult.idToElement.values()).filter(
           (el: AccessibilityNode) =>
-            [
-              "button",
-              "link",
-              "textbox",
-              "searchbox",
-              "combobox",
-            ].includes(el.role)
+            ["button", "link", "textbox", "searchbox", "combobox"].includes(
+              el.role
+            )
         ).length
       : 0;
 
@@ -256,7 +465,7 @@ export async function getA11yDOM(
 
       // 4b. Fetch accessibility trees for all iframes
       const { nodes: iframeNodes, debugInfo: frameDebugInfo } =
-        await fetchIframeAXTrees(client, maps, debug);
+        await fetchIframeAXTrees(page, client, maps, debug);
       allNodes.push(...iframeNodes);
 
       // Step 4: Detect scrollable elements
@@ -288,8 +497,11 @@ export async function getA11yDOM(
       );
 
       // Step 6: Merge all trees into combined state
-      const { elements: allElements, xpathMap: allXpaths, domState: combinedDomState } =
-        mergeTreeResults(treeResults);
+      const {
+        elements: allElements,
+        xpathMap: allXpaths,
+        domState: combinedDomState,
+      } = mergeTreeResults(treeResults);
 
       // Step 7: Process debug info - add computed fields from tree results (only if debug enabled)
       const processedDebugInfo = debug

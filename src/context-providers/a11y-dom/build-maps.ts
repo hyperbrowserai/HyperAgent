@@ -14,6 +14,36 @@ function joinStep(base: string, step: string): string {
 }
 
 /**
+ * Extract accessible name from DOM node attributes
+ * Prioritizes: aria-label > title > placeholder
+ * Returns undefined if no accessible name found
+ */
+function extractAccessibleName(attributes: string[] | undefined): string | undefined {
+  if (!attributes || attributes.length === 0) return undefined;
+
+  let ariaLabel: string | undefined;
+  let title: string | undefined;
+  let placeholder: string | undefined;
+
+  // CDP attributes are flat array: ["name1", "value1", "name2", "value2"]
+  for (let i = 0; i < attributes.length; i += 2) {
+    const attrName = attributes[i];
+    const attrValue = attributes[i + 1];
+
+    if (attrName === "aria-label" && attrValue) {
+      ariaLabel = attrValue;
+    } else if (attrName === "title" && attrValue) {
+      title = attrValue;
+    } else if (attrName === "placeholder" && attrValue) {
+      placeholder = attrValue;
+    }
+  }
+
+  // Return in priority order
+  return ariaLabel || title || placeholder;
+}
+
+/**
  * Build maps from backend node IDs to tag names and XPaths
  * This is essential for enhancing accessibility nodes with DOM information
  */
@@ -32,6 +62,7 @@ export async function buildBackendIdMaps(
     // Step 2: Initialize maps
     const tagNameMap: Record<EncodedId, string> = {};
     const xpathMap: Record<EncodedId, string> = {};
+    const accessibleNameMap: Record<EncodedId, string> = {}; // Maps encodedId -> accessible name
     const frameMap = new Map<number, IframeInfo>(); // Maps frameIndex -> iframe metadata
 
     // Debug: Count DOM nodes by frame (only if debug enabled)
@@ -85,6 +116,12 @@ export async function buildBackendIdMaps(
       const tagName = String(node.nodeName).toLowerCase();
       tagNameMap[encodedId] = tagName;
       xpathMap[encodedId] = path;
+
+      // Extract and store accessible name if present
+      const accessibleName = extractAccessibleName(node.attributes);
+      if (accessibleName) {
+        accessibleNameMap[encodedId] = accessibleName;
+      }
 
       // Debug: Count nodes by frame (only if debug enabled)
       if (debug && domNodeCounts) {
@@ -232,9 +269,9 @@ export async function buildBackendIdMaps(
       }
     }
 
-    return { tagNameMap, xpathMap, frameMap };
+    return { tagNameMap, xpathMap, accessibleNameMap, frameMap };
   } catch (error) {
     console.error("Error building backend ID maps:", error);
-    return { tagNameMap: {}, xpathMap: {}, frameMap: new Map() };
+    return { tagNameMap: {}, xpathMap: {}, accessibleNameMap: {}, frameMap: new Map() };
   }
 }

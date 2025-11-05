@@ -21,7 +21,19 @@ Return an array of elements that match the instruction if they exist, otherwise 
  * Provides specific guidance for different action types
  */
 export function buildActionInstruction(action: string): string {
-  const supportedActions = ['click', 'fill', 'type', 'press', 'scrollTo', 'nextChunk', 'prevChunk', 'selectOptionFromDropdown', 'hover', 'check', 'uncheck'];
+  const supportedActions = [
+    "click",
+    "fill",
+    "type",
+    "press",
+    "scrollTo",
+    "nextChunk",
+    "prevChunk",
+    "selectOptionFromDropdown",
+    "hover",
+    "check",
+    "uncheck",
+  ];
 
   const instruction = `Find the most relevant element to perform an action on given the following action: ${action}.
 Provide an action for this element such as ${supportedActions.join(", ")}, or any other playwright locator method. Remember that to users, buttons and links look the same in most cases.
@@ -45,19 +57,11 @@ export function buildExamineDomUserPrompt(
   instruction: string,
   tree: string
 ): string {
-  // Truncate tree if too long
-  let truncatedTree = tree;
-  const MAX_TREE_LENGTH = 50000;
-
-  if (tree.length > MAX_TREE_LENGTH) {
-    truncatedTree = tree.substring(0, MAX_TREE_LENGTH) + '\n\n[TREE TRUNCATED: Too large]';
-  }
-
   // Build detailed instruction for actions
   const detailedInstruction = buildActionInstruction(instruction);
 
   return `instruction: ${detailedInstruction}
 
 Accessibility Tree:
-${truncatedTree}`;
+${tree}`;
 }

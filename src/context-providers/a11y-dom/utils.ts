@@ -178,24 +178,6 @@ export async function cleanStructuralNodes(
 }
 
 /**
- * Generate a short alphanumeric ID from a number
- * Used for creating compact element IDs
- */
-export function generateShortId(num: number): string {
-  const chars =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let result = "";
-  let n = num;
-
-  do {
-    result = chars[n % chars.length] + result;
-    n = Math.floor(n / chars.length);
-  } while (n > 0);
-
-  return result;
-}
-
-/**
  * Parse encoded ID to extract frame index and backend node ID
  */
 export function parseEncodedId(encodedId: EncodedId): {
@@ -304,12 +286,14 @@ function mapTagToRole(tagName: string): string | undefined {
  * @param frameIndex Frame index to create nodes for
  * @param tagNameMap Map of encoded IDs to tag names
  * @param frameMap Map of frame metadata
+ * @param accessibleNameMap Map of encoded IDs to accessible names
  * @returns Array of synthetic AXNode objects
  */
 export function createDOMFallbackNodes(
   frameIndex: number,
   tagNameMap: Record<string, string>,
-  frameMap: Map<number, IframeInfo>
+  frameMap: Map<number, IframeInfo>,
+  accessibleNameMap?: Record<string, string>
 ): AXNode[] {
   const domFallbackNodes: AXNode[] = [];
   const framePrefix = `${frameIndex}-`;
@@ -326,15 +310,18 @@ export function createDOMFallbackNodes(
     const backendNodeId = parseInt(encodedId.split("-")[1]);
     if (isNaN(backendNodeId)) continue;
 
-    // Build context label
-    const contextLabel = buildFrameContextLabel(tagName, frameIndex, frameMap);
+    // Try to get accessible name from map first
+    const accessibleName = accessibleNameMap?.[encodedId];
+
+    // Build label: use accessible name if available, otherwise use tag name with frame context
+    const label = accessibleName || `${tagName} in frame ${frameIndex}`;
 
     // Create simple AXNode from DOM data with frame context
     domFallbackNodes.push({
       nodeId: `dom-${encodedId}`,
       backendDOMNodeId: backendNodeId,
       role: { value: role },
-      name: { value: contextLabel },
+      name: { value: label },
       ignored: false,
     });
   }

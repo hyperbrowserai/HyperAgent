@@ -775,14 +775,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
                   behavior: "smooth",
                 });
               } else {
+                // Check if element is scrollable
                 const scrollHeight = element.scrollHeight;
                 const clientHeight = element.clientHeight;
-                const scrollTop = (scrollHeight - clientHeight) * (yPct / 100);
-                element.scrollTo({
-                  top: scrollTop,
-                  left: element.scrollLeft,
-                  behavior: "smooth",
-                });
+                const isScrollable = scrollHeight > clientHeight;
+
+                if (isScrollable) {
+                  // Element has scrollable content - scroll within it
+                  const scrollTop = (scrollHeight - clientHeight) * (yPct / 100);
+                  element.scrollTo({
+                    top: scrollTop,
+                    left: element.scrollLeft,
+                    behavior: "smooth",
+                  });
+                } else {
+                  // Element is not scrollable (e.g., iframe) - scroll it into view
+                  element.scrollIntoView({
+                    behavior: "smooth",
+                    block: yPct < 30 ? "start" : yPct > 70 ? "end" : "center",
+                  });
+                }
               }
             },
             { yArg: scrollArg }
