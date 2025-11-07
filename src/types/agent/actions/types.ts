@@ -1,5 +1,5 @@
 import { Page } from "playwright-core";
-import { DOMState } from "../../../context-providers/dom/types";
+import { A11yDOMState } from "../../../context-providers/a11y-dom/types";
 import { HyperAgentLLM } from "@/llm/types";
 import { z } from "zod";
 import { MCPClient } from "../../../agent/mcp/client";
@@ -8,7 +8,7 @@ import { ActionConfig } from "@/types/config";
 
 export interface ActionContext {
   page: Page;
-  domState: DOMState;
+  domState: A11yDOMState;
   llm: HyperAgentLLM;
   tokenLimit: number;
   variables: HyperVariable[];

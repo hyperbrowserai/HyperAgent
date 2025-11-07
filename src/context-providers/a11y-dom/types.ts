@@ -32,6 +32,20 @@ export interface AXNode {
 }
 
 /**
+ * Bounding box information for an element
+ */
+export interface DOMRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  top: number;
+  left: number;
+  right: number;
+  bottom: number;
+}
+
+/**
  * Simplified AccessibilityNode with parsed values
  * Used for tree building and filtering
  */
@@ -52,6 +66,10 @@ export interface AccessibilityNode {
       value?: string;
     };
   }>;
+  /**
+   * Bounding box data (only populated when enableVisualMode is true)
+   */
+  boundingBox?: DOMRect;
 }
 
 /**
@@ -119,6 +137,10 @@ export interface TreeResult {
   simplified: string;
   xpathMap: Record<EncodedId, string>;
   idToElement: Map<EncodedId, AccessibilityNode>;
+  /**
+   * Map of encodedId to bounding box (only when enableVisualMode is true)
+   */
+  boundingBoxMap?: Map<EncodedId, DOMRect>;
 }
 
 /**
@@ -217,6 +239,16 @@ export interface A11yDOMState {
    * Debug information about frame extraction (for debugging iframe issues)
    */
   frameDebugInfo?: FrameDebugInfo[];
+
+  /**
+   * Map of encodedId to bounding box (only when enableVisualMode is true)
+   */
+  boundingBoxMap?: Map<EncodedId, DOMRect>;
+
+  /**
+   * Visual overlay PNG as base64 string (only when enableVisualMode is true)
+   */
+  visualOverlay?: string;
 }
 
 /**

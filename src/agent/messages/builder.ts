@@ -3,7 +3,7 @@ import { HyperAgentMessage } from "@/llm/types";
 import { Page } from "playwright-core";
 import { getScrollInfo } from "./utils";
 import { retry } from "@/utils/retry";
-import { DOMState } from "@/context-providers/dom/types";
+import { A11yDOMState } from "@/context-providers/a11y-dom/types";
 import { HyperVariable } from "@/types/agent/types";
 
 export const buildAgentStepMessages = async (
@@ -11,7 +11,7 @@ export const buildAgentStepMessages = async (
   steps: AgentStep[],
   task: string,
   page: Page,
-  domState: DOMState,
+  domState: A11yDOMState,
   screenshot: string | undefined,
   variables: HyperVariable[]
 ): Promise<HyperAgentMessage[]> => {
@@ -46,14 +46,13 @@ export const buildAgentStepMessages = async (
         role: "assistant",
         content: JSON.stringify(step.agentOutput),
       });
-      for (const actionOutput of step.actionOutputs) {
-        messages.push({
-          role: "user",
-          content: actionOutput.extract
-            ? `${actionOutput.message} :\n ${JSON.stringify(actionOutput.extract)}`
-            : actionOutput.message,
-        });
-      }
+      const actionOutput = step.actionOutput;
+      messages.push({
+        role: "user",
+        content: actionOutput.extract
+          ? `${actionOutput.message} :\n ${JSON.stringify(actionOutput.extract)}`
+          : actionOutput.message,
+      });
     }
   }
 
@@ -63,26 +62,28 @@ export const buildAgentStepMessages = async (
     content: `=== Elements ===\n${domState.domState}\n`,
   });
 
-  // Add page screenshot section (always present in visual mode)
-  const scrollInfo = await retry({ func: () => getScrollInfo(page) });
-  messages.push({
-    role: "user",
-    content: [
-      {
-        type: "text",
-        text: "=== Page Screenshot ===\n",
-      },
-      {
-        type: "image",
-        url: `data:image/png;base64,${screenshot}`,
-        mimeType: "image/png",
-      },
-      {
-        type: "text",
-        text: `=== Page State ===\nPixels above: ${scrollInfo[0]}\nPixels below: ${scrollInfo[1]}\n`,
-      },
-    ],
-  });
+  // Add page screenshot section (only if screenshot is available)
+  if (screenshot) {
+    const scrollInfo = await retry({ func: () => getScrollInfo(page) });
+    messages.push({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "=== Page Screenshot ===\n",
+        },
+        {
+          type: "image",
+          url: `data:image/png;base64,${screenshot}`,
+          mimeType: "image/png",
+        },
+        {
+          type: "text",
+          text: `=== Page State ===\nPixels above: ${scrollInfo[0]}\nPixels below: ${scrollInfo[1]}\n`,
+        },
+      ],
+    });
+  }
 
   return messages;
 };

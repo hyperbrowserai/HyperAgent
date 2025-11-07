@@ -8,19 +8,14 @@ export const AgentOutputFn = (actionsSchema: z.ZodUnion<readonly [z.ZodType<any>
     thoughts: z
       .string()
       .describe(
-        "Your thoughts on the task at hand, was the previous goal successful?"
+        "Your reasoning about the current state and what needs to be done next based on the task goal and previous actions"
       ),
     memory: z
       .string()
       .describe(
-        "Information that you need to remember to accomplish subsequent goals"
+        "A summary of successful actions completed so far and the resulting state changes (e.g., 'Clicked login button -> login form appeared', 'Filled email field with user@example.com')"
       ),
-    nextGoal: z
-      .string()
-      .describe(
-        "The next goal you are trying to accomplish with the actions you have chosen"
-      ),
-    actions: z.array(actionsSchema),
+    action: actionsSchema,
   });
 
 export type AgentOutput = z.infer<ReturnType<typeof AgentOutputFn>>;
@@ -28,7 +23,7 @@ export type AgentOutput = z.infer<ReturnType<typeof AgentOutputFn>>;
 export interface AgentStep {
   idx: number;
   agentOutput: AgentOutput;
-  actionOutputs: ActionOutput[];
+  actionOutput: ActionOutput;
 }
 
 export interface TaskParams {
@@ -38,6 +33,7 @@ export interface TaskParams {
   onStep?: (step: AgentStep) => Promise<void> | void;
   onComplete?: (output: TaskOutput) => Promise<void> | void;
   debugOnAgentOutput?: (step: AgentOutput) => void;
+  enableVisualMode?: boolean;
 }
 
 export interface TaskOutput {

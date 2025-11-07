@@ -28,11 +28,10 @@ import {
   LocalBrowserProvider,
 } from "../browser-providers";
 import { HyperagentError } from "./error";
-import {
-  A11yDOMState,
-  IframeInfo,
-  toEncodedId,
-} from "../context-providers/a11y-dom/types";
+import { findElementWithInstruction } from "./shared/find-element";
+import { executePlaywrightMethod } from "./shared/execute-playwright-method";
+import { getElementLocator } from "./shared/element-locator";
+import { A11yDOMState } from "../context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "../types/agent/types";
@@ -477,134 +476,47 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     elementMap: Map<string, unknown>;
     llmResponse: { rawText: string; parsed: unknown };
   }> {
-    let domState: A11yDOMState | null = null;
-    let elementMap: Map<string, unknown> | null = null;
-    let examineResult: {
-      elements: ExamineDomResult[];
-      llmResponse: { rawText: string; parsed: unknown };
-    } | null = null;
-
-    // Retry loop for element finding
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      // Wait for DOM to settle (ensures dynamic content like dropdowns have finished loading)
-      if (this.debug) {
-        if (attempt === 0) {
-          console.log(`[aiAction] Waiting for DOM to settle...`);
-        } else {
-          console.log(
-            `[aiAction] Retry ${attempt + 1}/${maxRetries}: Waiting for DOM to settle...`
-          );
-        }
+    // Delegate to shared utility
+    const result = await findElementWithInstruction(
+      instruction,
+      page,
+      this.llm,
+      {
+        maxRetries,
+        retryDelayMs,
+        debug: this.debug,
       }
-      await waitForSettledDOM(page);
-      if (this.debug) {
-        console.log(`[aiAction] DOM settled`);
-      }
+    );
 
-      // Fetch a11y tree (pass debug flag to avoid expensive debug info collection when not needed)
-      domState = await getA11yDOM(page, this.debug);
-
-      if (!domState) {
-        throw new Error("Failed to fetch page structure");
-      }
-
-      if (this.debug) {
-        console.log(
-          `[aiAction] Fetched a11y tree: ${domState.elements.size} elements`
-        );
-      }
-
-      // Convert elements map to string-only keys for examineDom
-      elementMap = new Map(
-        Array.from(domState.elements).map(([k, v]) => [String(k), v])
-      );
-
-      if (this.debug) {
-        console.log(
-          `[aiAction] Calling examineDom to find element for: "${instruction}"`
-        );
-      }
-
-      examineResult = await examineDom(
-        instruction,
-        {
-          tree: domState.domState,
-          xpathMap: domState.xpathMap || {},
-          elements: elementMap,
-          url: page.url(),
-        },
-        this.llm
-      );
-
-      // Check if element was found
-      if (examineResult && examineResult.elements.length > 0) {
-        // Found it! Break out of retry loop
-        if (this.debug && attempt > 0) {
-          console.log(`[aiAction] Element found on attempt ${attempt + 1}`);
-        }
-        return {
-          element: examineResult.elements[0],
-          domState,
-          elementMap,
-          llmResponse: examineResult.llmResponse,
-        };
-      }
-
-      // Element not found - retry or fail
-      if (attempt < maxRetries - 1) {
-        if (this.debug) {
-          console.log(
-            `[aiAction] Element not found, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})...`
-          );
-        }
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-      }
+    // Check if element was found
+    if (result.success && result.element) {
+      // Success - return the result
+      return {
+        element: result.element,
+        domState: result.domState,
+        elementMap: result.elementMap,
+        llmResponse: result.llmResponse!,
+      };
     }
 
-    // After all retries, throw error with debug info
-    if (this.debug && domState && elementMap) {
+    // Element not found after all retries - handle error case
+    if (this.debug) {
       console.error(
         `[aiAction] No elements found for instruction: "${instruction}" after ${maxRetries} attempts`
       );
       console.error(`[aiAction] Current URL: ${page.url()}`);
       console.error(
-        `[aiAction] Total elements in final a11y tree: ${domState.elements.size}`
+        `[aiAction] Total elements in final a11y tree: ${result.domState.elements.size}`
       );
-
-      // Show a sample of available interactive elements
-      const elements = this.collectInteractiveElements(
-        elementMap,
-        HyperAgent.AIACTION_CONFIG.MAX_DEBUG_ELEMENTS_TO_DISPLAY
-      );
-      const MAX_LABEL_LENGTH = HyperAgent.AIACTION_CONFIG.MAX_LABEL_LENGTH;
-      const interactiveElements = elements.map(
-        ({ id, role, label }) =>
-          `  - ${role}: "${label.slice(0, MAX_LABEL_LENGTH)}${label.length > MAX_LABEL_LENGTH ? "..." : ""}" [${id}]`
-      );
-
-      if (interactiveElements.length > 0) {
-        console.error(
-          `[aiAction] Available interactive elements (first ${interactiveElements.length}):`
-        );
-        console.error(interactiveElements.join("\n"));
-        console.error(
-          `[aiAction] Try using one of the exact labels above in your instruction`
-        );
-      } else {
-        console.error(`[aiAction] No interactive elements found in a11y tree`);
-        console.error(
-          `[aiAction] The page may not have fully loaded, or the element might be in an iframe`
-        );
-      }
 
       // Write debug data to files before throwing error
       await this.writeDebugData({
         instruction,
         page,
         startTime,
-        domState,
-        elementMap,
-        llmResponse: examineResult?.llmResponse,
+        domState: result.domState,
+        elementMap: result.elementMap,
+        llmResponse: result.llmResponse,
         error: new HyperagentError(
           `No elements found for instruction: "${instruction}" after ${maxRetries} retry attempts.`,
           404
@@ -708,288 +620,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (debugError) {
       console.error(`[aiAction] Failed to write debug data:`, debugError);
     }
-  }
-
-  /**
-   * Execute a Playwright method on a locator
-   * Handles all supported action types (click, fill, scroll, etc.)
-   *
-   * @param method The Playwright method to execute
-   * @param args Arguments for the method
-   * @param locator The Playwright locator to execute on
-   * @returns Promise that resolves when action completes
-   * @throws Error if method is unknown
-   */
-  private async executePlaywrightMethod(
-    method: string,
-    args: unknown[],
-    locator: ReturnType<Page["locator"]>
-  ): Promise<void> {
-    switch (method) {
-      case "click":
-        await locator.click({
-          timeout: HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT,
-        });
-        break;
-      case "type":
-      case "fill":
-        await locator.fill((args[0] as string) || "");
-        break;
-      case "selectOptionFromDropdown":
-        await locator.selectOption((args[0] as string) || "");
-        break;
-      case "hover":
-        await locator.hover();
-        break;
-      case "press":
-        await locator.press((args[0] as string) || "Enter");
-        break;
-      case "check":
-        await locator.check();
-        break;
-      case "uncheck":
-        await locator.uncheck();
-        break;
-      case "scrollTo":
-        {
-          // Scroll to percentage of element or viewport height
-          const scrollArg = (args[0] || "50%").toString();
-          await locator.evaluate(
-            (element, { yArg }) => {
-              function parsePercent(val: string): number {
-                const cleaned = val.trim().replace("%", "");
-                const num = parseFloat(cleaned);
-                return Number.isNaN(num) ? 0 : Math.max(0, Math.min(num, 100));
-              }
-
-              const yPct = parsePercent(yArg);
-
-              if (element.tagName.toLowerCase() === "html") {
-                const scrollHeight = document.body.scrollHeight;
-                const viewportHeight = window.innerHeight;
-                const scrollTop =
-                  (scrollHeight - viewportHeight) * (yPct / 100);
-                window.scrollTo({
-                  top: scrollTop,
-                  left: window.scrollX,
-                  behavior: "smooth",
-                });
-              } else {
-                // Check if element is scrollable
-                const scrollHeight = element.scrollHeight;
-                const clientHeight = element.clientHeight;
-                const isScrollable = scrollHeight > clientHeight;
-
-                if (isScrollable) {
-                  // Element has scrollable content - scroll within it
-                  const scrollTop =
-                    (scrollHeight - clientHeight) * (yPct / 100);
-                  element.scrollTo({
-                    top: scrollTop,
-                    left: element.scrollLeft,
-                    behavior: "smooth",
-                  });
-                } else {
-                  // Element is not scrollable (e.g., iframe) - scroll it into view
-                  element.scrollIntoView({
-                    behavior: "smooth",
-                    block: yPct < 30 ? "start" : yPct > 70 ? "end" : "center",
-                  });
-                }
-              }
-            },
-            { yArg: scrollArg }
-          );
-        }
-        break;
-      case "nextChunk":
-        // Scroll by one viewport/element height
-        await locator.evaluate((element) => {
-          const waitForScrollEnd = (el: HTMLElement | Element) =>
-            new Promise<void>((resolve) => {
-              let last = el.scrollTop ?? 0;
-              const check = () => {
-                const cur = el.scrollTop ?? 0;
-                if (cur === last) return resolve();
-                last = cur;
-                requestAnimationFrame(check);
-              };
-              requestAnimationFrame(check);
-            });
-
-          const tagName = element.tagName.toLowerCase();
-
-          if (tagName === "html" || tagName === "body") {
-            const height = window.visualViewport?.height ?? window.innerHeight;
-            window.scrollBy({ top: height, left: 0, behavior: "smooth" });
-            const scrollingRoot = (document.scrollingElement ??
-              document.documentElement) as HTMLElement;
-            return waitForScrollEnd(scrollingRoot);
-          }
-
-          const height = (element as HTMLElement).getBoundingClientRect()
-            .height;
-          (element as HTMLElement).scrollBy({
-            top: height,
-            left: 0,
-            behavior: "smooth",
-          });
-          return waitForScrollEnd(element);
-        });
-        break;
-      case "prevChunk":
-        // Scroll up by one viewport/element height
-        await locator.evaluate((element) => {
-          const waitForScrollEnd = (el: HTMLElement | Element) =>
-            new Promise<void>((resolve) => {
-              let last = el.scrollTop ?? 0;
-              const check = () => {
-                const cur = el.scrollTop ?? 0;
-                if (cur === last) return resolve();
-                last = cur;
-                requestAnimationFrame(check);
-              };
-              requestAnimationFrame(check);
-            });
-
-          const tagName = element.tagName.toLowerCase();
-
-          if (tagName === "html" || tagName === "body") {
-            const height = window.visualViewport?.height ?? window.innerHeight;
-            window.scrollBy({ top: -height, left: 0, behavior: "smooth" });
-            const rootScrollingEl = (document.scrollingElement ??
-              document.documentElement) as HTMLElement;
-            return waitForScrollEnd(rootScrollingEl);
-          }
-
-          const height = (element as HTMLElement).getBoundingClientRect()
-            .height;
-          (element as HTMLElement).scrollBy({
-            top: -height,
-            left: 0,
-            behavior: "smooth",
-          });
-          return waitForScrollEnd(element);
-        });
-        break;
-      default: {
-        const errorMsg = `Unknown method: ${method}`;
-        if (this.debug) {
-          console.error(`[aiAction] ${errorMsg}`);
-        }
-        throw new HyperagentError(errorMsg, 400);
-      }
-    }
-
-    if (this.debug) {
-      console.log(`[aiAction] Successfully executed ${method}`);
-    }
-  }
-
-  /**
-   * Get Playwright locator from element ID
-   * Converts element ID to EncodedId, looks up XPath, and creates Playwright locator
-   * Supports iframe elements by extracting frameIndex and using frame.locator()
-   *
-   * @param elementId The element ID to locate
-   * @param xpathMap Map of EncodedIds to XPath strings
-   * @param page The page to create the locator on
-   * @param frameMap Optional map of frame indices to iframe metadata
-   * @returns Promise resolving to object with locator and trimmed xpath
-   * @throws Error if element ID not found in xpath map
-   */
-  private async getElementLocator(
-    elementId: string,
-    xpathMap: Record<string, string>,
-    page: Page,
-    frameMap?: Map<number, IframeInfo>
-  ): Promise<{ locator: ReturnType<Page["locator"]>; xpath: string }> {
-    // Convert elementId to EncodedId format for xpath lookup
-    const encodedId = toEncodedId(elementId);
-    const rawXpath = xpathMap[encodedId];
-
-    if (!rawXpath) {
-      const errorMsg = `Element ${elementId} not found in xpath map`;
-      if (this.debug) {
-        console.error(`[aiAction] ${errorMsg}`);
-        console.error(
-          `[aiAction] Looking for element with ID: ${elementId} (type: ${typeof elementId})`
-        );
-        console.error(`[aiAction] Direct lookup result:`, xpathMap[encodedId]);
-      }
-      throw new HyperagentError(errorMsg, 404);
-    }
-
-    // Trim trailing text nodes from xpath
-    const xpath = rawXpath.replace(/\/text\(\)(\[\d+\])?$/iu, "");
-
-    // Extract frameIndex from encodedId (format: "frameIndex-nodeIndex")
-    const [frameIndexStr] = encodedId.split("-");
-    const frameIndex = parseInt(frameIndexStr!, 10);
-
-    // Main frame (frameIndex 0) - use page.locator()
-    if (frameIndex === 0) {
-      return { locator: page.locator(`xpath=${xpath}`), xpath };
-    }
-
-    // Iframe element - need to find the correct frame
-    if (!frameMap || !frameMap.has(frameIndex)) {
-      const errorMsg = `Frame metadata not found for frame ${frameIndex}`;
-      if (this.debug) {
-        console.error(`[aiAction] ${errorMsg}`);
-      }
-      throw new HyperagentError(errorMsg, 404);
-    }
-
-    const iframeInfo = frameMap.get(frameIndex)!;
-
-    // Use stored Playwright Frame directly (set during frame matching in getA11yDOM)
-    const targetFrame = iframeInfo.playwrightFrame;
-
-    if (!targetFrame) {
-      const errorMsg = `Playwright Frame not found for element ${elementId} (frameIndex: ${frameIndex}). Frame matching may have failed.`;
-      if (this.debug) {
-        console.error(`[aiAction] ${errorMsg}`);
-        console.error(
-          `[aiAction] Frame info:`,
-          { src: iframeInfo.src, name: iframeInfo.name, xpath: iframeInfo.xpath }
-        );
-        console.error(
-          `[aiAction] Available frames:`,
-          page.frames().map((f) => ({ url: f.url(), name: f.name() }))
-        );
-      }
-      throw new HyperagentError(errorMsg, 404);
-    }
-
-    if (this.debug) {
-      console.log(
-        `[aiAction] Using Playwright Frame ${frameIndex}: ${targetFrame.url()}`
-      );
-    }
-
-    // Wait for iframe content to be loaded
-    try {
-      await targetFrame.waitForLoadState("domcontentloaded", { timeout: 5000 });
-    } catch {
-      if (this.debug) {
-        console.warn(
-          `[aiAction] Timeout waiting for iframe to load (frame ${frameIndex}), proceeding anyway`
-        );
-      }
-      // Continue anyway - frame might already be loaded
-    }
-
-    if (this.debug) {
-      console.log(
-        `[aiAction] Using frame ${frameIndex} locator for element ${elementId}`
-      );
-      console.log(
-        `[aiAction] Frame URL: ${targetFrame.url()}, Name: ${targetFrame.name()}`
-      );
-    }
-
-    return { locator: targetFrame.locator(`xpath=${xpath}`), xpath };
   }
 
   /**
@@ -1119,11 +749,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
 
       // Get Playwright locator for the element (xpath is already trimmed by getElementLocator)
-      const { locator, xpath } = await this.getElementLocator(
+      const { locator, xpath } = await getElementLocator(
         element.elementId,
         domState.xpathMap,
         page,
-        domState.frameMap
+        domState.frameMap,
+        this.debug
       );
 
       // Execute the Playwright method
@@ -1135,7 +766,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       const method = element.method;
       const args = element.arguments || [];
-      await this.executePlaywrightMethod(method, args, locator);
+      await executePlaywrightMethod(method, args, locator, {
+        clickTimeout: HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT,
+        debug: this.debug,
+      });
 
       // Wait for DOM to settle after action
       await waitForSettledDOM(page);

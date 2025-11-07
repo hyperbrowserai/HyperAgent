@@ -16,7 +16,7 @@ export const ThinkingAction = z
 export type ThinkingActionType = z.infer<typeof ThinkingAction>;
 
 export const ThinkingActionDefinition: AgentActionDefinition = {
-  type: "thinkAction" as const,
+  type: "thinking" as const,
   actionParams: ThinkingAction,
   run: async (ctx: ActionContext, action: ThinkingActionType) => {
     const { thought } = action;

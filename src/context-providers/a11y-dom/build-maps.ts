@@ -18,7 +18,9 @@ function joinStep(base: string, step: string): string {
  * Prioritizes: aria-label > title > placeholder
  * Returns undefined if no accessible name found
  */
-function extractAccessibleName(attributes: string[] | undefined): string | undefined {
+function extractAccessibleName(
+  attributes: string[] | undefined
+): string | undefined {
   if (!attributes || attributes.length === 0) return undefined;
 
   let ariaLabel: string | undefined;
@@ -38,6 +40,8 @@ function extractAccessibleName(attributes: string[] | undefined): string | undef
       placeholder = attrValue;
     }
   }
+
+  console.log("ACCESSIBLE NAMES", ariaLabel, title, placeholder);
 
   // Return in priority order
   return ariaLabel || title || placeholder;
@@ -100,7 +104,10 @@ export async function buildBackendIdMaps(
 
       // DEBUG: Track encodedId creation (only if debug enabled)
       if (debug && encodedIdCounts) {
-        encodedIdCounts.set(encodedId, (encodedIdCounts.get(encodedId) || 0) + 1);
+        encodedIdCounts.set(
+          encodedId,
+          (encodedIdCounts.get(encodedId) || 0) + 1
+        );
         if (encodedIdCounts.get(encodedId)! > 1) {
           console.warn(
             `[buildBackendIdMaps] ⚠️ Duplicate encodedId: "${encodedId}" (frameIndex=${currentFrameIndex}, backendNodeId=${node.backendNodeId}, tagName=${String(node.nodeName).toLowerCase()}), count=${encodedIdCounts.get(encodedId)}`
@@ -132,7 +139,11 @@ export async function buildBackendIdMaps(
       }
 
       // Debug: Count input/textarea elements (only if debug enabled)
-      if (debug && inputElementsByFrame && (tagName === "input" || tagName === "textarea")) {
+      if (
+        debug &&
+        inputElementsByFrame &&
+        (tagName === "input" || tagName === "textarea")
+      ) {
         inputElementsByFrame.set(
           currentFrameIndex,
           (inputElementsByFrame.get(currentFrameIndex) || 0) + 1
@@ -272,6 +283,11 @@ export async function buildBackendIdMaps(
     return { tagNameMap, xpathMap, accessibleNameMap, frameMap };
   } catch (error) {
     console.error("Error building backend ID maps:", error);
-    return { tagNameMap: {}, xpathMap: {}, accessibleNameMap: {}, frameMap: new Map() };
+    return {
+      tagNameMap: {},
+      xpathMap: {},
+      accessibleNameMap: {},
+      frameMap: new Map(),
+    };
   }
 }

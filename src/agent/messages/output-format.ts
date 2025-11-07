@@ -1,14 +1,11 @@
 export const OUTPUT_FORMAT = `Your response MUST be in this exact format:
 {
-  "thoughts": "Your thoughts on the task at hand, was the previous goal successful?",
-  "memory": "Information that you need to remember to accomplish subsequent goals",
-  "nextGoal": "The next goal you are trying to accomplish with the actions you have chosen",
-  "actions": [
-    {
-      "action": "The action you will take",
-      "params": {
-        ...Action Arguments...
-      }
+  "thoughts": "Your reasoning about the current state and what needs to be done next based on the task goal and previous actions",
+  "memory": "A summary of successful actions completed so far and the resulting state changes (e.g., 'Clicked login button -> login form appeared', 'Filled email field with user@example.com')",
+  "action": {
+    "type": "The action type to take (actElement, goToUrl, wait, thinking, extract, complete, etc.)",
+    "params": {
+      ...Action Arguments...
     }
-  ]
+  }
 }`

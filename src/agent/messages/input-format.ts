@@ -12,19 +12,21 @@ export const INPUT_FORMAT = `=== Final Goal ===
 - Format: <<name>> - {description}
 === Elements ===
 [A list of the elements on the page in the following format]
-[index]<type attributes...>value</type>
+[encodedId] type: name attributes
 - type: HTML element type (button, input, etc.)
-- index: Numeric identifier for interaction 
+- encodedId: Element identifier in format "frameIndex-nodeId" (e.g., "0-1234")
+- name: The accessible name or label of the element
 - attributes: All HTML attributes of the element like type, name, value, class, etc. This can include:
   * Data attributes
-  * ARIA attributes 
+  * ARIA attributes
   * Custom attributes
   * Any other valid HTML attributes
   * The attributes provide important context about the element's behavior, accessibility, and styling
 === Previous Actions ===
 [The previous steps of the task]
-=== Page Screenshot ===
-- A screenshot of the current page with the interactive elements highlighted with their index
-=== Page State ===
-- Pixels below
-- Pixels above`;
+=== Page Screenshot === (only in visual modes)
+- A screenshot of the current page
+- In visual-debug mode, interactive elements are highlighted with their encodedId
+=== Page State === (only in visual modes)
+- Pixels below: Number of pixels scrolled below current viewport
+- Pixels above: Number of pixels scrolled above current viewport`;

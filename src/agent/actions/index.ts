@@ -1,17 +1,14 @@
 import { GoToURLActionDefinition } from "./go-to-url";
-import { ClickElementActionDefinition } from "./click-element";
-import { InputTextActionDefinition } from "./input-text";
 import { CompleteActionDefinition } from "./complete";
 import { generateCompleteActionWithOutputDefinition } from "./complete-with-output-schema";
 import { ExtractActionDefinition } from "./extract";
-import { SelectOptionActionDefinition } from "./select-option";
-import { ScrollActionDefinition } from "./scroll";
 import { PageBackActionDefinition } from "./page-back";
 import { PageForwardActionDefinition } from "./page-forward";
-import { KeyPressActionDefinition } from "./key-press";
 import { ThinkingActionDefinition } from "./thinking";
 import { RefreshPageActionDefinition } from "./refresh-page";
 import { PDFActionDefinition } from "./pdf";
+import { ActElementActionDefinition } from "./act-element";
+import { WaitActionDefinition } from "./wait";
 
 /**
  * Custom error class for when an action is not found in the registry
@@ -30,17 +27,19 @@ export class ActionNotFoundError extends Error {
 }
 
 const DEFAULT_ACTIONS = [
+  // Navigation actions
   GoToURLActionDefinition,
   PageBackActionDefinition,
   PageForwardActionDefinition,
   RefreshPageActionDefinition,
+
+  // Element interaction (natural language)
+  ActElementActionDefinition,
+
+  // Other actions
   ExtractActionDefinition,
-  ClickElementActionDefinition,
-  SelectOptionActionDefinition,
-  ScrollActionDefinition,
-  InputTextActionDefinition,
-  KeyPressActionDefinition,
   ThinkingActionDefinition,
+  WaitActionDefinition,
 ];
 
 if (process.env.GEMINI_API_KEY) {

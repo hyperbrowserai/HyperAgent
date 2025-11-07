@@ -13,6 +13,7 @@ import {
   FrameDebugInfo,
   EncodedId,
   IframeInfo,
+  DOMRect,
 } from "./types";
 import { buildBackendIdMaps } from "./build-maps";
 import { buildHierarchicalTree } from "./build-tree";
@@ -21,6 +22,7 @@ import {
   findScrollableElementIds,
 } from "./scrollable-detection";
 import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
+import { renderA11yOverlay } from "./visual-overlay";
 
 /**
  * Verify if an iframe element matches the frameInfo metadata
@@ -467,7 +469,9 @@ async function fetchIframeAXTrees(
 
       // Update nextFrameIndex to account for any nested frames we just merged
       // This prevents frameIndex collisions when processing subsequent OOPIF frames
-      nextFrameIndex = Math.max(nextFrameIndex, ...Array.from(maps.frameMap?.keys() ?? [])) + 1;
+      nextFrameIndex =
+        Math.max(nextFrameIndex, ...Array.from(maps.frameMap?.keys() || [0])) +
+        1;
     } catch (error) {
       console.warn(
         `[A11y] Failed to fetch AX tree for OOPIF frame ${iframeFrameIndex} (url=${frameUrl}):`,
@@ -580,17 +584,20 @@ function processFrameDebugInfo(
  * 1. Detects all frames in the page
  * 2. For same-origin iframes: uses main CDP session with frameId parameter
  * 3. Merges all accessibility trees into a single state
+ * 4. (Optional) Collects bounding boxes and renders visual overlay
  *
  * Note: Chrome's Accessibility API automatically includes same-origin iframe
  * content in the main frame's tree, so we primarily focus on the main frame.
  *
  * @param page - Playwright page
  * @param debug - Whether to collect debug information (frameDebugInfo)
- * @returns A11yDOMState with elements map and text tree
+ * @param enableVisualMode - Whether to collect bounding boxes and generate visual overlay
+ * @returns A11yDOMState with elements map, text tree, and optional visual overlay
  */
 export async function getA11yDOM(
   page: Page,
-  debug = false
+  debug = false,
+  enableVisualMode = false
 ): Promise<A11yDOMState> {
   try {
     // Step 1: Inject scrollable detection script into the main frame
@@ -608,7 +615,11 @@ export async function getA11yDOM(
 
       // Step 3.5: Match Playwright Frames to same-origin frameMap entries
       // This enables unified frame resolution using playwrightFrame for all frame types
-      await matchPlaywrightFramesToFrameMap(page, maps.frameMap || new Map(), debug);
+      await matchPlaywrightFramesToFrameMap(
+        page,
+        maps.frameMap || new Map(),
+        debug
+      );
 
       // Step 4: Fetch accessibility trees for main frame and all iframes
       const allNodes: (AXNode & { _frameIndex: number })[] = [];
@@ -647,7 +658,9 @@ export async function getA11yDOM(
             maps,
             frameIdx,
             scrollableIds,
-            debug
+            debug,
+            enableVisualMode,
+            client
           );
 
           return treeResult;
@@ -666,12 +679,69 @@ export async function getA11yDOM(
         ? processFrameDebugInfo(frameDebugInfo, treeResults)
         : undefined;
 
+      // Step 8: Generate visual overlay if enabled
+      let visualOverlay: string | undefined;
+      let boundingBoxMap: Map<EncodedId, DOMRect> | undefined;
+
+      if (enableVisualMode) {
+        // Collect all bounding boxes from tree results
+        boundingBoxMap = new Map();
+        for (const result of treeResults) {
+          if (result.boundingBoxMap) {
+            for (const [encodedId, rect] of result.boundingBoxMap) {
+              boundingBoxMap.set(encodedId, rect);
+            }
+          }
+        }
+
+        // Render overlay if we have bounding boxes
+        if (boundingBoxMap.size > 0) {
+          // Get viewport dimensions (calculate from page if not set)
+          let viewport = page.viewportSize();
+          if (!viewport) {
+            viewport = await page.evaluate(() => ({
+              width: window.innerWidth,
+              height: window.innerHeight,
+            }));
+          }
+
+          // Filter to only include boxes that are within or overlap the viewport
+          const visibleBoundingBoxMap = new Map<EncodedId, DOMRect>();
+          for (const [encodedId, rect] of boundingBoxMap.entries()) {
+            // Check if box overlaps viewport (accounting for partial visibility)
+            const isVisible =
+              rect.right > 0 &&
+              rect.bottom > 0 &&
+              rect.left < viewport.width &&
+              rect.top < viewport.height;
+
+            if (isVisible) {
+              visibleBoundingBoxMap.set(encodedId, rect);
+            }
+          }
+
+          visualOverlay = await renderA11yOverlay(visibleBoundingBoxMap, {
+            width: viewport.width,
+            height: viewport.height,
+            showEncodedIds: true,
+            colorScheme: "rainbow",
+          });
+
+          if (debug) {
+            console.log(
+              `[A11y Visual] Rendered ${visibleBoundingBoxMap.size} elements (filtered from ${boundingBoxMap.size} total)`
+            );
+          }
+        }
+      }
+
       return {
         elements: allElements,
         domState: combinedDomState,
         xpathMap: allXpaths,
         frameMap: maps.frameMap,
         ...(debug && { frameDebugInfo: processedDebugInfo }),
+        ...(enableVisualMode && { boundingBoxMap, visualOverlay }),
       };
     } finally {
       await client.detach();

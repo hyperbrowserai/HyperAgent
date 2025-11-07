@@ -7,7 +7,7 @@ import {
   ActionType,
   AgentActionDefinition,
 } from "@/types";
-import { getDom } from "@/context-providers/dom";
+import { getA11yDOM } from "@/context-providers/a11y-dom";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
@@ -24,7 +24,7 @@ import { HyperagentError } from "../error";
 import { buildAgentStepMessages } from "../messages/builder";
 import { SYSTEM_PROMPT } from "../messages/system-prompt";
 import { z } from "zod";
-import { DOMState } from "@/context-providers/dom/types";
+import { A11yDOMState } from "@/context-providers/a11y-dom/types";
 import { Page } from "playwright-core";
 import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
@@ -32,11 +32,33 @@ import { HyperAgentMessage } from "@/llm/types";
 import { Jimp } from "jimp";
 
 const compositeScreenshot = async (page: Page, overlay: string) => {
-  const screenshot = await page.screenshot({ type: "png" });
+  // Use CDP screenshot - faster, doesn't wait for fonts
+  const client = await page.context().newCDPSession(page);
+
+  const { data } = await client.send("Page.captureScreenshot", {
+    format: "png",
+  });
+  await client.detach();
+
   const [baseImage, overlayImage] = await Promise.all([
-    Jimp.read(screenshot as Buffer),
+    Jimp.read(Buffer.from(data, "base64")),
     Jimp.read(Buffer.from(overlay, "base64")),
   ]);
+
+  // If dimensions don't match (can happen with viewport: null or DPR), scale overlay to match screenshot
+  if (
+    overlayImage.bitmap.width !== baseImage.bitmap.width ||
+    overlayImage.bitmap.height !== baseImage.bitmap.height
+  ) {
+    console.log(
+      `[Screenshot] Dimension mismatch - overlay: ${overlayImage.bitmap.width}x${overlayImage.bitmap.height}, screenshot: ${baseImage.bitmap.width}x${baseImage.bitmap.height}, scaling overlay...`
+    );
+    overlayImage.resize({
+      w: baseImage.bitmap.width,
+      h: baseImage.bitmap.height,
+    });
+  }
+
   baseImage.composite(overlayImage, 0, 0);
   const buffer = await baseImage.getBuffer("image/png");
   return buffer.toString("base64");
@@ -71,7 +93,7 @@ const getActionHandler = (
 
 const runAction = async (
   action: ActionType,
-  domState: DOMState,
+  domState: A11yDOMState,
   page: Page,
   ctx: AgentCtx
 ): Promise<ActionOutput> => {
@@ -134,6 +156,9 @@ export const runAgentTask = async (
   let output = "";
   const page = taskState.startingPage;
   let currStep = 0;
+  let consecutiveFailuresOrWaits = 0;
+  const MAX_CONSECUTIVE_FAILURES_OR_WAITS = 5;
+
   while (true) {
     // Status Checks
     if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
@@ -152,12 +177,16 @@ export const runAgentTask = async (
       fs.mkdirSync(debugStepDir, { recursive: true });
     }
 
-    // Get DOM State (V1 always uses visual mode)
-    let domState: DOMState | null = null;
+    // Get A11y DOM State (visual mode optional, default false for performance)
+    let domState: A11yDOMState | null = null;
     try {
       domState = await retry({
         func: async () => {
-          const s = await getDom(page);
+          const s = await getA11yDOM(
+            page,
+            ctx.debug,
+            params?.enableVisualMode ?? false
+          );
           if (!s) throw new Error("no dom state");
           return s;
         },
@@ -183,14 +212,12 @@ export const runAgentTask = async (
       break;
     }
 
-    // V1 always uses visual mode with composite screenshot
+    // If visual mode enabled, composite screenshot with overlay
     let trimmedScreenshot: string | undefined;
-    if (domState.screenshot) {
+    if (domState.visualOverlay) {
       trimmedScreenshot = await compositeScreenshot(
         page,
-        domState.screenshot.startsWith("data:image/png;base64,")
-          ? domState.screenshot.slice("data:image/png;base64,".length)
-          : domState.screenshot
+        domState.visualOverlay
       );
     }
 
@@ -256,37 +283,91 @@ export const runAgentTask = async (
       break;
     }
 
-    // Run Actions
-    const agentStepActions = agentOutput.actions;
-    const actionOutputs: ActionOutput[] = [];
-    for (const action of agentStepActions) {
-      if (action.type === "complete") {
-        taskState.status = TaskStatus.COMPLETED;
-        const actionDefinition = ctx.actions.find(
-          (actionDefinition) => actionDefinition.type === "complete"
-        );
-        if (actionDefinition) {
-          output =
-            (await actionDefinition.completeAction?.(action.params)) ??
-            "No complete action found";
-        } else {
-          output = "No complete action found";
-        }
-      }
-      const actionOutput = await runAction(
-        action as ActionType,
-        domState,
-        page,
-        ctx
+    // Run single action
+    const action = agentOutput.action;
+
+    // Handle complete action specially
+    if (action.type === "complete") {
+      taskState.status = TaskStatus.COMPLETED;
+      const actionDefinition = ctx.actions.find(
+        (actionDefinition) => actionDefinition.type === "complete"
       );
-      actionOutputs.push(actionOutput);
-      // Wait for DOM to settle after action
-      await waitForSettledDOM(page);
+      if (actionDefinition) {
+        output =
+          (await actionDefinition.completeAction?.(action.params)) ??
+          "No complete action found";
+      } else {
+        output = "No complete action found";
+      }
     }
+
+    // Execute the action
+    const actionOutput = await runAction(
+      action as ActionType,
+      domState,
+      page,
+      ctx
+    );
+
+    // Check action result and handle retry logic
+    if (action.type === "wait") {
+      // Wait action - increment counter
+      consecutiveFailuresOrWaits++;
+
+      if (consecutiveFailuresOrWaits >= MAX_CONSECUTIVE_FAILURES_OR_WAITS) {
+        taskState.status = TaskStatus.FAILED;
+        taskState.error = `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress.`;
+
+        const step: AgentStep = {
+          idx: currStep,
+          agentOutput: agentOutput,
+          actionOutput,
+        };
+        taskState.steps.push(step);
+        await params?.onStep?.(step);
+        break;
+      }
+
+      if (ctx.debug) {
+        console.log(
+          `[agent] Wait action (${consecutiveFailuresOrWaits}/${MAX_CONSECUTIVE_FAILURES_OR_WAITS}): ${actionOutput.message}`
+        );
+      }
+    } else if (!actionOutput.success) {
+      // Action failed - increment counter
+      consecutiveFailuresOrWaits++;
+
+      if (consecutiveFailuresOrWaits >= MAX_CONSECUTIVE_FAILURES_OR_WAITS) {
+        taskState.status = TaskStatus.FAILED;
+        taskState.error = `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress. Last error: ${actionOutput.message}`;
+
+        const step: AgentStep = {
+          idx: currStep,
+          agentOutput: agentOutput,
+          actionOutput,
+        };
+        taskState.steps.push(step);
+        await params?.onStep?.(step);
+        break;
+      }
+
+      if (ctx.debug) {
+        console.log(
+          `[agent] Action failed (${consecutiveFailuresOrWaits}/${MAX_CONSECUTIVE_FAILURES_OR_WAITS}): ${actionOutput.message}`
+        );
+      }
+    } else {
+      // Success - reset counter
+      consecutiveFailuresOrWaits = 0;
+    }
+
+    // Wait for DOM to settle after action
+    await waitForSettledDOM(page);
+
     const step: AgentStep = {
       idx: currStep,
-      agentOutput: agentOutput,
-      actionOutputs,
+      agentOutput,
+      actionOutput,
     };
     taskState.steps.push(step);
     await params?.onStep?.(step);

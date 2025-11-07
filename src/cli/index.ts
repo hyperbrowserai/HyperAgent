@@ -184,25 +184,15 @@ program
       process.stdin.setRawMode(true);
 
       const onStep = (params: AgentStep) => {
-        const actionsList = zipWith(
-          params.actionOutputs,
-          params.agentOutput.actions,
-          (output, action) => ({
-            output,
-            action,
-          })
-        );
+        const action = params.agentOutput.action;
+        const output = params.actionOutput;
 
-        const actions = actionsList
-          .map((action, index, array) =>
-            index < array.length - 1
-              ? `  ├── [${action.output.success ? chalk.yellow(action.action.type) : chalk.red(action.action.type)}] ${action.output.success ? agent.pprintAction(action.action as ActionType) : chalk.red(action.output.message)}`
-              : `  └── [${action.output.success ? chalk.yellow(action.action.type) : chalk.red(action.action.type)}] ${action.output.success ? agent.pprintAction(action.action as ActionType) : chalk.red(action.output.message)}`
-          )
-          .join("\n");
+        const actionDisplay = output.success
+          ? `  └── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`
+          : `  └── [${chalk.red(action.type)}] ${chalk.red(output.message)}`;
 
         currentSpinner.succeed(
-          `[${chalk.yellow("task")}]: ${params.agentOutput.nextGoal}\n${actions}`
+          `[${chalk.yellow("step")}]: ${params.agentOutput.thoughts}\n${actionDisplay}`
         );
         currentSpinner = ora();
         process.stdin.setRawMode(true);
@@ -210,13 +200,11 @@ program
       };
 
       const debugAgentOutput = (params: AgentOutput) => {
-        const actions = params.actions.map((action, index, array) =>
-          index < array.length - 1
-            ? `  ├── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`
-            : `  └── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`
-        );
+        const action = params.action;
+        const actionDisplay = `  └── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`;
+
         currentSpinner.start(
-          `[${chalk.yellow("task")}]: ${params.nextGoal}\n${actions.join("\n")}`
+          `[${chalk.yellow("planning")}]: ${params.thoughts}\n${actionDisplay}`
         );
         process.stdin.setRawMode(true);
         process.stdin.resume();
