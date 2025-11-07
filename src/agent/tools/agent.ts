@@ -302,12 +302,7 @@ export const runAgentTask = async (
     }
 
     // Execute the action
-    const actionOutput = await runAction(
-      action as ActionType,
-      domState,
-      page,
-      ctx
-    );
+    const actionOutput = await runAction(action, domState, page, ctx);
 
     // Check action result and handle retry logic
     if (action.type === "wait") {

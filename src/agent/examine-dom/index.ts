@@ -5,13 +5,13 @@
  * matching elements from the accessibility tree with confidence scores.
  */
 
-import { HyperAgentLLM } from '@/llm/types';
-import { ExamineDomContext, ExamineDomResult } from './types';
+import { HyperAgentLLM } from "@/llm/types";
+import { ExamineDomContext, ExamineDomResult } from "./types";
 import {
   buildExamineDomSystemPrompt,
   buildExamineDomUserPrompt,
-} from './prompts';
-import { ExamineDomResultsSchema } from './schema';
+} from "./prompts";
+import { ExamineDomResultsSchema, ExamineDomResultsType } from "./schema";
 
 /**
  * Find elements in the accessibility tree that match the given instruction
@@ -41,7 +41,10 @@ export async function examineDom(
   instruction: string,
   context: ExamineDomContext,
   llm: HyperAgentLLM
-): Promise<{ elements: ExamineDomResult[]; llmResponse: { rawText: string; parsed: unknown } }> {
+): Promise<{
+  elements: ExamineDomResultsType["elements"];
+  llmResponse: { rawText: string; parsed: unknown };
+}> {
   // Build prompts for element finding
   const systemPrompt = buildExamineDomSystemPrompt();
   const userPrompt = buildExamineDomUserPrompt(instruction, context.tree);
@@ -56,8 +59,8 @@ export async function examineDom(
         },
       },
       [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
       ]
     );
 
@@ -94,12 +97,12 @@ export async function examineDom(
 
     return { elements: validatedResults, llmResponse };
   } catch (error) {
-    console.error('[examineDom] Error finding elements:', error);
+    console.error("[examineDom] Error finding elements:", error);
     // Return empty result on error (graceful degradation)
     return {
       elements: [],
       llmResponse: {
-        rawText: '',
+        rawText: "",
         parsed: null,
       },
     };
@@ -119,11 +122,7 @@ export async function examineDom(
  */
 export function extractValueFromInstruction(instruction: string): string {
   // Pattern: "with X", "into X", "in X"
-  const patterns = [
-    /with\s+(.+)$/i,
-    /into\s+(.+)$/i,
-    /in\s+(.+)$/i,
-  ];
+  const patterns = [/with\s+(.+)$/i, /into\s+(.+)$/i, /in\s+(.+)$/i];
 
   for (const pattern of patterns) {
     const match = instruction.match(pattern);
@@ -132,5 +131,5 @@ export function extractValueFromInstruction(instruction: string): string {
     }
   }
 
-  return '';
+  return "";
 }

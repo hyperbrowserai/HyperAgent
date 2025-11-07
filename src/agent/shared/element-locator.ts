@@ -38,7 +38,10 @@ export async function getElementLocator(
       console.error(
         `[getElementLocator] Looking for element with ID: ${elementId} (type: ${typeof elementId})`
       );
-      console.error(`[getElementLocator] Direct lookup result:`, xpathMap[encodedId]);
+      console.error(
+        `[getElementLocator] Direct lookup result:`,
+        xpathMap[encodedId]
+      );
     }
     throw new HyperagentError(errorMsg, 404);
   }
@@ -73,10 +76,11 @@ export async function getElementLocator(
     const errorMsg = `Playwright Frame not found for element ${elementId} (frameIndex: ${frameIndex}). Frame matching may have failed.`;
     if (debug) {
       console.error(`[getElementLocator] ${errorMsg}`);
-      console.error(
-        `[getElementLocator] Frame info:`,
-        { src: iframeInfo.src, name: iframeInfo.name, xpath: iframeInfo.xpath }
-      );
+      console.error(`[getElementLocator] Frame info:`, {
+        src: iframeInfo.src,
+        name: iframeInfo.name,
+        xpath: iframeInfo.xpath,
+      });
       console.error(
         `[getElementLocator] Available frames:`,
         page.frames().map((f) => ({ url: f.url(), name: f.name() }))

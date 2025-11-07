@@ -3,41 +3,26 @@
  * based on natural language instructions
  */
 
+import { ExamineDomResultSchema } from "./schema";
+import { z } from "zod";
+
 /**
  * Playwright methods that can be performed on elements
  */
 export type PlaywrightMethod =
-  | 'click'
-  | 'fill'
-  | 'type'
-  | 'press'
-  | 'scrollTo'
-  | 'nextChunk'
-  | 'prevChunk'
-  | 'selectOptionFromDropdown'
-  | 'hover'
-  | 'check'
-  | 'uncheck';
+  | "click"
+  | "fill"
+  | "type"
+  | "press"
+  | "scrollTo"
+  | "nextChunk"
+  | "prevChunk"
+  | "selectOptionFromDropdown"
+  | "hover"
+  | "check"
+  | "uncheck";
 
-/**
- * Result from examineDom function - represents a matching element
- */
-export interface ExamineDomResult {
-  /** The element ID in encoded format (e.g., "0-1234") */
-  elementId: string;
-
-  /** Human-readable description of the element */
-  description: string;
-
-  /** Confidence score 0-1 indicating match quality */
-  confidence: number;
-
-  /** Suggested Playwright method to use (optional) */
-  method?: PlaywrightMethod;
-
-  /** Suggested arguments for the method (optional) */
-  arguments?: any[];
-}
+export type ExamineDomResult = z.infer<typeof ExamineDomResultSchema>;
 
 /**
  * Context provided to examineDom function

@@ -478,7 +478,9 @@ async function fetchIframeAXTrees(
         (error as Error).message || error
       );
     } finally {
-      await oopifSession.detach();
+      if (oopifSession) {
+        await oopifSession.detach();
+      }
     }
   }
 

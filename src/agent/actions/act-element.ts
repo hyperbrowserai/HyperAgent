@@ -7,22 +7,24 @@ import { AGENT_ELEMENT_ACTIONS } from "../shared/action-restrictions";
 
 const ActElementAction = z
   .object({
-    instruction: z.string().describe(
-      "Describe the action in a short, specific phrase that mentions the element type.\n\n" +
-      "Supported actions: click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollTo, nextChunk, prevChunk\n\n" +
-      "Examples:\n" +
-      "- click the Login button\n" +
-      "- fill 'user@example.com' into email field\n" +
-      "- type 'search query' into search box\n" +
-      "- press Enter\n" +
-      "- select 'California' from state dropdown\n" +
-      "- check the terms checkbox\n" +
-      "- uncheck the newsletter checkbox\n" +
-      "- hover over profile menu\n" +
-      "- scroll to 50%\n" +
-      "- scroll down one page\n" +
-      "- scroll up one page"
-    ),
+    instruction: z
+      .string()
+      .describe(
+        "Describe the action in a short, specific phrase that mentions the element type.\n\n" +
+          "Supported actions: click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollTo, nextChunk, prevChunk\n\n" +
+          "Examples:\n" +
+          "- click the Login button\n" +
+          "- fill 'user@example.com' into email field\n" +
+          "- type 'search query' into search box\n" +
+          "- press Enter\n" +
+          "- select 'California' from state dropdown\n" +
+          "- check the terms checkbox\n" +
+          "- uncheck the newsletter checkbox\n" +
+          "- hover over profile menu\n" +
+          "- scroll to 50%\n" +
+          "- scroll down one page\n" +
+          "- scroll up one page"
+      ),
   })
   .describe("Perform a single action on an element using natural language");
 
@@ -66,11 +68,11 @@ export const ActElementActionDefinition: AgentActionDefinition = {
     }
 
     const element = examineResult.elements[0];
-    const method = element.method || "click";
+    const method = element.method;
     const args = element.arguments || [];
 
     // Validate action is allowed
-    if (!AGENT_ELEMENT_ACTIONS.includes(method as any)) {
+    if (!AGENT_ELEMENT_ACTIONS.includes(method)) {
       return {
         success: false,
         message: `Action "${method}" not allowed. Allowed actions: ${AGENT_ELEMENT_ACTIONS.join(
