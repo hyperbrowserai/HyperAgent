@@ -76,6 +76,24 @@ export function formatSimplifiedTree(
 }
 
 /**
+ * Generate frame header for tree display
+ * @param frameIndex - Frame index (0 for main)
+ * @param framePath - Full hierarchy path (e.g., ["Main", "Frame 1", "Frame 2"])
+ * @returns Formatted header string
+ */
+export function generateFrameHeader(
+  frameIndex: number,
+  framePath: string[]
+): string {
+  if (frameIndex === 0) {
+    return "=== Frame 0 (Main) ===";
+  }
+
+  const pathStr = framePath.join(" → ");
+  return `=== Frame ${frameIndex} (${pathStr}) ===`;
+}
+
+/**
  * Check if a node is interactive based on role and properties
  */
 export function isInteractive(node: AccessibilityNode): boolean {
@@ -249,6 +267,7 @@ export function buildFrameContextLabel(
   // Add parent context for nested iframes
   if (
     frameInfo?.parentFrameIndex !== undefined &&
+    frameInfo.parentFrameIndex !== null &&
     frameInfo.parentFrameIndex > 0
   ) {
     const parentInfo = frameMap.get(frameInfo.parentFrameIndex);

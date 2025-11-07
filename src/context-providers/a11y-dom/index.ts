@@ -3,7 +3,7 @@
  * Main entry point for extracting and formatting accessibility trees
  */
 
-import { Page, CDPSession } from "playwright-core";
+import { Page, CDPSession, Frame, ElementHandle } from "playwright-core";
 import {
   A11yDOMState,
   AXNode,
@@ -26,29 +26,17 @@ import { renderA11yOverlay } from "./visual-overlay";
 
 /**
  * Verify if an iframe element matches the frameInfo metadata
- * Uses iframe attributes and XPath verification
+ * PRIMARY: Uses XPath for exact node identity matching (handles multiple siblings correctly)
+ * FALLBACK: Uses attribute matching (src, name) if XPath is unavailable
  */
 async function verifyFrameMatch(
   parentFrame: ReturnType<Page["frames"]>[number],
-  iframeElement: any,
+  iframeElement: ElementHandle,
   frameInfo: IframeInfo
 ): Promise<boolean> {
   try {
-    // Get iframe attributes
-    const src = await iframeElement.getAttribute("src");
-    const name = await iframeElement.getAttribute("name");
-
-    // Match by src (most reliable for loaded iframes)
-    if (frameInfo.src && src && src === frameInfo.src) {
-      return true;
-    }
-
-    // Match by name
-    if (frameInfo.name && name && name === frameInfo.name) {
-      return true;
-    }
-
-    // Match by XPath (as last resort)
+    // PRIMARY: Match by XPath - this gives us exact node identity
+    // XPath includes position indices (e.g., iframe[1], iframe[2]) so it works with sibling iframes
     if (frameInfo.xpath) {
       const matchesByXPath = await parentFrame.evaluate(
         ({ xpath, element }) => {
@@ -60,6 +48,7 @@ async function verifyFrameMatch(
               XPathResult.FIRST_ORDERED_NODE_TYPE,
               null
             );
+            // Direct object identity comparison (===) - most reliable!
             return result.singleNodeValue === element;
           } catch {
             return false;
@@ -67,12 +56,88 @@ async function verifyFrameMatch(
         },
         { xpath: frameInfo.xpath, element: iframeElement }
       );
-      return matchesByXPath;
+
+      if (matchesByXPath) {
+        return true;
+      }
+    }
+
+    // FALLBACK: Match by attributes (less reliable, only used if XPath fails/unavailable)
+    // NOTE: src and name alone don't guarantee uniqueness with multiple identical sibling iframes
+    const src = await iframeElement.getAttribute("src");
+    const name = await iframeElement.getAttribute("name");
+
+    // Match by src
+    if (frameInfo.src && src && src === frameInfo.src) {
+      return true;
+    }
+
+    // Match by name
+    if (frameInfo.name && name && name === frameInfo.name) {
+      return true;
     }
 
     return false;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Build frame hierarchy paths for all frames
+ * Handles both same-origin iframes and OOPIFs
+ * Must be called after all frames are discovered (after fetchIframeAXTrees)
+ */
+function buildFramePaths(
+  frameMap: Map<number, IframeInfo>,
+  debug: boolean
+): void {
+  for (const [frameIndex, frameInfo] of frameMap) {
+    const pathSegments: string[] = [];
+    let currentIdx: number | null = frameIndex;
+    const visited = new Set<number>();
+
+    // Walk up parent chain using frameMap
+    while (currentIdx !== null && currentIdx !== 0 && !visited.has(currentIdx)) {
+      visited.add(currentIdx);
+      pathSegments.unshift(`Frame ${currentIdx}`);
+
+      const info = frameMap.get(currentIdx);
+      if (!info) {
+        // Shouldn't happen if frameMap is properly constructed
+        if (debug) {
+          console.warn(
+            `[A11y] Frame ${frameIndex}: parent frame ${currentIdx} not found in frameMap`
+          );
+        }
+        break;
+      }
+
+      currentIdx = info.parentFrameIndex;
+    }
+
+    // Build final path based on where we ended up
+    if (currentIdx === null) {
+      // Root frame (no parent)
+      frameInfo.framePath = pathSegments;
+    } else if (currentIdx === 0) {
+      // Parent is main frame
+      frameInfo.framePath = ["Main", ...pathSegments];
+    } else {
+      // Circular reference detected
+      if (debug) {
+        console.warn(
+          `[A11y] Frame ${frameIndex}: circular reference detected in parent chain`
+        );
+      }
+      frameInfo.framePath = pathSegments;
+    }
+
+    if (debug) {
+      console.log(
+        `[A11y] Built path for frame ${frameIndex}: ${frameInfo.framePath.join(" → ")}`
+      );
+    }
   }
 }
 
@@ -102,7 +167,10 @@ async function matchPlaywrightFramesToFrameMap(
 
     // Determine expected parent frame
     let expectedParentFrame: ReturnType<typeof page.frames>[number] | null;
-    if (frameInfo.parentFrameIndex === 0) {
+    if (frameInfo.parentFrameIndex === null) {
+      // Root frame (no parent) - skip matching
+      continue;
+    } else if (frameInfo.parentFrameIndex === 0) {
       expectedParentFrame = page.mainFrame();
     } else {
       const parentInfo = frameMap.get(frameInfo.parentFrameIndex);
@@ -140,7 +208,7 @@ async function matchPlaywrightFramesToFrameMap(
         // Verify parent matches expected parent
         if (pwParentFrame !== expectedParentFrame) continue;
 
-        // Verify this frame matches our frameInfo (src, name, xpath)
+        // Verify this frame matches using verifyFrameMatch (src, name, xpath)
         const matches = await verifyFrameMatch(
           pwParentFrame,
           iframeElement,
@@ -152,7 +220,7 @@ async function matchPlaywrightFramesToFrameMap(
           matchedPwFrames.add(pwFrame); // Mark this Playwright Frame as matched
           break;
         }
-      } catch (error) {
+      } catch {
         // Frame might be detached or inaccessible, continue
         continue;
       }
@@ -169,6 +237,161 @@ async function matchPlaywrightFramesToFrameMap(
       console.warn(
         `[A11y] ✗ Could not match frame ${frameIndex} (src=${frameInfo.src}, name=${frameInfo.name}, parent=${frameInfo.parentFrameIndex})`
       );
+    }
+  }
+}
+
+/**
+ * Process a single OOPIF frame recursively, ensuring parents are processed first
+ */
+async function processOOPIFRecursive(
+  frame: Frame,
+  page: Page,
+  maps: BackendIdMaps,
+  allNodes: Array<AXNode & { _frameIndex: number }>,
+  frameDebugInfo: Array<{
+    frameIndex: number;
+    frameUrl: string;
+    totalNodes: number;
+    rawNodes: AXNode[];
+  }>,
+  mergedMaps: {
+    tagNameMap: Record<EncodedId, string>;
+    xpathMap: Record<EncodedId, string>;
+    accessibleNameMap: Record<EncodedId, string>;
+  },
+  nextFrameIndex: { value: number },
+  processedOOPIFs: Set<Frame>,
+  playwrightFrameToIndex: Map<Frame, number>,
+  debug: boolean
+): Promise<void> {
+  // Skip if already processed
+  if (processedOOPIFs.has(frame)) return;
+
+  // Skip main frame
+  if (frame === page.mainFrame()) {
+    playwrightFrameToIndex.set(frame, 0);
+    return;
+  }
+
+  // Try to create CDP session - if it fails, this is a same-origin iframe (skip)
+  let oopifSession: CDPSession | null = null;
+  try {
+    oopifSession = await page.context().newCDPSession(frame);
+  } catch {
+    // Not an OOPIF, skip
+    return;
+  }
+
+  try {
+    // Ensure parent is processed first (recursive)
+    const parentFrame = frame.parentFrame();
+    if (parentFrame) {
+      await processOOPIFRecursive(
+        parentFrame,
+        page,
+        maps,
+        allNodes,
+        frameDebugInfo,
+        mergedMaps,
+        nextFrameIndex,
+        processedOOPIFs,
+        playwrightFrameToIndex,
+        debug
+      );
+    }
+
+    // Assign frame index
+    const iframeFrameIndex = nextFrameIndex.value++;
+    playwrightFrameToIndex.set(frame, iframeFrameIndex);
+
+    // Determine parent frame index using map
+    const parentFrameIdx = parentFrame
+      ? playwrightFrameToIndex.get(parentFrame) ?? null
+      : null;
+
+    if (debug) {
+      console.log(
+        `[A11y] Processing OOPIF frame ${iframeFrameIndex} (url=${frame.url()}, parent=${parentFrameIdx})`
+      );
+    }
+
+    // Enable CDP domains
+    await oopifSession.send("DOM.enable");
+    await oopifSession.send("Accessibility.enable");
+
+    // Build backend ID maps for this OOPIF
+    const oopifMaps = await buildBackendIdMaps(
+      oopifSession,
+      iframeFrameIndex,
+      debug
+    );
+
+    // Merge maps
+    Object.assign(mergedMaps.tagNameMap, oopifMaps.tagNameMap);
+    Object.assign(mergedMaps.xpathMap, oopifMaps.xpathMap);
+    Object.assign(mergedMaps.accessibleNameMap, oopifMaps.accessibleNameMap);
+
+    // Fetch OOPIF AX tree
+    const result = (await oopifSession.send("Accessibility.getFullAXTree")) as {
+      nodes: AXNode[];
+    };
+    let nodes = result.nodes;
+
+    // Fallback to DOM if needed
+    if (!hasInteractiveElements(nodes)) {
+      if (debug) {
+        console.log(
+          `[A11y] OOPIF frame ${iframeFrameIndex} has no interactive elements, falling back to DOM`
+        );
+      }
+      const domFallbackNodes = createDOMFallbackNodes(
+        iframeFrameIndex,
+        mergedMaps.tagNameMap,
+        oopifMaps.frameMap || new Map(),
+        mergedMaps.accessibleNameMap
+      );
+      if (domFallbackNodes.length > 0) {
+        nodes = domFallbackNodes;
+      }
+    }
+
+    // Tag and collect nodes
+    const taggedNodes = nodes.map((n) => ({
+      ...n,
+      _frameIndex: iframeFrameIndex,
+    }));
+    allNodes.push(...taggedNodes);
+
+    // Store in frameMap
+    maps.frameMap?.set(iframeFrameIndex, {
+      frameIndex: iframeFrameIndex,
+      src: frame.url(),
+      name: frame.name(),
+      xpath: "",
+      parentFrameIndex: parentFrameIdx,
+      siblingPosition: 0,
+      playwrightFrame: frame,
+    });
+
+    // Merge nested same-origin iframes from buildBackendIdMaps
+    for (const [nestedIdx, nestedInfo] of oopifMaps.frameMap?.entries() || []) {
+      maps.frameMap?.set(nestedIdx, nestedInfo);
+    }
+
+    if (debug) {
+      frameDebugInfo.push({
+        frameIndex: iframeFrameIndex,
+        frameUrl: frame.url(),
+        totalNodes: nodes.length,
+        rawNodes: nodes,
+      });
+    }
+
+    processedOOPIFs.add(frame);
+  } finally {
+    if (oopifSession) {
+      await oopifSession.detach();
     }
   }
 }
@@ -278,210 +501,33 @@ async function fetchIframeAXTrees(
     }
   }
 
-  // STEP 2: Discover and process OOPIF frames using Playwright
+  // STEP 2: Process OOPIF frames recursively (parents before children)
   const allPlaywrightFrames = page.frames();
   const mergedTagNameMap = { ...maps.tagNameMap };
   const mergedXpathMap = { ...maps.xpathMap };
   const mergedAccessibleNameMap = { ...maps.accessibleNameMap };
+  const processedOOPIFs = new Set<Frame>();
+  const playwrightFrameToIndex = new Map<Frame, number>();
+  const nextFrameIndexRef = { value: nextFrameIndex };
 
-  for (const playwrightFrame of allPlaywrightFrames) {
-    // Skip main frame
-    if (playwrightFrame === page.mainFrame()) continue;
-
-    // Try to create CDP session - if successful, it's an OOPIF
-    let oopifSession: CDPSession | null = null;
-    try {
-      oopifSession = await page.context().newCDPSession(playwrightFrame);
-    } catch {
-      // Not an OOPIF, skip (already processed in STEP 1)
-      continue;
-    }
-
-    // This is an OOPIF - process it with separate session
-    const iframeFrameIndex = nextFrameIndex++;
-    const frameUrl = playwrightFrame.url();
-
-    try {
-      if (debug) {
-        console.log(
-          `[A11y] Processing OOPIF frame ${iframeFrameIndex} (url=${frameUrl})`
-        );
-      }
-
-      // Enable CDP domains for OOPIF session
-      await oopifSession.send("DOM.enable");
-      await oopifSession.send("Accessibility.enable");
-
-      // Build backend ID maps for this OOPIF
-      const oopifMaps = await buildBackendIdMaps(
-        oopifSession,
-        iframeFrameIndex,
-        debug
-      );
-
-      // Merge maps
-      Object.assign(mergedTagNameMap, oopifMaps.tagNameMap);
-      Object.assign(mergedXpathMap, oopifMaps.xpathMap);
-      Object.assign(mergedAccessibleNameMap, oopifMaps.accessibleNameMap);
-
-      // Fetch OOPIF root frame AX tree using getFullAXTree
-      const rootResult = (await oopifSession.send(
-        "Accessibility.getFullAXTree"
-      )) as { nodes: AXNode[] };
-
-      let oopifRootNodes = rootResult.nodes;
-
-      // Fallback to DOM when AX tree has no interactive elements
-      if (!hasInteractiveElements(oopifRootNodes)) {
-        if (debug) {
-          console.log(
-            `[A11y] OOPIF frame ${iframeFrameIndex} has no interactive elements in AX tree, falling back to DOM`
-          );
-        }
-
-        const domFallbackNodes = createDOMFallbackNodes(
-          iframeFrameIndex,
-          mergedTagNameMap,
-          oopifMaps.frameMap || new Map(),
-          mergedAccessibleNameMap
-        );
-
-        if (domFallbackNodes.length > 0) {
-          oopifRootNodes = domFallbackNodes;
-        }
-      }
-
-      // Tag root nodes with OOPIF frame index
-      const taggedRootNodes = oopifRootNodes.map((n) => ({
-        ...n,
-        _frameIndex: iframeFrameIndex,
-      }));
-
-      allNodes.push(...taggedRootNodes);
-
-      // Collect debug info for OOPIF root
-      if (debug) {
-        frameDebugInfo.push({
-          frameIndex: iframeFrameIndex,
-          frameUrl: frameUrl,
-          totalNodes: oopifRootNodes.length,
-          rawNodes: oopifRootNodes,
-        });
-      }
-
-      // Process nested same-origin iframes within OOPIF (using OOPIF session)
-      if (oopifMaps.frameMap && oopifMaps.frameMap.size > 0) {
-        if (debug) {
-          console.log(
-            `[A11y] Processing ${oopifMaps.frameMap.size} nested frames within OOPIF ${iframeFrameIndex}`
-          );
-        }
-
-        for (const [nestedFrameIndex, nestedFrameInfo] of oopifMaps.frameMap) {
-          const { contentDocumentBackendNodeId, src } = nestedFrameInfo;
-
-          if (!contentDocumentBackendNodeId) {
-            if (debug) {
-              console.warn(
-                `[A11y] Nested frame ${nestedFrameIndex} in OOPIF ${iframeFrameIndex} has no contentDocumentBackendNodeId, skipping`
-              );
-            }
-            continue;
-          }
-
-          try {
-            if (debug) {
-              console.log(
-                `[A11y] Processing nested frame ${nestedFrameIndex} within OOPIF ${iframeFrameIndex} (src=${src})`
-              );
-            }
-
-            // Use OOPIF session with nested frame's contentDocumentBackendNodeId
-            const nestedResult = (await oopifSession.send(
-              "Accessibility.getPartialAXTree",
-              {
-                backendNodeId: contentDocumentBackendNodeId,
-                fetchRelatives: true,
-              }
-            )) as { nodes: AXNode[] };
-
-            let nestedNodes = nestedResult.nodes;
-
-            // Fallback to DOM when AX tree has no interactive elements
-            if (!hasInteractiveElements(nestedNodes)) {
-              if (debug) {
-                console.log(
-                  `[A11y] Nested frame ${nestedFrameIndex} has no interactive elements in AX tree, falling back to DOM`
-                );
-              }
-
-              const domFallbackNodes = createDOMFallbackNodes(
-                nestedFrameIndex,
-                mergedTagNameMap,
-                oopifMaps.frameMap,
-                mergedAccessibleNameMap
-              );
-
-              if (domFallbackNodes.length > 0) {
-                nestedNodes = domFallbackNodes;
-              }
-            }
-
-            // Tag nodes with nested frame index
-            const taggedNestedNodes = nestedNodes.map((n) => ({
-              ...n,
-              _frameIndex: nestedFrameIndex,
-            }));
-
-            allNodes.push(...taggedNestedNodes);
-
-            // Merge nested frame into main frameMap
-            maps.frameMap?.set(nestedFrameIndex, nestedFrameInfo);
-
-            // Collect debug info
-            if (debug) {
-              frameDebugInfo.push({
-                frameIndex: nestedFrameIndex,
-                frameUrl: src || "unknown",
-                totalNodes: nestedNodes.length,
-                rawNodes: nestedNodes,
-              });
-            }
-          } catch (error) {
-            console.warn(
-              `[A11y] Failed to fetch AX tree for nested frame ${nestedFrameIndex} in OOPIF ${iframeFrameIndex}:`,
-              (error as Error).message || error
-            );
-          }
-        }
-      }
-
-      // Store OOPIF root metadata in frameMap with Playwright Frame reference
-      maps.frameMap?.set(iframeFrameIndex, {
-        frameIndex: iframeFrameIndex,
-        src: frameUrl,
-        name: playwrightFrame.name(),
-        xpath: "", // No XPath for OOPIF (cross-origin)
-        parentFrameIndex: 0, // TODO: Detect actual parent frame
-        siblingPosition: 0, // TODO: Compute sibling position
-        playwrightFrame, // Store Frame for frame resolution
-      });
-
-      // Update nextFrameIndex to account for any nested frames we just merged
-      // This prevents frameIndex collisions when processing subsequent OOPIF frames
-      nextFrameIndex =
-        Math.max(nextFrameIndex, ...Array.from(maps.frameMap?.keys() || [0])) +
-        1;
-    } catch (error) {
-      console.warn(
-        `[A11y] Failed to fetch AX tree for OOPIF frame ${iframeFrameIndex} (url=${frameUrl}):`,
-        (error as Error).message || error
-      );
-    } finally {
-      if (oopifSession) {
-        await oopifSession.detach();
-      }
-    }
+  // Process all frames recursively (ensures parents are processed first)
+  for (const frame of allPlaywrightFrames) {
+    await processOOPIFRecursive(
+      frame,
+      page,
+      maps,
+      allNodes,
+      frameDebugInfo,
+      {
+        tagNameMap: mergedTagNameMap,
+        xpathMap: mergedXpathMap,
+        accessibleNameMap: mergedAccessibleNameMap,
+      },
+      nextFrameIndexRef,
+      processedOOPIFs,
+      playwrightFrameToIndex,
+      debug
+    );
   }
 
   // Update maps with merged values
@@ -638,6 +684,9 @@ export async function getA11yDOM(
       const { nodes: iframeNodes, debugInfo: frameDebugInfo } =
         await fetchIframeAXTrees(page, client, maps, debug);
       allNodes.push(...iframeNodes);
+
+      // 4c. Build frame hierarchy paths now that all frames are discovered
+      buildFramePaths(maps.frameMap || new Map(), debug);
 
       // Step 4: Detect scrollable elements
       const scrollableIds = await findScrollableElementIds(page, client);

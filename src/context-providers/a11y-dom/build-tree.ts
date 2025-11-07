@@ -17,6 +17,7 @@ import {
   formatSimplifiedTree,
   isInteractive,
   createEncodedId,
+  generateFrameHeader,
 } from "./utils";
 import { decorateRoleIfScrollable } from "./scrollable-detection";
 
@@ -60,7 +61,7 @@ function convertAXNode(
  */
 export async function buildHierarchicalTree(
   nodes: AXNode[],
-  { tagNameMap, xpathMap }: BackendIdMaps,
+  { tagNameMap, xpathMap, frameMap }: BackendIdMaps,
   frameIndex = 0,
   scrollableIds?: Set<number>,
   debug = false,
@@ -196,7 +197,15 @@ export async function buildHierarchicalTree(
   ).filter(Boolean) as AccessibilityNode[];
 
   // Pass 5: Generate simplified text tree
-  const simplified = cleanedRoots.map(formatSimplifiedTree).join("\n");
+  const treeContent = cleanedRoots.map(formatSimplifiedTree).join("\n");
+
+  // Pass 5.5: Prepend frame header
+  const frameInfo = frameMap?.get(frameIndex);
+  const framePath =
+    frameInfo?.framePath ||
+    (frameIndex === 0 ? ["Main"] : [`Frame ${frameIndex}`]);
+  const header = generateFrameHeader(frameIndex, framePath);
+  const simplified = `${header}\n${treeContent}`;
 
   // Pass 6: Build idToElement map for quick lookup
   const idToElement = new Map<EncodedId, AccessibilityNode>();
