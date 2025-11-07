@@ -71,6 +71,24 @@ export const ActElementActionDefinition: AgentActionDefinition = {
     const method = element.method;
     const args = element.arguments || [];
 
+    // Store debug info about selected element
+    const debugInfo = ctx.debug
+      ? {
+          selectedElement: {
+            elementId: element.elementId,
+            confidence: element.confidence,
+            description: element.description,
+            method: method,
+            arguments: args,
+          },
+          allCandidates: examineResult.elements.map((e) => ({
+            elementId: e.elementId,
+            confidence: e.confidence,
+            description: e.description,
+          })),
+        }
+      : undefined;
+
     // Validate action is allowed
     if (!AGENT_ELEMENT_ACTIONS.includes(method)) {
       return {
@@ -78,6 +96,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
         message: `Action "${method}" not allowed. Allowed actions: ${AGENT_ELEMENT_ACTIONS.join(
           ", "
         )}`,
+        debug: debugInfo,
       };
     }
 
@@ -100,6 +119,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
       return {
         success: true,
         message: `Successfully executed: ${instruction}`,
+        debug: debugInfo,
       };
     } catch (error) {
       const errorMessage =
@@ -107,6 +127,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
       return {
         success: false,
         message: `Failed to execute "${instruction}": ${errorMessage}`,
+        debug: debugInfo,
       };
     }
   },

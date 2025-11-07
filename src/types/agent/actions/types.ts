@@ -15,12 +15,14 @@ export interface ActionContext {
   debugDir?: string;
   mcpClient?: MCPClient;
   actionConfig?: ActionConfig;
+  debug?: boolean;
 }
 
 export interface ActionOutput {
   success: boolean;
   message: string;
   extract?: object;
+  debug?: any;
 }
 
 export type ActionSchemaType = z.ZodObject<{
@@ -30,7 +32,9 @@ export type ActionSchemaType = z.ZodObject<{
 
 export type ActionType = z.infer<ActionSchemaType>;
 
-export interface AgentActionDefinition<T extends z.ZodType<any> = z.ZodType<any>> {
+export interface AgentActionDefinition<
+  T extends z.ZodType<any> = z.ZodType<any>,
+> {
   readonly type: string;
   actionParams: T;
 

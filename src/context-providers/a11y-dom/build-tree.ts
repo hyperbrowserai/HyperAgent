@@ -3,6 +3,8 @@
  */
 
 import type { CDPSession } from "playwright-core";
+import * as fs from "fs";
+import * as path from "path";
 import {
   AXNode,
   AccessibilityNode,
@@ -66,7 +68,8 @@ export async function buildHierarchicalTree(
   scrollableIds?: Set<number>,
   debug = false,
   enableVisualMode = false,
-  cdpClient?: CDPSession
+  cdpClient?: CDPSession,
+  debugDir?: string
 ): Promise<TreeResult> {
   // Convert raw AX nodes to simplified format, decorating scrollable elements
   const accessibilityNodes = nodes.map((node) =>
@@ -78,6 +81,9 @@ export async function buildHierarchicalTree(
 
   // Map to store bounding boxes (only if visual mode enabled)
   const boundingBoxMap = new Map<EncodedId, DOMRect>();
+
+  // Track bounding box failures for debug
+  const boundingBoxFailures: Array<{ encodedId: EncodedId; backendNodeId: number }> = [];
 
   // Pass 1: Copy and filter nodes we want to keep
   for (const node of accessibilityNodes) {
@@ -164,12 +170,36 @@ export async function buildHierarchicalTree(
         }
       } catch {
         // Skip elements without layout (e.g., hidden elements, pseudo-elements)
-        // This is expected and not an error
-        if (debug) {
-          console.debug(
-            `[A11y] Could not get bounding box for node ${encodedId} (backendNodeId=${node.backendDOMNodeId})`
-          );
-        }
+        // This is expected and not an error - collect for debug file
+        boundingBoxFailures.push({
+          encodedId: encodedId!,
+          backendNodeId: node.backendDOMNodeId!,
+        });
+      }
+    }
+  }
+
+  // Log bounding box collection summary and write details to file
+  if ((debug || enableVisualMode) && cdpClient) {
+    const successCount = boundingBoxMap.size;
+    const failureCount = boundingBoxFailures.length;
+    const totalAttempts = successCount + failureCount;
+
+    if (failureCount > 0) {
+      // Console: Just show summary
+      console.debug(
+        `[A11y] Frame ${frameIndex}: Collected ${successCount}/${totalAttempts} bounding boxes (${failureCount} elements without layout)`
+      );
+
+      // Debug file: Write detailed list
+      if (debugDir) {
+        const failureDetails = boundingBoxFailures
+          .map(f => `${f.encodedId} (backendNodeId=${f.backendNodeId})`)
+          .join('\n');
+        fs.writeFileSync(
+          path.join(debugDir, `frame-${frameIndex}-bounding-box-failures.txt`),
+          `Failed to get bounding boxes for ${failureCount} elements:\n\n${failureDetails}\n`
+        );
       }
     }
   }

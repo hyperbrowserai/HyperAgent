@@ -645,7 +645,8 @@ function processFrameDebugInfo(
 export async function getA11yDOM(
   page: Page,
   debug = false,
-  enableVisualMode = false
+  enableVisualMode = false,
+  debugDir?: string
 ): Promise<A11yDOMState> {
   try {
     // Step 1: Inject scrollable detection script into the main frame
@@ -711,7 +712,8 @@ export async function getA11yDOM(
             scrollableIds,
             debug,
             enableVisualMode,
-            client
+            client,
+            debugDir
           );
 
           return treeResult;

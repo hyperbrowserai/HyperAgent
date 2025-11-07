@@ -103,6 +103,7 @@ const runAction = async (
     tokenLimit: ctx.tokenLimit,
     llm: ctx.llm,
     debugDir: ctx.debugDir,
+    debug: ctx.debug,
     mcpClient: ctx.mcpClient || undefined,
     variables: Object.values(ctx.variables),
     actionConfig: ctx.actionConfig,
@@ -185,7 +186,8 @@ export const runAgentTask = async (
           const s = await getA11yDOM(
             page,
             ctx.debug,
-            params?.enableVisualMode ?? false
+            params?.enableVisualMode ?? false,
+            ctx.debug ? debugStepDir : undefined
           );
           if (!s) throw new Error("no dom state");
           return s;
