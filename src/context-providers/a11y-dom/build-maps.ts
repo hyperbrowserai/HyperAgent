@@ -41,8 +41,6 @@ function extractAccessibleName(
     }
   }
 
-  console.log("ACCESSIBLE NAMES", ariaLabel, title, placeholder);
-
   // Return in priority order
   return ariaLabel || title || placeholder;
 }
