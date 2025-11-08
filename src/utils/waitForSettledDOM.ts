@@ -152,9 +152,9 @@ export async function waitForSettledDOM(
         // Global timeout
         globalTimeout = setTimeout(() => {
           if (inflight.size) {
-            console.log(
-              `[waitForSettledDOM] Timeout after ${timeoutMs}ms, ${inflight.size} requests still in flight`
-            );
+            // console.log(
+            //   `[waitForSettledDOM] Timeout after ${timeoutMs}ms, ${inflight.size} requests still in flight`
+            // );
           }
           resolveDone();
         }, timeoutMs);
@@ -166,9 +166,9 @@ export async function waitForSettledDOM(
             if (now - m.start > 2000) {
               inflight.delete(id);
               meta.delete(id);
-              console.log(
-                `[waitForSettledDOM] Forcing completion of stalled request: ${m.url.slice(0, 120)}`
-              );
+              // console.log(
+              //   `[waitForSettledDOM] Forcing completion of stalled request: ${m.url.slice(0, 120)}`
+              // );
             }
           }
           maybeQuiet();
