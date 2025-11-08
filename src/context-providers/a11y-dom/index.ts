@@ -3,7 +3,7 @@
  * Main entry point for extracting and formatting accessibility trees
  */
 
-import { Page, CDPSession, Frame, ElementHandle } from "playwright-core";
+import { Page, CDPSession, Frame } from "playwright-core";
 import {
   A11yDOMState,
   AXNode,
@@ -21,67 +21,9 @@ import {
   injectScrollableDetection,
   findScrollableElementIds,
 } from "./scrollable-detection";
+import { injectBoundingBoxScript } from "./bounding-box-batch";
 import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
 import { renderA11yOverlay } from "./visual-overlay";
-
-/**
- * Verify if an iframe element matches the frameInfo metadata
- * PRIMARY: Uses XPath for exact node identity matching (handles multiple siblings correctly)
- * FALLBACK: Uses attribute matching (src, name) if XPath is unavailable
- */
-async function verifyFrameMatch(
-  parentFrame: ReturnType<Page["frames"]>[number],
-  iframeElement: ElementHandle,
-  frameInfo: IframeInfo
-): Promise<boolean> {
-  try {
-    // PRIMARY: Match by XPath - this gives us exact node identity
-    // XPath includes position indices (e.g., iframe[1], iframe[2]) so it works with sibling iframes
-    if (frameInfo.xpath) {
-      const matchesByXPath = await parentFrame.evaluate(
-        ({ xpath, element }) => {
-          try {
-            const result = document.evaluate(
-              xpath,
-              document,
-              null,
-              XPathResult.FIRST_ORDERED_NODE_TYPE,
-              null
-            );
-            // Direct object identity comparison (===) - most reliable!
-            return result.singleNodeValue === element;
-          } catch {
-            return false;
-          }
-        },
-        { xpath: frameInfo.xpath, element: iframeElement }
-      );
-
-      if (matchesByXPath) {
-        return true;
-      }
-    }
-
-    // FALLBACK: Match by attributes (less reliable, only used if XPath fails/unavailable)
-    // NOTE: src and name alone don't guarantee uniqueness with multiple identical sibling iframes
-    const src = await iframeElement.getAttribute("src");
-    const name = await iframeElement.getAttribute("name");
-
-    // Match by src
-    if (frameInfo.src && src && src === frameInfo.src) {
-      return true;
-    }
-
-    // Match by name
-    if (frameInfo.name && name && name === frameInfo.name) {
-      return true;
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Build frame hierarchy paths for all frames
@@ -98,7 +40,11 @@ function buildFramePaths(
     const visited = new Set<number>();
 
     // Walk up parent chain using frameMap
-    while (currentIdx !== null && currentIdx !== 0 && !visited.has(currentIdx)) {
+    while (
+      currentIdx !== null &&
+      currentIdx !== 0 &&
+      !visited.has(currentIdx)
+    ) {
       visited.add(currentIdx);
       pathSegments.unshift(`Frame ${currentIdx}`);
 
@@ -136,106 +82,6 @@ function buildFramePaths(
     if (debug) {
       console.log(
         `[A11y] Built path for frame ${frameIndex}: ${frameInfo.framePath.join(" → ")}`
-      );
-    }
-  }
-}
-
-/**
- * Match Playwright Frames to frameMap entries
- * Links each same-origin iframe in frameMap to its corresponding Playwright Frame
- * This enables unified frame resolution using playwrightFrame for all frame types
- */
-async function matchPlaywrightFramesToFrameMap(
-  page: Page,
-  frameMap: Map<number, IframeInfo>,
-  debug: boolean
-): Promise<void> {
-  const allFrames = page.frames();
-  const matchedPwFrames = new Set<ReturnType<typeof page.frames>[number]>();
-
-  if (debug) {
-    console.log(
-      `[A11y] Matching ${allFrames.length} Playwright Frames to ${frameMap.size} frameMap entries`
-    );
-  }
-
-  // Skip frame 0 (main frame) and frames that already have playwrightFrame (OOPIF)
-  for (const [frameIndex, frameInfo] of frameMap) {
-    if (frameIndex === 0) continue; // Main frame doesn't need matching
-    if (frameInfo.playwrightFrame) continue; // Already set (OOPIF)
-
-    // Determine expected parent frame
-    let expectedParentFrame: ReturnType<typeof page.frames>[number] | null;
-    if (frameInfo.parentFrameIndex === null) {
-      // Root frame (no parent) - skip matching
-      continue;
-    } else if (frameInfo.parentFrameIndex === 0) {
-      expectedParentFrame = page.mainFrame();
-    } else {
-      const parentInfo = frameMap.get(frameInfo.parentFrameIndex);
-      expectedParentFrame = parentInfo?.playwrightFrame || null;
-
-      // If parent hasn't been matched yet, skip this frame for now
-      if (!expectedParentFrame) {
-        if (debug) {
-          console.warn(
-            `[A11y] ⊘ Skipping frame ${frameIndex} - parent frame ${frameInfo.parentFrameIndex} not matched yet`
-          );
-        }
-        continue;
-      }
-    }
-
-    let matchedFrame: ReturnType<typeof page.frames>[number] | null = null;
-
-    // Try to match this frameInfo to a Playwright Frame
-    for (const pwFrame of allFrames) {
-      try {
-        // Skip main frame
-        if (pwFrame === page.mainFrame()) continue;
-
-        // Skip frames that have already been matched to another frameInfo entry
-        if (matchedPwFrames.has(pwFrame)) continue;
-
-        // Get iframe element and its parent frame
-        const iframeElement = await pwFrame.frameElement();
-        if (!iframeElement) continue;
-
-        const pwParentFrame = pwFrame.parentFrame();
-        if (!pwParentFrame) continue;
-
-        // Verify parent matches expected parent
-        if (pwParentFrame !== expectedParentFrame) continue;
-
-        // Verify this frame matches using verifyFrameMatch (src, name, xpath)
-        const matches = await verifyFrameMatch(
-          pwParentFrame,
-          iframeElement,
-          frameInfo
-        );
-
-        if (matches) {
-          matchedFrame = pwFrame;
-          matchedPwFrames.add(pwFrame); // Mark this Playwright Frame as matched
-          break;
-        }
-      } catch {
-        // Frame might be detached or inaccessible, continue
-        continue;
-      }
-    }
-
-    if (matchedFrame) {
-      frameInfo.playwrightFrame = matchedFrame;
-      if (debug) {
-        console.log(
-          `[A11y] ✓ Matched frame ${frameIndex} to Playwright Frame: ${matchedFrame.url()}`
-        );
-      }
-    } else if (debug) {
-      console.warn(
-        `[A11y] ✗ Could not match frame ${frameIndex} (src=${frameInfo.src}, name=${frameInfo.name}, parent=${frameInfo.parentFrameIndex})`
       );
     }
   }
@@ -307,7 +153,7 @@ async function processOOPIFRecursive(
 
     // Determine parent frame index using map
     const parentFrameIdx = parentFrame
-      ? playwrightFrameToIndex.get(parentFrame) ?? null
+      ? (playwrightFrameToIndex.get(parentFrame) ?? null)
       : null;
 
     if (debug) {
@@ -319,6 +165,9 @@ async function processOOPIFRecursive(
     // Enable CDP domains
     await oopifSession.send("DOM.enable");
     await oopifSession.send("Accessibility.enable");
+
+    // Inject bounding box collection script into OOPIF frame
+    await injectBoundingBoxScript(frame);
 
     // Build backend ID maps for this OOPIF
     const oopifMaps = await buildBackendIdMaps(
@@ -425,7 +274,7 @@ async function fetchIframeAXTrees(
     rawNodes: AXNode[];
   }> = [];
 
-  let nextFrameIndex = (maps.frameMap?.size ?? 0) + 1; // Continue from where DOM traversal left off
+  const nextFrameIndex = (maps.frameMap?.size ?? 0) + 1; // Continue from where DOM traversal left off
 
   // STEP 1: Process same-origin iframes from DOM traversal
   for (const [frameIndex, frameInfo] of maps.frameMap?.entries() ?? []) {
@@ -648,9 +497,14 @@ export async function getA11yDOM(
   enableVisualMode = false,
   debugDir?: string
 ): Promise<A11yDOMState> {
+  const snapshotStartTime = Date.now();
+
   try {
-    // Step 1: Inject scrollable detection script into the main frame
-    await injectScrollableDetection(page);
+    // Step 1: Inject scripts into the main frame
+    await Promise.all([
+      injectScrollableDetection(page),
+      injectBoundingBoxScript(page),
+    ]);
 
     // Step 2: Create CDP session for main frame
     const client = await page.context().newCDPSession(page);
@@ -661,14 +515,6 @@ export async function getA11yDOM(
       // Step 3: Build backend ID maps (tag names and XPaths)
       // This traverses the full DOM including iframe content via DOM.getDocument with pierce: true
       const maps = await buildBackendIdMaps(client, 0, debug);
-
-      // Step 3.5: Match Playwright Frames to same-origin frameMap entries
-      // This enables unified frame resolution using playwrightFrame for all frame types
-      await matchPlaywrightFramesToFrameMap(
-        page,
-        maps.frameMap || new Map(),
-        debug
-      );
 
       // Step 4: Fetch accessibility trees for main frame and all iframes
       const allNodes: (AXNode & { _frameIndex: number })[] = [];
@@ -797,6 +643,13 @@ export async function getA11yDOM(
             );
           }
         }
+      }
+
+      const totalDuration = Date.now() - snapshotStartTime;
+      if (debug) {
+        console.log(
+          `[A11y] Total snapshot extraction completed in ${totalDuration}ms`
+        );
       }
 
       return {

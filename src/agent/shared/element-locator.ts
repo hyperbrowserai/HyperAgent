@@ -4,14 +4,15 @@
  */
 
 import type { Page } from "playwright-core";
-import { toEncodedId, type IframeInfo } from "../../context-providers/a11y-dom";
+import { toEncodedId, type IframeInfo, resolveFrameByXPath } from "../../context-providers/a11y-dom";
 import { HyperagentError } from "../error";
 
 /**
  * Get a Playwright locator for an element by its encoded ID
  *
  * Handles both main frame (frameIndex 0) and iframe elements.
- * For iframes, uses the stored Playwright Frame reference from frameMap.
+ * - OOPIF iframes: Uses pre-resolved playwrightFrame from frameMap
+ * - Same-origin iframes: Lazily resolves frame using XPath traversal
  *
  * @param elementId - Element ID (will be converted to EncodedId format)
  * @param xpathMap - Map of encodedId to xpath strings
@@ -69,17 +70,30 @@ export async function getElementLocator(
 
   const iframeInfo = frameMap.get(frameIndex)!;
 
-  // Use stored Playwright Frame directly (set during frame matching in getA11yDOM)
-  const targetFrame = iframeInfo.playwrightFrame;
+  // OOPIF frames have playwrightFrame pre-resolved during tree extraction
+  // Same-origin frames use lazy XPath resolution
+  let targetFrame = iframeInfo.playwrightFrame;
 
   if (!targetFrame) {
-    const errorMsg = `Playwright Frame not found for element ${elementId} (frameIndex: ${frameIndex}). Frame matching may have failed.`;
+    // Lazily resolve same-origin frame using XPath traversal
+    if (debug) {
+      console.log(
+        `[getElementLocator] Lazily resolving same-origin frame ${frameIndex}`
+      );
+    }
+    const resolvedFrame = await resolveFrameByXPath(page, frameMap, frameIndex);
+    targetFrame = resolvedFrame ?? undefined;
+  }
+
+  if (!targetFrame) {
+    const errorMsg = `Could not resolve frame for element ${elementId} (frameIndex: ${frameIndex})`;
     if (debug) {
       console.error(`[getElementLocator] ${errorMsg}`);
       console.error(`[getElementLocator] Frame info:`, {
         src: iframeInfo.src,
         name: iframeInfo.name,
         xpath: iframeInfo.xpath,
+        parentFrameIndex: iframeInfo.parentFrameIndex,
       });
       console.error(
         `[getElementLocator] Available frames:`,

@@ -2,6 +2,7 @@
  * Utility functions for accessibility tree processing
  */
 
+import { Page, Frame } from "playwright-core";
 import { AccessibilityNode, EncodedId, AXNode, IframeInfo } from "./types";
 
 /**
@@ -346,4 +347,123 @@ export function createDOMFallbackNodes(
   }
 
   return domFallbackNodes;
+}
+
+/**
+ * Resolve a frame by walking XPath chain from main frame
+ * For same-origin iframes only (OOPIF already has playwrightFrame set)
+ *
+ * This function lazily resolves the Playwright Frame for a given frameIndex by:
+ * 1. Building the frame path by walking parent references
+ * 2. Starting from the main frame and traversing through each iframe using XPath
+ * 3. Using Playwright's contentFrame() to navigate into nested iframes
+ *
+ * @param page - Main page
+ * @param frameMap - Map of frame indices to IframeInfo
+ * @param targetFrameIndex - Frame index to resolve
+ * @returns Resolved Frame or null if resolution fails
+ */
+export async function resolveFrameByXPath(
+  page: Page,
+  frameMap: Map<number, IframeInfo>,
+  targetFrameIndex: number
+): Promise<Frame | null> {
+  try {
+    // Main frame is always the page's main frame
+    if (targetFrameIndex === 0) {
+      return page.mainFrame();
+    }
+
+    const targetFrameInfo = frameMap.get(targetFrameIndex);
+    if (!targetFrameInfo) {
+      console.warn(`[A11y] Frame ${targetFrameIndex} not found in frameMap`);
+      return null;
+    }
+
+    // OOPIF frames have playwrightFrame pre-resolved
+    if (targetFrameInfo.playwrightFrame) {
+      return targetFrameInfo.playwrightFrame;
+    }
+
+    // Build frame path by walking parent chain: [0, 2, 5] for nested frames
+    const framePath: number[] = [];
+    let currentIdx: number | null = targetFrameIndex;
+    const visited = new Set<number>();
+
+    while (currentIdx !== null && !visited.has(currentIdx)) {
+      visited.add(currentIdx);
+      framePath.unshift(currentIdx);
+
+      const frameInfo = frameMap.get(currentIdx);
+      if (!frameInfo) break;
+
+      currentIdx = frameInfo.parentFrameIndex;
+    }
+
+    // Start from main frame
+    let currentFrame: Frame = page.mainFrame();
+
+    // Walk through frame chain (skip main frame at index 0)
+    for (let i = 1; i < framePath.length; i++) {
+      const frameIndex = framePath[i];
+      const frameInfo = frameMap.get(frameIndex);
+
+      if (!frameInfo?.xpath) {
+        console.warn(
+          `[A11y] Frame ${frameIndex} missing XPath, cannot resolve`
+        );
+        return null;
+      }
+
+      // Use XPath to locate iframe element, then use contentFrame() to traverse
+      try {
+        const iframeLocator = currentFrame.locator(`xpath=${frameInfo.xpath}`);
+        const iframeHandle = await iframeLocator.elementHandle();
+
+        if (!iframeHandle) {
+          console.warn(
+            `[A11y] Could not get element handle for frame ${frameIndex}`
+          );
+          return null;
+        }
+
+        const nextFrame = await iframeHandle.contentFrame();
+
+        if (!nextFrame) {
+          console.warn(
+            `[A11y] Could not get content frame for frame ${frameIndex}`
+          );
+          return null;
+        }
+
+        currentFrame = nextFrame;
+      } catch (error) {
+        console.warn(
+          `[A11y] Error traversing frame ${frameIndex}:`,
+          error
+        );
+        return null;
+      }
+    }
+
+    // Inject bounding box collection script into same-origin frame (if not already injected)
+    // Note: Multiple injections are safe - the script is idempotent
+    try {
+      const { injectBoundingBoxScript } = await import('./bounding-box-batch');
+      await injectBoundingBoxScript(currentFrame);
+    } catch (error) {
+      console.warn(
+        `[A11y] Failed to inject bounding box script into frame ${targetFrameIndex}:`,
+        error
+      );
+    }
+
+    return currentFrame;
+  } catch (error) {
+    console.error(
+      `[A11y] Failed to resolve frame ${targetFrameIndex}:`,
+      error
+    );
+    return null;
+  }
 }

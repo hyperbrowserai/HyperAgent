@@ -131,8 +131,29 @@ export const runAgentTask = async (
   taskState: TaskState,
   params?: TaskParams
 ): Promise<TaskOutput> => {
+  const taskStartTime = performance.now();
   const taskId = taskState.id;
   const debugDir = params?.debugDir || `debug/${taskId}`;
+
+  // Performance metrics for the entire task
+  const taskPerfMetrics = {
+    totalGetDOM: 0,
+    totalCompositeScreenshot: 0,
+    totalBuildMessages: 0,
+    totalLLMInvoke: 0,
+    totalRunAction: 0,
+    stepCount: 0,
+    stepMetrics: [] as Array<{
+      step: number;
+      getDOM: number;
+      compositeScreenshot: number;
+      buildMessages: number;
+      llmInvoke: number;
+      runAction: number;
+      total: number;
+    }>,
+  };
+
   if (ctx.debug) {
     console.log(`Debugging task ${taskId} in ${debugDir}`);
   }
@@ -161,6 +182,16 @@ export const runAgentTask = async (
   const MAX_CONSECUTIVE_FAILURES_OR_WAITS = 5;
 
   while (true) {
+    const stepStartTime = performance.now();
+    const stepMetrics = {
+      step: currStep,
+      getDOM: 0,
+      compositeScreenshot: 0,
+      buildMessages: 0,
+      llmInvoke: 0,
+      runAction: 0,
+      total: 0,
+    };
     // Status Checks
     if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
       await sleep(100);
@@ -181,6 +212,7 @@ export const runAgentTask = async (
     // Get A11y DOM State (visual mode optional, default false for performance)
     let domState: A11yDOMState | null = null;
     try {
+      const getDOMStart = performance.now();
       domState = await retry({
         func: async () => {
           const s = await getA11yDOM(
@@ -196,6 +228,8 @@ export const runAgentTask = async (
           retryCount: 3,
         },
       });
+      stepMetrics.getDOM = performance.now() - getDOMStart;
+      taskPerfMetrics.totalGetDOM += stepMetrics.getDOM;
     } catch (error) {
       if (ctx.debug) {
         console.log(
@@ -217,10 +251,13 @@ export const runAgentTask = async (
     // If visual mode enabled, composite screenshot with overlay
     let trimmedScreenshot: string | undefined;
     if (domState.visualOverlay) {
+      const compositeStart = performance.now();
       trimmedScreenshot = await compositeScreenshot(
         page,
         domState.visualOverlay
       );
+      stepMetrics.compositeScreenshot = performance.now() - compositeStart;
+      taskPerfMetrics.totalCompositeScreenshot += stepMetrics.compositeScreenshot;
     }
 
     // Store Dom State for Debugging
@@ -236,6 +273,7 @@ export const runAgentTask = async (
     }
 
     // Build Agent Step Messages
+    const buildMsgsStart = performance.now();
     const msgs = await buildAgentStepMessages(
       baseMsgs,
       taskState.steps,
@@ -245,6 +283,8 @@ export const runAgentTask = async (
       trimmedScreenshot,
       Object.values(ctx.variables)
     );
+    stepMetrics.buildMessages = performance.now() - buildMsgsStart;
+    taskPerfMetrics.totalBuildMessages += stepMetrics.buildMessages;
 
     // Store Agent Step Messages for Debugging
     if (ctx.debug) {
@@ -255,6 +295,7 @@ export const runAgentTask = async (
     }
 
     // Invoke LLM with structured output
+    const llmStart = performance.now();
     const structuredResult = await retry({
       func: () =>
         ctx.llm.invokeStructured(
@@ -267,6 +308,8 @@ export const runAgentTask = async (
           msgs
         ),
     });
+    stepMetrics.llmInvoke = performance.now() - llmStart;
+    taskPerfMetrics.totalLLMInvoke += stepMetrics.llmInvoke;
 
     if (!structuredResult.parsed) {
       throw new Error("Failed to get structured output from LLM");
@@ -304,7 +347,10 @@ export const runAgentTask = async (
     }
 
     // Execute the action
+    const actionStart = performance.now();
     const actionOutput = await runAction(action, domState, page, ctx);
+    stepMetrics.runAction = performance.now() - actionStart;
+    taskPerfMetrics.totalRunAction += stepMetrics.runAction;
 
     // Check action result and handle retry logic
     if (action.type === "wait") {
@@ -370,12 +416,47 @@ export const runAgentTask = async (
     await params?.onStep?.(step);
     currStep = currStep + 1;
 
+    // Record step metrics
+    stepMetrics.total = performance.now() - stepStartTime;
+    taskPerfMetrics.stepMetrics.push(stepMetrics);
+    taskPerfMetrics.stepCount++;
+
     if (ctx.debug) {
       fs.writeFileSync(
         `${debugStepDir}/stepOutput.json`,
         JSON.stringify(step, null, 2)
       );
+      // Write step performance metrics
+      fs.writeFileSync(
+        `${debugStepDir}/stepPerf.json`,
+        JSON.stringify(stepMetrics, null, 2)
+      );
     }
+  }
+
+  const totalTaskDuration = performance.now() - taskStartTime;
+
+  // Log final performance metrics
+  if (ctx.debug) {
+    console.log("\n=== Task Performance Summary ===");
+    console.log(`Total task duration: ${totalTaskDuration.toFixed(2)}ms`);
+    console.log(`Total steps: ${taskPerfMetrics.stepCount}`);
+    console.log(`\nTime breakdown (total):`);
+    console.log(`  Get A11y DOM: ${taskPerfMetrics.totalGetDOM.toFixed(2)}ms (${((taskPerfMetrics.totalGetDOM / totalTaskDuration) * 100).toFixed(1)}%)`);
+    console.log(`  Composite Screenshot: ${taskPerfMetrics.totalCompositeScreenshot.toFixed(2)}ms (${((taskPerfMetrics.totalCompositeScreenshot / totalTaskDuration) * 100).toFixed(1)}%)`);
+    console.log(`  Build Messages: ${taskPerfMetrics.totalBuildMessages.toFixed(2)}ms (${((taskPerfMetrics.totalBuildMessages / totalTaskDuration) * 100).toFixed(1)}%)`);
+    console.log(`  LLM Invocation: ${taskPerfMetrics.totalLLMInvoke.toFixed(2)}ms (${((taskPerfMetrics.totalLLMInvoke / totalTaskDuration) * 100).toFixed(1)}%)`);
+    console.log(`  Run Action: ${taskPerfMetrics.totalRunAction.toFixed(2)}ms (${((taskPerfMetrics.totalRunAction / totalTaskDuration) * 100).toFixed(1)}%)`);
+
+    if (taskPerfMetrics.stepCount > 0) {
+      console.log(`\nAverage per step:`);
+      console.log(`  Get A11y DOM: ${(taskPerfMetrics.totalGetDOM / taskPerfMetrics.stepCount).toFixed(2)}ms`);
+      console.log(`  Composite Screenshot: ${(taskPerfMetrics.totalCompositeScreenshot / taskPerfMetrics.stepCount).toFixed(2)}ms`);
+      console.log(`  Build Messages: ${(taskPerfMetrics.totalBuildMessages / taskPerfMetrics.stepCount).toFixed(2)}ms`);
+      console.log(`  LLM Invocation: ${(taskPerfMetrics.totalLLMInvoke / taskPerfMetrics.stepCount).toFixed(2)}ms`);
+      console.log(`  Run Action: ${(taskPerfMetrics.totalRunAction / taskPerfMetrics.stepCount).toFixed(2)}ms`);
+    }
+    console.log("================================\n");
   }
 
   const taskOutput: TaskOutput = {
@@ -387,6 +468,14 @@ export const runAgentTask = async (
     fs.writeFileSync(
       `${debugDir}/taskOutput.json`,
       JSON.stringify(taskOutput, null, 2)
+    );
+    // Write task performance metrics
+    fs.writeFileSync(
+      `${debugDir}/taskPerf.json`,
+      JSON.stringify({
+        totalDuration: totalTaskDuration,
+        ...taskPerfMetrics,
+      }, null, 2)
     );
   }
   await params?.onComplete?.(taskOutput);

@@ -8,8 +8,100 @@ import { EncodedId, DOMRect } from './types';
 import { createEncodedId } from './utils';
 
 /**
+ * Browser-side script to collect bounding boxes by backend node IDs
+ * Injected once per frame for efficient reuse
+ */
+export const boundingBoxCollectionScript = `
+/**
+ * Collect bounding boxes for elements by their backend node IDs
+ * Uses CDP's DOM.resolveNode to get elements by backend ID
+ *
+ * @param backendNodeIds - Array of backend node IDs to collect boxes for
+ * @returns Object mapping backend node ID to bounding box
+ */
+window.__hyperagent_collectBoundingBoxes = function(backendNodeIds) {
+  const results = {};
+
+  for (const backendNodeId of backendNodeIds) {
+    try {
+      // Note: We can't directly access elements by backend node ID in browser context
+      // We need to use XPath as the bridge
+      // This function will be called with XPath already resolved
+      continue;
+    } catch {
+      continue;
+    }
+  }
+
+  return results;
+};
+
+/**
+ * Collect bounding boxes using XPath lookup
+ * More efficient than individual CDP calls
+ *
+ * @param xpathToBackendId - Object mapping XPath to backend node ID
+ * @returns Object mapping backend node ID to bounding box
+ */
+window.__hyperagent_collectBoundingBoxesByXPath = function(xpathToBackendId) {
+  const boundingBoxes = {};
+
+  for (const [xpath, backendNodeId] of Object.entries(xpathToBackendId)) {
+    try {
+      const result = document.evaluate(
+        xpath,
+        document.documentElement,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+
+      const element = result.singleNodeValue;
+      if (!element || typeof element.getBoundingClientRect !== 'function') {
+        continue;
+      }
+
+      const rect = element.getBoundingClientRect();
+
+      // Only include elements that have some size
+      if (rect.width === 0 && rect.height === 0) {
+        continue;
+      }
+
+      boundingBoxes[backendNodeId] = {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+        top: rect.top,
+        left: rect.left,
+        right: rect.right,
+        bottom: rect.bottom,
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return boundingBoxes;
+};
+`;
+
+/**
+ * Inject bounding box collection script into a frame
+ * Should be called once per frame before collecting bounding boxes
+ */
+export async function injectBoundingBoxScript(pageOrFrame: Page | Frame): Promise<void> {
+  try {
+    await pageOrFrame.evaluate(boundingBoxCollectionScript);
+  } catch (error) {
+    console.warn('[A11y] Failed to inject bounding box collection script:', error);
+  }
+}
+
+/**
  * Batch collect bounding boxes for multiple backend node IDs using XPath evaluation
- * This performs a single page.evaluate() call instead of N CDP round-trips
+ * Uses pre-injected script for better performance
  *
  * @param pageOrFrame - Playwright Page or Frame to evaluate in
  * @param xpathToBackendId - Map of XPath strings to backend node IDs
@@ -29,60 +121,11 @@ export async function batchCollectBoundingBoxes(
     // Convert Map to plain object for serialization
     const xpathToBackendIdObj = Object.fromEntries(xpathToBackendId);
 
-    // Execute batch collection in browser context
+    // Call the injected function (much faster than inline evaluation)
     const results = await pageOrFrame.evaluate((xpathToBackendIdMapping) => {
-      const boundingBoxes: Record<string, {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        top: number;
-        left: number;
-        right: number;
-        bottom: number;
-      }> = {};
-
-      for (const [xpath, backendNodeId] of Object.entries(xpathToBackendIdMapping)) {
-        try {
-          // Evaluate XPath to get the element
-          const result = document.evaluate(
-            xpath,
-            document.documentElement,
-            null,
-            XPathResult.FIRST_ORDERED_NODE_TYPE,
-            null
-          );
-
-          const element = result.singleNodeValue as Element | null;
-
-          // Skip if element not found or doesn't have getBoundingClientRect
-          if (!element || typeof (element as any).getBoundingClientRect !== 'function') {
-            continue;
-          }
-
-          // Get bounding client rect
-          const rect = (element as any).getBoundingClientRect();
-
-          // Store with backendNodeId as key (will be converted back to number)
-          boundingBoxes[backendNodeId] = {
-            x: rect.left,
-            y: rect.top,
-            width: rect.width,
-            height: rect.height,
-            top: rect.top,
-            left: rect.left,
-            right: rect.right,
-            bottom: rect.bottom,
-          };
-        } catch {
-          // Skip elements that fail XPath evaluation or bounding box calculation
-          // This is expected for detached elements, hidden elements, etc.
-          continue;
-        }
-      }
-
-      return boundingBoxes;
-    }, xpathToBackendIdObj);
+      // @ts-expect-error - function injected via script
+      return window.__hyperagent_collectBoundingBoxesByXPath?.(xpathToBackendIdMapping) ?? {};
+    }, xpathToBackendIdObj) as Record<string, DOMRect>;
 
     // Convert results to Map with EncodedId keys
     const boundingBoxMap = new Map<EncodedId, DOMRect>();
@@ -90,7 +133,7 @@ export async function batchCollectBoundingBoxes(
     for (const [backendNodeIdStr, rect] of Object.entries(results)) {
       const backendNodeId = parseInt(backendNodeIdStr, 10);
       const encodedId = createEncodedId(frameIndex, backendNodeId);
-      boundingBoxMap.set(encodedId, rect);
+      boundingBoxMap.set(encodedId, rect as DOMRect);
     }
 
     return boundingBoxMap;
