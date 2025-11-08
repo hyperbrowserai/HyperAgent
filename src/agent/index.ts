@@ -38,8 +38,6 @@ import { HyperPage, HyperVariable } from "../types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
-import { examineDom } from "./examine-dom";
-import { getA11yDOM } from "../context-providers/a11y-dom";
 import { ExamineDomResult } from "./examine-dom/types";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
