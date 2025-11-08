@@ -126,7 +126,8 @@ export async function buildHierarchicalTree(
         pageOrFrame,
         xpathMap,
         nodesToCollect,
-        frameIndex
+        frameIndex,
+        frameMap
       );
       const duration = Date.now() - startTime;
 

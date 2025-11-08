@@ -109,7 +109,8 @@ async function processOOPIFRecursive(
   nextFrameIndex: { value: number },
   processedOOPIFs: Set<Frame>,
   playwrightFrameToIndex: Map<Frame, number>,
-  debug: boolean
+  debug: boolean,
+  enableVisualMode: boolean
 ): Promise<void> {
   // Skip if already processed
   if (processedOOPIFs.has(frame)) return;
@@ -130,28 +131,15 @@ async function processOOPIFRecursive(
   }
 
   try {
-    // Ensure parent is processed first (recursive)
-    const parentFrame = frame.parentFrame();
-    if (parentFrame) {
-      await processOOPIFRecursive(
-        parentFrame,
-        page,
-        maps,
-        allNodes,
-        frameDebugInfo,
-        mergedMaps,
-        nextFrameIndex,
-        processedOOPIFs,
-        playwrightFrameToIndex,
-        debug
-      );
-    }
+    // Note: Parent is guaranteed to be processed already due to wave-based processing
+    // No need for recursive parent checking
 
     // Assign frame index
     const iframeFrameIndex = nextFrameIndex.value++;
     playwrightFrameToIndex.set(frame, iframeFrameIndex);
 
     // Determine parent frame index using map
+    const parentFrame = frame.parentFrame();
     const parentFrameIdx = parentFrame
       ? (playwrightFrameToIndex.get(parentFrame) ?? null)
       : null;
@@ -162,12 +150,16 @@ async function processOOPIFRecursive(
       );
     }
 
-    // Enable CDP domains
-    await oopifSession.send("DOM.enable");
-    await oopifSession.send("Accessibility.enable");
+    // Enable CDP domains in parallel for better performance
+    await Promise.all([
+      oopifSession.send("DOM.enable"),
+      oopifSession.send("Accessibility.enable"),
+    ]);
 
-    // Inject bounding box collection script into OOPIF frame
-    await injectBoundingBoxScript(frame);
+    // Inject bounding box collection script into OOPIF frame (only if needed)
+    if (debug || enableVisualMode) {
+      await injectBoundingBoxScript(frame);
+    }
 
     // Build backend ID maps for this OOPIF
     const oopifMaps = await buildBackendIdMaps(
@@ -250,13 +242,15 @@ async function processOOPIFRecursive(
  * @param client CDP session
  * @param maps Backend ID maps containing frame metadata
  * @param debug Whether to collect debug information
+ * @param enableVisualMode Whether visual mode is enabled (affects script injection)
  * @returns Tagged nodes and optional debug info
  */
 async function fetchIframeAXTrees(
   page: Page,
   client: CDPSession,
   maps: BackendIdMaps,
-  debug: boolean
+  debug: boolean,
+  enableVisualMode: boolean
 ): Promise<{
   nodes: Array<AXNode & { _frameIndex: number }>;
   debugInfo: Array<{
@@ -350,7 +344,8 @@ async function fetchIframeAXTrees(
     }
   }
 
-  // STEP 2: Process OOPIF frames recursively (parents before children)
+  // STEP 2: Process OOPIF frames using wave-based parallel processing
+  // This ensures parents are processed before children while maximizing parallelism
   const allPlaywrightFrames = page.frames();
   const mergedTagNameMap = { ...maps.tagNameMap };
   const mergedXpathMap = { ...maps.xpathMap };
@@ -359,24 +354,51 @@ async function fetchIframeAXTrees(
   const playwrightFrameToIndex = new Map<Frame, number>();
   const nextFrameIndexRef = { value: nextFrameIndex };
 
-  // Process all frames recursively (ensures parents are processed first)
+  // Build parent-child relationship map for wave-based processing
+  const framesByParent = new Map<Frame | null, Frame[]>();
   for (const frame of allPlaywrightFrames) {
-    await processOOPIFRecursive(
-      frame,
-      page,
-      maps,
-      allNodes,
-      frameDebugInfo,
-      {
-        tagNameMap: mergedTagNameMap,
-        xpathMap: mergedXpathMap,
-        accessibleNameMap: mergedAccessibleNameMap,
-      },
-      nextFrameIndexRef,
-      processedOOPIFs,
-      playwrightFrameToIndex,
-      debug
+    const parent = frame.parentFrame();
+    if (!framesByParent.has(parent)) {
+      framesByParent.set(parent, []);
+    }
+    framesByParent.get(parent)!.push(frame);
+  }
+
+  // Process frames in waves (BFS style) - all frames at same depth level in parallel
+  let currentWave = framesByParent.get(page.mainFrame()) || [];
+
+  while (currentWave.length > 0) {
+    // Process all frames in current wave IN PARALLEL
+    await Promise.all(
+      currentWave.map(frame =>
+        processOOPIFRecursive(
+          frame,
+          page,
+          maps,
+          allNodes,
+          frameDebugInfo,
+          {
+            tagNameMap: mergedTagNameMap,
+            xpathMap: mergedXpathMap,
+            accessibleNameMap: mergedAccessibleNameMap,
+          },
+          nextFrameIndexRef,
+          processedOOPIFs,
+          playwrightFrameToIndex,
+          debug,
+          enableVisualMode
+        )
+      )
     );
+
+    // Collect children for next wave
+    const nextWave: Frame[] = [];
+    for (const frame of currentWave) {
+      const children = framesByParent.get(frame) || [];
+      nextWave.push(...children);
+    }
+
+    currentWave = nextWave;
   }
 
   // Update maps with merged values
@@ -497,14 +519,16 @@ export async function getA11yDOM(
   enableVisualMode = false,
   debugDir?: string
 ): Promise<A11yDOMState> {
-  const snapshotStartTime = Date.now();
-
   try {
     // Step 1: Inject scripts into the main frame
-    await Promise.all([
-      injectScrollableDetection(page),
-      injectBoundingBoxScript(page),
-    ]);
+    const injectionPromises = [injectScrollableDetection(page)];
+
+    // Only inject bounding box script if needed for debug or visual mode
+    if (debug || enableVisualMode) {
+      injectionPromises.push(injectBoundingBoxScript(page));
+    }
+
+    await Promise.all(injectionPromises);
 
     // Step 2: Create CDP session for main frame
     const client = await page.context().newCDPSession(page);
@@ -529,7 +553,7 @@ export async function getA11yDOM(
 
       // 4b. Fetch accessibility trees for all iframes
       const { nodes: iframeNodes, debugInfo: frameDebugInfo } =
-        await fetchIframeAXTrees(page, client, maps, debug);
+        await fetchIframeAXTrees(page, client, maps, debug, enableVisualMode);
       allNodes.push(...iframeNodes);
 
       // 4c. Build frame hierarchy paths now that all frames are discovered
@@ -643,13 +667,6 @@ export async function getA11yDOM(
             );
           }
         }
-      }
-
-      const totalDuration = Date.now() - snapshotStartTime;
-      if (debug) {
-        console.log(
-          `[A11y] Total snapshot extraction completed in ${totalDuration}ms`
-        );
       }
 
       return {
