@@ -25,7 +25,33 @@ export async function executePlaywrightMethod(
 
   switch (method) {
     case "click":
-      await locator.click({ timeout: clickTimeout });
+      try {
+        await locator.click({ timeout: clickTimeout });
+      } catch (e) {
+        // Fallback to JavaScript click if Playwright click fails (e.g., element interception)
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        if (debug) {
+          console.log(
+            `[executePlaywrightMethod] Playwright click failed, falling back to JS click: ${errorMsg}`
+          );
+        }
+        try {
+          await locator.evaluate(
+            (el) => (el as HTMLElement).click(),
+            undefined,
+            { timeout: clickTimeout }
+          );
+        } catch (jsClickError) {
+          // Re-throw with context from both attempts
+          const jsErrorMsg =
+            jsClickError instanceof Error
+              ? jsClickError.message
+              : String(jsClickError);
+          throw new Error(
+            `Failed to click element. Playwright error: ${errorMsg}. JS click error: ${jsErrorMsg}`
+          );
+        }
+      }
       break;
     case "type":
     case "fill":
@@ -63,8 +89,7 @@ export async function executePlaywrightMethod(
             if (element.tagName.toLowerCase() === "html") {
               const scrollHeight = document.body.scrollHeight;
               const viewportHeight = window.innerHeight;
-              const scrollTop =
-                (scrollHeight - viewportHeight) * (yPct / 100);
+              const scrollTop = (scrollHeight - viewportHeight) * (yPct / 100);
               window.scrollTo({
                 top: scrollTop,
                 left: window.scrollX,
@@ -165,14 +190,13 @@ export async function executePlaywrightMethod(
         return waitForScrollEnd(element);
       });
       break;
-    default:
-      {
-        const errorMsg = `Unknown method: ${method}`;
-        if (debug) {
-          console.error(`[executePlaywrightMethod] ${errorMsg}`);
-        }
-        throw new Error(errorMsg);
+    default: {
+      const errorMsg = `Unknown method: ${method}`;
+      if (debug) {
+        console.error(`[executePlaywrightMethod] ${errorMsg}`);
       }
+      throw new Error(errorMsg);
+    }
   }
 
   if (debug) {

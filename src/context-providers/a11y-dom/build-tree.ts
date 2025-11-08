@@ -2,7 +2,7 @@
  * Build hierarchical accessibility tree from flat CDP nodes
  */
 
-import type { CDPSession } from "playwright-core";
+import type { Page, Frame } from "playwright-core";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -22,6 +22,7 @@ import {
   generateFrameHeader,
 } from "./utils";
 import { decorateRoleIfScrollable } from "./scrollable-detection";
+import { batchCollectBoundingBoxesWithFailures } from "./bounding-box-batch";
 
 /**
  * Convert raw CDP AXNode to simplified AccessibilityNode
@@ -59,6 +60,10 @@ function convertAXNode(
  * @param xpathMap - Map of encoded IDs to XPaths
  * @param frameIndex - Frame index for encoded ID generation
  * @param scrollableIds - Set of backend node IDs that are scrollable
+ * @param debug - Whether to collect debug information
+ * @param enableVisualMode - Whether to collect bounding boxes for visual overlay
+ * @param pageOrFrame - Playwright Page or Frame for batch bounding box collection
+ * @param debugDir - Directory to write debug files
  * @returns TreeResult with cleaned tree, simplified text, and maps
  */
 export async function buildHierarchicalTree(
@@ -68,7 +73,7 @@ export async function buildHierarchicalTree(
   scrollableIds?: Set<number>,
   debug = false,
   enableVisualMode = false,
-  cdpClient?: CDPSession,
+  pageOrFrame?: Page | Frame,
   debugDir?: string
 ): Promise<TreeResult> {
   // Convert raw AX nodes to simplified format, decorating scrollable elements
@@ -80,10 +85,72 @@ export async function buildHierarchicalTree(
   const nodeMap = new Map<string, RichNode>();
 
   // Map to store bounding boxes (only if visual mode enabled)
-  const boundingBoxMap = new Map<EncodedId, DOMRect>();
+  let boundingBoxMap = new Map<EncodedId, DOMRect>();
+  let boundingBoxFailures: Array<{ encodedId: EncodedId; backendNodeId: number }> = [];
 
-  // Track bounding box failures for debug
-  const boundingBoxFailures: Array<{ encodedId: EncodedId; backendNodeId: number }> = [];
+  // Batch collect bounding boxes BEFORE Pass 1 if visual mode enabled
+  if ((debug || enableVisualMode) && pageOrFrame) {
+    // First pass: identify nodes we want to keep and collect their info
+    const nodesToCollect: Array<{ backendDOMNodeId?: number; encodedId?: EncodedId }> = [];
+
+    for (const node of accessibilityNodes) {
+      // Skip nodes without nodeId or negative pseudo-nodes
+      if (!node.nodeId || +node.nodeId < 0) continue;
+
+      // Keep nodes that have:
+      // - A name (visible text)
+      // - Children (structural importance)
+      // - Interactive role
+      const keep =
+        node.name?.trim() || node.childIds?.length || isInteractive(node);
+      if (!keep) continue;
+
+      // Create encoded ID
+      let encodedId: EncodedId | undefined;
+      if (node.backendDOMNodeId !== undefined) {
+        encodedId = createEncodedId(frameIndex, node.backendDOMNodeId);
+      }
+
+      if (node.backendDOMNodeId !== undefined && encodedId) {
+        nodesToCollect.push({
+          backendDOMNodeId: node.backendDOMNodeId,
+          encodedId,
+        });
+      }
+    }
+
+    // Batch collect all bounding boxes in a single page.evaluate call
+    if (nodesToCollect.length > 0) {
+      const startTime = Date.now();
+      const result = await batchCollectBoundingBoxesWithFailures(
+        pageOrFrame,
+        xpathMap,
+        nodesToCollect,
+        frameIndex
+      );
+      const duration = Date.now() - startTime;
+
+      boundingBoxMap = result.boundingBoxMap;
+      boundingBoxFailures = result.failures;
+
+      if (debug) {
+        console.debug(
+          `[A11y] Frame ${frameIndex}: Batch collected ${boundingBoxMap.size}/${nodesToCollect.length} bounding boxes in ${duration}ms (${boundingBoxFailures.length} elements without layout)`
+        );
+      }
+
+      // Write failures to debug file
+      if (debugDir && boundingBoxFailures.length > 0) {
+        const failureDetails = boundingBoxFailures
+          .map(f => `${f.encodedId} (backendNodeId=${f.backendNodeId})`)
+          .join('\n');
+        fs.writeFileSync(
+          path.join(debugDir, `frame-${frameIndex}-bounding-box-failures.txt`),
+          `Failed to get bounding boxes for ${boundingBoxFailures.length} elements:\n\n${failureDetails}\n`
+        );
+      }
+    }
+  }
 
   // Pass 1: Copy and filter nodes we want to keep
   for (const node of accessibilityNodes) {
@@ -120,87 +187,10 @@ export async function buildHierarchicalTree(
 
     nodeMap.set(node.nodeId, richNode);
 
-    // Collect bounding box if visual mode enabled (inline collection for performance)
-    if (
-      (debug || enableVisualMode) &&
-      cdpClient &&
-      node.backendDOMNodeId &&
-      encodedId
-    ) {
-      try {
-        const { model } = await cdpClient.send("DOM.getBoxModel", {
-          backendNodeId: node.backendDOMNodeId,
-        });
-
-        if (model?.border && model.border.length >= 8) {
-          // Border quad: [x1,y1, x2,y2, x3,y3, x4,y4]
-          // Extract bounding box coordinates
-          const xs = [
-            model.border[0],
-            model.border[2],
-            model.border[4],
-            model.border[6],
-          ];
-          const ys = [
-            model.border[1],
-            model.border[3],
-            model.border[5],
-            model.border[7],
-          ];
-
-          const left = Math.min(...xs);
-          const top = Math.min(...ys);
-          const right = Math.max(...xs);
-          const bottom = Math.max(...ys);
-
-          const boundingBox: DOMRect = {
-            x: left,
-            y: top,
-            width: right - left,
-            height: bottom - top,
-            top,
-            left,
-            right,
-            bottom,
-          };
-
-          // Store in both richNode and boundingBoxMap
-          richNode.boundingBox = boundingBox;
-          boundingBoxMap.set(encodedId, boundingBox);
-        }
-      } catch {
-        // Skip elements without layout (e.g., hidden elements, pseudo-elements)
-        // This is expected and not an error - collect for debug file
-        boundingBoxFailures.push({
-          encodedId: encodedId!,
-          backendNodeId: node.backendDOMNodeId!,
-        });
-      }
-    }
-  }
-
-  // Log bounding box collection summary and write details to file
-  if ((debug || enableVisualMode) && cdpClient) {
-    const successCount = boundingBoxMap.size;
-    const failureCount = boundingBoxFailures.length;
-    const totalAttempts = successCount + failureCount;
-
-    if (failureCount > 0) {
-      // Console: Just show summary
-      console.debug(
-        `[A11y] Frame ${frameIndex}: Collected ${successCount}/${totalAttempts} bounding boxes (${failureCount} elements without layout)`
-      );
-
-      // Debug file: Write detailed list
-      if (debugDir) {
-        const failureDetails = boundingBoxFailures
-          .map(f => `${f.encodedId} (backendNodeId=${f.backendNodeId})`)
-          .join('\n');
-        fs.writeFileSync(
-          path.join(debugDir, `frame-${frameIndex}-bounding-box-failures.txt`),
-          `Failed to get bounding boxes for ${failureCount} elements:\n\n${failureDetails}\n`
-        );
-      }
+    // Attach bounding box if it was collected in batch
+    if (encodedId && boundingBoxMap.has(encodedId)) {
+      const boundingBox = boundingBoxMap.get(encodedId)!;
+      richNode.boundingBox = boundingBox;
     }
   }
 
@@ -249,11 +239,23 @@ export async function buildHierarchicalTree(
 
   cleanedRoots.forEach((root) => collectNodes(root as RichNode));
 
+  // Pass 7: Build final bounding box map from cleaned tree only
+  // This ensures the visual overlay only shows elements that made it through tree cleaning
+  const finalBoundingBoxMap = new Map<EncodedId, DOMRect>();
+  if (enableVisualMode) {
+    for (const encodedId of idToElement.keys()) {
+      const boundingBox = boundingBoxMap.get(encodedId);
+      if (boundingBox) {
+        finalBoundingBoxMap.set(encodedId, boundingBox);
+      }
+    }
+  }
+
   return {
     tree: cleanedRoots,
     simplified,
     xpathMap,
     idToElement,
-    ...(enableVisualMode && { boundingBoxMap }),
+    ...(enableVisualMode && { boundingBoxMap: finalBoundingBoxMap }),
   };
 }

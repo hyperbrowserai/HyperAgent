@@ -705,6 +705,17 @@ export async function getA11yDOM(
       // Build trees for each frame
       const treeResults = await Promise.all(
         Array.from(frameGroups.entries()).map(async ([frameIdx, nodes]) => {
+          // Get the appropriate Frame for this frameIdx
+          let frameContext: Page | Frame = page; // Default to main frame
+
+          if (frameIdx !== 0) {
+            // Look up the frame from frameMap
+            const frameInfo = maps.frameMap?.get(frameIdx);
+            if (frameInfo?.playwrightFrame) {
+              frameContext = frameInfo.playwrightFrame;
+            }
+          }
+
           const treeResult = await buildHierarchicalTree(
             nodes,
             maps,
@@ -712,7 +723,7 @@ export async function getA11yDOM(
             scrollableIds,
             debug,
             enableVisualMode,
-            client,
+            frameContext,
             debugDir
           );
 
