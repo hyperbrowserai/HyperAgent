@@ -248,7 +248,7 @@ export class CDPConnectionManager extends EventEmitter {
     const attachResult = await this.sendBrowserCommand("Target.attachToTarget", {
       targetId: actualTargetId,
       flatten: true
-    });
+    }) as { sessionId: string };
 
     const sessionId = attachResult.sessionId;
     
@@ -348,7 +348,7 @@ export class CDPConnectionManager extends EventEmitter {
     console.log("[CDP] Listing targets...");
     
     try {
-      const result = await this.sendBrowserCommand("Target.getTargets");
+      const result = await this.sendBrowserCommand("Target.getTargets") as { targetInfos: Protocol.Target.TargetInfo[] };
       const targets = result.targetInfos || [];
       console.log(`[CDP] Found ${targets.length} targets`);
       return targets;
@@ -365,7 +365,7 @@ export class CDPConnectionManager extends EventEmitter {
     try {
       const result = await this.sendBrowserCommand("Target.createTarget", {
         url
-      });
+      }) as Protocol.Target.CreateTargetResponse;
       console.log(`[CDP] Target created: ${result.targetId}`);
       return result;
     } catch (error) {
