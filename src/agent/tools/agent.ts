@@ -8,6 +8,7 @@ import {
   AgentActionDefinition,
 } from "@/types";
 import { getA11yDOM } from "@/context-providers/a11y-dom";
+import { getCDPClient } from "@/cdp";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
@@ -33,11 +34,15 @@ import { Jimp } from "jimp";
 
 const compositeScreenshot = async (page: Page, overlay: string) => {
   // Use CDP screenshot - faster, doesn't wait for fonts
-  const client = await page.context().newCDPSession(page);
+  const cdpClient = await getCDPClient(page);
+  const client = await cdpClient.createSession({ type: "page", page });
 
-  const { data } = await client.send("Page.captureScreenshot", {
-    format: "png",
-  });
+  const { data } = await client.send<{ data: string }>(
+    "Page.captureScreenshot",
+    {
+      format: "png",
+    }
+  );
   await client.detach();
 
   const [baseImage, overlayImage] = await Promise.all([

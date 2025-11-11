@@ -2,7 +2,7 @@
  * Build backend ID maps for DOM traversal and xpath generation
  */
 
-import { CDPSession } from "playwright-core";
+import type { CDPSession } from "@/cdp";
 import { DOMNode, BackendIdMaps, EncodedId, IframeInfo } from "./types";
 import { createEncodedId } from "./utils";
 

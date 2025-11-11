@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { parseMarkdown } from "@/utils/html-to-markdown";
 import fs from "fs";
+import { getCDPClient } from "@/cdp";
 
 export const ExtractAction = z
   .object({
@@ -26,10 +27,16 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       const objective = action.objective;
 
       // Take a screenshot of the page
-      const cdpSession = await ctx.page.context().newCDPSession(ctx.page);
-      let screenshot;
+      const cdpClient = await getCDPClient(ctx.page);
+      const cdpSession = await cdpClient.createSession({
+        type: "page",
+        page: ctx.page,
+      });
+      let screenshot: { data: string };
       try {
-        screenshot = await cdpSession.send("Page.captureScreenshot");
+        screenshot = await cdpSession.send<{ data: string }>(
+          "Page.captureScreenshot"
+        );
 
         // Save screenshot to debug dir if exists
         if (ctx.debugDir) {

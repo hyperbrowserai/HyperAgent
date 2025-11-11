@@ -3,7 +3,7 @@
  * Main entry point for extracting and formatting accessibility trees
  */
 
-import { Page, CDPSession, Frame } from "playwright-core";
+import type { Page, Frame } from "playwright-core";
 import {
   A11yDOMState,
   AXNode,
@@ -24,6 +24,8 @@ import {
 import { injectBoundingBoxScript } from "./bounding-box-batch";
 import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
 import { renderA11yOverlay } from "./visual-overlay";
+import { getCDPClient } from "@/cdp";
+import type { CDPClient, CDPSession } from "@/cdp";
 
 /**
  * Build frame hierarchy paths for all frames
@@ -110,7 +112,8 @@ async function processOOPIFRecursive(
   processedOOPIFs: Set<Frame>,
   playwrightFrameToIndex: Map<Frame, number>,
   debug: boolean,
-  enableVisualMode: boolean
+  enableVisualMode: boolean,
+  cdpClient: CDPClient
 ): Promise<void> {
   // Skip if already processed
   if (processedOOPIFs.has(frame)) return;
@@ -124,9 +127,13 @@ async function processOOPIFRecursive(
   // Try to create CDP session - if it fails, this is a same-origin iframe (skip)
   let oopifSession: CDPSession | null = null;
   try {
-    oopifSession = await page.context().newCDPSession(frame);
+    oopifSession = await cdpClient.createSession({ type: "frame", frame });
   } catch {
     // Not an OOPIF, skip
+    return;
+  }
+
+  if (!oopifSession) {
     return;
   }
 
@@ -250,7 +257,8 @@ async function fetchIframeAXTrees(
   client: CDPSession,
   maps: BackendIdMaps,
   debug: boolean,
-  enableVisualMode: boolean
+  enableVisualMode: boolean,
+  cdpClient: CDPClient
 ): Promise<{
   nodes: Array<AXNode & { _frameIndex: number }>;
   debugInfo: Array<{
@@ -386,7 +394,8 @@ async function fetchIframeAXTrees(
           processedOOPIFs,
           playwrightFrameToIndex,
           debug,
-          enableVisualMode
+          enableVisualMode,
+          cdpClient
         )
       )
     );
@@ -531,7 +540,8 @@ export async function getA11yDOM(
     await Promise.all(injectionPromises);
 
     // Step 2: Create CDP session for main frame
-    const client = await page.context().newCDPSession(page);
+    const cdpClient = await getCDPClient(page);
+    const client = await cdpClient.createSession({ type: "page", page });
 
     try {
       await client.send("Accessibility.enable");
@@ -553,7 +563,14 @@ export async function getA11yDOM(
 
       // 4b. Fetch accessibility trees for all iframes
       const { nodes: iframeNodes, debugInfo: frameDebugInfo } =
-        await fetchIframeAXTrees(page, client, maps, debug, enableVisualMode);
+        await fetchIframeAXTrees(
+          page,
+          client,
+          maps,
+          debug,
+          enableVisualMode,
+          cdpClient
+        );
       allNodes.push(...iframeNodes);
 
       // 4c. Build frame hierarchy paths now that all frames are discovered

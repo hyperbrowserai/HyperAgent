@@ -3,8 +3,8 @@
  * Detects elements with overflow scrolling for enhanced accessibility tree
  */
 
-import { Page, Frame } from 'playwright-core';
-import { CDPSession } from 'playwright-core';
+import type { Page, Frame } from 'playwright-core';
+import type { CDPSession } from '@/cdp';
 
 /**
  * Browser-side functions to detect scrollable elements

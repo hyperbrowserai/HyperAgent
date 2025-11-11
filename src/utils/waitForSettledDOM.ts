@@ -15,6 +15,7 @@
  */
 
 import { Page } from "playwright-core";
+import { getCDPClient } from "@/cdp";
 import { Protocol } from "devtools-protocol";
 
 export async function waitForSettledDOM(
@@ -22,7 +23,8 @@ export async function waitForSettledDOM(
   timeoutMs: number = 10000
 ): Promise<void> {
   try {
-    const client = await page.context().newCDPSession(page);
+    const cdpClient = await getCDPClient(page);
+    const client = await cdpClient.createSession({ type: "page", page });
 
     try {
       // Check if document exists
@@ -138,15 +140,17 @@ export async function waitForSettledDOM(
           if (stalledRequestSweepTimer) clearInterval(stalledRequestSweepTimer);
 
           // Remove event listeners
-          client.off("Network.requestWillBeSent", onRequestWillBeSent);
-          client.off("Network.loadingFinished", onLoadingFinished);
-          client.off("Network.loadingFailed", onLoadingFailed);
-          client.off(
-            "Network.requestServedFromCache",
-            onRequestServedFromCache
-          );
-          client.off("Network.responseReceived", onResponseReceived);
-          client.off("Page.frameStoppedLoading", onFrameStoppedLoading);
+          if (client.off) {
+            client.off("Network.requestWillBeSent", onRequestWillBeSent as any);
+            client.off("Network.loadingFinished", onLoadingFinished as any);
+            client.off("Network.loadingFailed", onLoadingFailed as any);
+            client.off(
+              "Network.requestServedFromCache",
+              onRequestServedFromCache as any
+            );
+            client.off("Network.responseReceived", onResponseReceived as any);
+            client.off("Page.frameStoppedLoading", onFrameStoppedLoading as any);
+          }
         };
 
         // Global timeout
@@ -175,12 +179,15 @@ export async function waitForSettledDOM(
         }, 500);
 
         // Register network event handlers
-        client.on("Network.requestWillBeSent", onRequestWillBeSent);
-        client.on("Network.loadingFinished", onLoadingFinished);
-        client.on("Network.loadingFailed", onLoadingFailed);
-        client.on("Network.requestServedFromCache", onRequestServedFromCache);
-        client.on("Network.responseReceived", onResponseReceived);
-        client.on("Page.frameStoppedLoading", onFrameStoppedLoading);
+        client.on("Network.requestWillBeSent", onRequestWillBeSent as any);
+        client.on("Network.loadingFinished", onLoadingFinished as any);
+        client.on("Network.loadingFailed", onLoadingFailed as any);
+        client.on(
+          "Network.requestServedFromCache",
+          onRequestServedFromCache as any
+        );
+        client.on("Network.responseReceived", onResponseReceived as any);
+        client.on("Page.frameStoppedLoading", onFrameStoppedLoading as any);
 
         // Start the quiet check
         maybeQuiet();
