@@ -43,6 +43,7 @@
     "@inquirer/prompts": "^7.4.1",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "@types/crypto-js": "^4.2.2",
+    "@types/ws": "^8.18.1",
     "boxen": "5.1.2",
     "chalk": "4.1.2",
     "commander": "^13.1.0",

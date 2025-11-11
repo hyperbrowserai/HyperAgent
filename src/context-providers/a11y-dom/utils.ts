@@ -446,18 +446,6 @@ export async function resolveFrameByXPath(
       }
     }
 
-    // Inject bounding box collection script into same-origin frame (if not already injected)
-    // Note: Multiple injections are safe - the script is idempotent
-    try {
-      const { injectBoundingBoxScript } = await import('./bounding-box-batch');
-      await injectBoundingBoxScript(currentFrame);
-    } catch (error) {
-      console.warn(
-        `[A11y] Failed to inject bounding box script into frame ${targetFrameIndex}:`,
-        error
-      );
-    }
-
     return currentFrame;
   } catch (error) {
     console.error(

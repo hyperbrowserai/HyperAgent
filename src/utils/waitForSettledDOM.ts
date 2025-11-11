@@ -84,6 +84,7 @@ export async function waitForSettledDOM(
         };
 
         // Define event handlers as named functions so we can remove them in cleanup
+        // Use compatible signatures that work with CDPSession.on/off
         const onRequestWillBeSent = (
           params: Protocol.Network.RequestWillBeSentEvent
         ) => {
@@ -141,15 +142,15 @@ export async function waitForSettledDOM(
 
           // Remove event listeners
           if (client.off) {
-            client.off("Network.requestWillBeSent", onRequestWillBeSent as any);
-            client.off("Network.loadingFinished", onLoadingFinished as any);
-            client.off("Network.loadingFailed", onLoadingFailed as any);
+            client.off("Network.requestWillBeSent", onRequestWillBeSent);
+            client.off("Network.loadingFinished", onLoadingFinished);
+            client.off("Network.loadingFailed", onLoadingFailed);
             client.off(
               "Network.requestServedFromCache",
-              onRequestServedFromCache as any
+              onRequestServedFromCache
             );
-            client.off("Network.responseReceived", onResponseReceived as any);
-            client.off("Page.frameStoppedLoading", onFrameStoppedLoading as any);
+            client.off("Network.responseReceived", onResponseReceived);
+            client.off("Page.frameStoppedLoading", onFrameStoppedLoading);
           }
         };
 
@@ -179,15 +180,15 @@ export async function waitForSettledDOM(
         }, 500);
 
         // Register network event handlers
-        client.on("Network.requestWillBeSent", onRequestWillBeSent as any);
-        client.on("Network.loadingFinished", onLoadingFinished as any);
-        client.on("Network.loadingFailed", onLoadingFailed as any);
+        client.on("Network.requestWillBeSent", onRequestWillBeSent);
+        client.on("Network.loadingFinished", onLoadingFinished);
+        client.on("Network.loadingFailed", onLoadingFailed);
         client.on(
           "Network.requestServedFromCache",
-          onRequestServedFromCache as any
+          onRequestServedFromCache
         );
-        client.on("Network.responseReceived", onResponseReceived as any);
-        client.on("Page.frameStoppedLoading", onFrameStoppedLoading as any);
+        client.on("Network.responseReceived", onResponseReceived);
+        client.on("Page.frameStoppedLoading", onFrameStoppedLoading);
 
         // Start the quiet check
         maybeQuiet();

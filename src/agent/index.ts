@@ -39,6 +39,7 @@ import { z } from "zod";
 import { ErrorEmitter } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { ExamineDomResult } from "./examine-dom/types";
+import { disposeAllCDPClients } from "@/cdp";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -100,6 +101,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
 
+    // TODO(Phase4): This legacy provider branch will be replaced by connector configs.
     this.browserProvider = (
       this.browserProviderType === "Hyperbrowser"
         ? new HyperbrowserProvider({
@@ -287,6 +289,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Close the agent and all associated resources
    */
   public async closeAgent(): Promise<void> {
+    await disposeAllCDPClients().catch((error) => {
+      console.warn("[HyperAgent] Failed to dispose CDP clients:", error);
+    });
     for (const taskId in this.tasks) {
       const task = this.tasks[taskId];
       if (!endTaskStatuses.has(task.status)) {

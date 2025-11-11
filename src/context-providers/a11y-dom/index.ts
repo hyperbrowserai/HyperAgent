@@ -21,7 +21,7 @@ import {
   injectScrollableDetection,
   findScrollableElementIds,
 } from "./scrollable-detection";
-import { injectBoundingBoxScript } from "./bounding-box-batch";
+import { injectBoundingBoxScriptSession } from "./bounding-box-batch";
 import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
 import { renderA11yOverlay } from "./visual-overlay";
 import { getCDPClient } from "@/cdp";
@@ -165,7 +165,7 @@ async function processOOPIFRecursive(
 
     // Inject bounding box collection script into OOPIF frame (only if needed)
     if (debug || enableVisualMode) {
-      await injectBoundingBoxScript(frame);
+      await injectBoundingBoxScriptSession(oopifSession);
     }
 
     // Build backend ID maps for this OOPIF
@@ -530,14 +530,7 @@ export async function getA11yDOM(
 ): Promise<A11yDOMState> {
   try {
     // Step 1: Inject scripts into the main frame
-    const injectionPromises = [injectScrollableDetection(page)];
-
-    // Only inject bounding box script if needed for debug or visual mode
-    if (debug || enableVisualMode) {
-      injectionPromises.push(injectBoundingBoxScript(page));
-    }
-
-    await Promise.all(injectionPromises);
+    await injectScrollableDetection(page);
 
     // Step 2: Create CDP session for main frame
     const cdpClient = await getCDPClient(page);
@@ -545,6 +538,10 @@ export async function getA11yDOM(
 
     try {
       await client.send("Accessibility.enable");
+
+      if (debug || enableVisualMode) {
+        await injectBoundingBoxScriptSession(client);
+      }
 
       // Step 3: Build backend ID maps (tag names and XPaths)
       // This traverses the full DOM including iframe content via DOM.getDocument with pierce: true

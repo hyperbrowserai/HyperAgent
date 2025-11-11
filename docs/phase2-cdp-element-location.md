@@ -134,7 +134,8 @@ Instead of exposing user-facing deep-locator syntax, the agent always works “f
   ```
 - API surface:
   - `clickElement(ctx: CDPActionContext, options?: { button?: "left" | "right" | "middle"; clickCount?: 1 | 2 }): Promise<void>`
-    - Prefer bounding boxes from the injected script; if absent, call `DOM.getContentQuads`.
+    - Default path: resolve `objectId`, scroll into view, call `DOM.getContentQuads` (or `DOM.getBoxModel`) to compute a center per interaction.
+    - When visual/debug mode pre-injected the bounding-box script for this session, reuse that cached data instead of issuing `DOM.*`.
     - Send `Input.dispatchMouseEvent` for move/press/release with precise coordinates.
   - `typeText(ctx, text: string, opts?: { delayMs?: number; commitEnter?: boolean }): Promise<void>`
     - Focus element via `Runtime.callFunctionOn`.
@@ -162,11 +163,10 @@ Each helper should:
 - Release remote objects (`Runtime.releaseObject`) even on failure.
 - Normalize arguments (e.g., percent strings for scroll).
 
-### C3. Bounding Box Helper
-- Reuse the injected bounding box data from Phase 1 (visual mode) as the primary coordinate source to avoid extra CDP calls.
-  - Ensure `getA11yDOM` always captures bounding boxes when `cdpActions` flag is enabled (without necessarily drawing overlays).
-  - `boundingBoxProvider(encodedId)` returns cached rects; only when absent do we fetch via `DOM.getContentQuads`.
-- Share this helper across click/scroll interactions so every action gets deterministic coordinates.
+### C3. Bounding Box Strategy
+- When `cdpActions` and visual/debug mode are enabled, capture bounding boxes during DOM extraction and reuse them for all interactions.
+- In the default (non-visual) mode, compute bounding boxes lazily per action via `DOM.getContentQuads` / `DOM.getBoxModel`; no upfront injection required.
+- Share helpers so click/scroll actions can transparently pick the available data source without duplicating geometry logic.
 
 ### C4. Keyboard Input
 - Implement `pressKey` using `Input.dispatchKeyEvent` for keyDown/keyUp combos, mirroring Playwright’s behavior (respecting modifiers).

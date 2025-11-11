@@ -5,6 +5,7 @@ import {
   HyperbrowserProvider,
   LocalBrowserProvider,
 } from "@/browser-providers";
+import type { Page as PlaywrightPage, BrowserContext } from "playwright-core";
 
 export interface MCPServerConfig {
   id?: string;
@@ -56,6 +57,21 @@ export interface MCPConfig {
 
 export type BrowserProviders = "Local" | "Hyperbrowser";
 
+/**
+ * Placeholder connector configuration for the Phase 4 connector-only flow.
+ * Currently unused but defined so implementers can start wiring connectors
+ * without touching the legacy provider surface.
+ */
+export interface PlaywrightConnectorOptions {
+  page: PlaywrightPage;
+  context?: BrowserContext;
+}
+
+export interface HyperAgentConnectorConfig {
+  driver: "playwright"; // Future drivers (puppeteer, raw CDP) will extend this union.
+  options: PlaywrightConnectorOptions;
+}
+
 export interface ActionConfig {
   /**
    * Configuration for the clickElement action
@@ -74,6 +90,10 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
   customActions?: Array<AgentActionDefinition>;
 
   browserProvider?: T;
+  /**
+   * Connector configuration (future Phase 4). Mutually exclusive with browserProvider.
+   */
+  connectorConfig?: HyperAgentConnectorConfig;
 
   debug?: boolean;
   llm?: HyperAgentLLM | LLMConfig;

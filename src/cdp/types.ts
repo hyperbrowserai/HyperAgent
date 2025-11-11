@@ -1,8 +1,5 @@
 export interface CDPSession {
-  send<T = any, P = Record<string, unknown>>(
-    method: string,
-    params?: P
-  ): Promise<T>;
+  send<T = any>(method: string, params?: Record<string, unknown>): Promise<T>;
   on(event: string, handler: (...payload: any[]) => void): void;
   off?(event: string, handler: (...payload: any[]) => void): void;
   detach(): Promise<void>;

@@ -15,17 +15,21 @@ class PlaywrightSessionAdapter implements CDPSession {
     this.raw = session;
   }
 
-  async send<T = any, P = Record<string, unknown>>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async send<T = any>(
     method: string,
-    params?: P
+    params?: Record<string, unknown>
   ): Promise<T> {
     const result = (this.session.send as PlaywrightSession["send"])(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       method as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       params as any
     );
     return result as Promise<T>;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on(event: string, handler: (...payload: any[]) => void): void {
     this.session.on(
       event as Parameters<PlaywrightSession["on"]>[0],
@@ -33,6 +37,7 @@ class PlaywrightSessionAdapter implements CDPSession {
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   off(event: string, handler: (...payload: any[]) => void): void {
     const off = (this.session as PlaywrightSession & {
       off?: PlaywrightSession["off"];
@@ -45,6 +50,8 @@ class PlaywrightSessionAdapter implements CDPSession {
   async detach(): Promise<void> {
     try {
       await this.session.detach();
+    } catch (error) {
+      console.warn("[CDP][PlaywrightAdapter] Failed to detach session:", error);
     } finally {
       this.release(this);
     }
@@ -93,7 +100,12 @@ class PlaywrightCDPClient implements CDPClient {
 
   async dispose(): Promise<void> {
     const detachPromises = Array.from(this.trackedSessions).map((session) =>
-      session.detach().catch(() => {})
+      session.detach().catch((error) => {
+        console.warn(
+          "[CDP][PlaywrightAdapter] Failed to detach cached session:",
+          error
+        );
+      })
     );
     await Promise.all(detachPromises);
     this.trackedSessions.clear();
@@ -115,14 +127,64 @@ class PlaywrightCDPClient implements CDPClient {
   }
 }
 
-const clientCache = new WeakMap<Page, PlaywrightCDPClient>();
+const clientCache = new Map<Page, PlaywrightCDPClient>();
+const pendingClients = new Map<Page, Promise<CDPClient>>();
 
 export async function getCDPClientForPage(page: Page): Promise<CDPClient> {
-  let client = clientCache.get(page);
-  if (!client) {
-    client = new PlaywrightCDPClient(page);
-    clientCache.set(page, client);
+  // Return already initialized client
+  const existing = clientCache.get(page);
+  if (existing) {
+    return existing;
   }
-  await client.init();
-  return client;
+
+  // Return pending initialization promise to avoid race conditions
+  const pending = pendingClients.get(page);
+  if (pending) {
+    return pending;
+  }
+
+  // Create new client with initialization
+  const initPromise = (async () => {
+    const client = new PlaywrightCDPClient(page);
+    await client.init();
+    clientCache.set(page, client);
+    pendingClients.delete(page);
+    page.once("close", () => {
+      disposeCDPClientForPage(page).catch(() => {});
+    });
+    return client;
+  })();
+
+  pendingClients.set(page, initPromise);
+  return initPromise;
+}
+
+export async function disposeCDPClientForPage(page: Page): Promise<void> {
+  const client = clientCache.get(page);
+  clientCache.delete(page);
+  pendingClients.delete(page);
+  if (!client) return;
+  await client.dispose().catch((error) => {
+    console.warn(
+      "[CDP][PlaywrightAdapter] Failed to dispose client for page:",
+      error
+    );
+  });
+}
+
+export async function disposeAllCDPClients(): Promise<void> {
+  const disposals = Array.from(clientCache.entries()).map(
+    async ([page, client]) => {
+      clientCache.delete(page);
+      pendingClients.delete(page);
+      await client.dispose().catch((error) => {
+        console.warn(
+          "[CDP][PlaywrightAdapter] Failed to dispose cached client:",
+          error
+        );
+      });
+    }
+  );
+  await Promise.all(disposals);
+  pendingClients.clear();
 }

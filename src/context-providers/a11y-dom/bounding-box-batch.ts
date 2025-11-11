@@ -3,7 +3,9 @@
  * Collects bounding boxes for multiple elements in a single browser evaluation
  */
 
-import { Page, Frame } from 'playwright-core';
+import type { Page, Frame } from 'playwright-core';
+import type { CDPSession } from '@/cdp';
+import { ensureScriptInjected } from '@/cdp/script-injector';
 import { EncodedId, DOMRect } from './types';
 import { createEncodedId } from './utils';
 
@@ -218,12 +220,16 @@ window.__hyperagent_collectBoundingBoxesForSameOriginIframe = function(elementsD
  * Inject bounding box collection script into a frame
  * Should be called once per frame before collecting bounding boxes
  */
-export async function injectBoundingBoxScript(pageOrFrame: Page | Frame): Promise<void> {
-  try {
-    await pageOrFrame.evaluate(boundingBoxCollectionScript);
-  } catch (error) {
-    console.warn('[A11y] Failed to inject bounding box collection script:', error);
-  }
+const BOUNDING_BOX_SCRIPT_KEY = "bounding-box-collector";
+
+export async function injectBoundingBoxScriptSession(
+  session: CDPSession
+): Promise<void> {
+  await ensureScriptInjected(
+    session,
+    BOUNDING_BOX_SCRIPT_KEY,
+    boundingBoxCollectionScript
+  );
 }
 
 /**
