@@ -11,3 +11,14 @@ export {
   attachDriverToCDP,
   AttachDriverToCDPOptions,
 } from "./connector-helpers";
+export {
+  resolveElement,
+  ResolvedCDPElement,
+  ElementResolveContext,
+} from "./element-resolver";
+export {
+  dispatchCDPAction,
+  CDPActionContext,
+  CDPActionMethod,
+  CDPActionElement,
+} from "./interactions";

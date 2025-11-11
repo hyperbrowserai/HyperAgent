@@ -84,6 +84,7 @@ export interface ActionConfig {
      */
     timeout?: number;
   };
+  cdpActions?: boolean;
 }
 
 export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {

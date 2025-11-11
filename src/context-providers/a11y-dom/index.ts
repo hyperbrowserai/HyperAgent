@@ -3,6 +3,7 @@
  * Main entry point for extracting and formatting accessibility trees
  */
 
+import type { Protocol } from "devtools-protocol";
 import type { Page, Frame } from "playwright-core";
 import {
   A11yDOMState,
@@ -26,6 +27,141 @@ import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
 import { renderA11yOverlay } from "./visual-overlay";
 import { getCDPClient } from "@/cdp";
 import type { CDPClient, CDPSession } from "@/cdp";
+
+const DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS = 300;
+
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+async function collectExecutionContexts(
+  session: CDPSession,
+  options: {
+    frameIds?: Set<string>;
+    timeoutMs?: number;
+    debug?: boolean;
+  } = {}
+): Promise<Map<string, number>> {
+  const { frameIds, timeoutMs = DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS, debug } =
+    options;
+
+  if (frameIds && frameIds.size === 0) {
+    return new Map();
+  }
+
+  const targetFrames = frameIds ? new Set(frameIds) : undefined;
+  const contexts = new Map<string, number>();
+
+  let finishWait: (() => void) | undefined;
+  let finished = false;
+  const waitPromise = targetFrames
+    ? new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          resolve();
+        }, timeoutMs);
+        finishWait = () => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timeout);
+          resolve();
+        };
+      })
+    : delay(timeoutMs);
+
+  const handler = (
+    event: Protocol.Runtime.ExecutionContextCreatedEvent
+  ): void => {
+    const auxData = event.context
+      .auxData as { frameId?: string; type?: string } | undefined;
+    const frameId = auxData?.frameId;
+    if (!frameId) return;
+    if (targetFrames && !targetFrames.has(frameId)) return;
+    const contextType = auxData?.type;
+    if (contextType && contextType !== "default") return;
+    if (contexts.has(frameId)) return;
+
+    contexts.set(frameId, event.context.id);
+    if (debug) {
+      console.log(
+        `[Runtime] Collected executionContextId ${event.context.id} for frame ${frameId}`
+      );
+    }
+
+    if (targetFrames) {
+      targetFrames.delete(frameId);
+      if (targetFrames.size === 0) {
+        finishWait?.();
+      }
+    }
+  };
+
+  session.on("Runtime.executionContextCreated", handler);
+  try {
+    await session.send("Runtime.enable").catch(() => {});
+    await waitPromise;
+  } finally {
+    session.off?.("Runtime.executionContextCreated", handler);
+  }
+
+  return contexts;
+}
+
+async function annotateFrameSessions(options: {
+  session: CDPSession;
+  frameMap?: Map<number, IframeInfo>;
+  frameIndices?: number[];
+  debug?: boolean;
+}): Promise<void> {
+  const { session, frameMap, frameIndices, debug } = options;
+  if (!frameMap || frameMap.size === 0) {
+    return;
+  }
+
+  const indices =
+    frameIndices ??
+    Array.from(frameMap.entries())
+      .filter(([, info]) => info && !info.playwrightFrame)
+      .map(([idx]) => idx);
+
+  if (indices.length === 0) {
+    return;
+  }
+
+  const frameIds = new Set<string>();
+  for (const index of indices) {
+    const info = frameMap.get(index);
+    if (!info) continue;
+    if (!info.frameId && info.cdpFrameId) {
+      info.frameId = info.cdpFrameId;
+    }
+    const candidate = info.frameId ?? info.cdpFrameId;
+    if (candidate) {
+      frameIds.add(candidate);
+    }
+  }
+
+  let contexts: Map<string, number> | undefined;
+  if (frameIds.size > 0) {
+    contexts = await collectExecutionContexts(session, {
+      frameIds,
+      debug,
+    });
+  }
+
+  for (const index of indices) {
+    const info = frameMap.get(index);
+    if (!info) continue;
+    info.cdpSessionId = session.id ?? info.cdpSessionId;
+    if (!info.frameId && info.cdpFrameId) {
+      info.frameId = info.cdpFrameId;
+    }
+    const frameId = info.frameId ?? info.cdpFrameId;
+    if (frameId && contexts?.has(frameId)) {
+      info.executionContextId = contexts.get(frameId);
+    }
+  }
+}
 
 /**
  * Build frame hierarchy paths for all frames
@@ -161,7 +297,32 @@ async function processOOPIFRecursive(
     await Promise.all([
       oopifSession.send("DOM.enable"),
       oopifSession.send("Accessibility.enable"),
+      oopifSession.send("Page.enable").catch(() => {}),
     ]);
+
+    let oopifFrameId: string | undefined;
+    try {
+      const frameTree = (await oopifSession.send<
+        Protocol.Page.GetFrameTreeResponse
+      >("Page.getFrameTree")) as Protocol.Page.GetFrameTreeResponse;
+      oopifFrameId = frameTree?.frameTree?.frame?.id;
+    } catch (error) {
+      if (debug) {
+        console.warn(
+          `[A11y] Failed to retrieve frame tree for OOPIF frame ${iframeFrameIndex}:`,
+          error
+        );
+      }
+    }
+
+    let oopifExecutionContextId: number | undefined;
+    if (oopifFrameId) {
+      const rootContexts = await collectExecutionContexts(oopifSession, {
+        frameIds: new Set([oopifFrameId]),
+        debug,
+      });
+      oopifExecutionContextId = rootContexts.get(oopifFrameId);
+    }
 
     // Inject bounding box collection script into OOPIF frame (only if needed)
     if (debug || enableVisualMode) {
@@ -211,12 +372,25 @@ async function processOOPIFRecursive(
     }));
     allNodes.push(...taggedNodes);
 
+    if (oopifMaps.frameMap?.size) {
+      await annotateFrameSessions({
+        session: oopifSession,
+        frameMap: oopifMaps.frameMap,
+        frameIndices: Array.from(oopifMaps.frameMap.keys()),
+        debug,
+      });
+    }
+
     // Store in frameMap
     maps.frameMap?.set(iframeFrameIndex, {
       frameIndex: iframeFrameIndex,
       src: frame.url(),
       name: frame.name(),
       xpath: "",
+      frameId: oopifFrameId,
+      cdpFrameId: oopifFrameId,
+      cdpSessionId: oopifSession.id ?? undefined,
+      executionContextId: oopifExecutionContextId,
       parentFrameIndex: parentFrameIdx,
       siblingPosition: 0,
       playwrightFrame: frame,
@@ -546,6 +720,11 @@ export async function getA11yDOM(
       // Step 3: Build backend ID maps (tag names and XPaths)
       // This traverses the full DOM including iframe content via DOM.getDocument with pierce: true
       const maps = await buildBackendIdMaps(client, 0, debug);
+      await annotateFrameSessions({
+        session: client,
+        frameMap: maps.frameMap,
+        debug,
+      });
 
       // Step 4: Fetch accessibility trees for main frame and all iframes
       const allNodes: (AXNode & { _frameIndex: number })[] = [];
@@ -687,6 +866,7 @@ export async function getA11yDOM(
         elements: allElements,
         domState: combinedDomState,
         xpathMap: allXpaths,
+        backendNodeMap: maps.backendNodeMap,
         frameMap: maps.frameMap,
         ...(debug && { frameDebugInfo: processedDebugInfo }),
         ...(enableVisualMode && { boundingBoxMap, visualOverlay }),
@@ -702,6 +882,7 @@ export async function getA11yDOM(
       elements: new Map(),
       domState: "Error: Could not extract accessibility tree",
       xpathMap: {},
+      backendNodeMap: {},
       frameMap: new Map(),
     };
   }

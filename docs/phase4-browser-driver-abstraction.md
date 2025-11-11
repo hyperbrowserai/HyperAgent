@@ -31,6 +31,7 @@ Scope corresponds to integration roadmap Phase 4 (items 4.1–4.2 & future conne
 4. **Legacy provider bridge** (Phase 1/2 codepath) that still creates Playwright sessions internally but immediately wraps them in the adapter.
 5. **CDP integration**: the generic page must expose `getCDPClient()` which returns the Phase 1 CDP client/cache, ensuring common CDP entry points.
 6. **Context orchestration**: a `GenericContext` (akin to Stagehand’s `V3Context`) that owns the transport, Target auto-attach wiring, and `GenericPage` lifecycle so connectors can manage multiple tabs and OOPIFs.
+7. **Session reuse & lifecycle**: the context will be responsible for reusing long-lived CDP sessions per page/frame (instead of creating/detaching temporary sessions every call) so Network/Lifecycle tracking can subscribe once and stay active. This keeps Phase 1 lightweight while ensuring Phase 4 delivers the full optimization.
 
 ---
 

@@ -32,6 +32,7 @@ import { findElementWithInstruction } from "./shared/find-element";
 import { executePlaywrightMethod } from "./shared/execute-playwright-method";
 import { getElementLocator } from "./shared/element-locator";
 import { A11yDOMState } from "../context-providers/a11y-dom/types";
+import type { EncodedId } from "../context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "../types/agent/types";
@@ -39,7 +40,13 @@ import { z } from "zod";
 import { ErrorEmitter } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { ExamineDomResult } from "./examine-dom/types";
-import { disposeAllCDPClients } from "@/cdp";
+import {
+  disposeAllCDPClients,
+  getCDPClient,
+  resolveElement,
+  dispatchCDPAction,
+} from "@/cdp";
+import type { CDPActionMethod } from "@/cdp";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -751,16 +758,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         console.log(`[aiAction] Arguments:`, element.arguments);
       }
 
-      // Get Playwright locator for the element (xpath is already trimmed by getElementLocator)
-      const { locator, xpath } = await getElementLocator(
-        element.elementId,
-        domState.xpathMap,
-        page,
-        domState.frameMap,
-        this.debug
-      );
-
-      // Execute the Playwright method
       if (!element.method) {
         throw new HyperagentError(
           "Element method is missing from LLM response",
@@ -769,10 +766,49 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       const method = element.method;
       const args = element.arguments || [];
-      await executePlaywrightMethod(method, args, locator, {
-        clickTimeout: HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT,
-        debug: this.debug,
-      });
+      const encodedId = element.elementId as EncodedId;
+      let actionXPath: string | undefined;
+
+      const canUseCDP =
+        !!this.actionConfig?.cdpActions && !!domState.backendNodeMap;
+
+      if (canUseCDP) {
+        const cdpClient = await getCDPClient(page);
+        const resolved = await resolveElement(encodedId, {
+          page,
+          cdpClient,
+          backendNodeMap: domState.backendNodeMap,
+          xpathMap: domState.xpathMap,
+          frameMap: domState.frameMap,
+        });
+
+        actionXPath = domState.xpathMap?.[encodedId];
+
+        console.log("DISPATCHING CDP ACTION", method, args);
+        await dispatchCDPAction(method as CDPActionMethod, args, {
+          element: {
+            ...resolved,
+            xpath: actionXPath,
+          },
+          boundingBox: domState.boundingBoxMap?.get(encodedId) ?? undefined,
+          preferScriptBoundingBox: this.debug,
+        });
+      } else {
+        // Get Playwright locator for the element (xpath is already trimmed by getElementLocator)
+        const { locator, xpath } = await getElementLocator(
+          element.elementId,
+          domState.xpathMap,
+          page,
+          domState.frameMap,
+          this.debug
+        );
+        actionXPath = xpath;
+
+        await executePlaywrightMethod(method, args, locator, {
+          clickTimeout: HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT,
+          debug: this.debug,
+        });
+      }
 
       // Wait for DOM to settle after action
       await waitForSettledDOM(page);
@@ -788,7 +824,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           elementId: element.elementId,
           method,
           arguments: args,
-          xpath,
+          xpath: actionXPath,
         },
         llmResponse,
         success: true,

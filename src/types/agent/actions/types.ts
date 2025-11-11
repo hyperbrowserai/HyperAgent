@@ -16,6 +16,12 @@ export interface ActionContext {
   mcpClient?: MCPClient;
   actionConfig?: ActionConfig;
   debug?: boolean;
+  cdp?: {
+    resolveElement: typeof import("@/cdp").resolveElement;
+    dispatchCDPAction: typeof import("@/cdp").dispatchCDPAction;
+    client: import("@/cdp").CDPClient;
+    preferScriptBoundingBox?: boolean;
+  };
 }
 
 export interface ActionOutput {

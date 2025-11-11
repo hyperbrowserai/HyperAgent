@@ -4,6 +4,8 @@ import { examineDom } from "../examine-dom";
 import { executePlaywrightMethod } from "../shared/execute-playwright-method";
 import { getElementLocator } from "../shared/element-locator";
 import { AGENT_ELEMENT_ACTIONS } from "../shared/action-restrictions";
+import type { EncodedId } from "@/context-providers/a11y-dom/types";
+import type { CDPActionMethod, ResolvedCDPElement } from "@/cdp";
 
 const ActElementAction = z
   .object({
@@ -70,6 +72,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
     const element = examineResult.elements[0];
     const method = element.method;
     const args = element.arguments || [];
+    const encodedId = element.elementId as EncodedId;
 
     // Store debug info about selected element
     const debugInfo = ctx.debug
@@ -98,6 +101,46 @@ export const ActElementActionDefinition: AgentActionDefinition = {
         )}`,
         debug: debugInfo,
       };
+    }
+
+    const shouldUseCDP =
+      !!ctx.actionConfig?.cdpActions && !!ctx.cdp && !!ctx.domState.backendNodeMap;
+
+    if (shouldUseCDP) {
+      const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
+      try {
+        const resolved = await ctx.cdp!.resolveElement(encodedId, {
+          page: ctx.page,
+          cdpClient: ctx.cdp!.client,
+          backendNodeMap: ctx.domState.backendNodeMap,
+          xpathMap: ctx.domState.xpathMap,
+          frameMap: ctx.domState.frameMap,
+          resolvedElementsCache,
+        });
+
+        await ctx.cdp!.dispatchCDPAction(method as CDPActionMethod, args, {
+          element: {
+            ...resolved,
+            xpath: ctx.domState.xpathMap?.[encodedId],
+          },
+          boundingBox: ctx.domState.boundingBoxMap?.get(encodedId) ?? undefined,
+          preferScriptBoundingBox: ctx.cdp!.preferScriptBoundingBox,
+        });
+
+        return {
+          success: true,
+          message: `Successfully executed: ${instruction}`,
+          debug: debugInfo,
+        };
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        return {
+          success: false,
+          message: `Failed to execute "${instruction}": ${errorMessage}`,
+          debug: debugInfo,
+        };
+      }
     }
 
     try {

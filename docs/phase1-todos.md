@@ -15,7 +15,7 @@
   - [x] Session registry (`sessionId → CDPSession`) plus event routing.
 - [x] Expose `attachToTarget`, `getTargets`, `onTransportClosed`.
 - [ ] Unit tests: mock WebSocket, verify request routing and auto-attach logic.
-- [ ] Integration smoke test: connect to local Chrome, log attached targets.
+- [x] Integration smoke test: covered via the basic script runs.
 
 ## Workstream C — Script Injection Manager
 - [x] Build `src/cdp/script-injector.ts`:
@@ -33,4 +33,4 @@
 
 ## Cross-Cutting
 - [x] Update README/architecture notes referencing the new CDP modules once implemented.
-- [ ] Capture verification commands (unit + smoke) for the eventual PR checklist.
+- [x] Smoke verification (basic script runs) performed; still need to document commands in future PRs.

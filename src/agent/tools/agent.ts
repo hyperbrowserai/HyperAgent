@@ -8,7 +8,7 @@ import {
   AgentActionDefinition,
 } from "@/types";
 import { getA11yDOM } from "@/context-providers/a11y-dom";
-import { getCDPClient } from "@/cdp";
+import { getCDPClient, resolveElement, dispatchCDPAction } from "@/cdp";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
@@ -113,6 +113,16 @@ const runAction = async (
     variables: Object.values(ctx.variables),
     actionConfig: ctx.actionConfig,
   };
+
+  if (ctx.actionConfig?.cdpActions) {
+    const cdpClient = await getCDPClient(page);
+    actionCtx.cdp = {
+      resolveElement,
+      dispatchCDPAction,
+      client: cdpClient,
+      preferScriptBoundingBox: !!ctx.debugDir,
+    };
+  }
   const actionType = action.type;
   const actionHandler = getActionHandler(ctx.actions, action.type);
   if (!actionHandler) {

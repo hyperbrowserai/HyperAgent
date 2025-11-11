@@ -7,12 +7,14 @@ import type { CDPSession as PlaywrightSession, Frame, Page } from "playwright-co
 
 class PlaywrightSessionAdapter implements CDPSession {
   readonly raw: PlaywrightSession;
+  readonly id: string | null;
 
   constructor(
     private readonly session: PlaywrightSession,
     private readonly release: (adapter: PlaywrightSessionAdapter) => void
   ) {
     this.raw = session;
+    this.id = extractSessionId(session);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,6 +58,14 @@ class PlaywrightSessionAdapter implements CDPSession {
       this.release(this);
     }
   }
+}
+
+function extractSessionId(session: PlaywrightSession): string | null {
+  const candidate = session as PlaywrightSession & {
+    _sessionId?: string;
+    _guid?: string;
+  };
+  return candidate._sessionId ?? candidate._guid ?? null;
 }
 
 class PlaywrightCDPClient implements CDPClient {

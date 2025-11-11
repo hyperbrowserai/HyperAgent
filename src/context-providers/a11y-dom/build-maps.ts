@@ -65,6 +65,7 @@ export async function buildBackendIdMaps(
     const tagNameMap: Record<EncodedId, string> = {};
     const xpathMap: Record<EncodedId, string> = {};
     const accessibleNameMap: Record<EncodedId, string> = {}; // Maps encodedId -> accessible name
+    const backendNodeMap: Record<EncodedId, number> = {};
     const frameMap = new Map<number, IframeInfo>(); // Maps frameIndex -> iframe metadata
 
     // Debug: Count DOM nodes by frame (only if debug enabled)
@@ -121,6 +122,7 @@ export async function buildBackendIdMaps(
       const tagName = String(node.nodeName).toLowerCase();
       tagNameMap[encodedId] = tagName;
       xpathMap[encodedId] = path;
+      backendNodeMap[encodedId] = node.backendNodeId;
 
       // Extract and store accessible name if present
       const accessibleName = extractAccessibleName(node.attributes);
@@ -188,6 +190,7 @@ export async function buildBackendIdMaps(
           src: iframeSrc,
           name: iframeName,
           xpath: path, // XPath to the iframe element itself
+          frameId: cdpFrameId,
           cdpFrameId, // CDP frameId (not unique, kept for debugging)
           parentFrameIndex: currentFrameIndex, // Parent frame
           siblingPosition, // Position among siblings with same parent+URL
@@ -278,13 +281,20 @@ export async function buildBackendIdMaps(
       }
     }
 
-    return { tagNameMap, xpathMap, accessibleNameMap, frameMap };
+    return {
+      tagNameMap,
+      xpathMap,
+      accessibleNameMap,
+      backendNodeMap,
+      frameMap,
+    };
   } catch (error) {
     console.error("Error building backend ID maps:", error);
     return {
       tagNameMap: {},
       xpathMap: {},
       accessibleNameMap: {},
+      backendNodeMap: {},
       frameMap: new Map(),
     };
   }

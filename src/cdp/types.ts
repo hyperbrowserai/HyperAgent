@@ -4,6 +4,7 @@ export interface CDPSession {
   off?(event: string, handler: (...payload: any[]) => void): void;
   detach(): Promise<void>;
   raw?: unknown;
+  id?: string | null;
 }
 
 export interface CDPClient {
