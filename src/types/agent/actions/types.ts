@@ -5,6 +5,7 @@ import { z } from "zod";
 import { MCPClient } from "../../../agent/mcp/client";
 import { HyperVariable } from "../types";
 import { ActionConfig } from "@/types/config";
+import type { FrameContextManager } from "@/cdp";
 
 export interface ActionContext {
   page: Page;
@@ -21,6 +22,7 @@ export interface ActionContext {
     dispatchCDPAction: typeof import("@/cdp").dispatchCDPAction;
     client: import("@/cdp").CDPClient;
     preferScriptBoundingBox?: boolean;
+    frameContextManager?: FrameContextManager;
   };
 }
 

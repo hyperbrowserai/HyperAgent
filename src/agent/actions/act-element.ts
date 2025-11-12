@@ -116,6 +116,8 @@ export const ActElementActionDefinition: AgentActionDefinition = {
           xpathMap: ctx.domState.xpathMap,
           frameMap: ctx.domState.frameMap,
           resolvedElementsCache,
+          frameContextManager: ctx.cdp!.frameContextManager,
+          debug: ctx.debug,
         });
 
         await ctx.cdp!.dispatchCDPAction(method as CDPActionMethod, args, {

@@ -22,3 +22,8 @@ export {
   CDPActionMethod,
   CDPActionElement,
 } from "./interactions";
+export { FrameGraph, FrameRecord } from "./frame-graph";
+export {
+  FrameContextManager,
+  getOrCreateFrameContextManager,
+} from "./frame-context-manager";

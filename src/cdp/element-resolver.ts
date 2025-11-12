@@ -2,6 +2,8 @@ import type { Protocol } from "devtools-protocol";
 import type { Page } from "playwright-core";
 
 import type { CDPClient, CDPSession } from "@/cdp/types";
+import type { FrameContextManager } from "@/cdp/frame-context-manager";
+import { getOrCreateFrameContextManager } from "@/cdp/frame-context-manager";
 import type {
   EncodedId,
   IframeInfo,
@@ -14,6 +16,8 @@ export interface ElementResolveContext {
   xpathMap: Record<EncodedId, string>;
   frameMap?: Map<number, IframeInfo>;
   resolvedElementsCache?: Map<EncodedId, ResolvedCDPElement>;
+  frameContextManager?: FrameContextManager;
+  debug?: boolean;
 }
 
 export interface ResolvedCDPElement {
@@ -52,11 +56,10 @@ export async function resolveElement(
     return cachedElement;
   }
 
-  const { session, frameId } = await resolveFrameSession(
-    ctx,
+  const { session, frameId } = await resolveFrameSession(ctx, {
     frameIndex,
-    frameInfo
-  );
+    frameInfo,
+  });
 
   let backendNodeId = ctx.backendNodeMap[encodedId];
 
@@ -96,6 +99,11 @@ export async function resolveElement(
     objectId: resolveResponse.object?.objectId,
   };
 
+  logDebug(
+    ctx,
+    `[ElementResolver] Resolved ${encodedId} via backendNodeId ${backendNodeId} (frameId=${frameId}, session=${session.id ?? "unknown"})`
+  );
+
   if (!ctx.resolvedElementsCache) {
     ctx.resolvedElementsCache = new Map();
   }
@@ -109,20 +117,39 @@ function parseFrameIndex(encodedId: EncodedId): number {
   return Number.parseInt(frameIndexStr || "0", 10) || 0;
 }
 
+interface FrameSessionRequest {
+  frameIndex: number;
+  frameInfo?: IframeInfo;
+}
+
 async function resolveFrameSession(
   ctx: ElementResolveContext,
-  frameIndex: number,
-  frameInfo?: IframeInfo
+  { frameIndex, frameInfo }: FrameSessionRequest
 ): Promise<{ session: CDPSession; frameId: string }> {
   const cache = getSessionCache(ctx.cdpClient);
+  const frameManager =
+    ctx.frameContextManager ?? getOrCreateFrameContextManager(ctx.cdpClient);
+  const frameId = resolveFrameId(frameManager, frameInfo, frameIndex);
 
-  // Return cached session
   if (cache.has(frameIndex)) {
     const cached = cache.get(frameIndex)!;
-    return { session: cached, frameId: getFrameId(frameInfo, frameIndex) };
+    logDebug(
+      ctx,
+      `[ElementResolver] Using cached session for frameIndex=${frameIndex} (frameId=${frameId})`
+    );
+    return { session: cached, frameId };
   }
 
-  // Check for pending session creation to avoid race conditions
+  const managedSession = frameManager?.getFrameSession(frameId);
+  if (managedSession) {
+    cache.set(frameIndex, managedSession);
+    logDebug(
+      ctx,
+      `[ElementResolver] Reusing manager session ${managedSession.id ?? "root"} for frameIndex=${frameIndex} (frameId=${frameId})`
+    );
+    return { session: managedSession, frameId };
+  }
+
   let pendingMap = pendingFrameSessions.get(ctx.cdpClient);
   if (!pendingMap) {
     pendingMap = new Map();
@@ -131,26 +158,37 @@ async function resolveFrameSession(
 
   const pending = pendingMap.get(frameIndex);
   if (pending) {
-    return pending; // Return existing promise - concurrent calls wait for same session
+    return pending;
   }
 
-  // Create new session (store promise immediately to prevent races)
   const sessionPromise = (async () => {
-    const rootSession = await ensureRootSession(ctx);
+    try {
+      const rootSession = await ensureRootSession(ctx);
 
-    if (frameIndex === 0 || !frameInfo?.playwrightFrame) {
-      cache.set(frameIndex, rootSession);
+      if (frameIndex === 0 || !frameInfo?.playwrightFrame) {
+        cache.set(frameIndex, rootSession);
+        frameManager?.setFrameSession(frameId, rootSession);
+        logDebug(
+          ctx,
+          `[ElementResolver] Using root session for frameIndex=${frameIndex} (frameId=${frameId})`
+        );
+        return { session: rootSession, frameId };
+      }
+
+      const session = await ctx.cdpClient.createSession({
+        type: "frame",
+        frame: frameInfo.playwrightFrame,
+      });
+      cache.set(frameIndex, session);
+      frameManager?.setFrameSession(frameId, session);
+      logDebug(
+        ctx,
+        `[ElementResolver] Attached new session ${session.id ?? "unknown"} for frameIndex=${frameIndex} (frameId=${frameId})`
+      );
+      return { session, frameId };
+    } finally {
       pendingMap!.delete(frameIndex);
-      return { session: rootSession, frameId: getFrameId(frameInfo, frameIndex) };
     }
-
-    const session = await ctx.cdpClient.createSession({
-      type: "frame",
-      frame: frameInfo.playwrightFrame,
-    });
-    cache.set(frameIndex, session);
-    pendingMap!.delete(frameIndex);
-    return { session, frameId: getFrameId(frameInfo, frameIndex) };
   })();
 
   pendingMap.set(frameIndex, sessionPromise);
@@ -187,7 +225,19 @@ function getSessionCache(client: CDPClient): Map<number, CDPSession> {
   return cache;
 }
 
-function getFrameId(
+function resolveFrameId(
+  manager: FrameContextManager | undefined,
+  frameInfo: IframeInfo | undefined,
+  frameIndex: number
+): string {
+  const managerFrameId = manager?.getFrameIdByIndex(frameIndex);
+  if (managerFrameId) {
+    return managerFrameId;
+  }
+  return getFallbackFrameId(frameInfo, frameIndex);
+}
+
+function getFallbackFrameId(
   frameInfo: IframeInfo | undefined,
   frameIndex: number
 ): string {
@@ -198,6 +248,12 @@ function getFrameId(
     return frameInfo.cdpFrameId;
   }
   return frameIndex === 0 ? "root" : `frame-${frameIndex}`;
+}
+
+function logDebug(ctx: ElementResolveContext, message: string): void {
+  if (ctx.debug) {
+    console.log(message);
+  }
 }
 
 async function recoverBackendNodeId(
@@ -211,6 +267,11 @@ async function recoverBackendNodeId(
   if (!xpath) {
     throw new Error(`XPath not found for encodedId ${encodedId}`);
   }
+
+  logDebug(
+    ctx,
+    `[ElementResolver] Recovering backendNodeId for ${encodedId} via XPath (frameIndex=${frameIndex})`
+  );
 
   // Validate execution context for iframe elements
   if (frameIndex !== 0 && frameInfo && !frameInfo.executionContextId) {
@@ -255,6 +316,10 @@ async function recoverBackendNodeId(
     }
 
     ctx.backendNodeMap[encodedId] = backendNodeId;
+    logDebug(
+      ctx,
+      `[ElementResolver] XPath recovery succeeded for ${encodedId} (backendNodeId=${backendNodeId})`
+    );
     return backendNodeId;
   } finally {
     await session

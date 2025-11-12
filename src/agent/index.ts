@@ -45,6 +45,7 @@ import {
   getCDPClient,
   resolveElement,
   dispatchCDPAction,
+  getOrCreateFrameContextManager,
 } from "@/cdp";
 import type { CDPActionMethod, ResolvedCDPElement } from "@/cdp";
 
@@ -774,6 +775,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       if (canUseCDP) {
         const cdpClient = await getCDPClient(page);
+        const frameContextManager = getOrCreateFrameContextManager(cdpClient);
         const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
         const resolved = await resolveElement(encodedId, {
           page,
@@ -782,6 +784,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           xpathMap: domState.xpathMap,
           frameMap: domState.frameMap,
           resolvedElementsCache,
+          frameContextManager,
+          debug: this.debug,
         });
 
         actionXPath = domState.xpathMap?.[encodedId];

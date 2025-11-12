@@ -25,7 +25,10 @@ import {
 import { injectBoundingBoxScriptSession } from "./bounding-box-batch";
 import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
 import { renderA11yOverlay } from "./visual-overlay";
-import { getCDPClient } from "@/cdp";
+import {
+  getCDPClient,
+  getOrCreateFrameContextManager,
+} from "@/cdp";
 import type { CDPClient, CDPSession } from "@/cdp";
 
 const DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS = 500;
@@ -169,6 +172,130 @@ async function annotateFrameSessions(options: {
       info.executionContextId = contexts.get(frameId);
     }
   }
+}
+
+interface SyncFrameContextOptions {
+  manager: ReturnType<typeof getOrCreateFrameContextManager>;
+  frameMap?: Map<number, IframeInfo>;
+  rootSession: CDPSession;
+  cdpClient: CDPClient;
+  debug?: boolean;
+}
+
+async function syncFrameContextManager({
+  manager,
+  frameMap,
+  rootSession,
+  cdpClient,
+  debug,
+}: SyncFrameContextOptions): Promise<void> {
+  const { frameTree } = await rootSession.send<
+    Protocol.Page.GetFrameTreeResponse
+  >("Page.getFrameTree");
+  const rootFrame = frameTree?.frame;
+
+  if (!rootFrame) {
+    if (debug) {
+      console.warn("[FrameContext] No root frame returned from Page.getFrameTree");
+    }
+    return;
+  }
+
+  const frameIdByIndex = new Map<number, string>();
+  frameIdByIndex.set(0, rootFrame.id);
+
+  manager.upsertFrame({
+    frameId: rootFrame.id,
+    parentFrameId: rootFrame.parentId ?? null,
+    loaderId: rootFrame.loaderId,
+    name: rootFrame.name,
+    url: rootFrame.url,
+  });
+  manager.assignFrameIndex(rootFrame.id, 0);
+  manager.setFrameSession(rootFrame.id, rootSession);
+
+  if (debug) {
+    console.log(
+      `[FrameContext] Registered root frame ${rootFrame.id} (url=${rootFrame.url})`
+    );
+  }
+
+  if (!frameMap || frameMap.size === 0) {
+    return;
+  }
+
+  const entries = Array.from(frameMap.entries()).sort(
+    ([a], [b]) => Number(a) - Number(b)
+  );
+
+  await Promise.all(
+    entries.map(async ([frameIndex, info]) => {
+      const frameId = info.frameId ?? info.cdpFrameId;
+      if (!frameId) {
+        if (debug) {
+          console.warn(
+            `[FrameContext] Frame ${frameIndex} missing frameId/cdpFrameId (likely same-origin iframe without separate target)`
+          );
+        }
+        return;
+      }
+
+      frameIdByIndex.set(frameIndex, frameId);
+
+      const parentIndex = info.parentFrameIndex;
+      const parentFrameId =
+        parentIndex === null
+          ? null
+          : frameIdByIndex.get(parentIndex ?? 0) ?? frameIdByIndex.get(0)!;
+
+      manager.upsertFrame({
+        frameId,
+        parentFrameId,
+        url: info.src,
+        name: info.name,
+        backendNodeId: info.iframeBackendNodeId,
+        executionContextId: info.executionContextId,
+      });
+      manager.assignFrameIndex(frameId, frameIndex);
+
+      let session = manager.getFrameSession(frameId);
+      if (!session) {
+        if (info.playwrightFrame) {
+          try {
+            session = await cdpClient.createSession({
+              type: "frame",
+              frame: info.playwrightFrame,
+            });
+            if (debug) {
+              console.log(
+                `[FrameContext] Attached CDP session ${session.id ?? "unknown"} for frame ${frameIndex} (${frameId})`
+              );
+            }
+          } catch (error) {
+            console.warn(
+              `[FrameContext] Failed to create session for frame ${frameIndex} (${frameId}):`,
+              error
+            );
+          }
+        }
+
+        if (!session) {
+          session = rootSession;
+          if (debug) {
+            console.log(
+              `[FrameContext] Reusing root session for frame ${frameIndex} (${frameId})`
+            );
+          }
+        }
+
+        manager.setFrameSession(frameId, session);
+      } else if (debug) {
+        console.log(
+          `[FrameContext] Frame ${frameIndex} (${frameId}) already has session ${session.id ?? "unknown"}`
+        );
+      }
+    })
+  );
 }
 
 /**
@@ -716,6 +843,7 @@ export async function getA11yDOM(
 
     // Step 2: Create CDP session for main frame
     const cdpClient = await getCDPClient(page);
+    const frameContextManager = getOrCreateFrameContextManager(cdpClient);
     const client = await cdpClient.createSession({ type: "page", page });
 
     try {
@@ -759,6 +887,13 @@ export async function getA11yDOM(
 
       // 4c. Build frame hierarchy paths now that all frames are discovered
       buildFramePaths(maps.frameMap || new Map(), debug);
+      await syncFrameContextManager({
+        manager: frameContextManager,
+        frameMap: maps.frameMap,
+        cdpClient,
+        rootSession: cdpClient.rootSession,
+        debug,
+      });
 
       // Step 4: Detect scrollable elements
       const scrollableIds = await findScrollableElementIds(page, client);
