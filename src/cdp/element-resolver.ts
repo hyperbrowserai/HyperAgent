@@ -207,21 +207,12 @@ async function recoverBackendNodeId(
   }
 
   try {
-    const { nodeId } = await session.send<Protocol.DOM.RequestNodeResponse>(
-      "DOM.requestNode",
-      { objectId }
-    );
-    if (typeof nodeId !== "number") {
-      throw new Error(
-        `DOM.requestNode did not return a nodeId for ${encodedId} (frame ${frameIndex})`
+    const description =
+      await session.send<Protocol.DOM.DescribeNodeResponse>(
+        "DOM.describeNode",
+        { objectId }
       );
-    }
-
-    const describeResponse =
-      await session.send<Protocol.DOM.DescribeNodeResponse>("DOM.describeNode", {
-        nodeId,
-      });
-    const backendNodeId = describeResponse.node?.backendNodeId;
+    const backendNodeId = description.node?.backendNodeId;
     if (typeof backendNodeId !== "number") {
       throw new Error(
         `DOM.describeNode did not return backendNodeId for ${encodedId} (frame ${frameIndex})`

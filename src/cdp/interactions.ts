@@ -9,6 +9,11 @@ type MouseButton = "left" | "right" | "middle";
 
 type ScrollDirection = "nextChunk" | "prevChunk";
 
+type FillElementResult =
+  | { status: "done" }
+  | { status: "needsinput"; value: string }
+  | { status: "error"; reason?: string };
+
 export type CDPActionMethod =
   | "click"
   | "doubleClick"
@@ -65,15 +70,181 @@ interface FillOptions {
 
 interface ScrollToOptions {
   target?: string | number;
+  behavior?: "smooth" | "instant";
 }
 
 interface SelectOptionOptions {
   value: string;
 }
 
+type SelectOptionResult =
+  | { status: "selected"; value: string }
+  | { status: "notfound" };
+
 const domEnabledSessions = new WeakSet<CDPSession>();
 const runtimeEnabledSessions = new WeakSet<CDPSession>();
 const inputEnabledSessions = new WeakSet<CDPSession>();
+
+const FILL_ELEMENT_SCRIPT = `
+function(rawValue) {
+  try {
+    const element = this;
+    if (!element) {
+      return { status: "error", reason: "Element missing" };
+    }
+    const doc = element.ownerDocument || document;
+    const win = doc.defaultView || window;
+    const value = rawValue == null ? "" : String(rawValue);
+
+    const dispatchEvents = () => {
+      try {
+        element.dispatchEvent(new win.Event("input", { bubbles: true }));
+        element.dispatchEvent(new win.Event("change", { bubbles: true }));
+      } catch {}
+    };
+
+    const setUsingDescriptor = (target, prop, val) => {
+      const proto = target.constructor?.prototype;
+      const descriptor =
+        (proto && Object.getOwnPropertyDescriptor(proto, prop)) ||
+        Object.getOwnPropertyDescriptor(win.HTMLElement.prototype, prop) ||
+        Object.getOwnPropertyDescriptor(win.HTMLInputElement?.prototype || {}, prop) ||
+        Object.getOwnPropertyDescriptor(win.HTMLTextAreaElement?.prototype || {}, prop);
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(target, val);
+        return true;
+      }
+      try {
+        target[prop] = val;
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (element instanceof win.HTMLInputElement) {
+      const type = (element.type || "").toLowerCase();
+      const directSetTypes = [
+        "color",
+        "date",
+        "datetime-local",
+        "month",
+        "range",
+        "time",
+        "week",
+        "checkbox",
+        "radio",
+        "file",
+        "hidden",
+      ];
+      if (directSetTypes.includes(type)) {
+        if (type === "checkbox" || type === "radio") {
+          const normalized = value.trim().toLowerCase();
+          element.checked =
+            normalized === "true" ||
+            normalized === "1" ||
+            normalized === "on" ||
+            normalized === "checked";
+        } else {
+          setUsingDescriptor(element, "value", value);
+        }
+        dispatchEvents();
+        return { status: "done" };
+      }
+
+      const typeInputTypes = [
+        "",
+        "email",
+        "number",
+        "password",
+        "search",
+        "tel",
+        "text",
+        "url",
+      ];
+      if (typeInputTypes.includes(type)) {
+        return { status: "needsinput", value };
+      }
+
+      setUsingDescriptor(element, "value", value);
+      dispatchEvents();
+      return { status: "done" };
+    }
+
+    if (element instanceof win.HTMLTextAreaElement) {
+      return { status: "needsinput", value };
+    }
+
+    if (element.isContentEditable) {
+      element.textContent = value;
+      dispatchEvents();
+      return { status: "done" };
+    }
+
+    if (setUsingDescriptor(element, "value", value)) {
+      dispatchEvents();
+      return { status: "done" };
+    }
+
+    return { status: "needsinput", value };
+  } catch (error) {
+    return { status: "error", reason: error?.message || "Failed to fill element" };
+  }
+}
+`;
+
+const PREPARE_FOR_TYPING_SCRIPT = `
+function() {
+  try {
+    const element = this;
+    if (!element || !element.isConnected) return false;
+    const doc = element.ownerDocument || document;
+    const win = doc.defaultView || window;
+    try {
+      if (typeof element.focus === "function") {
+        element.focus();
+      }
+    } catch {}
+
+    if (
+      element instanceof win.HTMLInputElement ||
+      element instanceof win.HTMLTextAreaElement
+    ) {
+      try {
+        if (typeof element.select === "function") {
+          element.select();
+          return true;
+        }
+      } catch {}
+      try {
+        const length = (element.value || "").length;
+        if (typeof element.setSelectionRange === "function") {
+          element.setSelectionRange(0, length);
+          return true;
+        }
+      } catch {}
+      return true;
+    }
+
+    if (element.isContentEditable) {
+      const selection = doc.getSelection?.();
+      const range = doc.createRange?.();
+      if (selection && range) {
+        try {
+          range.selectNodeContents(element);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        } catch {}
+      }
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+`;
 
 function ensureActionContext(ctx: CDPActionContext): void {
   if (!ctx || !ctx.element) {
@@ -122,7 +293,11 @@ export async function dispatchCDPAction(
       });
       return;
     case "scrollTo":
-      await scrollToPosition(ctx, (args[0] as ScrollToOptions) ?? {});
+      if (!args[0]) {
+        await scrollElementIntoView(ctx);
+      } else {
+        await scrollToPosition(ctx, args[0] as ScrollToOptions);
+      }
       return;
     case "nextChunk":
       await scrollByChunk(ctx, "nextChunk");
@@ -233,21 +408,61 @@ async function fillElement(
   const objectId = await ensureObjectHandle(element);
 
   await ensureRuntimeEnabled(session);
-  await session.send("Runtime.callFunctionOn", {
-    objectId,
-    functionDeclaration: `
-      function(nextValue) {
-        if (this && "value" in this) {
-          this.value = nextValue ?? "";
-          if (typeof this.dispatchEvent === "function") {
-            this.dispatchEvent(new Event("input", { bubbles: true }));
-            this.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        }
-      }
-    `,
-    arguments: [{ value }],
-  });
+  const fillResponse = await session.send<Protocol.Runtime.CallFunctionOnResponse>(
+    "Runtime.callFunctionOn",
+    {
+      objectId,
+      functionDeclaration: FILL_ELEMENT_SCRIPT,
+      arguments: [{ value }],
+      returnByValue: true,
+    }
+  );
+
+  const fillResult = (fillResponse.result?.value ??
+    {}) as FillElementResult;
+
+  if (fillResult.status === "error") {
+    throw new Error(
+      `Failed to fill element: ${fillResult.reason ?? "unknown error"}`
+    );
+  }
+
+  if (fillResult.status === "needsinput") {
+    const textToType =
+      fillResult.value ?? value ?? "";
+
+    await session
+      .send("Runtime.callFunctionOn", {
+        objectId,
+        functionDeclaration: PREPARE_FOR_TYPING_SCRIPT,
+        returnByValue: true,
+      })
+      .catch(() => {});
+
+    await focusElement(ctx);
+    await ensureInputEnabled(session);
+
+    if (textToType.length === 0) {
+      await session.send("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: "Backspace",
+        code: "Backspace",
+        windowsVirtualKeyCode: 8,
+        nativeVirtualKeyCode: 8,
+      } as Record<string, unknown>);
+      await session.send("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: "Backspace",
+        code: "Backspace",
+        windowsVirtualKeyCode: 8,
+        nativeVirtualKeyCode: 8,
+      } as Record<string, unknown>);
+    } else {
+      await session.send("Input.insertText", {
+        text: textToType,
+      });
+    }
+  }
 
   if (options?.commitChange) {
     await session.send("Runtime.callFunctionOn", {
@@ -274,18 +489,22 @@ async function pressKey(
   await focusElement(ctx);
   await ensureInputEnabled(session);
 
-  const keyDef = normalizeKeyDescriptor(key);
+  const keyDef = getKeyEventData(key);
   await session.send("Input.dispatchKeyEvent", {
     type: "keyDown",
     key: keyDef.key,
     text: keyDef.text,
     code: keyDef.code,
+    windowsVirtualKeyCode: keyDef.windowsVirtualKeyCode,
+    nativeVirtualKeyCode: keyDef.nativeVirtualKeyCode,
   });
   await session.send("Input.dispatchKeyEvent", {
     type: "keyUp",
     key: keyDef.key,
     text: keyDef.text,
     code: keyDef.code,
+    windowsVirtualKeyCode: keyDef.windowsVirtualKeyCode,
+    nativeVirtualKeyCode: keyDef.nativeVirtualKeyCode,
   });
 
   if (options?.delayMs) {
@@ -329,32 +548,75 @@ async function selectOption(
   const value = options.value;
 
   await ensureRuntimeEnabled(session);
-  await session.send("Runtime.callFunctionOn", {
-    objectId,
-    functionDeclaration: `
-      function(targetValue) {
-        if (!this || this.tagName?.toLowerCase() !== "select") {
-          return;
-        }
-        const options = Array.from(this.options || []);
-        const normalized = targetValue?.toString().trim().toLowerCase();
-        const next = options.find(opt => {
-          if (!normalized) return false;
-          const byValue = (opt.value || "").toLowerCase() === normalized;
-          const byText = (opt.innerText || "").toLowerCase() === normalized;
-          return byValue || byText;
-        }) ?? options.find(Boolean);
-        if (next) {
-          this.value = next.value;
-          if (typeof this.dispatchEvent === "function") {
+  const result = await session.send<Protocol.Runtime.CallFunctionOnResponse>(
+    "Runtime.callFunctionOn",
+    {
+      objectId,
+      functionDeclaration: `
+        function(rawValue) {
+          if (!this || this.tagName?.toLowerCase() !== "select") {
+            return { status: "notfound" };
+          }
+          const target = rawValue == null ? "" : String(rawValue).trim();
+          const normalized = target.toLowerCase();
+          const options = Array.from(this.options || []);
+          if (!options.length) {
+            return { status: "notfound" };
+          }
+
+          let byIndex = null;
+          if (target && /^\\d+$/.test(target)) {
+            const idx = Number(target);
+            if (!Number.isNaN(idx) && idx >= 0 && idx < options.length) {
+              byIndex = options[idx];
+            }
+          }
+
+          const match =
+            byIndex ||
+            options.find((opt) => {
+              if (!normalized) return false;
+              const compare = (val) =>
+                (val || "").toString().trim().toLowerCase();
+              return (
+                compare(opt.value) === normalized ||
+                compare(opt.label) === normalized ||
+                compare(opt.textContent) === normalized ||
+                compare(opt.innerText) === normalized
+              );
+            }) ||
+            options.find(Boolean);
+
+          if (!match) {
+            return { status: "notfound" };
+          }
+
+          try {
+            this.value = match.value;
+          } catch {
+            return { status: "notfound" };
+          }
+
+          try {
             this.dispatchEvent(new Event("input", { bubbles: true }));
             this.dispatchEvent(new Event("change", { bubbles: true }));
-          }
+          } catch {}
+
+          return { status: "selected", value: match.value };
         }
-      }
-    `,
-    arguments: [{ value }],
-  });
+      `,
+      arguments: [{ value }],
+      returnByValue: true,
+    }
+  );
+
+  const selection = (result.result?.value ??
+    {}) as SelectOptionResult;
+  if (selection.status !== "selected") {
+    throw new Error(
+      `Failed to select "${value}" (no matching option)`
+    );
+  }
 }
 
 async function scrollToPosition(
@@ -370,7 +632,7 @@ async function scrollToPosition(
   await session.send("Runtime.callFunctionOn", {
     objectId,
     functionDeclaration: `
-      function(percent) {
+      function(percent, behavior) {
         const pct = Math.max(0, Math.min(100, Number(percent)));
         const target = this;
         const isRoot = target === document.documentElement || target === document.body;
@@ -380,11 +642,40 @@ async function scrollToPosition(
         if (!scrollContainer) return;
         const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight;
         const nextTop = maxScroll * (pct / 100);
-        scrollContainer.scrollTo({ top: nextTop, behavior: "smooth" });
+        scrollContainer.scrollTo({
+          top: nextTop,
+          behavior: behavior === "instant" ? "auto" : "smooth",
+        });
       }
     `,
-    arguments: [{ value: percent }],
+    arguments: [{ value: percent }, { value: options.behavior }],
   });
+  await waitForScrollSettlement(session, element.backendNodeId);
+}
+
+async function scrollElementIntoView(ctx: CDPActionContext): Promise<void> {
+  const { element } = ctx;
+  const session = element.session;
+
+  try {
+    await session.send("DOM.scrollIntoViewIfNeeded", {
+      backendNodeId: element.backendNodeId,
+    });
+  } catch {
+    const objectId = await ensureObjectHandle(element);
+    await ensureRuntimeEnabled(session);
+    await session.send("Runtime.callFunctionOn", {
+      objectId,
+      functionDeclaration: `
+        function() {
+          if (typeof this.scrollIntoView === "function") {
+            this.scrollIntoView({ behavior: "auto", block: "center" });
+          }
+        }
+      `,
+    });
+  }
+  await waitForScrollSettlement(session, element.backendNodeId);
 }
 
 async function scrollByChunk(
@@ -415,6 +706,7 @@ async function scrollByChunk(
     `,
     arguments: [{ value: delta * sign }],
   });
+  await waitForScrollSettlement(session, element.backendNodeId);
 }
 
 async function focusElement(ctx: CDPActionContext): Promise<void> {
@@ -536,6 +828,47 @@ async function ensureObjectHandle(
   return objectId;
 }
 
+async function waitForScrollSettlement(
+  session: CDPSession,
+  backendNodeId: number
+): Promise<void> {
+  await ensureDomEnabled(session);
+  try {
+    await session.send("DOM.enable");
+  } catch {
+    /* ignore */
+  }
+
+  const start = Date.now();
+  const timeoutMs = 400;
+  let lastPosition: { x: number; y: number } | null = null;
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const { model } = await session.send<Protocol.DOM.GetBoxModelResponse>(
+        "DOM.getBoxModel",
+        { backendNodeId }
+      );
+      if (!model) break;
+      const newPosition = {
+        x: model.content[0],
+        y: model.content[1],
+      };
+      if (
+        lastPosition &&
+        Math.abs(newPosition.x - lastPosition.x) < 1 &&
+        Math.abs(newPosition.y - lastPosition.y) < 1
+      ) {
+        break;
+      }
+      lastPosition = newPosition;
+      await delay(50);
+    } catch {
+      break;
+    }
+  }
+}
+
 function normalizeScrollPercent(target: string | number): number {
   if (typeof target === "number") {
     return clamp(target, 0, 100);
@@ -549,28 +882,73 @@ function normalizeScrollPercent(target: string | number): number {
   return clamp(Number.isNaN(num) ? 50 : num, 0, 100);
 }
 
-function normalizeKeyDescriptor(key: string): {
+interface KeyEventData {
   key: string;
   code: string;
   text?: string;
-} {
-  const trimmed = key?.toString() ?? "";
-  switch (trimmed.toLowerCase()) {
-    case "enter":
-      return { key: "Enter", code: "Enter" };
-    case "tab":
-      return { key: "Tab", code: "Tab" };
-    case "escape":
-    case "esc":
-      return { key: "Escape", code: "Escape" };
-    case "space":
-      return { key: " ", code: "Space", text: " " };
-    default:
-      if (trimmed.length === 1) {
-        return { key: trimmed, code: `Key${trimmed.toUpperCase()}`, text: trimmed };
-      }
-      return { key: trimmed, code: trimmed };
+  windowsVirtualKeyCode: number;
+  nativeVirtualKeyCode: number;
+}
+
+function getKeyEventData(inputKey: string): KeyEventData {
+  const key = (inputKey ?? "").toString();
+  const lower = key.toLowerCase();
+  const mapping: Record<
+    string,
+    { key: string; code: string; keyCode: number; text?: string }
+  > = {
+    enter: { key: "Enter", code: "Enter", keyCode: 13 },
+    tab: { key: "Tab", code: "Tab", keyCode: 9 },
+    escape: { key: "Escape", code: "Escape", keyCode: 27 },
+    esc: { key: "Escape", code: "Escape", keyCode: 27 },
+    space: { key: " ", code: "Space", keyCode: 32, text: " " },
+    backspace: { key: "Backspace", code: "Backspace", keyCode: 8 },
+    delete: { key: "Delete", code: "Delete", keyCode: 46 },
+    arrowup: { key: "ArrowUp", code: "ArrowUp", keyCode: 38 },
+    arrowdown: { key: "ArrowDown", code: "ArrowDown", keyCode: 40 },
+    arrowleft: { key: "ArrowLeft", code: "ArrowLeft", keyCode: 37 },
+    arrowright: { key: "ArrowRight", code: "ArrowRight", keyCode: 39 },
+  };
+
+  if (mapping[lower]) {
+    const entry = mapping[lower];
+    return {
+      key: entry.key,
+      code: entry.code,
+      text: entry.text,
+      windowsVirtualKeyCode: entry.keyCode,
+      nativeVirtualKeyCode: entry.keyCode,
+    };
   }
+
+  if (key.length === 1) {
+    const char = key;
+    const upper = char.toUpperCase();
+    const isLetter = upper >= "A" && upper <= "Z";
+    const isDigit = char >= "0" && char <= "9";
+    const code = isLetter
+      ? `Key${upper}`
+      : isDigit
+        ? `Digit${char}`
+        : `Key${upper}`;
+    const keyCode = isDigit
+      ? char.charCodeAt(0)
+      : upper.charCodeAt(0);
+    return {
+      key: char,
+      code,
+      text: char,
+      windowsVirtualKeyCode: keyCode,
+      nativeVirtualKeyCode: keyCode,
+    };
+  }
+
+  return {
+    key,
+    code: key,
+    windowsVirtualKeyCode: 0,
+    nativeVirtualKeyCode: 0,
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {
