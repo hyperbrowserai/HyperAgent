@@ -46,7 +46,7 @@ import {
   resolveElement,
   dispatchCDPAction,
 } from "@/cdp";
-import type { CDPActionMethod } from "@/cdp";
+import type { CDPActionMethod, ResolvedCDPElement } from "@/cdp";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -774,12 +774,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       if (canUseCDP) {
         const cdpClient = await getCDPClient(page);
+        const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
         const resolved = await resolveElement(encodedId, {
           page,
           cdpClient,
           backendNodeMap: domState.backendNodeMap,
           xpathMap: domState.xpathMap,
           frameMap: domState.frameMap,
+          resolvedElementsCache,
         });
 
         actionXPath = domState.xpathMap?.[encodedId];

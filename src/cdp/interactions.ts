@@ -735,19 +735,29 @@ async function scrollIntoViewIfNeeded(ctx: CDPActionContext): Promise<void> {
   await ensureDomEnabled(session);
   try {
     await session.send("DOM.scrollIntoViewIfNeeded", { backendNodeId });
-  } catch {
-    const objectId = await ensureObjectHandle(element);
-    await ensureRuntimeEnabled(session);
-    await session.send("Runtime.callFunctionOn", {
-      objectId,
-      functionDeclaration: `
-        function() {
-          if (typeof this.scrollIntoView === "function") {
-            this.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
+  } catch (primaryError) {
+    // Try JavaScript fallback
+    try {
+      const objectId = await ensureObjectHandle(element);
+      await ensureRuntimeEnabled(session);
+      await session.send("Runtime.callFunctionOn", {
+        objectId,
+        functionDeclaration: `
+          function() {
+            if (typeof this.scrollIntoView === "function") {
+              this.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
+            }
           }
-        }
-      `,
-    });
+        `,
+      });
+    } catch (fallbackError) {
+      // Re-throw with context about both failures
+      throw new Error(
+        `[CDP][Interactions] Failed to scroll element into view. ` +
+        `Primary method failed: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}. ` +
+        `Fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+      );
+    }
   }
 }
 
@@ -833,11 +843,6 @@ async function waitForScrollSettlement(
   backendNodeId: number
 ): Promise<void> {
   await ensureDomEnabled(session);
-  try {
-    await session.send("DOM.enable");
-  } catch {
-    /* ignore */
-  }
 
   const start = Date.now();
   const timeoutMs = 400;

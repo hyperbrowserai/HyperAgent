@@ -28,7 +28,7 @@ import { renderA11yOverlay } from "./visual-overlay";
 import { getCDPClient } from "@/cdp";
 import type { CDPClient, CDPSession } from "@/cdp";
 
-const DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS = 300;
+const DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS = 500;
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -98,7 +98,15 @@ async function collectExecutionContexts(
 
   session.on("Runtime.executionContextCreated", handler);
   try {
-    await session.send("Runtime.enable").catch(() => {});
+    await session.send("Runtime.enable").catch((error) => {
+      if (debug) {
+        console.warn(
+          "[A11y] Failed to enable Runtime domain for context collection. " +
+          "Execution contexts may be missing for iframe elements.",
+          error
+        );
+      }
+    });
     await waitPromise;
   } finally {
     session.off?.("Runtime.executionContextCreated", handler);

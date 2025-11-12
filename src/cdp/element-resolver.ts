@@ -24,6 +24,10 @@ export interface ResolvedCDPElement {
 }
 
 const sessionCache = new WeakMap<CDPClient, Map<number, CDPSession>>();
+const pendingFrameSessions = new WeakMap<
+  CDPClient,
+  Map<number, Promise<{ session: CDPSession; frameId: string }>>
+>();
 const domEnabledSessions = new WeakSet<CDPSession>();
 const runtimeEnabledSessions = new WeakSet<CDPSession>();
 
@@ -112,24 +116,45 @@ async function resolveFrameSession(
 ): Promise<{ session: CDPSession; frameId: string }> {
   const cache = getSessionCache(ctx.cdpClient);
 
+  // Return cached session
   if (cache.has(frameIndex)) {
     const cached = cache.get(frameIndex)!;
     return { session: cached, frameId: getFrameId(frameInfo, frameIndex) };
   }
 
-  const rootSession = await ensureRootSession(ctx);
-
-  if (frameIndex === 0 || !frameInfo?.playwrightFrame) {
-    cache.set(frameIndex, rootSession);
-    return { session: rootSession, frameId: getFrameId(frameInfo, frameIndex) };
+  // Check for pending session creation to avoid race conditions
+  let pendingMap = pendingFrameSessions.get(ctx.cdpClient);
+  if (!pendingMap) {
+    pendingMap = new Map();
+    pendingFrameSessions.set(ctx.cdpClient, pendingMap);
   }
 
-  const session = await ctx.cdpClient.createSession({
-    type: "frame",
-    frame: frameInfo.playwrightFrame,
-  });
-  cache.set(frameIndex, session);
-  return { session, frameId: getFrameId(frameInfo, frameIndex) };
+  const pending = pendingMap.get(frameIndex);
+  if (pending) {
+    return pending; // Return existing promise - concurrent calls wait for same session
+  }
+
+  // Create new session (store promise immediately to prevent races)
+  const sessionPromise = (async () => {
+    const rootSession = await ensureRootSession(ctx);
+
+    if (frameIndex === 0 || !frameInfo?.playwrightFrame) {
+      cache.set(frameIndex, rootSession);
+      pendingMap!.delete(frameIndex);
+      return { session: rootSession, frameId: getFrameId(frameInfo, frameIndex) };
+    }
+
+    const session = await ctx.cdpClient.createSession({
+      type: "frame",
+      frame: frameInfo.playwrightFrame,
+    });
+    cache.set(frameIndex, session);
+    pendingMap!.delete(frameIndex);
+    return { session, frameId: getFrameId(frameInfo, frameIndex) };
+  })();
+
+  pendingMap.set(frameIndex, sessionPromise);
+  return sessionPromise;
 }
 
 async function ensureRootSession(
@@ -185,6 +210,16 @@ async function recoverBackendNodeId(
   const xpath = ctx.xpathMap[encodedId];
   if (!xpath) {
     throw new Error(`XPath not found for encodedId ${encodedId}`);
+  }
+
+  // Validate execution context for iframe elements
+  if (frameIndex !== 0 && frameInfo && !frameInfo.executionContextId) {
+    console.warn(
+      `[CDP][ElementResolver] executionContextId missing for frame ${frameIndex}. ` +
+      `XPath evaluation may fail or evaluate in wrong context. ` +
+      `This can happen if execution context collection timed out. ` +
+      `Consider increasing DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS in a11y-dom/index.ts`
+    );
   }
 
   await ensureRuntimeEnabled(session);
@@ -260,10 +295,10 @@ async function resolveNodeByBackendId(
   session: CDPSession,
   backendNodeId: number
 ): Promise<Protocol.DOM.ResolveNodeResponse> {
-  return (await session.send<Protocol.DOM.ResolveNodeResponse>(
+  return await session.send<Protocol.DOM.ResolveNodeResponse>(
     "DOM.resolveNode",
     { backendNodeId }
-  )) as Protocol.DOM.ResolveNodeResponse;
+  );
 }
 
 function isMissingNodeError(error: unknown): boolean {
