@@ -189,6 +189,12 @@ async function syncFrameContextManager({
   cdpClient,
   debug,
 }: SyncFrameContextOptions): Promise<void> {
+  await manager.enableAutoAttach(rootSession).catch((error) => {
+    if (debug) {
+      console.warn("[FrameContext] Failed to enable auto-attach:", error);
+    }
+  });
+
   const { frameTree } = await rootSession.send<
     Protocol.Page.GetFrameTreeResponse
   >("Page.getFrameTree");

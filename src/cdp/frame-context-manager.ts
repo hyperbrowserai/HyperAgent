@@ -17,6 +17,24 @@ interface UpsertFrameInput
 export class FrameContextManager {
   private readonly graph = new FrameGraph();
   private readonly sessions = new Map<string, CDPSession>();
+  private readonly frameExecutionContexts = new Map<string, number>();
+  private readonly executionContextToFrame = new Map<number, string>();
+  private readonly executionContextWaiters = new Map<
+    string,
+    Set<{ resolve: (value?: number) => void; timeoutId?: NodeJS.Timeout }>
+  >();
+  private readonly runtimeTrackedSessions = new WeakSet<CDPSession>();
+  private readonly sessionListeners = new Map<
+    CDPSession,
+    Array<{ event: string; handler: (...args: unknown[]) => void }>
+  >();
+  private readonly autoAttachedSessions = new Map<
+    string,
+    { session: CDPSession; frameId: string }
+  >();
+  private autoAttachEnabled = false;
+  private autoAttachSetupPromise: Promise<void> | null = null;
+  private autoAttachRootSession: CDPSession | null = null;
   private initialized = false;
   private initializingPromise: Promise<void> | null = null;
 
@@ -52,6 +70,7 @@ export class FrameContextManager {
         parentFrameId: record.parentFrameId,
       });
     }
+    this.trackRuntimeForSession(session);
   }
 
   getFrameSession(frameId: string): CDPSession | undefined {
@@ -72,6 +91,45 @@ export class FrameContextManager {
     return this.graph.getFrame(frameId);
   }
 
+  getExecutionContextId(frameId: string): number | undefined {
+    return this.frameExecutionContexts.get(frameId);
+  }
+
+  async waitForExecutionContext(
+    frameId: string,
+    timeoutMs = 750
+  ): Promise<number | undefined> {
+    const existing = this.frameExecutionContexts.get(frameId);
+    if (typeof existing === "number") {
+      return existing;
+    }
+
+    return await new Promise<number | undefined>((resolve) => {
+      const waiter = { resolve: (value?: number) => resolve(value) } as {
+        resolve: (value?: number) => void;
+        timeoutId?: NodeJS.Timeout;
+      };
+
+      waiter.timeoutId = setTimeout(() => {
+        const waiters = this.executionContextWaiters.get(frameId);
+        if (waiters) {
+          waiters.delete(waiter);
+          if (waiters.size === 0) {
+            this.executionContextWaiters.delete(frameId);
+          }
+        }
+        resolve(undefined);
+      }, timeoutMs);
+
+      let waiters = this.executionContextWaiters.get(frameId);
+      if (!waiters) {
+        waiters = new Set();
+        this.executionContextWaiters.set(frameId, waiters);
+      }
+      waiters.add(waiter);
+    });
+  }
+
   toJSON(): { graph: ReturnType<FrameGraph["toJSON"]> } {
     return { graph: this.graph.toJSON() };
   }
@@ -79,6 +137,23 @@ export class FrameContextManager {
   clear(): void {
     this.graph.clear();
     this.sessions.clear();
+    this.frameExecutionContexts.clear();
+    this.executionContextToFrame.clear();
+
+    for (const waiters of this.executionContextWaiters.values()) {
+      for (const waiter of waiters) {
+        if (waiter.timeoutId) clearTimeout(waiter.timeoutId);
+        waiter.resolve(undefined);
+      }
+    }
+    this.executionContextWaiters.clear();
+
+    for (const [session, listeners] of this.sessionListeners.entries()) {
+      for (const { event, handler } of listeners) {
+        session.off?.(event, handler);
+      }
+    }
+    this.sessionListeners.clear();
   }
 
   async ensureInitialized(): Promise<void> {
@@ -87,6 +162,7 @@ export class FrameContextManager {
 
     this.initializingPromise = (async () => {
       const rootSession = this.client.rootSession;
+      await this.enableAutoAttach(rootSession);
       await this.captureFrameTree(rootSession);
       this.initialized = true;
     })().finally(() => {
@@ -130,7 +206,7 @@ export class FrameContextManager {
       }
 
       const target = this.findTargetForFrame(targetMap, frameId);
-      if (target && target.targetId) {
+      if (target && target.targetId && !this.autoAttachEnabled) {
         await this.attachToTarget(session, target.targetId, frameId);
       }
 
@@ -185,6 +261,175 @@ export class FrameContextManager {
       if (!record) return;
       this.graph.upsertFrame({ ...record, backendNodeId: owner.backendNodeId ?? record.backendNodeId });
     } catch {}
+  }
+
+  async enableAutoAttach(session: CDPSession): Promise<void> {
+    if (this.autoAttachEnabled) {
+      return;
+    }
+    if (this.autoAttachSetupPromise) {
+      return this.autoAttachSetupPromise;
+    }
+
+    this.autoAttachRootSession = session;
+
+    this.autoAttachSetupPromise = (async () => {
+      session.on("Target.attachedToTarget", this.handleTargetAttached);
+      session.on("Target.detachedFromTarget", this.handleTargetDetached);
+      await session.send("Target.setAutoAttach", {
+        autoAttach: true,
+        flatten: true,
+        waitForDebuggerOnStart: false,
+      });
+      this.autoAttachEnabled = true;
+      console.log("[FrameContext] Target auto-attach enabled");
+    })().finally(() => {
+      this.autoAttachSetupPromise = null;
+    });
+
+    return this.autoAttachSetupPromise;
+  }
+
+  private handleTargetAttached = async (
+    event: Protocol.Target.AttachedToTargetEvent
+  ): Promise<void> => {
+    const frameId = (event.targetInfo as { frameId?: string }).frameId;
+    if (!frameId) {
+      return;
+    }
+
+    try {
+      const session = await this.client.createSession({
+        type: "raw",
+        target: { sessionId: event.sessionId },
+      });
+
+      this.autoAttachedSessions.set(event.sessionId, { session, frameId });
+      this.setFrameSession(frameId, session);
+      this.graph.upsertFrame({
+        frameId,
+        parentFrameId: event.targetInfo.openerFrameId ?? null,
+        name: event.targetInfo.title,
+        url: event.targetInfo.url,
+        lastUpdated: Date.now(),
+      });
+
+      console.log(
+        `[FrameContext] Auto-attached session ${session.id ?? event.sessionId} for frame ${frameId} (${event.targetInfo.url ||
+          "n/a"})`
+      );
+    } catch (error) {
+      console.warn(
+        `[FrameContext] Failed to auto-attach session for frame ${frameId}:`,
+        error
+      );
+    }
+  };
+
+  private handleTargetDetached = async (
+    event: Protocol.Target.DetachedFromTargetEvent
+  ): Promise<void> => {
+    const record = this.autoAttachedSessions.get(event.sessionId);
+    if (!record) {
+      return;
+    }
+
+    this.autoAttachedSessions.delete(event.sessionId);
+    const { session, frameId } = record;
+
+    if (this.sessions.get(frameId) === session) {
+      this.sessions.delete(frameId);
+      this.graph.removeFrame(frameId);
+    }
+
+    try {
+      await session.detach();
+    } catch {
+      // ignore
+    }
+
+    console.log(
+      `[FrameContext] Auto-detached session ${session.id ?? event.sessionId} for frame ${frameId}`
+    );
+  };
+
+  private trackRuntimeForSession(session: CDPSession): void {
+    if (this.runtimeTrackedSessions.has(session)) {
+      return;
+    }
+    this.runtimeTrackedSessions.add(session);
+
+    const createdHandler = (event: Protocol.Runtime.ExecutionContextCreatedEvent): void => {
+      const auxData = event.context
+        .auxData as { frameId?: string; type?: string } | undefined;
+      const frameId = auxData?.frameId;
+      if (!frameId) return;
+      const contextType = auxData?.type;
+      if (contextType && contextType !== "default") return;
+
+      this.frameExecutionContexts.set(frameId, event.context.id);
+      this.executionContextToFrame.set(event.context.id, frameId);
+
+      const record = this.graph.getFrame(frameId);
+      if (record && record.executionContextId !== event.context.id) {
+        this.graph.upsertFrame({
+          ...record,
+          executionContextId: event.context.id,
+        });
+      }
+
+      const waiters = this.executionContextWaiters.get(frameId);
+      if (waiters) {
+        for (const waiter of waiters) {
+          if (waiter.timeoutId) clearTimeout(waiter.timeoutId);
+          waiter.resolve(event.context.id);
+        }
+        this.executionContextWaiters.delete(frameId);
+      }
+    };
+
+    const destroyedHandler = (event: Protocol.Runtime.ExecutionContextDestroyedEvent): void => {
+      const frameId = this.executionContextToFrame.get(event.executionContextId);
+      if (!frameId) {
+        return;
+      }
+      this.executionContextToFrame.delete(event.executionContextId);
+      this.frameExecutionContexts.delete(frameId);
+    };
+
+    const clearedHandler = (): void => {
+      for (const [frameId, frameSession] of this.sessions.entries()) {
+        if (frameSession !== session) continue;
+        const contextId = this.frameExecutionContexts.get(frameId);
+        if (typeof contextId === "number") {
+          this.frameExecutionContexts.delete(frameId);
+          this.executionContextToFrame.delete(contextId);
+        }
+      }
+    };
+
+    session.on("Runtime.executionContextCreated", createdHandler);
+    session.on("Runtime.executionContextDestroyed", destroyedHandler);
+    session.on("Runtime.executionContextsCleared", clearedHandler);
+
+    this.sessionListeners.set(session, [
+      {
+        event: "Runtime.executionContextCreated",
+        handler: createdHandler as (...args: unknown[]) => void,
+      },
+      {
+        event: "Runtime.executionContextDestroyed",
+        handler: destroyedHandler as (...args: unknown[]) => void,
+      },
+      {
+        event: "Runtime.executionContextsCleared",
+        handler: clearedHandler as (...args: unknown[]) => void,
+      },
+    ]);
+
+    session.send("Runtime.enable").catch((error) => {
+      console.warn("[FrameContextManager] Failed to enable Runtime domain:", error);
+    });
   }
 }
 

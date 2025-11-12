@@ -41,6 +41,8 @@ export async function resolveElement(
 ): Promise<ResolvedCDPElement> {
   const frameIndex = parseFrameIndex(encodedId);
   const frameInfo = frameIndex === 0 ? undefined : ctx.frameMap?.get(frameIndex);
+  const frameManager =
+    ctx.frameContextManager ?? getOrCreateFrameContextManager(ctx.cdpClient);
 
   if (frameIndex !== 0 && !frameInfo) {
     throw new Error(
@@ -56,10 +58,11 @@ export async function resolveElement(
     return cachedElement;
   }
 
-  const { session, frameId } = await resolveFrameSession(ctx, {
-    frameIndex,
-    frameInfo,
-  });
+  const { session, frameId } = await resolveFrameSession(
+    ctx,
+    { frameIndex, frameInfo },
+    frameManager
+  );
 
   let backendNodeId = ctx.backendNodeMap[encodedId];
 
@@ -69,7 +72,9 @@ export async function resolveElement(
       ctx,
       session,
       frameIndex,
-      frameInfo
+      frameInfo,
+      frameId,
+      frameManager
     );
   }
 
@@ -85,7 +90,9 @@ export async function resolveElement(
       ctx,
       session,
       frameIndex,
-      frameInfo
+      frameInfo,
+      frameId,
+      frameManager
     );
     resolveResponse = await resolveNodeByBackendId(session, backendNodeId);
   }
@@ -124,11 +131,10 @@ interface FrameSessionRequest {
 
 async function resolveFrameSession(
   ctx: ElementResolveContext,
-  { frameIndex, frameInfo }: FrameSessionRequest
+  { frameIndex, frameInfo }: FrameSessionRequest,
+  frameManager: FrameContextManager
 ): Promise<{ session: CDPSession; frameId: string }> {
   const cache = getSessionCache(ctx.cdpClient);
-  const frameManager =
-    ctx.frameContextManager ?? getOrCreateFrameContextManager(ctx.cdpClient);
   const frameId = resolveFrameId(frameManager, frameInfo, frameIndex);
 
   if (cache.has(frameIndex)) {
@@ -261,25 +267,38 @@ async function recoverBackendNodeId(
   ctx: ElementResolveContext,
   session: CDPSession,
   frameIndex: number,
-  frameInfo?: IframeInfo
+  frameInfo: IframeInfo | undefined,
+  frameId: string,
+  frameManager?: FrameContextManager
 ): Promise<number> {
   const xpath = ctx.xpathMap[encodedId];
   if (!xpath) {
     throw new Error(`XPath not found for encodedId ${encodedId}`);
   }
 
+  let executionContextId =
+    (frameManager?.getExecutionContextId(frameId) ??
+      frameInfo?.executionContextId) ??
+    undefined;
+
+  if (!executionContextId && frameManager) {
+    executionContextId = await frameManager
+      .waitForExecutionContext(frameId)
+      .catch(() => undefined);
+  }
+
   logDebug(
     ctx,
-    `[ElementResolver] Recovering backendNodeId for ${encodedId} via XPath (frameIndex=${frameIndex})`
+    `[ElementResolver] Recovering backendNodeId for ${encodedId} via XPath (frameIndex=${frameIndex}, frameId=${frameId})`
   );
 
   // Validate execution context for iframe elements
-  if (frameIndex !== 0 && frameInfo && !frameInfo.executionContextId) {
+  if (frameIndex !== 0 && !executionContextId) {
     console.warn(
-      `[CDP][ElementResolver] executionContextId missing for frame ${frameIndex}. ` +
-      `XPath evaluation may fail or evaluate in wrong context. ` +
-      `This can happen if execution context collection timed out. ` +
-      `Consider increasing DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS in a11y-dom/index.ts`
+      `[CDP][ElementResolver] executionContextId missing for frame ${frameIndex} (${frameId}). ` +
+        `XPath evaluation may fail or evaluate in wrong context. ` +
+        `This can happen if execution context collection timed out. ` +
+        `Consider increasing DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS in a11y-dom/index.ts`
     );
   }
 
@@ -289,7 +308,7 @@ async function recoverBackendNodeId(
   const evalResponse =
     await session.send<Protocol.Runtime.EvaluateResponse>("Runtime.evaluate", {
       expression: buildXPathEvaluationExpression(xpath),
-      contextId: frameInfo?.executionContextId,
+      contextId: executionContextId,
       includeCommandLineAPI: false,
       returnByValue: false,
       awaitPromise: false,
