@@ -4,7 +4,7 @@
  */
 
 import type { Protocol } from "devtools-protocol";
-import type { Page, Frame } from "playwright-core";
+import type { Page } from "playwright-core";
 import {
   A11yDOMState,
   AXNode,
@@ -22,7 +22,10 @@ import {
   injectScrollableDetection,
   findScrollableElementIds,
 } from "./scrollable-detection";
-import { injectBoundingBoxScriptSession } from "./bounding-box-batch";
+import {
+  injectBoundingBoxScriptSession,
+  BoundingBoxTarget,
+} from "./bounding-box-batch";
 import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
 import { renderA11yOverlay } from "./visual-overlay";
 import {
@@ -131,9 +134,7 @@ async function annotateFrameSessions(options: {
 
   const indices =
     frameIndices ??
-    Array.from(frameMap.entries())
-      .filter(([, info]) => info && !info.playwrightFrame)
-      .map(([idx]) => idx);
+    Array.from(frameMap.entries()).map(([idx]) => idx);
 
   if (indices.length === 0) {
     return;
@@ -194,6 +195,10 @@ async function syncFrameContextManager({
       console.warn("[FrameContext] Failed to enable auto-attach:", error);
     }
   });
+
+  if (debug) {
+    console.log("[FrameContext] Auto-attach requested for root session");
+  }
 
   const { frameTree } = await rootSession.send<
     Protocol.Page.GetFrameTreeResponse
@@ -266,34 +271,12 @@ async function syncFrameContextManager({
 
       let session = manager.getFrameSession(frameId);
       if (!session) {
-        if (info.playwrightFrame) {
-          try {
-            session = await cdpClient.createSession({
-              type: "frame",
-              frame: info.playwrightFrame,
-            });
-            if (debug) {
-              console.log(
-                `[FrameContext] Attached CDP session ${session.id ?? "unknown"} for frame ${frameIndex} (${frameId})`
-              );
-            }
-          } catch (error) {
-            console.warn(
-              `[FrameContext] Failed to create session for frame ${frameIndex} (${frameId}):`,
-              error
-            );
-          }
+        session = rootSession;
+        if (debug) {
+          console.log(
+            `[FrameContext] Reusing root session for frame ${frameIndex} (${frameId})`
+          );
         }
-
-        if (!session) {
-          session = rootSession;
-          if (debug) {
-            console.log(
-              `[FrameContext] Reusing root session for frame ${frameIndex} (${frameId})`
-            );
-          }
-        }
-
         manager.setFrameSession(frameId, session);
       } else if (debug) {
         console.log(
@@ -366,198 +349,6 @@ function buildFramePaths(
   }
 }
 
-/**
- * Process a single OOPIF frame recursively, ensuring parents are processed first
- */
-async function processOOPIFRecursive(
-  frame: Frame,
-  page: Page,
-  maps: BackendIdMaps,
-  allNodes: Array<AXNode & { _frameIndex: number }>,
-  frameDebugInfo: Array<{
-    frameIndex: number;
-    frameUrl: string;
-    totalNodes: number;
-    rawNodes: AXNode[];
-  }>,
-  mergedMaps: {
-    tagNameMap: Record<EncodedId, string>;
-    xpathMap: Record<EncodedId, string>;
-    accessibleNameMap: Record<EncodedId, string>;
-  },
-  nextFrameIndex: { value: number },
-  processedOOPIFs: Set<Frame>,
-  playwrightFrameToIndex: Map<Frame, number>,
-  debug: boolean,
-  enableVisualMode: boolean,
-  cdpClient: CDPClient
-): Promise<void> {
-  // Skip if already processed
-  if (processedOOPIFs.has(frame)) return;
-
-  // Skip main frame
-  if (frame === page.mainFrame()) {
-    playwrightFrameToIndex.set(frame, 0);
-    return;
-  }
-
-  // Try to create CDP session - if it fails, this is a same-origin iframe (skip)
-  let oopifSession: CDPSession | null = null;
-  try {
-    oopifSession = await cdpClient.createSession({ type: "frame", frame });
-  } catch {
-    // Not an OOPIF, skip
-    return;
-  }
-
-  if (!oopifSession) {
-    return;
-  }
-
-  try {
-    // Note: Parent is guaranteed to be processed already due to wave-based processing
-    // No need for recursive parent checking
-
-    // Assign frame index
-    const iframeFrameIndex = nextFrameIndex.value++;
-    playwrightFrameToIndex.set(frame, iframeFrameIndex);
-
-    // Determine parent frame index using map
-    const parentFrame = frame.parentFrame();
-    const parentFrameIdx = parentFrame
-      ? (playwrightFrameToIndex.get(parentFrame) ?? null)
-      : null;
-
-    if (debug) {
-      console.log(
-        `[A11y] Processing OOPIF frame ${iframeFrameIndex} (url=${frame.url()}, parent=${parentFrameIdx})`
-      );
-    }
-
-    // Enable CDP domains in parallel for better performance
-    await Promise.all([
-      oopifSession.send("DOM.enable"),
-      oopifSession.send("Accessibility.enable"),
-      oopifSession.send("Page.enable").catch(() => {}),
-    ]);
-
-    let oopifFrameId: string | undefined;
-    try {
-      const frameTree = (await oopifSession.send<
-        Protocol.Page.GetFrameTreeResponse
-      >("Page.getFrameTree")) as Protocol.Page.GetFrameTreeResponse;
-      oopifFrameId = frameTree?.frameTree?.frame?.id;
-    } catch (error) {
-      if (debug) {
-        console.warn(
-          `[A11y] Failed to retrieve frame tree for OOPIF frame ${iframeFrameIndex}:`,
-          error
-        );
-      }
-    }
-
-    let oopifExecutionContextId: number | undefined;
-    if (oopifFrameId) {
-      const rootContexts = await collectExecutionContexts(oopifSession, {
-        frameIds: new Set([oopifFrameId]),
-        debug,
-      });
-      oopifExecutionContextId = rootContexts.get(oopifFrameId);
-    }
-
-    // Inject bounding box collection script into OOPIF frame (only if needed)
-    if (debug || enableVisualMode) {
-      await injectBoundingBoxScriptSession(oopifSession);
-    }
-
-    // Build backend ID maps for this OOPIF
-    const oopifMaps = await buildBackendIdMaps(
-      oopifSession,
-      iframeFrameIndex,
-      debug
-    );
-
-    // Merge maps
-    Object.assign(mergedMaps.tagNameMap, oopifMaps.tagNameMap);
-    Object.assign(mergedMaps.xpathMap, oopifMaps.xpathMap);
-    Object.assign(mergedMaps.accessibleNameMap, oopifMaps.accessibleNameMap);
-
-    // Fetch OOPIF AX tree
-    const result = (await oopifSession.send("Accessibility.getFullAXTree")) as {
-      nodes: AXNode[];
-    };
-    let nodes = result.nodes;
-
-    // Fallback to DOM if needed
-    if (!hasInteractiveElements(nodes)) {
-      if (debug) {
-        console.log(
-          `[A11y] OOPIF frame ${iframeFrameIndex} has no interactive elements, falling back to DOM`
-        );
-      }
-      const domFallbackNodes = createDOMFallbackNodes(
-        iframeFrameIndex,
-        mergedMaps.tagNameMap,
-        oopifMaps.frameMap || new Map(),
-        mergedMaps.accessibleNameMap
-      );
-      if (domFallbackNodes.length > 0) {
-        nodes = domFallbackNodes;
-      }
-    }
-
-    // Tag and collect nodes
-    const taggedNodes = nodes.map((n) => ({
-      ...n,
-      _frameIndex: iframeFrameIndex,
-    }));
-    allNodes.push(...taggedNodes);
-
-    if (oopifMaps.frameMap?.size) {
-      await annotateFrameSessions({
-        session: oopifSession,
-        frameMap: oopifMaps.frameMap,
-        frameIndices: Array.from(oopifMaps.frameMap.keys()),
-        debug,
-      });
-    }
-
-    // Store in frameMap
-    maps.frameMap?.set(iframeFrameIndex, {
-      frameIndex: iframeFrameIndex,
-      src: frame.url(),
-      name: frame.name(),
-      xpath: "",
-      frameId: oopifFrameId,
-      cdpFrameId: oopifFrameId,
-      cdpSessionId: oopifSession.id ?? undefined,
-      executionContextId: oopifExecutionContextId,
-      parentFrameIndex: parentFrameIdx,
-      siblingPosition: 0,
-      playwrightFrame: frame,
-    });
-
-    // Merge nested same-origin iframes from buildBackendIdMaps
-    for (const [nestedIdx, nestedInfo] of oopifMaps.frameMap?.entries() || []) {
-      maps.frameMap?.set(nestedIdx, nestedInfo);
-    }
-
-    if (debug) {
-      frameDebugInfo.push({
-        frameIndex: iframeFrameIndex,
-        frameUrl: frame.url(),
-        totalNodes: nodes.length,
-        rawNodes: nodes,
-      });
-    }
-
-    processedOOPIFs.add(frame);
-  } finally {
-    if (oopifSession) {
-      await oopifSession.detach();
-    }
-  }
-}
 
 /**
  * Fetch accessibility trees for all iframes in the page
@@ -568,12 +359,12 @@ async function processOOPIFRecursive(
  * @returns Tagged nodes and optional debug info
  */
 async function fetchIframeAXTrees(
-  page: Page,
   client: CDPSession,
   maps: BackendIdMaps,
   debug: boolean,
   enableVisualMode: boolean,
-  cdpClient: CDPClient
+  cdpClient: CDPClient,
+  frameContextManager: ReturnType<typeof getOrCreateFrameContextManager>
 ): Promise<{
   nodes: Array<AXNode & { _frameIndex: number }>;
   debugInfo: Array<{
@@ -591,18 +382,45 @@ async function fetchIframeAXTrees(
     rawNodes: AXNode[];
   }> = [];
 
-  const nextFrameIndex = (maps.frameMap?.size ?? 0) + 1; // Continue from where DOM traversal left off
+  const frameEntries = Array.from(maps.frameMap?.entries() ?? []);
+  if (frameEntries.length === 0) {
+    return { nodes: allNodes, debugInfo: frameDebugInfo };
+  }
 
-  // STEP 1: Process same-origin iframes from DOM traversal
-  for (const [frameIndex, frameInfo] of maps.frameMap?.entries() ?? []) {
-    const { contentDocumentBackendNodeId, src } = frameInfo;
+  const rootSession = cdpClient.rootSession;
+  const processedCrossOriginFrames = new Set<string>();
+  const sameOriginFrames: Array<[number, IframeInfo]> = [];
 
-    if (!contentDocumentBackendNodeId) {
-      if (debug) {
-        console.warn(
-          `[A11y] Frame ${frameIndex} has no contentDocumentBackendNodeId, skipping`
-        );
+  for (const [frameIndex, frameInfo] of frameEntries) {
+    const frameId = frameInfo.frameId ?? frameInfo.cdpFrameId;
+    const session = frameId ? frameContextManager.getFrameSession(frameId) : undefined;
+    const isCrossOrigin =
+      frameId && session && session !== rootSession;
+
+    if (isCrossOrigin && frameId && session) {
+      if (processedCrossOriginFrames.has(frameId)) {
+        continue;
       }
+      await collectCrossOriginFrameData({
+        frameIndex,
+        frameInfo,
+        session,
+        maps,
+        allNodes,
+        frameDebugInfo,
+        debug,
+        enableVisualMode,
+        frameContextManager,
+      });
+      processedCrossOriginFrames.add(frameId);
+    } else {
+      sameOriginFrames.push([frameIndex, frameInfo]);
+    }
+  }
+
+  for (const [frameIndex, frameInfo] of sameOriginFrames) {
+    const { contentDocumentBackendNodeId, src } = frameInfo;
+    if (!contentDocumentBackendNodeId) {
       continue;
     }
 
@@ -613,8 +431,6 @@ async function fetchIframeAXTrees(
         );
       }
 
-      // Same-origin: Use main CDP session with contentDocumentBackendNodeId
-      // Note: contentDocumentBackendNodeId is unique per iframe
       const result = (await client.send("Accessibility.getPartialAXTree", {
         backendNodeId: contentDocumentBackendNodeId,
         fetchRelatives: true,
@@ -622,14 +438,7 @@ async function fetchIframeAXTrees(
 
       let iframeNodes = result.nodes;
 
-      // Fallback to DOM when AX tree has no interactive elements
       if (!hasInteractiveElements(iframeNodes)) {
-        if (debug) {
-          console.log(
-            `[A11y] Frame ${frameIndex} has no interactive elements in AX tree, falling back to DOM`
-          );
-        }
-
         const domFallbackNodes = createDOMFallbackNodes(
           frameIndex,
           maps.tagNameMap,
@@ -642,7 +451,6 @@ async function fetchIframeAXTrees(
         }
       }
 
-      // Tag nodes with their frame index
       const taggedNodes = iframeNodes.map((n) => ({
         ...n,
         _frameIndex: frameIndex,
@@ -650,7 +458,6 @@ async function fetchIframeAXTrees(
 
       allNodes.push(...taggedNodes);
 
-      // Collect debug info (only if debug mode enabled)
       if (debug) {
         frameDebugInfo.push({
           frameIndex,
@@ -667,70 +474,124 @@ async function fetchIframeAXTrees(
     }
   }
 
-  // STEP 2: Process OOPIF frames using wave-based parallel processing
-  // This ensures parents are processed before children while maximizing parallelism
-  const allPlaywrightFrames = page.frames();
-  const mergedTagNameMap = { ...maps.tagNameMap };
-  const mergedXpathMap = { ...maps.xpathMap };
-  const mergedAccessibleNameMap = { ...maps.accessibleNameMap };
-  const processedOOPIFs = new Set<Frame>();
-  const playwrightFrameToIndex = new Map<Frame, number>();
-  const nextFrameIndexRef = { value: nextFrameIndex };
-
-  // Build parent-child relationship map for wave-based processing
-  const framesByParent = new Map<Frame | null, Frame[]>();
-  for (const frame of allPlaywrightFrames) {
-    const parent = frame.parentFrame();
-    if (!framesByParent.has(parent)) {
-      framesByParent.set(parent, []);
-    }
-    framesByParent.get(parent)!.push(frame);
-  }
-
-  // Process frames in waves (BFS style) - all frames at same depth level in parallel
-  let currentWave = framesByParent.get(page.mainFrame()) || [];
-
-  while (currentWave.length > 0) {
-    // Process all frames in current wave IN PARALLEL
-    await Promise.all(
-      currentWave.map(frame =>
-        processOOPIFRecursive(
-          frame,
-          page,
-          maps,
-          allNodes,
-          frameDebugInfo,
-          {
-            tagNameMap: mergedTagNameMap,
-            xpathMap: mergedXpathMap,
-            accessibleNameMap: mergedAccessibleNameMap,
-          },
-          nextFrameIndexRef,
-          processedOOPIFs,
-          playwrightFrameToIndex,
-          debug,
-          enableVisualMode,
-          cdpClient
-        )
-      )
-    );
-
-    // Collect children for next wave
-    const nextWave: Frame[] = [];
-    for (const frame of currentWave) {
-      const children = framesByParent.get(frame) || [];
-      nextWave.push(...children);
-    }
-
-    currentWave = nextWave;
-  }
-
-  // Update maps with merged values
-  maps.tagNameMap = mergedTagNameMap;
-  maps.xpathMap = mergedXpathMap;
-  maps.accessibleNameMap = mergedAccessibleNameMap;
-
   return { nodes: allNodes, debugInfo: frameDebugInfo };
+}
+
+interface CrossOriginFrameParams {
+  frameIndex: number;
+  frameInfo: IframeInfo;
+  session: CDPSession;
+  maps: BackendIdMaps;
+  allNodes: Array<AXNode & { _frameIndex: number }>;
+  frameDebugInfo: Array<{
+    frameIndex: number;
+    frameUrl: string;
+    totalNodes: number;
+    rawNodes: AXNode[];
+  }>;
+  debug: boolean;
+  enableVisualMode: boolean;
+  frameContextManager: ReturnType<typeof getOrCreateFrameContextManager>;
+}
+
+async function collectCrossOriginFrameData({
+  frameIndex,
+  frameInfo,
+  session,
+  maps,
+  allNodes,
+  frameDebugInfo,
+  debug,
+  enableVisualMode,
+  frameContextManager,
+}: CrossOriginFrameParams): Promise<void> {
+  const frameId = frameInfo.frameId ?? frameInfo.cdpFrameId;
+  if (!frameId) {
+    if (debug) {
+      console.warn(
+        `[A11y] Cross-origin frame ${frameIndex} missing frameId/cdpFrameId`
+      );
+    }
+    return;
+  }
+
+  await Promise.all([
+    session.send("DOM.enable").catch(() => {}),
+    session.send("Accessibility.enable").catch(() => {}),
+    session.send("Page.enable").catch(() => {}),
+  ]);
+
+  if (debug || enableVisualMode) {
+    await injectBoundingBoxScriptSession(session);
+  }
+
+  const subMaps = await buildBackendIdMaps(session, frameIndex, debug);
+
+  Object.assign(maps.tagNameMap, subMaps.tagNameMap);
+  Object.assign(maps.xpathMap, subMaps.xpathMap);
+  Object.assign(maps.accessibleNameMap, subMaps.accessibleNameMap);
+  maps.frameMap = maps.frameMap ?? new Map();
+
+  const executionContextId =
+    frameContextManager.getExecutionContextId(frameId) ??
+    (await frameContextManager
+      .waitForExecutionContext(frameId)
+      .catch(() => undefined)) ??
+    frameInfo.executionContextId;
+
+  maps.frameMap.set(frameIndex, {
+    ...frameInfo,
+    frameIndex,
+    frameId,
+    cdpFrameId: frameId,
+    cdpSessionId: session.id ?? frameInfo.cdpSessionId,
+    executionContextId,
+  });
+
+  if (subMaps.frameMap?.size) {
+    for (const [nestedIdx, nestedInfo] of subMaps.frameMap.entries()) {
+      if (!maps.frameMap.has(nestedIdx)) {
+        maps.frameMap.set(nestedIdx, nestedInfo);
+      }
+    }
+  }
+
+  const result = (await session.send(
+    "Accessibility.getFullAXTree"
+  )) as { nodes: AXNode[] };
+  let nodes = result.nodes;
+
+  if (!hasInteractiveElements(nodes)) {
+    if (debug) {
+      console.log(
+        `[A11y] OOPIF frame ${frameIndex} has no interactive elements, falling back to DOM`
+      );
+    }
+    const domFallbackNodes = createDOMFallbackNodes(
+      frameIndex,
+      maps.tagNameMap,
+      maps.frameMap || new Map(),
+      maps.accessibleNameMap
+    );
+    if (domFallbackNodes.length > 0) {
+      nodes = domFallbackNodes;
+    }
+  }
+
+  const taggedNodes = nodes.map((n) => ({
+    ...n,
+    _frameIndex: frameIndex,
+  }));
+  allNodes.push(...taggedNodes);
+
+  if (debug) {
+    frameDebugInfo.push({
+      frameIndex,
+      frameUrl: frameInfo.src || "unknown",
+      totalNodes: nodes.length,
+      rawNodes: nodes,
+    });
+  }
 }
 
 /**
@@ -880,14 +741,18 @@ export async function getA11yDOM(
       allNodes.push(...mainNodes.map((n) => ({ ...n, _frameIndex: 0 })));
 
       // 4b. Fetch accessibility trees for all iframes
+      if (debug) {
+        console.log("[A11y] Fetching iframe trees using CDP sessions");
+      }
+
       const { nodes: iframeNodes, debugInfo: frameDebugInfo } =
         await fetchIframeAXTrees(
-          page,
           client,
           maps,
           debug,
           enableVisualMode,
-          cdpClient
+          cdpClient,
+          frameContextManager
         );
       allNodes.push(...iframeNodes);
 
@@ -917,14 +782,34 @@ export async function getA11yDOM(
       // Build trees for each frame
       const treeResults = await Promise.all(
         Array.from(frameGroups.entries()).map(async ([frameIdx, nodes]) => {
-          // Get the appropriate Frame for this frameIdx
-          let frameContext: Page | Frame = page; // Default to main frame
+          let boundingBoxTarget: import("./bounding-box-batch").BoundingBoxTarget | undefined;
 
-          if (frameIdx !== 0) {
-            // Look up the frame from frameMap
-            const frameInfo = maps.frameMap?.get(frameIdx);
-            if (frameInfo?.playwrightFrame) {
-              frameContext = frameInfo.playwrightFrame;
+          if (debug || enableVisualMode) {
+            if (frameIdx === 0) {
+              boundingBoxTarget = { kind: "playwright", target: page };
+            } else {
+              const frameInfo = maps.frameMap?.get(frameIdx);
+              const frameId = frameInfo?.frameId ?? frameInfo?.cdpFrameId;
+              if (frameId) {
+                const frameSession = frameContextManager.getFrameSession(frameId);
+                if (frameSession && frameSession !== cdpClient.rootSession) {
+                  const executionContextId =
+                    frameContextManager.getExecutionContextId(frameId) ??
+                    (await frameContextManager
+                      .waitForExecutionContext(frameId)
+                      .catch(() => undefined));
+                  boundingBoxTarget = {
+                    kind: "cdp",
+                    session: frameSession,
+                    executionContextId,
+                    frameId,
+                  };
+                } else {
+                  boundingBoxTarget = { kind: "playwright", target: page };
+                }
+              } else {
+                boundingBoxTarget = { kind: "playwright", target: page };
+              }
             }
           }
 
@@ -935,7 +820,7 @@ export async function getA11yDOM(
             scrollableIds,
             debug,
             enableVisualMode,
-            frameContext,
+            boundingBoxTarget,
             debugDir
           );
 

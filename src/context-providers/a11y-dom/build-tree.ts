@@ -2,7 +2,6 @@
  * Build hierarchical accessibility tree from flat CDP nodes
  */
 
-import type { Page, Frame } from "playwright-core";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -22,7 +21,10 @@ import {
   generateFrameHeader,
 } from "./utils";
 import { decorateRoleIfScrollable } from "./scrollable-detection";
-import { batchCollectBoundingBoxesWithFailures } from "./bounding-box-batch";
+import {
+  batchCollectBoundingBoxesWithFailures,
+  BoundingBoxTarget,
+} from "./bounding-box-batch";
 
 /**
  * Convert raw CDP AXNode to simplified AccessibilityNode
@@ -73,7 +75,7 @@ export async function buildHierarchicalTree(
   scrollableIds?: Set<number>,
   debug = false,
   enableVisualMode = false,
-  pageOrFrame?: Page | Frame,
+  boundingBoxTarget?: BoundingBoxTarget,
   debugDir?: string
 ): Promise<TreeResult> {
   // Convert raw AX nodes to simplified format, decorating scrollable elements
@@ -89,7 +91,7 @@ export async function buildHierarchicalTree(
   let boundingBoxFailures: Array<{ encodedId: EncodedId; backendNodeId: number }> = [];
 
   // Batch collect bounding boxes BEFORE Pass 1 if visual mode enabled
-  if ((debug || enableVisualMode) && pageOrFrame) {
+  if ((debug || enableVisualMode) && boundingBoxTarget) {
     // First pass: identify nodes we want to keep and collect their info
     const nodesToCollect: Array<{ backendDOMNodeId?: number; encodedId?: EncodedId }> = [];
 
@@ -123,7 +125,7 @@ export async function buildHierarchicalTree(
     if (nodesToCollect.length > 0) {
       const startTime = Date.now();
       const result = await batchCollectBoundingBoxesWithFailures(
-        pageOrFrame,
+        boundingBoxTarget,
         xpathMap,
         nodesToCollect,
         frameIndex,

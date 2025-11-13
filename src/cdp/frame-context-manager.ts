@@ -35,6 +35,8 @@ export class FrameContextManager {
   private autoAttachEnabled = false;
   private autoAttachSetupPromise: Promise<void> | null = null;
   private autoAttachRootSession: CDPSession | null = null;
+  private readonly pageTrackedSessions = new WeakSet<CDPSession>();
+  private nextFrameIndex = 0;
   private initialized = false;
   private initializingPromise: Promise<void> | null = null;
 
@@ -58,6 +60,9 @@ export class FrameContextManager {
 
   assignFrameIndex(frameId: string, index: number): void {
     this.graph.assignFrameIndex(frameId, index);
+    if (index >= this.nextFrameIndex) {
+      this.nextFrameIndex = index + 1;
+    }
   }
 
   setFrameSession(frameId: string, session: CDPSession): void {
@@ -154,6 +159,10 @@ export class FrameContextManager {
       }
     }
     this.sessionListeners.clear();
+
+    this.autoAttachedSessions.clear();
+    this.autoAttachEnabled = false;
+    this.autoAttachRootSession = null;
   }
 
   async ensureInitialized(): Promise<void> {
@@ -281,6 +290,7 @@ export class FrameContextManager {
         flatten: true,
         waitForDebuggerOnStart: false,
       });
+      await this.trackPageEvents(session);
       this.autoAttachEnabled = true;
       console.log("[FrameContext] Target auto-attach enabled");
     })().finally(() => {
@@ -352,6 +362,93 @@ export class FrameContextManager {
       `[FrameContext] Auto-detached session ${session.id ?? event.sessionId} for frame ${frameId}`
     );
   };
+
+  private async trackPageEvents(session: CDPSession): Promise<void> {
+    if (this.pageTrackedSessions.has(session)) {
+      return;
+    }
+    this.pageTrackedSessions.add(session);
+
+    await session
+      .send("Page.enable")
+      .catch((error) =>
+        console.warn("[FrameContext] Failed to enable Page domain:", error)
+      );
+
+    const attachedHandler = (event: Protocol.Page.FrameAttachedEvent): void => {
+      this.handlePageFrameAttached(event).catch((error) =>
+        console.warn("[FrameContext] Error handling frameAttached:", error)
+      );
+    };
+
+    const detachedHandler = (event: Protocol.Page.FrameDetachedEvent): void => {
+      this.handlePageFrameDetached(event);
+    };
+
+    const navigatedHandler = (event: Protocol.Page.FrameNavigatedEvent): void => {
+      this.handlePageFrameNavigated(event);
+    };
+
+    session.on("Page.frameAttached", attachedHandler);
+    session.on("Page.frameDetached", detachedHandler);
+    session.on("Page.frameNavigated", navigatedHandler);
+
+    const listeners =
+      this.sessionListeners.get(session) ??
+      [];
+    listeners.push(
+      { event: "Page.frameAttached", handler: attachedHandler as (...args: unknown[]) => void },
+      { event: "Page.frameDetached", handler: detachedHandler as (...args: unknown[]) => void },
+      { event: "Page.frameNavigated", handler: navigatedHandler as (...args: unknown[]) => void }
+    );
+    this.sessionListeners.set(session, listeners);
+  }
+
+  private async handlePageFrameAttached(
+    event: Protocol.Page.FrameAttachedEvent
+  ): Promise<void> {
+    const frameId = event.frameId;
+    const parentFrameId = event.parentFrameId ?? null;
+    if (this.graph.getFrame(frameId)) {
+      return;
+    }
+
+    this.upsertFrame({
+      frameId,
+      parentFrameId,
+    });
+    if (typeof this.graph.getFrameIndex(frameId) === "undefined") {
+      const index = this.nextFrameIndex++;
+      this.assignFrameIndex(frameId, index);
+    }
+    const rootSession = this.autoAttachRootSession ?? this.client.rootSession;
+    this.setFrameSession(frameId, rootSession);
+    await this.populateFrameOwner(rootSession, frameId);
+    console.log(
+      `[FrameContext] Page.frameAttached: frameId=${frameId}, parent=${parentFrameId ?? "root"}`
+    );
+  }
+
+  private handlePageFrameDetached(event: Protocol.Page.FrameDetachedEvent): void {
+    const frameId = event.frameId;
+    if (!this.graph.getFrame(frameId)) {
+      return;
+    }
+    this.removeFrame(frameId);
+    console.log(`[FrameContext] Page.frameDetached: frameId=${frameId}`);
+  }
+
+  private handlePageFrameNavigated(event: Protocol.Page.FrameNavigatedEvent): void {
+    const frameId = event.frame.id;
+    this.upsertFrame({
+      frameId,
+      parentFrameId: event.frame.parentId ?? null,
+      loaderId: event.frame.loaderId,
+      url: event.frame.url,
+      name: event.frame.name,
+    });
+    console.log(`[FrameContext] Page.frameNavigated: frameId=${frameId}, url=${event.frame.url}`);
+  }
 
   private trackRuntimeForSession(session: CDPSession): void {
     if (this.runtimeTrackedSessions.has(session)) {

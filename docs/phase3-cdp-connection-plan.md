@@ -61,17 +61,10 @@ Playwright still controls navigation/input; our CDP client handles frame/session
 - Listen for `Page.close()`/`browserContext.close()` and call `cdpConnection.close()` to avoid leaking sockets.
 
 ### Step 4: FrameContextManager updates
-- Change constructor to accept the new `CdpConnection` (root session + session registry).
-- On `ensureInitialized`:
-  - Call `Page.getFrameTree` (through the root session) and seed FrameRecords.
-  - For each frame, `attachToTarget(targetId)` if Chrome exposes one (OOPIF). For same-origin frames, reuse the root session.
-  - Subscribe to CDP events (`Target.attachedToTarget`, `Target.detachedFromTarget`, `Runtime.executionContextCreated`). Update FrameRecords accordingly.
-- Provide APIs used by resolvers:
-  ```ts
-  resolveFrameIndex(encodedIndex): { frameId, session, executionContextId }
-  waitForMainWorld(frameId, timeout)
-  getFrameGraphSnapshot()
-  ```
+- ✅ Manager already owns the FrameGraph + execution-context registry.
+- ✅ On `ensureInitialized` we auto-attach, call `Page.getFrameTree`, and seed FrameRecords.
+- ✅ `Target.attachedToTarget` + `Page.frameAttached/Detached/Navigated` keep frame → session mappings up to date.
+- ✅ Resolver APIs (`getFrameSession`, `waitForExecutionContext`, `frameGraphSnapshot`) now back all CDP interactions.
 
 ### Step 5: Refactor resolvers & DOM extraction
 - Update `resolveElement` to use the manager (`resolveFrameIndex`) rather than `frameInfo.playwrightFrame`. If the manager cannot resolve a frame (e.g., before initialization), fall back to the current behavior temporarily, but log a warning.
@@ -82,9 +75,8 @@ Playwright still controls navigation/input; our CDP client handles frame/session
 - Remove `resolveFrameByXPath` and other Playwright-specific frame helpers once this path is stable.
 
 ### Step 6: Lifecycle watcher & tests
-- Implement `LifecycleWatcher` on top of our CDP connection (listen to `Page.frameNavigated`, network events, etc.). This replaces `waitForSettledDOM` in later phases.
-- Add unit tests for the CDP connection, FrameContextManager, and resolver logic (mocking CDP events).
-- Run iframe-heavy templates (YouTube OOPIF, Google Maps) with `cdpActions` enabled, capturing before/after timings to confirm XPath traversal is gone.
+- ✅ Lifecycle events wired into FrameContextManager; `waitForSettledDOM` delegates to the new `waitForLifecycle` + network-idle helper.
+- ⏳ Tests still pending (see Phase 5 plan) once the architecture stabilizes.
 
 ---
 
@@ -97,9 +89,9 @@ Playwright still controls navigation/input; our CDP client handles frame/session
 
 ## 5. Deliverables
 1. `CdpConnection` + glue code to reuse the Chromium debugging endpoint.
-2. FrameContextManager powered by raw CDP sessions (frameId → sessionId).
-3. Resolver / DOM extraction refactored to use the manager instead of Playwright frames.
-4. Lifecycle watcher + execution context registry.
-5. Tests & documentation describing the new architecture.
+2. ✅ FrameContextManager powered by raw CDP sessions (frameId → sessionId) with auto-attach + lifecycle events.
+3. ✅ Resolver / DOM extraction refactored to use the manager instead of Playwright frames.
+4. ✅ Lifecycle watcher + execution context registry.
+5. ⏳ Tests/documentation updates (ongoing).
 
 Once these land, Phase 3’s promise—frame-first, CDP-only element resolution—is fulfilled. All nested frames (same-origin or OOPIF) will be handled through CDP sessions with no XPath traversal, giving us the speed boost we set out to achieve.

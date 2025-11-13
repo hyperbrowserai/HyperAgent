@@ -170,28 +170,13 @@ async function resolveFrameSession(
   const sessionPromise = (async () => {
     try {
       const rootSession = await ensureRootSession(ctx);
-
-      if (frameIndex === 0 || !frameInfo?.playwrightFrame) {
-        cache.set(frameIndex, rootSession);
-        frameManager?.setFrameSession(frameId, rootSession);
-        logDebug(
-          ctx,
-          `[ElementResolver] Using root session for frameIndex=${frameIndex} (frameId=${frameId})`
-        );
-        return { session: rootSession, frameId };
-      }
-
-      const session = await ctx.cdpClient.createSession({
-        type: "frame",
-        frame: frameInfo.playwrightFrame,
-      });
-      cache.set(frameIndex, session);
-      frameManager?.setFrameSession(frameId, session);
+      cache.set(frameIndex, rootSession);
+      frameManager?.setFrameSession(frameId, rootSession);
       logDebug(
         ctx,
-        `[ElementResolver] Attached new session ${session.id ?? "unknown"} for frameIndex=${frameIndex} (frameId=${frameId})`
+        `[ElementResolver] Falling back to root session for frameIndex=${frameIndex} (frameId=${frameId})`
       );
-      return { session, frameId };
+      return { session: rootSession, frameId };
     } finally {
       pendingMap!.delete(frameIndex);
     }

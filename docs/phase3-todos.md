@@ -1,34 +1,34 @@
 # Phase 3 TODOs (Derived from `docs/phase3-cdp-frame-management.md`)
 
 ## Workstream A — FrameGraph & Execution Contexts
-- [ ] Implement `FrameGraph` module (`src/cdp/frame-graph.ts`) with `FrameRecord`, `FrameGraph`, and helper mutators.
-- [ ] Bootstrap FrameGraph on startup using `Page.getFrameTree`, `Target.getTargets`, and `DOM.getFrameOwner` to capture `backendNodeId` and parent relationships.
-- [ ] Maintain `frameIndexMap` (encoded frame index ↔ CDP `frameId`) for backward compatibility with `EncodedId`.
-- [ ] Build `ExecutionContextRegistry` listening to `Runtime.executionContextCreated/Destroyed` per session; expose `waitForMainWorld(frameId)`.
-- [ ] Introduce a `FrameContextManager` class that owns the FrameGraph + ExecutionContextRegistry and exposes high-level APIs (`getFrameRecord`, `ensureSession`, `waitForMainWorld`), so the rest of the code depends on the abstraction rather than raw CDP plumbing.
+- [x] Implemented `FrameGraph` + helper mutators (`src/cdp/frame-graph.ts`).
+- [x] Bootstrapped the graph via `FrameContextManager.captureFrameTree` (`Page.getFrameTree` + `DOM.getFrameOwner`).
+- [x] Maintain `frameIndexMap` (encoded frame index ↔ CDP `frameId`).
+- [x] Track execution contexts via `FrameContextManager` (`Runtime.executionContextCreated/Destroyed`) with `waitForExecutionContext` helper.
+- [x] `FrameContextManager` now owns frame metadata + context/session registry.
 
 ## Workstream B — CDP Session Manager
-- [ ] Extend the Phase 1 CDP client to call `Target.setAutoAttach({ autoAttach: true, flatten: true })` and cache `sessionId → CDPSession`.
-- [ ] Track `frameId → CDPSession` and react to `Target.attachedToTarget` / `detachedFromTarget` / `Page.frameAttached` events to keep the FrameGraph in sync.
-- [ ] Provide `ensureFrameSession(frameId)` that waits for (or creates) the session, reusing pending promises to avoid races.
-- [ ] Treat the session manager as part of the `FrameContextManager` abstraction (dependency inversion): higher layers (resolver, DOM extraction) should only interact with the manager, not with raw Playwright handles or CDP commands.
+- [x] Auto-attach enabled via `FrameContextManager.enableAutoAttach()`.
+- [x] `Target.attachedToTarget` + `Page.frameAttached/Detached/Navigated` now update the graph and session map.
+- [x] `resolveElement` / DOM extraction call `frameManager.getFrameSession` instead of spinning up Playwright sessions.
+- [x] Higher layers depend on the manager abstraction only (no raw `newCDPSession`).
 
 ## Workstream C — Resolver & DOM Utilities
-- [ ] Update `resolveElement` / `resolveFrameSession` to fetch sessions/contexts through the FrameGraph manager (no Playwright frame handles).
-- [ ] Add `resolveFrame(frameIndexOrId)` and `resolveFrameOwner(encodedId)` helpers backed by the FrameGraph.
-- [ ] Replace XPath-based frame traversal (`resolveFrameByXPath`, Playwright frame lookups) with the CDP frame registry in DOM extraction helpers.
+- [x] `resolveElement` now reuses manager sessions and falls back to root when needed.
+- [x] DOM helpers pull frame metadata from the manager (no cached `playwrightFrame`).
+- [ ] Remove legacy Playwright fallback (`resolveFrameByXPath`, `agent/shared/element-locator.ts`) once CDP-only flow proves stable.
 
 ## Workstream D — DOM Extraction & Actions
-- [ ] Refactor `getA11yDOM` to iterate frames via FrameGraph sessions instead of Playwright `page.frames()`.
-- [ ] Populate `frameMap` with new metadata (`frameId`, `sessionId`, `executionContextId`, `backendNodeId`, `iframeEncodedId`).
-- [ ] Update `act-element` / `executeSingleAction` to resolve frame sessions/contexts via the registry before dispatching CDP actions; include frame graph snapshots in debug artifacts.
+- [x] `getA11yDOM` fetches iframe trees via CDP sessions (no Playwright frame traversal).
+- [x] `frameMap` now includes frameId/session/executionContext metadata and stays in sync via auto-attach.
+- [x] Actions use the resolver/manager (`resolveElement` + CDP interactions). Debug output now logs frame/session info.
 
 ## Workstream E — Lifecycle Watcher & Wait Helpers
-- [ ] Implement a `LifecycleWatcher` (mirroring Playwright semantics) listening to `Page.frameNavigated`, `Page.frameDetached`, network idle, etc.
-- [ ] Expose `waitForLifecycle(frameId, { waitUntil })` and `waitForDomNetworkQuiet` utilities to replace `waitForSettledDOM` in later phases.
-- [ ] Unit tests for watcher behavior (navigations, redirects, aborted loads).
+- [x] Lifecycle events wired into `FrameContextManager` (frame attach/detach/navigate + execution contexts).
+- [x] `waitForSettledDOM` now delegates to `waitForLifecycle` + network-idle helper.
+- [ ] Add targeted tests and eventually rename/remove the `waitForSettledDOM` alias.
 
 ## Workstream F — Testing & Docs
-- [ ] Unit tests for FrameGraph, session manager, execution context registry, and resolver edge cases.
-- [ ] Integration pass: run iframe-heavy templates (YouTube OOPIF, Google Maps) using the new frame registry to confirm parity.
-- [ ] Update docs/debug output to describe the new frame tracking approach (`frame-graph.json`, logging).
+- [ ] Add basic coverage for frame/session/lifecycle watcher behavior (pending).
+- [x] Manual integration pass (iframe, YouTube OOPIF, Google Maps) verified via logs.
+- [ ] Update docs (this file, connection plan) to describe the auto-attach/lifecycle architecture (in progress).
