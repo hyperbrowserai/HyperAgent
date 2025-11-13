@@ -22,6 +22,7 @@ export const INPUT_FORMAT = `=== Final Goal ===
   * Custom attributes
   * Any other valid HTML attributes
   * The attributes provide important context about the element's behavior, accessibility, and styling
+- When choosing an element for \`actElement\`, reference the exact \`encodedId\` shown here (for example, \`"0-5125"\`).
 === Previous Actions ===
 [The previous steps of the task]
 === Page Screenshot === (only in visual modes)

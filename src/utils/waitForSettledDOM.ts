@@ -14,58 +14,111 @@
  * 6. Global timeout ensures we don't wait forever
  */
 
-import type { Page } from "playwright-core";
+import type { BrowserContext, Page } from "playwright-core";
 import {
   getCDPClient,
   getOrCreateFrameContextManager,
 } from "@/cdp";
-import type { CDPClient } from "@/cdp";
+import type { CDPClient, CDPSession } from "@/cdp";
 import type { FrameContextManager } from "@/cdp/frame-context-manager";
 import { Protocol } from "devtools-protocol";
+import { performance } from "perf_hooks";
 
 const NETWORK_IDLE_THRESHOLD_MS = 500;
+const STALLED_REQUEST_MS = 2000;
+const STALLED_SWEEP_INTERVAL_MS = 500;
+const TRACE_WAIT =
+  process.env.HYPERAGENT_TRACE_WAIT === "1" ||
+  process.env.HYPERAGENT_TRACE_WAIT === "true";
 
 export interface LifecycleOptions {
   waitUntil?: Array<"domcontentloaded" | "load" | "networkidle">;
   timeoutMs?: number;
-  frameId?: string;
+}
+
+export interface WaitForSettledStats {
+  durationMs: number;
+  lifecycleMs: number;
+  networkMs: number;
+  requestsSeen: number;
+  peakInflight: number;
+  resolvedByTimeout: boolean;
+  forcedDrops: number;
 }
 
 export async function waitForSettledDOM(
   page: Page,
   timeoutMs: number = 10000
-): Promise<void> {
-  await waitForLifecycle(page, {
-    waitUntil: ["networkidle"],
-    timeoutMs,
-  });
+): Promise<WaitForSettledStats> {
+  const ctx = page.context() as BrowserContext & {
+    _options?: { recordVideo?: unknown };
+  };
+  const traceWait = TRACE_WAIT || !!ctx._options?.recordVideo;
+  const totalStart = performance.now();
+
+  // Currently we only wait for network idle (historical behavior). Hook exists if we add DOM states later.
+  const lifecycleDuration = 0;
+  if (traceWait) {
+    console.log(
+      `[Perf][waitForSettledDOM] lifecycle took ${lifecycleDuration.toFixed(
+        0
+      )}ms`
+    );
+  }
+
+  const cdpClient = await getCDPClient(page);
+  const manager = getOrCreateFrameContextManager(cdpClient);
+  await manager.enableAutoAttach(cdpClient.rootSession);
+
+  const lifecycleSession = await getLifecycleSession(page, cdpClient);
+
+  const networkStart = performance.now();
+  const stats = await waitForNetworkIdle(lifecycleSession, { timeoutMs });
+  const networkDuration = performance.now() - networkStart;
+
+  if (traceWait) {
+    console.log(
+      `[Perf][waitForSettledDOM] networkidle took ${networkDuration.toFixed(
+        0
+      )}ms (requests=${stats.requestsSeen}, peakInflight=${
+        stats.peakInflight
+      }, reason=${stats.resolvedByTimeout ? "timeout" : "quiet"})`
+    );
+    const totalDuration = performance.now() - totalStart;
+    console.log(
+      `[Perf][waitForSettledDOM] total took ${totalDuration.toFixed(0)}ms`
+    );
+  }
+
+  const totalDuration = performance.now() - totalStart;
+  return {
+    durationMs: totalDuration,
+    lifecycleMs: lifecycleDuration,
+    networkMs: networkDuration,
+    requestsSeen: stats.requestsSeen,
+    peakInflight: stats.peakInflight,
+    resolvedByTimeout: stats.resolvedByTimeout,
+    forcedDrops: stats.forcedDrops,
+  };
 }
 
 export async function waitForLifecycle(
   page: Page,
   options: LifecycleOptions = {}
 ): Promise<void> {
-  const {
-    waitUntil = ["domcontentloaded"],
-    timeoutMs = 10000,
-    frameId,
-  } = options;
-
-  const cdpClient = await getCDPClient(page);
-  const manager = getOrCreateFrameContextManager(cdpClient);
-  await manager.enableAutoAttach(cdpClient.rootSession);
+  const { waitUntil = ["domcontentloaded"], timeoutMs = 10000 } = options;
+  const domStates = waitUntil.filter(
+    (state) => state === "domcontentloaded" || state === "load"
+  );
+  if (domStates.length === 0) return;
 
   const watcher = new LifecycleWatcher({
     page,
-    waitUntil,
+    waitUntil: domStates,
     timeoutMs,
   });
 
   await watcher.waitForLifecycle();
-
-  if (waitUntil.includes("networkidle")) {
-    await waitForNetworkIdle(page, cdpClient, { timeoutMs, frameId });
-  }
 }
 
 interface LifecycleWatcherConfig {
@@ -102,30 +155,45 @@ class LifecycleWatcher {
 
 interface NetworkIdleOptions {
   timeoutMs: number;
-  frameId?: string;
+}
+
+interface NetworkIdleStats {
+  requestsSeen: number;
+  peakInflight: number;
+  resolvedByTimeout: boolean;
+  forcedDrops: number;
 }
 
 async function waitForNetworkIdle(
-  page: Page,
-  cdpClient: CDPClient,
+  session: CDPSession,
   options: NetworkIdleOptions
-): Promise<void> {
-  const { timeoutMs, frameId } = options;
-  const session = await cdpClient.createSession({ type: "page", page });
+): Promise<NetworkIdleStats> {
+  const { timeoutMs } = options;
   const inflight = new Set<string>();
   let quietTimer: NodeJS.Timeout | null = null;
   let globalTimeout: NodeJS.Timeout | null = null;
-
-  await session.send("Network.enable").catch(() => {});
+  const stats: NetworkIdleStats = {
+    requestsSeen: 0,
+    peakInflight: 0,
+    resolvedByTimeout: false,
+    forcedDrops: 0,
+  };
 
   await new Promise<void>((resolve) => {
+    const requestMeta = new Map<
+      string,
+      { url?: string; start: number }
+    >();
+    let stalledSweepTimer: NodeJS.Timeout | null = null;
+
     const maybeResolve = () => {
       if (inflight.size === 0 && !quietTimer) {
-        quietTimer = setTimeout(resolveDone, NETWORK_IDLE_THRESHOLD_MS);
+        quietTimer = setTimeout(() => resolveDone(false), NETWORK_IDLE_THRESHOLD_MS);
       }
     };
 
-    const resolveDone = () => {
+    const resolveDone = (byTimeout: boolean) => {
+      stats.resolvedByTimeout = byTimeout;
       if (quietTimer) clearTimeout(quietTimer);
       if (globalTimeout) clearTimeout(globalTimeout);
       cleanup();
@@ -138,7 +206,13 @@ async function waitForNetworkIdle(
         session.off("Network.loadingFinished", onLoadingFinished);
         session.off("Network.loadingFailed", onLoadingFailed);
       }
-      session.detach().catch(() => {});
+      if (stalledSweepTimer) {
+        clearInterval(stalledSweepTimer);
+        stalledSweepTimer = null;
+      }
+      if (!isLifecycleSession(session)) {
+        session.detach().catch(() => {});
+      }
     };
 
     const onRequestWillBeSent = (
@@ -148,6 +222,14 @@ async function waitForNetworkIdle(
         return;
       }
       inflight.add(event.requestId);
+      stats.requestsSeen += 1;
+      if (inflight.size > stats.peakInflight) {
+        stats.peakInflight = inflight.size;
+      }
+      requestMeta.set(event.requestId, {
+        url: event.request.url,
+        start: Date.now(),
+      });
       if (quietTimer) {
         clearTimeout(quietTimer);
         quietTimer = null;
@@ -155,20 +237,94 @@ async function waitForNetworkIdle(
     };
 
     const onLoadingFinished = (event: Protocol.Network.LoadingFinishedEvent): void => {
-      inflight.delete(event.requestId);
-      maybeResolve();
+      finishRequest(event.requestId);
     };
 
     const onLoadingFailed = (event: Protocol.Network.LoadingFailedEvent): void => {
-      inflight.delete(event.requestId);
-      maybeResolve();
+      finishRequest(event.requestId);
     };
 
     session.on("Network.requestWillBeSent", onRequestWillBeSent);
     session.on("Network.loadingFinished", onLoadingFinished);
     session.on("Network.loadingFailed", onLoadingFailed);
 
-    globalTimeout = setTimeout(resolveDone, timeoutMs);
+    stalledSweepTimer = setInterval(() => {
+      if (!requestMeta.size) return;
+      const now = Date.now();
+      for (const [id, meta] of requestMeta.entries()) {
+        if (now - meta.start > STALLED_REQUEST_MS) {
+          if (inflight.delete(id)) {
+            stats.forcedDrops += 1;
+            if (TRACE_WAIT) {
+              console.warn(
+                `[waitForSettledDOM] Forcing completion of stalled request ${id} (age=${now - meta.start}ms url=${meta.url ?? "unknown"})`
+              );
+            }
+            requestMeta.delete(id);
+            maybeResolve();
+          }
+        }
+      }
+    }, STALLED_SWEEP_INTERVAL_MS);
+
+    globalTimeout = setTimeout(() => resolveDone(true), timeoutMs);
     maybeResolve();
+
+    function finishRequest(requestId: string): void {
+      if (inflight.delete(requestId)) {
+        requestMeta.delete(requestId);
+        maybeResolve();
+      }
+    }
   });
+
+  return stats;
+}
+
+type LifecycleSessionRecord = {
+  session: CDPSession;
+  disposed: boolean;
+};
+
+const lifecycleSessionCache = new WeakMap<Page, Promise<LifecycleSessionRecord>>();
+type LifecycleTaggedSession = CDPSession & { __hyperLifecycleSession?: boolean };
+
+function markLifecycleSession(session: CDPSession): void {
+  (session as LifecycleTaggedSession).__hyperLifecycleSession = true;
+}
+
+function isLifecycleSession(session: CDPSession): session is LifecycleTaggedSession {
+  return Boolean((session as LifecycleTaggedSession).__hyperLifecycleSession);
+}
+
+async function getLifecycleSession(
+  page: Page,
+  client: CDPClient
+): Promise<CDPSession> {
+  let recordPromise = lifecycleSessionCache.get(page);
+  if (!recordPromise) {
+    recordPromise = (async () => {
+      const session = await client.createSession({ type: "page", page });
+      markLifecycleSession(session);
+      await session.send("Network.enable").catch(() => {});
+      await session.send("Page.enable").catch(() => {});
+      const record: LifecycleSessionRecord = { session, disposed: false };
+      const cleanup = (): void => {
+        if (record.disposed) return;
+        record.disposed = true;
+        session.detach().catch(() => {});
+        lifecycleSessionCache.delete(page);
+      };
+      page.once("close", cleanup);
+      return record;
+    })();
+    lifecycleSessionCache.set(page, recordPromise);
+  }
+
+  const record = await recordPromise;
+  if (record.disposed) {
+    lifecycleSessionCache.delete(page);
+    return getLifecycleSession(page, client);
+  }
+  return record.session;
 }

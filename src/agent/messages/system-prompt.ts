@@ -60,6 +60,7 @@ ${EXAMPLE_ACTIONS}
 - Be specific in your instructions: mention element type and identifying text
 - Examples: "click the Login button", "fill 'user@example.com' into email field"
 - The system will automatically find and interact with elements based on your instruction
+- When choosing \`actElement\`, you MUST include the encoded element ID (e.g., "0-5125"), the CDP method (click/fill/etc.), any arguments, and a confidence score. Encoded IDs come directly from the \`=== Elements ===\` section.
 
 ## Task Completion
 - Only use "complete" when you have fully accomplished everything specified in the task

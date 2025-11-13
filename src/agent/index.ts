@@ -39,6 +39,7 @@ import { HyperPage, HyperVariable } from "../types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
+import { performance } from "perf_hooks";
 import { ExamineDomResult } from "./examine-dom/types";
 import {
   disposeAllCDPClients,
@@ -48,6 +49,7 @@ import {
   getOrCreateFrameContextManager,
 } from "@/cdp";
 import type { CDPActionMethod, ResolvedCDPElement } from "@/cdp";
+import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -726,6 +728,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     instruction: string,
     page: Page
   ): Promise<TaskOutput> {
+    const actionStart = performance.now();
     const startTime = new Date().toISOString();
 
     if (this.debug) {
@@ -737,6 +740,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     try {
       // Find element with retry logic
+      const findStart = performance.now();
       const {
         element,
         domState: foundDomState,
@@ -752,6 +756,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       domState = foundDomState;
       elementMap = foundElementMap;
+      logPerf(
+        this.debug,
+        "[Perf][executeSingleAction] findElementWithRetry",
+        findStart
+      );
 
       if (this.debug) {
         console.log(`[aiAction] Found element: ${element.elementId}`);
@@ -773,6 +782,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const canUseCDP =
         !!this.actionConfig?.cdpActions && !!domState.backendNodeMap;
 
+      const execStart = performance.now();
       if (canUseCDP) {
         const cdpClient = await getCDPClient(page);
         const frameContextManager = getOrCreateFrameContextManager(cdpClient);
@@ -817,7 +827,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
 
       // Wait for DOM to settle after action
-      await waitForSettledDOM(page);
+      const waitStart = performance.now();
+      const waitStats = await waitForSettledDOM(page);
+      markDomSnapshotDirty(page);
+      logPerf(this.debug, "[Perf][executeSingleAction] action dispatch", execStart);
+      logPerf(this.debug, "[Perf][executeSingleAction] waitForSettledDOM", waitStart);
 
       // Write debug data on success
       await this.writeDebugData({
@@ -836,6 +850,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         success: true,
       });
 
+      logPerf(
+        this.debug,
+        "[Perf][executeSingleAction] total",
+        actionStart
+      );
       return {
         status: TaskStatus.COMPLETED,
         steps: [],
@@ -1088,4 +1107,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     return hyperPage;
   }
+}
+
+function logPerf(debug: boolean | undefined, label: string, start: number): void {
+  if (!debug) return;
+  const duration = performance.now() - start;
+  console.log(`${label} took ${Math.round(duration)}ms`);
 }

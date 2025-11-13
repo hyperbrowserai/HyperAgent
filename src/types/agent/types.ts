@@ -34,6 +34,8 @@ export interface TaskParams {
   onComplete?: (output: TaskOutput) => Promise<void> | void;
   debugOnAgentOutput?: (step: AgentOutput) => void;
   enableVisualMode?: boolean;
+  useDomCache?: boolean;
+  enableDomStreaming?: boolean;
 }
 
 export interface TaskOutput {

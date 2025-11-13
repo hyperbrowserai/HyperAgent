@@ -5,7 +5,6 @@ export {
   disposeCDPClientForPage,
   disposeAllCDPClients,
 } from "./playwright-adapter";
-export { CdpConnection } from "./connection";
 export { getBoundingBox } from "./bounding-box";
 export {
   attachDriverToCDP,

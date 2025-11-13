@@ -11,6 +11,10 @@ import {
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
 
+const STRUCTURED_SCHEMA_DEBUG =
+  process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "1" ||
+  process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "true";
+
 export interface OpenAIClientConfig {
   apiKey?: string;
   model: string;
@@ -140,6 +144,15 @@ export class OpenAIClient implements HyperAgentLLM {
   ): Promise<HyperAgentStructuredResult<TSchema>> {
     const openAIMessages = convertToOpenAIMessages(messages);
     const responseFormat = convertToOpenAIJsonSchema(request.schema);
+    if (STRUCTURED_SCHEMA_DEBUG) {
+      const schemaPayload =
+        (responseFormat as { json_schema?: { schema?: unknown } }).json_schema
+          ?.schema ?? responseFormat;
+      console.log(
+        "[LLM][OpenAI] Structured output schema:",
+        JSON.stringify(schemaPayload, null, 2)
+      );
+    }
 
     // GPT-5 only supports temperature=1 (default), so omit temperature for this model
     const temperature = request.options?.temperature ?? this.temperature;

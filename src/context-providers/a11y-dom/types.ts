@@ -188,6 +188,15 @@ export interface FrameMetadata {
   frameName: string;
 }
 
+export interface FrameChunkEvent {
+  frameIndex: number;
+  framePath?: string[];
+  frameUrl?: string;
+  simplified: string;
+  totalNodes: number;
+  order: number;
+}
+
 /**
  * Debug information about frame extraction
  */

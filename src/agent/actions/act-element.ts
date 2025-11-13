@@ -1,34 +1,63 @@
 import { z } from "zod";
+import { performance } from "perf_hooks";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
-import { examineDom } from "../examine-dom";
 import { executePlaywrightMethod } from "../shared/execute-playwright-method";
 import { getElementLocator } from "../shared/element-locator";
 import { AGENT_ELEMENT_ACTIONS } from "../shared/action-restrictions";
 import type { EncodedId } from "@/context-providers/a11y-dom/types";
+import { isEncodedId } from "@/context-providers/a11y-dom/types";
 import type { CDPActionMethod, ResolvedCDPElement } from "@/cdp";
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.object({}).catchall(jsonValueSchema),
+  ]) as z.ZodType<JsonValue>
+);
+
+const methodSchema = z
+  .enum(AGENT_ELEMENT_ACTIONS)
+  .describe(
+    "Method to execute (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollTo, nextChunk, prevChunk)."
+  );
 
 const ActElementAction = z
   .object({
     instruction: z
       .string()
       .describe(
-        "Describe the action in a short, specific phrase that mentions the element type.\n\n" +
-          "Supported actions: click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollTo, nextChunk, prevChunk\n\n" +
-          "Examples:\n" +
-          "- click the Login button\n" +
-          "- fill 'user@example.com' into email field\n" +
-          "- type 'search query' into search box\n" +
-          "- press Enter\n" +
-          "- select 'California' from state dropdown\n" +
-          "- check the terms checkbox\n" +
-          "- uncheck the newsletter checkbox\n" +
-          "- hover over profile menu\n" +
-          "- scroll to 50%\n" +
-          "- scroll down one page\n" +
-          "- scroll up one page"
+        "Short explanation of why this action is needed."
+      ),
+    elementId: z
+      .string()
+      .min(1)
+      .describe(
+        'Encoded element identifier from the DOM listing (format "frameIndex-backendNodeId", e.g., "0-5125").'
+      ),
+    method: methodSchema.describe(
+      "CDP/Playwright method to invoke (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollTo, nextChunk, prevChunk)."
+    ),
+    arguments: z
+      .array(jsonValueSchema)
+      .describe(
+        "Arguments for the method (e.g., text to fill, key to press, scroll target). Use an empty array when no arguments are required."
+      ),
+    confidence: z
+      .number()
+      .min(0)
+      .max(1)
+      .describe(
+        "LLM-estimated confidence (0-1). Used for debugging/telemetry; execution does not depend on it."
       ),
   })
-  .describe("Perform a single action on an element using natural language");
+  .describe("Perform a single action on an element by referencing an encoded ID from the DOM listing.");
 
 type ActElementActionType = z.infer<typeof ActElementAction>;
 
@@ -39,76 +68,55 @@ export const ActElementActionDefinition: AgentActionDefinition = {
     ctx: ActionContext,
     action: ActElementActionType
   ): Promise<ActionOutput> {
-    const { instruction } = action;
-
-    // DOM state is provided by agent loop in ctx.domState
-    // NO DOM FETCHING HERE - agent loop handles that
-
-    // Convert elements map for examineDom
-    const elementMap = new Map(
-      Array.from(ctx.domState.elements).map(([k, v]) => [String(k), v])
-    );
-
-    // Call examineDom with current DOM state
-    const examineResult = await examineDom(
+    const {
       instruction,
-      {
-        tree: ctx.domState.domState,
-        xpathMap: ctx.domState.xpathMap || {},
-        elements: elementMap,
-        url: ctx.page.url(),
-      },
-      ctx.llm
-    );
+      elementId,
+      method,
+      arguments: methodArgs = [],
+      confidence,
+    } = action;
 
-    // Check if element was found
-    if (!examineResult || examineResult.elements.length === 0) {
+    if (!isEncodedId(elementId)) {
       return {
         success: false,
-        message: `Failed to execute "${instruction}": Element not found on page`,
+        message: `Failed to execute "${instruction}": elementId "${elementId}" is not in encoded format (frameIndex-backendNodeId).`,
       };
     }
 
-    const element = examineResult.elements[0];
-    const method = element.method;
-    const args = element.arguments || [];
-    const encodedId = element.elementId as EncodedId;
-
-    // Store debug info about selected element
-    const debugInfo = ctx.debug
-      ? {
-          selectedElement: {
-            elementId: element.elementId,
-            confidence: element.confidence,
-            description: element.description,
-            method: method,
-            arguments: args,
-          },
-          allCandidates: examineResult.elements.map((e) => ({
-            elementId: e.elementId,
-            confidence: e.confidence,
-            description: e.description,
-          })),
-        }
-      : undefined;
-
-    // Validate action is allowed
-    if (!AGENT_ELEMENT_ACTIONS.includes(method)) {
+    const encodedId = elementId as EncodedId;
+    const elementMetadata = ctx.domState.elements.get(encodedId);
+    if (!elementMetadata) {
       return {
         success: false,
-        message: `Action "${method}" not allowed. Allowed actions: ${AGENT_ELEMENT_ACTIONS.join(
-          ", "
-        )}`,
-        debug: debugInfo,
+        message: `Failed to execute "${instruction}": elementId "${elementId}" not present in current DOM.`,
       };
     }
+
+    const timings: Record<string, number> | undefined = ctx.debug ? {} : undefined;
+    const debugInfo =
+      ctx.debug && elementMetadata
+        ? {
+            requestedAction: {
+              elementId,
+              method,
+              arguments: methodArgs,
+              confidence,
+              instruction,
+            },
+            elementMetadata,
+            ...(timings ? { timings } : {}),
+          }
+        : undefined;
 
     const shouldUseCDP =
-      !!ctx.actionConfig?.cdpActions && !!ctx.cdp && !!ctx.domState.backendNodeMap;
+      !!ctx.actionConfig?.cdpActions &&
+      !!ctx.cdp &&
+      !!ctx.domState.backendNodeMap;
 
     if (shouldUseCDP) {
       const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
       try {
+        const resolveStart = performance.now();
         const resolved = await ctx.cdp!.resolveElement(encodedId, {
           page: ctx.page,
           cdpClient: ctx.cdp!.client,
@@ -119,8 +127,12 @@ export const ActElementActionDefinition: AgentActionDefinition = {
           frameContextManager: ctx.cdp!.frameContextManager,
           debug: ctx.debug,
         });
+        if (timings) {
+          timings.resolveElementMs = Math.round(performance.now() - resolveStart);
+        }
 
-        await ctx.cdp!.dispatchCDPAction(method as CDPActionMethod, args, {
+        const dispatchStart = performance.now();
+        await ctx.cdp!.dispatchCDPAction(method as CDPActionMethod, methodArgs, {
           element: {
             ...resolved,
             xpath: ctx.domState.xpathMap?.[encodedId],
@@ -128,6 +140,9 @@ export const ActElementActionDefinition: AgentActionDefinition = {
           boundingBox: ctx.domState.boundingBoxMap?.get(encodedId) ?? undefined,
           preferScriptBoundingBox: ctx.cdp!.preferScriptBoundingBox,
         });
+        if (timings) {
+          timings.dispatchMs = Math.round(performance.now() - dispatchStart);
+        }
 
         return {
           success: true,
@@ -147,19 +162,27 @@ export const ActElementActionDefinition: AgentActionDefinition = {
 
     try {
       // Get Playwright locator using shared utility
+      const locatorStart = performance.now();
       const { locator } = await getElementLocator(
-        element.elementId,
+        elementId,
         ctx.domState.xpathMap,
         ctx.page,
         ctx.domState.frameMap,
         !!ctx.debugDir
       );
+      if (timings) {
+        timings.locatorMs = Math.round(performance.now() - locatorStart);
+      }
 
       // Execute Playwright method using shared utility
-      await executePlaywrightMethod(method, args, locator, {
+      const pwStart = performance.now();
+      await executePlaywrightMethod(method, methodArgs, locator, {
         clickTimeout: ctx.actionConfig?.clickElement?.timeout ?? 3500,
         debug: !!ctx.debugDir,
       });
+      if (timings) {
+        timings.playwrightActionMs = Math.round(performance.now() - pwStart);
+      }
 
       return {
         success: true,

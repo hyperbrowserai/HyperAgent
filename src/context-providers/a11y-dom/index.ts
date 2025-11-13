@@ -5,6 +5,8 @@
 
 import type { Protocol } from "devtools-protocol";
 import type { Page } from "playwright-core";
+import fs from "fs";
+import path from "path";
 import {
   A11yDOMState,
   AXNode,
@@ -15,6 +17,7 @@ import {
   EncodedId,
   IframeInfo,
   DOMRect,
+  FrameChunkEvent,
 } from "./types";
 import { buildBackendIdMaps } from "./build-maps";
 import { buildHierarchicalTree } from "./build-tree";
@@ -33,6 +36,8 @@ import {
   getOrCreateFrameContextManager,
 } from "@/cdp";
 import type { CDPClient, CDPSession } from "@/cdp";
+import { domSnapshotCache } from "./dom-cache";
+import { PerformanceTracker } from "./performance";
 
 const DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS = 500;
 
@@ -521,7 +526,7 @@ async function collectCrossOriginFrameData({
     session.send("Page.enable").catch(() => {}),
   ]);
 
-  if (debug || enableVisualMode) {
+  if (enableVisualMode) {
     await injectBoundingBoxScriptSession(session);
   }
 
@@ -698,31 +703,75 @@ function processFrameDebugInfo(
  * @param enableVisualMode - Whether to collect bounding boxes and generate visual overlay
  * @returns A11yDOMState with elements map, text tree, and optional visual overlay
  */
+interface GetA11yDomOptions {
+  useCache?: boolean;
+  enableStreaming?: boolean;
+  onFrameChunk?: (chunk: FrameChunkEvent) => void;
+}
+
 export async function getA11yDOM(
   page: Page,
   debug = false,
   enableVisualMode = false,
-  debugDir?: string
+  debugDir?: string,
+  options?: GetA11yDomOptions
 ): Promise<A11yDOMState> {
+  const profileDom =
+    debug || process.env.HYPERAGENT_PROFILE_DOM === "1" || !!debugDir;
+  const tracker = profileDom ? new PerformanceTracker("getA11yDOM") : null;
+  const timeAsync = async <T>(
+    name: string,
+    fn: () => Promise<T>,
+    metadata?: Record<string, unknown>
+  ): Promise<T> => {
+    if (!tracker) return await fn();
+    tracker.startTimer(name, metadata);
+    try {
+      return await fn();
+    } finally {
+      tracker.stopTimer(name);
+    }
+  };
+
+  const canUseCache = options?.useCache && !enableVisualMode;
+  const onFrameChunk = options?.onFrameChunk;
+  if (canUseCache) {
+    const cached = domSnapshotCache.get(page);
+    if (cached) {
+      tracker?.mark("cacheHit");
+      return cached;
+    }
+  }
+
   try {
     // Step 1: Inject scripts into the main frame
-    await injectScrollableDetection(page);
+    await timeAsync("injectScrollableDetection", () =>
+      injectScrollableDetection(page)
+    );
 
     // Step 2: Create CDP session for main frame
     const cdpClient = await getCDPClient(page);
     const frameContextManager = getOrCreateFrameContextManager(cdpClient);
-    const client = await cdpClient.createSession({ type: "page", page });
+    const client = await timeAsync("createCDPSession", () =>
+      cdpClient.createSession({ type: "page", page })
+    );
 
     try {
-      await client.send("Accessibility.enable");
+      await timeAsync("Accessibility.enable", () =>
+        client.send("Accessibility.enable")
+      );
 
-      if (debug || enableVisualMode) {
-        await injectBoundingBoxScriptSession(client);
+      if (enableVisualMode) {
+        await timeAsync("injectBoundingBoxScript", () =>
+          injectBoundingBoxScriptSession(client)
+        );
       }
 
       // Step 3: Build backend ID maps (tag names and XPaths)
       // This traverses the full DOM including iframe content via DOM.getDocument with pierce: true
-      const maps = await buildBackendIdMaps(client, 0, debug);
+      const maps = await timeAsync("buildBackendIdMaps", () =>
+        buildBackendIdMaps(client, 0, debug)
+      );
       await annotateFrameSessions({
         session: client,
         frameMap: maps.frameMap,
@@ -733,8 +782,12 @@ export async function getA11yDOM(
       const allNodes: (AXNode & { _frameIndex: number })[] = [];
 
       // 4a. Fetch main frame accessibility tree
-      const { nodes: mainNodes } = (await client.send(
-        "Accessibility.getFullAXTree"
+      const { nodes: mainNodes } = (await timeAsync(
+        "fetchMainFrameAXTree",
+        () =>
+          client.send("Accessibility.getFullAXTree") as Promise<{
+            nodes: AXNode[];
+          }>
       )) as {
         nodes: AXNode[];
       };
@@ -746,28 +799,34 @@ export async function getA11yDOM(
       }
 
       const { nodes: iframeNodes, debugInfo: frameDebugInfo } =
-        await fetchIframeAXTrees(
-          client,
-          maps,
-          debug,
-          enableVisualMode,
-          cdpClient,
-          frameContextManager
+        await timeAsync("fetchIframeAXTrees", () =>
+          fetchIframeAXTrees(
+            client,
+            maps,
+            debug,
+            enableVisualMode,
+            cdpClient,
+            frameContextManager
+          )
         );
       allNodes.push(...iframeNodes);
 
       // 4c. Build frame hierarchy paths now that all frames are discovered
       buildFramePaths(maps.frameMap || new Map(), debug);
-      await syncFrameContextManager({
-        manager: frameContextManager,
-        frameMap: maps.frameMap,
-        cdpClient,
-        rootSession: cdpClient.rootSession,
-        debug,
-      });
+      await timeAsync("syncFrameContextManager", () =>
+        syncFrameContextManager({
+          manager: frameContextManager,
+          frameMap: maps.frameMap,
+          cdpClient,
+          rootSession: cdpClient.rootSession,
+          debug,
+        })
+      );
 
       // Step 4: Detect scrollable elements
-      const scrollableIds = await findScrollableElementIds(page, client);
+      const scrollableIds = await timeAsync("findScrollableElements", () =>
+        findScrollableElementIds(page, client)
+      );
 
       // Step 5: Build hierarchical trees for each frame
       const frameGroups = new Map<number, AXNode[]>();
@@ -779,12 +838,14 @@ export async function getA11yDOM(
         frameGroups.get(frameIdx)!.push(node);
       }
 
-      // Build trees for each frame
+      const frameEntries = Array.from(frameGroups.entries());
+
+      // Build trees for each frame (potentially in parallel)
       const treeResults = await Promise.all(
-        Array.from(frameGroups.entries()).map(async ([frameIdx, nodes]) => {
+        frameEntries.map(async ([frameIdx, nodes], order) => {
           let boundingBoxTarget: import("./bounding-box-batch").BoundingBoxTarget | undefined;
 
-          if (debug || enableVisualMode) {
+          if (enableVisualMode) {
             if (frameIdx === 0) {
               boundingBoxTarget = { kind: "playwright", target: page };
             } else {
@@ -813,16 +874,34 @@ export async function getA11yDOM(
             }
           }
 
-          const treeResult = await buildHierarchicalTree(
-            nodes,
-            maps,
-            frameIdx,
-            scrollableIds,
-            debug,
-            enableVisualMode,
-            boundingBoxTarget,
-            debugDir
+          const treeResult = await timeAsync(
+            `buildFrameTree:${frameIdx}`,
+            () =>
+              buildHierarchicalTree(
+                nodes,
+                maps,
+                frameIdx,
+                scrollableIds,
+                debug,
+                enableVisualMode,
+                boundingBoxTarget,
+                debugDir
+            ),
+            { nodeCount: nodes.length }
           );
+
+          if (onFrameChunk) {
+            const frameInfo = maps.frameMap?.get(frameIdx);
+            onFrameChunk({
+              frameIndex: frameIdx,
+              framePath: frameInfo?.framePath,
+              frameUrl:
+                frameInfo?.src ?? (frameIdx === 0 ? page.url() : undefined),
+              simplified: treeResult.simplified,
+              totalNodes: nodes.length,
+              order,
+            });
+          }
 
           return treeResult;
         })
@@ -881,12 +960,14 @@ export async function getA11yDOM(
             }
           }
 
-          visualOverlay = await renderA11yOverlay(visibleBoundingBoxMap, {
-            width: viewport.width,
-            height: viewport.height,
-            showEncodedIds: true,
-            colorScheme: "rainbow",
-          });
+          visualOverlay = await timeAsync("renderA11yOverlay", () =>
+            renderA11yOverlay(visibleBoundingBoxMap, {
+              width: viewport.width,
+              height: viewport.height,
+              showEncodedIds: true,
+              colorScheme: "rainbow",
+            })
+          );
 
           if (debug) {
             console.log(
@@ -896,7 +977,7 @@ export async function getA11yDOM(
         }
       }
 
-      return {
+      const snapshot: A11yDOMState = {
         elements: allElements,
         domState: combinedDomState,
         xpathMap: allXpaths,
@@ -905,6 +986,28 @@ export async function getA11yDOM(
         ...(debug && { frameDebugInfo: processedDebugInfo }),
         ...(enableVisualMode && { boundingBoxMap, visualOverlay }),
       };
+
+      if (canUseCache) {
+        domSnapshotCache.set(page, snapshot);
+        tracker?.mark("cacheStore");
+      }
+
+      tracker?.finish();
+      if (tracker && debugDir) {
+        try {
+          fs.mkdirSync(debugDir, { recursive: true });
+          fs.writeFileSync(
+            path.join(debugDir, "dom-capture-metrics.json"),
+            tracker.toJSON()
+          );
+        } catch {
+          // best effort
+        }
+      } else if (tracker && debug) {
+        console.log(tracker.formatReport());
+      }
+
+      return snapshot;
     } finally {
       await client.detach();
     }

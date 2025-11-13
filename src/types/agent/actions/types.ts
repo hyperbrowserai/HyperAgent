@@ -17,6 +17,7 @@ export interface ActionContext {
   mcpClient?: MCPClient;
   actionConfig?: ActionConfig;
   debug?: boolean;
+  invalidateDomCache: () => void;
   cdp?: {
     resolveElement: typeof import("@/cdp").resolveElement;
     dispatchCDPAction: typeof import("@/cdp").dispatchCDPAction;

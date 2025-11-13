@@ -13,6 +13,10 @@ import {
   createAnthropicToolChoice,
 } from "../utils/schema-converter";
 
+const STRUCTURED_SCHEMA_DEBUG =
+  process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "1" ||
+  process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "true";
+
 export interface AnthropicClientConfig {
   apiKey?: string;
   model: string;
@@ -83,6 +87,12 @@ export class AnthropicClient implements HyperAgentLLM {
       convertToAnthropicMessages(messages);
     const tool = convertToAnthropicTool(request.schema);
     const toolChoice = createAnthropicToolChoice("structured_output");
+    if (STRUCTURED_SCHEMA_DEBUG) {
+      console.log(
+        "[LLM][Anthropic] Structured output schema:",
+        JSON.stringify(tool, null, 2)
+      );
+    }
 
     const response = await this.client.messages.create({
       model: this.model,
@@ -105,9 +115,21 @@ export class AnthropicClient implements HyperAgentLLM {
 
     try {
       const input = content.input as any;
-      const validated = request.schema.parse(input.result);
+      let payload = input.result;
+      if (typeof payload === "string") {
+        try {
+          payload = JSON.parse(payload);
+        } catch (error) {
+          console.warn(
+            "[LLM][Anthropic] Failed to JSON.parse tool result string:",
+            error
+          );
+        }
+      }
+      const normalizedInput = { ...input, result: payload };
+      const validated = request.schema.parse(normalizedInput.result);
       return {
-        rawText: JSON.stringify(input),
+        rawText: JSON.stringify(normalizedInput),
         parsed: validated,
       };
     } catch {
