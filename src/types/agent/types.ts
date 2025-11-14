@@ -36,6 +36,9 @@ export interface TaskParams {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
+  featureFlags?: {
+    cdpFrames?: boolean;
+  };
 }
 
 export interface TaskOutput {

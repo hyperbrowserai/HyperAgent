@@ -72,7 +72,8 @@ const READ_ONLY_ACTIONS = new Set(["thinking", "wait", "extract", "complete"]);
 
 const ensureFrameContextsReady = async (
   page: Page,
-  debug?: boolean
+  debug: boolean | undefined,
+  _featureFlags?: TaskParams["featureFlags"]
 ): Promise<void> => {
   try {
     const cdpClient = await getCDPClient(page);
@@ -84,6 +85,26 @@ const ensureFrameContextsReady = async (
         "[FrameContext] Failed to initialize frame context manager:",
         error
       );
+    }
+  }
+};
+
+const writeFrameGraphSnapshot = async (
+  page: Page,
+  dir: string,
+  debug?: boolean
+): Promise<void> => {
+  try {
+    const cdpClient = await getCDPClient(page);
+    const frameManager = getOrCreateFrameContextManager(cdpClient);
+    const data = frameManager.toJSON();
+    fs.writeFileSync(
+      `${dir}/frames.json`,
+      JSON.stringify(data, null, 2)
+    );
+  } catch (error) {
+    if (debug) {
+      console.warn("[FrameContext] Failed to write frame graph:", error);
     }
   }
 };
@@ -150,6 +171,30 @@ const getActionHandler = (
   }
 };
 
+const DOM_CAPTURE_MAX_ATTEMPTS = 3;
+const NAVIGATION_ERROR_SNIPPETS = [
+  "Execution context was destroyed",
+  "Cannot find context",
+  "Target closed",
+];
+
+const isRecoverableDomError = (error: unknown): boolean => {
+  if (!(error instanceof Error) || !error.message) {
+    return false;
+  }
+  return NAVIGATION_ERROR_SNIPPETS.some((snippet) =>
+    error.message.includes(snippet)
+  );
+};
+
+const isPlaceholderSnapshot = (snapshot: A11yDOMState): boolean => {
+  if (snapshot.elements.size > 0) return false;
+  return (
+    typeof snapshot.domState === "string" &&
+    snapshot.domState.startsWith("Error: Could not extract accessibility tree")
+  );
+};
+
 const runAction = async (
   action: ActionType,
   domState: A11yDOMState,
@@ -168,6 +213,7 @@ const runAction = async (
     variables: Object.values(ctx.variables),
     actionConfig: ctx.actionConfig,
     invalidateDomCache: () => markDomSnapshotDirty(page),
+    featureFlags: ctx.featureFlags,
   };
 
   if (ctx.actionConfig?.cdpActions) {
@@ -260,7 +306,7 @@ export const runAgentTask = async (
   let lastScreenshotBase64: string | undefined;
 
   try {
-    await ensureFrameContextsReady(page, ctx.debug);
+    await ensureFrameContextsReady(page, ctx.debug, params?.featureFlags);
     while (true) {
     // Status Checks
     if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
@@ -285,31 +331,57 @@ export const runAgentTask = async (
 
     // Get A11y DOM State (visual mode optional, default false for performance)
     let domState: A11yDOMState | null = null;
-    const domChunkAggregator = enableDomStreaming ? new DomChunkAggregator() : null;
+    let domChunks: string | null = null;
     try {
       const domFetchStart = performance.now();
-      domState = await retry({
-        func: async () => {
-          const s = await getA11yDOM(
-            page,
-            ctx.debug,
-            params?.enableVisualMode ?? false,
-            ctx.debug ? debugStepDir : undefined,
-            {
-              useCache: useDomCache,
-              enableStreaming: enableDomStreaming,
-              onFrameChunk: domChunkAggregator
-                ? (chunk) => domChunkAggregator.push(chunk)
-                : undefined,
+      const captureDomState = async (): Promise<A11yDOMState> => {
+        let lastError: unknown;
+        for (let attempt = 0; attempt < DOM_CAPTURE_MAX_ATTEMPTS; attempt++) {
+          const attemptAggregator = enableDomStreaming
+            ? new DomChunkAggregator()
+            : null;
+          try {
+            const snapshot = await getA11yDOM(
+              page,
+              ctx.debug,
+              params?.enableVisualMode ?? false,
+              ctx.debug ? debugStepDir : undefined,
+              {
+                useCache: useDomCache,
+                enableStreaming: enableDomStreaming,
+                onFrameChunk: attemptAggregator
+                  ? (chunk) => attemptAggregator.push(chunk)
+                  : undefined,
+              }
+            );
+            if (!snapshot) {
+              throw new Error("Failed to capture DOM state");
             }
-          );
-          if (!s) throw new Error("no dom state");
-          return s;
-        },
-        params: {
-          retryCount: 3,
-        },
-      });
+            if (isPlaceholderSnapshot(snapshot)) {
+              lastError = new Error(snapshot.domState);
+            } else {
+              domChunks = attemptAggregator?.hasContent()
+                ? attemptAggregator.toString()
+                : null;
+              return snapshot;
+            }
+          } catch (error) {
+            if (!isRecoverableDomError(error)) {
+              throw error;
+            }
+            lastError = error;
+          }
+          if (ctx.debug) {
+            console.warn(
+              `[DOM] Capture failed (attempt ${attempt + 1}/${DOM_CAPTURE_MAX_ATTEMPTS}), waiting for navigation to settle...`
+            );
+          }
+          await waitForSettledDOM(page).catch(() => {});
+        }
+        throw lastError ?? new Error("Failed to capture DOM state");
+      };
+
+      domState = await captureDomState();
       const domDuration = performance.now() - domFetchStart;
       logPerf(
         ctx.debug,
@@ -363,8 +435,8 @@ export const runAgentTask = async (
       }
     }
 
-    if (domChunkAggregator?.hasContent()) {
-      domState.domState = domChunkAggregator.toString();
+    if (domChunks) {
+      domState.domState = domChunks;
     }
 
     // Build Agent Step Messages
@@ -560,6 +632,7 @@ export const runAgentTask = async (
     stepMetrics.totalMs = Math.round(totalDuration);
 
     if (ctx.debug) {
+      await writeFrameGraphSnapshot(page, debugStepDir, ctx.debug);
       fs.writeFileSync(
         `${debugStepDir}/stepOutput.json`,
         JSON.stringify(step, null, 2)

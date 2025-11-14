@@ -18,6 +18,7 @@ export interface ElementResolveContext {
   resolvedElementsCache?: Map<EncodedId, ResolvedCDPElement>;
   frameContextManager?: FrameContextManager;
   debug?: boolean;
+  strictFrameValidation?: boolean;
 }
 
 export interface ResolvedCDPElement {
@@ -61,7 +62,8 @@ export async function resolveElement(
   const { session, frameId } = await resolveFrameSession(
     ctx,
     { frameIndex, frameInfo },
-    frameManager
+    frameManager,
+    ctx.strictFrameValidation
   );
 
   let backendNodeId = ctx.backendNodeMap[encodedId];
@@ -74,7 +76,8 @@ export async function resolveElement(
       frameIndex,
       frameInfo,
       frameId,
-      frameManager
+      frameManager,
+      ctx.strictFrameValidation
     );
   }
 
@@ -92,7 +95,8 @@ export async function resolveElement(
       frameIndex,
       frameInfo,
       frameId,
-      frameManager
+      frameManager,
+      ctx.strictFrameValidation
     );
     resolveResponse = await resolveNodeByBackendId(session, backendNodeId);
   }
@@ -132,10 +136,11 @@ interface FrameSessionRequest {
 async function resolveFrameSession(
   ctx: ElementResolveContext,
   { frameIndex, frameInfo }: FrameSessionRequest,
-  frameManager: FrameContextManager
+  frameManager: FrameContextManager,
+  strict?: boolean
 ): Promise<{ session: CDPSession; frameId: string }> {
   const cache = getSessionCache(ctx.cdpClient);
-  const frameId = resolveFrameId(frameManager, frameInfo, frameIndex);
+  const frameId = resolveFrameId(frameManager, frameInfo, frameIndex, strict);
 
   if (cache.has(frameIndex)) {
     const cached = cache.get(frameIndex)!;
@@ -154,6 +159,11 @@ async function resolveFrameSession(
       `[ElementResolver] Reusing manager session ${managedSession.id ?? "root"} for frameIndex=${frameIndex} (frameId=${frameId})`
     );
     return { session: managedSession, frameId };
+  }
+  if (strict) {
+    throw new Error(
+      `[CDP][ElementResolver] Session not registered for frameIndex=${frameIndex} (frameId=${frameId})`
+    );
   }
 
   let pendingMap = pendingFrameSessions.get(ctx.cdpClient);
@@ -216,11 +226,17 @@ function getSessionCache(client: CDPClient): Map<number, CDPSession> {
 function resolveFrameId(
   manager: FrameContextManager | undefined,
   frameInfo: IframeInfo | undefined,
-  frameIndex: number
+  frameIndex: number,
+  strict?: boolean
 ): string {
   const managerFrameId = manager?.getFrameIdByIndex(frameIndex);
   if (managerFrameId) {
     return managerFrameId;
+  }
+  if (strict) {
+    throw new Error(
+      `[CDP][ElementResolver] Frame index ${frameIndex} not tracked in FrameContextManager`
+    );
   }
   return getFallbackFrameId(frameInfo, frameIndex);
 }
@@ -251,7 +267,8 @@ async function recoverBackendNodeId(
   frameIndex: number,
   frameInfo: IframeInfo | undefined,
   frameId: string,
-  frameManager?: FrameContextManager
+  frameManager?: FrameContextManager,
+  strict?: boolean
 ): Promise<number> {
   const xpath = ctx.xpathMap[encodedId];
   if (!xpath) {
@@ -276,6 +293,11 @@ async function recoverBackendNodeId(
 
   // Validate execution context for iframe elements
   if (frameIndex !== 0 && !executionContextId) {
+    if (strict) {
+      throw new Error(
+        `[CDP][ElementResolver] Execution context missing for frame ${frameIndex} (${frameId})`
+      );
+    }
     console.warn(
       `[CDP][ElementResolver] executionContextId missing for frame ${frameIndex} (${frameId}). ` +
         `XPath evaluation may fail or evaluate in wrong context. ` +

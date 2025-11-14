@@ -126,6 +126,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
           resolvedElementsCache,
           frameContextManager: ctx.cdp!.frameContextManager,
           debug: ctx.debug,
+          strictFrameValidation: ctx.featureFlags?.cdpFrames === true,
         });
         if (timings) {
           timings.resolveElementMs = Math.round(performance.now() - resolveStart);

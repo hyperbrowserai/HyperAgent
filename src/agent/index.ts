@@ -74,6 +74,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private actionConfig: HyperAgentConfig["actionConfig"];
+  private featureFlags: NonNullable<HyperAgentConfig["featureFlags"]>;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -130,6 +131,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     this.debug = params.debug ?? false;
     this.actionConfig = params.actionConfig;
+    this.featureFlags = params.featureFlags ?? {};
     this.errorEmitter = new ErrorEmitter();
   }
 
@@ -399,18 +401,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       steps: [],
     };
     this.tasks[taskId] = taskState;
+    const mergedParams = this.mergeFeatureFlags(params);
     runAgentTask(
       {
         llm: this.llm,
-        actions: this.getActions(params?.outputSchema),
+        actions: this.getActions(mergedParams.outputSchema),
         tokenLimit: this.tokenLimit,
         debug: this.debug,
         mcpClient: this.mcpClient,
         variables: this._variables,
         actionConfig: this.actionConfig,
+        featureFlags: mergedParams.featureFlags,
       },
       taskState,
-      params
+      mergedParams
     ).catch((error: Error) => {
       // Retrieve the correct state to update
       const failedTaskState = this.tasks[taskId];
@@ -450,18 +454,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     try {
+      const mergedParams = this.mergeFeatureFlags(params);
       return await runAgentTask(
         {
           llm: this.llm,
-          actions: this.getActions(params?.outputSchema),
+          actions: this.getActions(mergedParams?.outputSchema),
           tokenLimit: this.tokenLimit,
           debug: this.debug,
           mcpClient: this.mcpClient,
           variables: this._variables,
           actionConfig: this.actionConfig,
+          featureFlags: mergedParams.featureFlags,
         },
         taskState,
-        params
+        mergedParams
       );
     } catch (error) {
       taskState.status = TaskStatus.FAILED;
@@ -554,6 +560,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @param params Debug data parameters
    * @returns Promise that resolves when debug data is written
    */
+  private mergeFeatureFlags(params?: TaskParams): TaskParams {
+    if (!params) {
+      return { featureFlags: { ...this.featureFlags } };
+    }
+    return {
+      ...params,
+      featureFlags: {
+        ...this.featureFlags,
+        ...params.featureFlags,
+      },
+    };
+  }
+
   private async writeDebugData(params: {
     instruction: string;
     page: Page;
