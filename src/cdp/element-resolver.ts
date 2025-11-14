@@ -29,10 +29,6 @@ export interface ResolvedCDPElement {
 }
 
 const sessionCache = new WeakMap<CDPClient, Map<number, CDPSession>>();
-const pendingFrameSessions = new WeakMap<
-  CDPClient,
-  Map<number, Promise<{ session: CDPSession; frameId: string }>>
->();
 const domEnabledSessions = new WeakSet<CDPSession>();
 const runtimeEnabledSessions = new WeakSet<CDPSession>();
 
@@ -160,40 +156,9 @@ async function resolveFrameSession(
     );
     return { session: managedSession, frameId };
   }
-  if (strict) {
-    throw new Error(
-      `[CDP][ElementResolver] Session not registered for frameIndex=${frameIndex} (frameId=${frameId})`
-    );
-  }
-
-  let pendingMap = pendingFrameSessions.get(ctx.cdpClient);
-  if (!pendingMap) {
-    pendingMap = new Map();
-    pendingFrameSessions.set(ctx.cdpClient, pendingMap);
-  }
-
-  const pending = pendingMap.get(frameIndex);
-  if (pending) {
-    return pending;
-  }
-
-  const sessionPromise = (async () => {
-    try {
-      const rootSession = await ensureRootSession(ctx);
-      cache.set(frameIndex, rootSession);
-      frameManager?.setFrameSession(frameId, rootSession);
-      logDebug(
-        ctx,
-        `[ElementResolver] Falling back to root session for frameIndex=${frameIndex} (frameId=${frameId})`
-      );
-      return { session: rootSession, frameId };
-    } finally {
-      pendingMap!.delete(frameIndex);
-    }
-  })();
-
-  pendingMap.set(frameIndex, sessionPromise);
-  return sessionPromise;
+  throw new Error(
+    `[CDP][ElementResolver] Session not registered for frameIndex=${frameIndex} (frameId=${frameId})`
+  );
 }
 
 async function ensureRootSession(
