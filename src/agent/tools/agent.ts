@@ -72,8 +72,7 @@ const READ_ONLY_ACTIONS = new Set(["thinking", "wait", "extract", "complete"]);
 
 const ensureFrameContextsReady = async (
   page: Page,
-  debug: boolean | undefined,
-  _featureFlags?: TaskParams["featureFlags"]
+  debug: boolean | undefined
 ): Promise<void> => {
   try {
     const cdpClient = await getCDPClient(page);
@@ -213,7 +212,6 @@ const runAction = async (
     variables: Object.values(ctx.variables),
     actionConfig: ctx.actionConfig,
     invalidateDomCache: () => markDomSnapshotDirty(page),
-    featureFlags: ctx.featureFlags,
   };
 
   if (ctx.actionConfig?.cdpActions) {
@@ -224,6 +222,7 @@ const runAction = async (
       client: cdpClient,
       preferScriptBoundingBox: !!ctx.debugDir,
       frameContextManager: getOrCreateFrameContextManager(cdpClient),
+      debug: ctx.debug,
     };
   }
   const actionType = action.type;
@@ -306,7 +305,7 @@ export const runAgentTask = async (
   let lastScreenshotBase64: string | undefined;
 
   try {
-    await ensureFrameContextsReady(page, ctx.debug, params?.featureFlags);
+    await ensureFrameContextsReady(page, ctx.debug);
     while (true) {
     // Status Checks
     if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {

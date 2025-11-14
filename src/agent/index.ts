@@ -74,7 +74,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private actionConfig: HyperAgentConfig["actionConfig"];
-  private featureFlags: NonNullable<HyperAgentConfig["featureFlags"]>;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -131,7 +130,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     this.debug = params.debug ?? false;
     this.actionConfig = params.actionConfig;
-    this.featureFlags = params.featureFlags ?? {};
     this.errorEmitter = new ErrorEmitter();
   }
 
@@ -401,7 +399,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       steps: [],
     };
     this.tasks[taskId] = taskState;
-    const mergedParams = this.mergeFeatureFlags(params);
+    const mergedParams = params ?? {};
     runAgentTask(
       {
         llm: this.llm,
@@ -411,7 +409,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mcpClient: this.mcpClient,
         variables: this._variables,
         actionConfig: this.actionConfig,
-        featureFlags: mergedParams.featureFlags,
       },
       taskState,
       mergedParams
@@ -454,7 +451,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     try {
-      const mergedParams = this.mergeFeatureFlags(params);
+      const mergedParams = params ?? {};
       return await runAgentTask(
         {
           llm: this.llm,
@@ -464,7 +461,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           actionConfig: this.actionConfig,
-          featureFlags: mergedParams.featureFlags,
         },
         taskState,
         mergedParams
@@ -551,26 +547,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       `No elements found for instruction: "${instruction}" after ${maxRetries} retry attempts. The instruction may be too vague, the element may not exist, or the page may not have fully loaded.`,
       404
     );
-  }
-
-  /**
-   * Write debug data for aiAction execution
-   * Captures screenshot, DOM state, and execution details for debugging
-   *
-   * @param params Debug data parameters
-   * @returns Promise that resolves when debug data is written
-   */
-  private mergeFeatureFlags(params?: TaskParams): TaskParams {
-    if (!params) {
-      return { featureFlags: { ...this.featureFlags } };
-    }
-    return {
-      ...params,
-      featureFlags: {
-        ...this.featureFlags,
-        ...params.featureFlags,
-      },
-    };
   }
 
   private async writeDebugData(params: {
@@ -748,11 +724,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   private async executeSingleAction(
     instruction: string,
-    page: Page
+    page: Page,
+    params?: TaskParams
   ): Promise<TaskOutput> {
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
-
     if (this.debug) {
       console.log(`[aiAction] Instruction: ${instruction}`);
     }
@@ -808,6 +784,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (canUseCDP) {
         const cdpClient = await getCDPClient(page);
         const frameContextManager = getOrCreateFrameContextManager(cdpClient);
+        await frameContextManager.ensureInitialized().catch(() => {});
         const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
         const resolved = await resolveElement(encodedId, {
           page,
@@ -818,6 +795,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           resolvedElementsCache,
           frameContextManager,
           debug: this.debug,
+          strictFrameValidation: true,
         });
 
         actionXPath = domState.xpathMap?.[encodedId];
@@ -830,6 +808,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           },
           boundingBox: domState.boundingBoxMap?.get(encodedId) ?? undefined,
           preferScriptBoundingBox: this.debug,
+          debug: this.debug,
         });
       } else {
         // Get Playwright locator for the element (xpath is already trimmed by getElementLocator)
@@ -1082,8 +1061,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const hyperPage = page as HyperPage;
     hyperPage.ai = (task: string, params?: TaskParams) =>
       this.executeTask(task, params, page);
-    hyperPage.aiAction = (instruction: string) =>
-      this.executeSingleAction(instruction, page);
+    hyperPage.aiAction = (instruction: string, params?: TaskParams) =>
+      this.executeSingleAction(instruction, page, params);
     hyperPage.aiAsync = (task: string, params?: TaskParams) =>
       this.executeTaskAsync(task, params, page);
     hyperPage.extract = async (task, outputSchema, params) => {

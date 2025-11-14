@@ -126,7 +126,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
           resolvedElementsCache,
           frameContextManager: ctx.cdp!.frameContextManager,
           debug: ctx.debug,
-          strictFrameValidation: ctx.featureFlags?.cdpFrames === true,
+          strictFrameValidation: true,
         });
         if (timings) {
           timings.resolveElementMs = Math.round(performance.now() - resolveStart);
@@ -140,6 +140,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
           },
           boundingBox: ctx.domState.boundingBoxMap?.get(encodedId) ?? undefined,
           preferScriptBoundingBox: ctx.cdp!.preferScriptBoundingBox,
+          debug: ctx.cdp?.debug ?? ctx.debug,
         });
         if (timings) {
           timings.dispatchMs = Math.round(performance.now() - dispatchStart);

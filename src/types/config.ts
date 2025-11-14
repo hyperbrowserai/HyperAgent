@@ -115,7 +115,4 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
     profileDomCapture?: boolean;
     structuredSchema?: boolean;
   };
-  featureFlags?: {
-    cdpFrames?: boolean;
-  };
 }

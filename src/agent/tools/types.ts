@@ -3,7 +3,6 @@ import { MCPClient } from "../mcp/client";
 import { HyperAgentLLM } from "@/llm/types";
 import { HyperVariable } from "@/types/agent/types";
 import { ActionConfig } from "@/types/config";
-import type { TaskParams } from "@/types/agent/types";
 
 export interface AgentCtx {
   mcpClient?: MCPClient;
@@ -14,5 +13,4 @@ export interface AgentCtx {
   tokenLimit: number;
   llm: HyperAgentLLM;
   actionConfig?: ActionConfig;
-  featureFlags?: TaskParams["featureFlags"];
 }

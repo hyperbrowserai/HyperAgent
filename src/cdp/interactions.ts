@@ -81,6 +81,16 @@ type SelectOptionResult =
   | { status: "selected"; value: string }
   | { status: "notfound" };
 
+interface ScrollDebugMetrics {
+  targetTagName: string | null;
+  containerTagName: string | null;
+  isRootTarget: boolean;
+  scrollTop: number;
+  clientHeight: number;
+  scrollHeight: number;
+  maxScroll: number;
+}
+
 const domEnabledSessions = new WeakSet<CDPSession>();
 const runtimeEnabledSessions = new WeakSet<CDPSession>();
 const inputEnabledSessions = new WeakSet<CDPSession>();
@@ -292,13 +302,19 @@ export async function dispatchCDPAction(
         value: (args[0] as string) ?? "",
       });
       return;
-    case "scrollTo":
-      if (!args[0]) {
+    case "scrollTo": {
+      const targetArg = args[0];
+      if (targetArg == null) {
         await scrollElementIntoView(ctx);
       } else {
-        await scrollToPosition(ctx, args[0] as ScrollToOptions);
+        const options =
+          typeof targetArg === "object" && !Array.isArray(targetArg)
+            ? (targetArg as ScrollToOptions)
+            : { target: targetArg as string | number };
+        await scrollToPosition(ctx, options);
       }
       return;
+    }
     case "nextChunk":
       await scrollByChunk(ctx, "nextChunk");
       return;
@@ -627,30 +643,157 @@ async function scrollToPosition(
   const { element } = ctx;
   const session = element.session;
   const objectId = await ensureObjectHandle(element);
-
   await ensureRuntimeEnabled(session);
-  await session.send("Runtime.callFunctionOn", {
-    objectId,
-    functionDeclaration: `
-      function(percent, behavior) {
-        const pct = Math.max(0, Math.min(100, Number(percent)));
-        const target = this;
-        const isRoot = target === document.documentElement || target === document.body;
-        const scrollContainer = isRoot
-          ? (document.scrollingElement || document.documentElement)
-          : target;
-        if (!scrollContainer) return;
-        const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-        const nextTop = maxScroll * (pct / 100);
-        scrollContainer.scrollTo({
-          top: nextTop,
-          behavior: behavior === "instant" ? "auto" : "smooth",
-        });
+
+  const beforeMetrics =
+    ctx.debug && objectId ? await captureScrollMetrics(session, objectId) : null;
+  const intendedScrollTop =
+    beforeMetrics !== null ? beforeMetrics.maxScroll * (percent / 100) : null;
+
+  if (ctx.debug) {
+    console.log(
+      `[CDP][Interactions] scrollTo target=${options.target ?? "50%"} -> ${percent}% (backendNodeId=${element.backendNodeId})`
+    );
+    if (beforeMetrics) {
+      logScrollMetrics("before", beforeMetrics, {
+        intentTop: intendedScrollTop ?? undefined,
+      });
+    } else {
+      console.log(
+        `[CDP][Interactions] scrollTo metrics unavailable before scroll (backendNodeId=${element.backendNodeId})`
+      );
+    }
+  }
+
+  const scrollResponse =
+    await session.send<Protocol.Runtime.CallFunctionOnResponse>(
+      "Runtime.callFunctionOn",
+      {
+        objectId,
+        functionDeclaration: `
+          function(percent, behavior) {
+            const pct = Math.max(0, Math.min(100, Number(percent)));
+            const target = this;
+            const doc = target.ownerDocument || document;
+            const win = doc.defaultView || window;
+            const isRoot = target === doc.documentElement || target === doc.body;
+            const scrollContainer = isRoot
+              ? (doc.scrollingElement || doc.documentElement || doc.body)
+              : target;
+            if (!scrollContainer) {
+              return { status: "missing" };
+            }
+            const maxScroll = Math.max(
+              0,
+              Number(scrollContainer.scrollHeight || 0) -
+                Number(scrollContainer.clientHeight || 0)
+            );
+            const nextTop = maxScroll * (pct / 100);
+
+            const waitForIdle = () =>
+              new Promise((resolve) => {
+                const epsilon = 0.5;
+                const requiredStableFrames = 4;
+                const maxWaitMs = 2000;
+                const raf =
+                  typeof win.requestAnimationFrame === "function"
+                    ? win.requestAnimationFrame.bind(win)
+                    : (cb) => win.setTimeout(cb, 16);
+                const caf =
+                  typeof win.cancelAnimationFrame === "function"
+                    ? win.cancelAnimationFrame.bind(win)
+                    : win.clearTimeout.bind(win);
+                let stableFrames = 0;
+                let lastTop = scrollContainer.scrollTop;
+                let rafHandle = null;
+                const timeoutId = win.setTimeout(() => {
+                  if (rafHandle != null) {
+                    caf(rafHandle);
+                  }
+                  resolve({
+                    status: "timeout",
+                    finalTop: scrollContainer.scrollTop,
+                    maxScroll,
+                  });
+                }, maxWaitMs);
+
+                const step = () => {
+                  const currentTop = scrollContainer.scrollTop;
+                  if (Math.abs(currentTop - lastTop) <= epsilon) {
+                    stableFrames += 1;
+                  } else {
+                    stableFrames = 0;
+                  }
+                  lastTop = currentTop;
+
+                  if (stableFrames >= requiredStableFrames) {
+                    win.clearTimeout(timeoutId);
+                    if (rafHandle != null) {
+                      caf(rafHandle);
+                    }
+                    resolve({
+                      status: "done",
+                      finalTop: currentTop,
+                      maxScroll,
+                    });
+                    return;
+                  }
+                  rafHandle = raf(step);
+                };
+
+                rafHandle = raf(step);
+              });
+
+            scrollContainer.scrollTo({
+              top: nextTop,
+              behavior: behavior === "instant" ? "auto" : "smooth",
+            });
+
+            if (maxScroll === 0) {
+              return {
+                status: "noop",
+                finalTop: scrollContainer.scrollTop,
+                maxScroll,
+              };
+            }
+
+            return waitForIdle();
+          }
+        `,
+        arguments: [{ value: percent }, { value: options.behavior }],
+        awaitPromise: true,
+        returnByValue: true,
       }
-    `,
-    arguments: [{ value: percent }, { value: options.behavior }],
-  });
-  await waitForScrollSettlement(session, element.backendNodeId);
+    );
+  const scrollResult = (scrollResponse.result?.value ??
+    null) as { status?: string; finalTop?: number; maxScroll?: number } | null;
+
+  if (ctx.debug) {
+    const afterMetrics =
+      objectId != null ? await captureScrollMetrics(session, objectId) : null;
+    if (scrollResult) {
+      const finalTop =
+        typeof scrollResult.finalTop === "number"
+          ? scrollResult.finalTop.toFixed(2)
+          : "n/a";
+      const maxScrollVal =
+        typeof scrollResult.maxScroll === "number"
+          ? scrollResult.maxScroll.toFixed(2)
+          : "n/a";
+      console.log(
+        `[CDP][Interactions] scrollTo in-page wait status=${scrollResult.status ?? "unknown"} finalTop=${finalTop} maxScroll=${maxScrollVal}`
+      );
+    }
+    if (afterMetrics) {
+      logScrollMetrics("after", afterMetrics, {
+        previousTop: beforeMetrics?.scrollTop,
+      });
+    } else {
+      console.log(
+        `[CDP][Interactions] scrollTo metrics unavailable after scroll (backendNodeId=${element.backendNodeId})`
+      );
+    }
+  }
 }
 
 async function scrollElementIntoView(ctx: CDPActionContext): Promise<void> {
@@ -872,6 +1015,87 @@ async function waitForScrollSettlement(
       break;
     }
   }
+}
+
+async function captureScrollMetrics(
+  session: CDPSession,
+  objectId: string
+): Promise<ScrollDebugMetrics | null> {
+  await ensureRuntimeEnabled(session);
+  const response =
+    await session.send<Protocol.Runtime.CallFunctionOnResponse>(
+      "Runtime.callFunctionOn",
+      {
+        objectId,
+        functionDeclaration: `
+          function() {
+            try {
+              const target = this;
+              const doc = target.ownerDocument || document;
+              const isRootTarget =
+                target === doc.documentElement || target === doc.body;
+              const scrollContainer = isRootTarget
+                ? (doc.scrollingElement || doc.documentElement || doc.body)
+                : target;
+              if (!scrollContainer) {
+                return null;
+              }
+              const scrollTop = Number(scrollContainer.scrollTop) || 0;
+              const scrollHeight = Number(scrollContainer.scrollHeight) || 0;
+              const clientHeight = Number(scrollContainer.clientHeight) || 0;
+              const maxScroll = Math.max(0, scrollHeight - clientHeight);
+              return {
+                targetTagName: target.tagName || null,
+                containerTagName: scrollContainer.tagName || null,
+                isRootTarget,
+                scrollTop,
+                clientHeight,
+                scrollHeight,
+                maxScroll,
+              };
+            } catch (error) {
+              return null;
+            }
+          }
+        `,
+        returnByValue: true,
+      }
+    );
+
+  return (response.result?.value ??
+    null) as ScrollDebugMetrics | null;
+}
+
+function logScrollMetrics(
+  phase: "before" | "after",
+  metrics: ScrollDebugMetrics,
+  extras?: { intentTop?: number; previousTop?: number }
+): void {
+  const parts = [
+    `[CDP][Interactions] scrollTo metrics (${phase}) target=${metrics.targetTagName ?? "unknown"} container=${metrics.containerTagName ?? "unknown"}`,
+    `scrollTop=${formatScrollNumber(metrics.scrollTop)}`,
+    `maxScroll=${formatScrollNumber(metrics.maxScroll)}`,
+    `clientHeight=${formatScrollNumber(metrics.clientHeight)}`,
+    `scrollHeight=${formatScrollNumber(metrics.scrollHeight)}`,
+  ];
+  if (typeof extras?.intentTop === "number") {
+    parts.push(`intentTop=${formatScrollNumber(extras.intentTop)}`);
+  }
+  if (typeof extras?.previousTop === "number") {
+    parts.push(
+      `delta=${formatScrollNumber(
+        metrics.scrollTop - extras.previousTop
+      )}`
+    );
+  }
+  console.log(parts.join(" "));
+}
+
+function formatScrollNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "NaN";
+  }
+  return value.toFixed(2);
 }
 
 function normalizeScrollPercent(target: string | number): number {
