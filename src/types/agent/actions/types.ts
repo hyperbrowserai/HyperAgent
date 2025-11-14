@@ -4,7 +4,6 @@ import { HyperAgentLLM } from "@/llm/types";
 import { z } from "zod";
 import { MCPClient } from "../../../agent/mcp/client";
 import { HyperVariable } from "../types";
-import { ActionConfig } from "@/types/config";
 import type { FrameContextManager } from "@/cdp";
 
 export interface ActionContext {
@@ -15,8 +14,8 @@ export interface ActionContext {
   variables: HyperVariable[];
   debugDir?: string;
   mcpClient?: MCPClient;
-  actionConfig?: ActionConfig;
   debug?: boolean;
+  cdpActions?: boolean;
   invalidateDomCache: () => void;
   cdp?: {
     resolveElement: typeof import("@/cdp").resolveElement;

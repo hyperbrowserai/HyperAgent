@@ -73,7 +73,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
-  private actionConfig: HyperAgentConfig["actionConfig"];
+  private cdpActionsEnabled: boolean;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -129,7 +129,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     this.debug = params.debug ?? false;
-    this.actionConfig = params.actionConfig;
+    this.cdpActionsEnabled = params.cdpActions ?? true;
     this.errorEmitter = new ErrorEmitter();
   }
 
@@ -408,7 +408,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         debug: this.debug,
         mcpClient: this.mcpClient,
         variables: this._variables,
-        actionConfig: this.actionConfig,
+        cdpActions: this.cdpActionsEnabled,
       },
       taskState,
       mergedParams
@@ -460,7 +460,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           debug: this.debug,
           mcpClient: this.mcpClient,
           variables: this._variables,
-          actionConfig: this.actionConfig,
+          cdpActions: this.cdpActionsEnabled,
         },
         taskState,
         mergedParams
@@ -777,8 +777,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const encodedId = element.elementId as EncodedId;
       let actionXPath: string | undefined;
 
-      const canUseCDP =
-        !!this.actionConfig?.cdpActions && !!domState.backendNodeMap;
+      const canUseCDP = this.cdpActionsEnabled && !!domState.backendNodeMap;
 
       const execStart = performance.now();
       if (canUseCDP) {

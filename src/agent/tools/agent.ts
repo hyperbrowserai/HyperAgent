@@ -210,11 +210,11 @@ const runAction = async (
     debug: ctx.debug,
     mcpClient: ctx.mcpClient || undefined,
     variables: Object.values(ctx.variables),
-    actionConfig: ctx.actionConfig,
+    cdpActions: ctx.cdpActions,
     invalidateDomCache: () => markDomSnapshotDirty(page),
   };
 
-  if (ctx.actionConfig?.cdpActions) {
+  if (ctx.cdpActions) {
     const cdpClient = await getCDPClient(page);
     actionCtx.cdp = {
       resolveElement,

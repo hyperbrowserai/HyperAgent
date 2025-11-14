@@ -109,8 +109,8 @@ export const ActElementActionDefinition: AgentActionDefinition = {
         : undefined;
 
     const shouldUseCDP =
-      !!ctx.actionConfig?.cdpActions &&
       !!ctx.cdp &&
+      ctx.cdpActions !== false &&
       !!ctx.domState.backendNodeMap;
 
     if (shouldUseCDP) {
@@ -179,7 +179,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
       // Execute Playwright method using shared utility
       const pwStart = performance.now();
       await executePlaywrightMethod(method, methodArgs, locator, {
-        clickTimeout: ctx.actionConfig?.clickElement?.timeout ?? 3500,
+        clickTimeout: 3500,
         debug: !!ctx.debugDir,
       });
       if (timings) {
