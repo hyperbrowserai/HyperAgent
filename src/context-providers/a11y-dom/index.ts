@@ -38,6 +38,7 @@ import {
 import type { CDPClient, CDPSession } from "@/cdp";
 import { domSnapshotCache } from "./dom-cache";
 import { PerformanceTracker } from "./performance";
+import { getDebugOptions } from "@/debug/options";
 
 const DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS = 500;
 
@@ -290,6 +291,35 @@ async function syncFrameContextManager({
       }
     })
   );
+}
+
+async function hydrateFrameContextFromSnapshot(
+  page: Page,
+  snapshot: A11yDOMState,
+  debug: boolean
+): Promise<void> {
+  if (!snapshot.frameMap || snapshot.frameMap.size === 0) {
+    return;
+  }
+  try {
+    const cdpClient = await getCDPClient(page);
+    const manager = getOrCreateFrameContextManager(cdpClient);
+    await manager.ensureInitialized().catch(() => {});
+    await syncFrameContextManager({
+      manager,
+      frameMap: snapshot.frameMap,
+      cdpClient,
+      rootSession: cdpClient.rootSession,
+      debug,
+    });
+  } catch (error) {
+    if (debug) {
+      console.warn(
+        "[FrameContext] Failed to hydrate frame manager from cache:",
+        error
+      );
+    }
+  }
 }
 
 /**
@@ -716,8 +746,12 @@ export async function getA11yDOM(
   debugDir?: string,
   options?: GetA11yDomOptions
 ): Promise<A11yDOMState> {
+  const debugOptions = getDebugOptions();
   const profileDom =
-    debug || process.env.HYPERAGENT_PROFILE_DOM === "1" || !!debugDir;
+    debug ||
+    debugOptions.profileDomCapture ||
+    process.env.HYPERAGENT_PROFILE_DOM === "1" ||
+    !!debugDir;
   const tracker = profileDom ? new PerformanceTracker("getA11yDOM") : null;
   const timeAsync = async <T>(
     name: string,
@@ -739,6 +773,7 @@ export async function getA11yDOM(
     const cached = domSnapshotCache.get(page);
     if (cached) {
       tracker?.mark("cacheHit");
+      await hydrateFrameContextFromSnapshot(page, cached, debug);
       return cached;
     }
   }
@@ -752,11 +787,18 @@ export async function getA11yDOM(
     // Step 2: Create CDP session for main frame
     const cdpClient = await getCDPClient(page);
     const frameContextManager = getOrCreateFrameContextManager(cdpClient);
-    const client = await timeAsync("createCDPSession", () =>
-      cdpClient.createSession({ type: "page", page })
+    await frameContextManager.ensureInitialized().catch((error) => {
+      if (debug) {
+        console.warn(
+          "[FrameContext] Failed to initialize frame manager:",
+          error
+        );
+      }
+    });
+    const client = await timeAsync("acquireDomSession", () =>
+      cdpClient.acquireSession("dom")
     );
 
-    try {
       await timeAsync("Accessibility.enable", () =>
         client.send("Accessibility.enable")
       );
@@ -1008,9 +1050,6 @@ export async function getA11yDOM(
       }
 
       return snapshot;
-    } finally {
-      await client.detach();
-    }
   } catch (error) {
     console.error("Error extracting accessibility tree:", error);
 

@@ -1,5 +1,7 @@
 # Phase 1 Plan: Generic CDP Abstraction & Puppeteer Provider
 
+> **Status note:** The dedicated `CdpConnection` transport described below was removed once we standardized on Playwright's private CDP session IDs. The rest of the plan (adapters, frame metadata, etc.) remains relevant historical context.
+
 ## 1. Objectives
 - **Unify CDP access** so DOM capture, screenshots, and interaction code stop reaching directly into Playwright sessions.
 - **Prepare for multiple browser drivers** by defining driver-agnostic interfaces plus concrete adapters for Playwright and (later) Puppeteer.

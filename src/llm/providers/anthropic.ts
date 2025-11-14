@@ -12,10 +12,19 @@ import {
   convertToAnthropicTool,
   createAnthropicToolChoice,
 } from "../utils/schema-converter";
+import { getDebugOptions } from "@/debug/options";
 
-const STRUCTURED_SCHEMA_DEBUG =
+const ENV_STRUCTURED_SCHEMA_DEBUG =
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "1" ||
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "true";
+
+function shouldDebugStructuredSchema(): boolean {
+  const opts = getDebugOptions();
+  if (typeof opts.structuredSchema === "boolean") {
+    return opts.structuredSchema;
+  }
+  return ENV_STRUCTURED_SCHEMA_DEBUG;
+}
 
 export interface AnthropicClientConfig {
   apiKey?: string;
@@ -87,7 +96,7 @@ export class AnthropicClient implements HyperAgentLLM {
       convertToAnthropicMessages(messages);
     const tool = convertToAnthropicTool(request.schema);
     const toolChoice = createAnthropicToolChoice("structured_output");
-    if (STRUCTURED_SCHEMA_DEBUG) {
+    if (shouldDebugStructuredSchema()) {
       console.log(
         "[LLM][Anthropic] Structured output schema:",
         JSON.stringify(tool, null, 2)

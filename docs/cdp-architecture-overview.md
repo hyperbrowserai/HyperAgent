@@ -37,7 +37,7 @@ Phase-by-phase snapshot of the end state we are marching toward. Each layer buil
 ## Component Relationships
 
 1. **CDP Transport & Sessions (Phase 1)**
-   - `CdpConnection` owns the WebSocket, auto-attaches targets, multiplexes child sessions.
+   - Playwright-provided CDP sessions (via `newCDPSession`) are reused as the transport; we dropped the standalone `CdpConnection` once we could safely rely on private session IDs.
    - Script injector ensures bounding-box/DOM helpers exist in every session.
 
 2. **Element Resolution & Actions (Phase 2)**

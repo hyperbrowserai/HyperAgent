@@ -1,5 +1,7 @@
 # Phase 3 — Dedicated CDP Connection Plan
 
+> **Update (decommissioned):** We no longer maintain the standalone `CdpConnection`. The current implementation piggybacks on Playwright's private CDP session IDs, so this document is retained only for historical context.
+
 Objective: Run Playwright and a first-class CDP client side-by-side so we can manage frames, sessions, and execution contexts directly (no Playwright frame handles, no XPath traversal). This mirrors Stagehand v3’s architecture and unlocks true frame-first resolution.
 
 ---

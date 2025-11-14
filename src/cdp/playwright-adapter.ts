@@ -2,7 +2,9 @@ import type {
   CDPClient,
   CDPSession,
   CDPTargetDescriptor,
+  CDPSessionKind,
 } from "@/cdp/types";
+import { getDebugOptions } from "@/debug/options";
 import type { CDPSession as PlaywrightSession, Frame, Page } from "playwright-core";
 
 class PlaywrightSessionAdapter implements CDPSession {
@@ -45,7 +47,11 @@ class PlaywrightSessionAdapter implements CDPSession {
       off?: PlaywrightSession["off"];
     }).off;
     if (off) {
-      off.call(this.session, event as Parameters<PlaywrightSession["off"]>[0], handler as Parameters<PlaywrightSession["off"]>[1]);
+      off.call(
+        this.session,
+        event as Parameters<PlaywrightSession["off"]>[0],
+        handler as Parameters<PlaywrightSession["off"]>[1]
+      );
     }
   }
 
@@ -72,8 +78,14 @@ class PlaywrightCDPClient implements CDPClient {
   private rootSessionPromise: Promise<CDPSession> | null = null;
   private rootSessionAdapter: CDPSession | null = null;
   private readonly trackedSessions = new Set<PlaywrightSessionAdapter>();
+  private readonly sessionPool = new Map<CDPSessionKind, Promise<CDPSession>>();
+  private readonly sessionPoolCleanup = new Map<CDPSessionKind, () => void>();
 
   constructor(private readonly page: Page) {}
+
+  private get sessionLogging(): boolean {
+    return !!getDebugOptions().cdpSessions;
+  }
 
   get rootSession(): CDPSession {
     if (!this.rootSessionAdapter) {
@@ -108,7 +120,34 @@ class PlaywrightCDPClient implements CDPClient {
     return wrapped;
   }
 
+  async acquireSession(
+    kind: CDPSessionKind,
+    descriptor?: CDPTargetDescriptor
+  ): Promise<CDPSession> {
+    let pooled = this.sessionPool.get(kind);
+    if (!pooled) {
+      if (this.sessionLogging) {
+        console.log(`[CDP][SessionPool] creating ${kind} session`);
+      }
+      pooled = this.createPooledSession(kind, descriptor);
+      this.sessionPool.set(kind, pooled);
+    } else if (this.sessionLogging) {
+      console.log(`[CDP][SessionPool] reusing ${kind} session`);
+    }
+
+    try {
+      return await pooled;
+    } catch (error) {
+      this.invalidatePooledSession(kind, pooled);
+      throw error;
+    }
+  }
+
   async dispose(): Promise<void> {
+    this.sessionPoolCleanup.forEach((cleanup) => cleanup());
+    this.sessionPoolCleanup.clear();
+    this.sessionPool.clear();
+
     const detachPromises = Array.from(this.trackedSessions).map((session) =>
       session.detach().catch((error) => {
         console.warn(
@@ -119,6 +158,62 @@ class PlaywrightCDPClient implements CDPClient {
     );
     await Promise.all(detachPromises);
     this.trackedSessions.clear();
+  }
+
+  private async createPooledSession(
+    kind: CDPSessionKind,
+    descriptor?: CDPTargetDescriptor
+  ): Promise<CDPSession> {
+    const session = await this.createSession(
+      descriptor ?? { type: "page", page: this.page }
+    );
+
+    const cleanup = (): void => {
+      session.off?.("Detached", onDetached);
+      this.sessionPoolCleanup.delete(kind);
+      this.sessionPool.delete(kind);
+    };
+
+    const onDetached = (): void => {
+      if (this.sessionLogging) {
+        console.warn(`[CDP][SessionPool] ${kind} session detached`);
+      }
+      cleanup();
+    };
+
+    session.on?.("Detached", onDetached);
+    this.sessionPoolCleanup.set(kind, cleanup);
+
+    await this.initializeSessionForKind(kind, session);
+    return session;
+  }
+
+  private async initializeSessionForKind(
+    kind: CDPSessionKind,
+    session: CDPSession
+  ): Promise<void> {
+    switch (kind) {
+      case "lifecycle":
+        await session.send("Network.enable").catch(() => {});
+        await session.send("Page.enable").catch(() => {});
+        break;
+      default:
+        break;
+    }
+  }
+
+  private invalidatePooledSession(
+    kind: CDPSessionKind,
+    target?: Promise<CDPSession>
+  ): void {
+    const existing = this.sessionPool.get(kind);
+    if (target && existing && existing !== target) {
+      return;
+    }
+    const cleanup = this.sessionPoolCleanup.get(kind);
+    cleanup?.();
+    this.sessionPoolCleanup.delete(kind);
+    this.sessionPool.delete(kind);
   }
 
   private resolveTarget(
@@ -141,19 +236,16 @@ const clientCache = new Map<Page, PlaywrightCDPClient>();
 const pendingClients = new Map<Page, Promise<CDPClient>>();
 
 export async function getCDPClientForPage(page: Page): Promise<CDPClient> {
-  // Return already initialized client
   const existing = clientCache.get(page);
   if (existing) {
     return existing;
   }
 
-  // Return pending initialization promise to avoid race conditions
   const pending = pendingClients.get(page);
   if (pending) {
     return pending;
   }
 
-  // Create new client with initialization
   const initPromise = (async () => {
     const client = new PlaywrightCDPClient(page);
     await client.init();

@@ -109,4 +109,10 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
    * Configuration for agent actions
    */
   actionConfig?: ActionConfig;
+  debugOptions?: {
+    cdpSessions?: boolean;
+    traceWait?: boolean;
+    profileDomCapture?: boolean;
+    structuredSchema?: boolean;
+  };
 }

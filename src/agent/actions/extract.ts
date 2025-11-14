@@ -28,25 +28,17 @@ export const ExtractActionDefinition: AgentActionDefinition = {
 
       // Take a screenshot of the page
       const cdpClient = await getCDPClient(ctx.page);
-      const cdpSession = await cdpClient.createSession({
-        type: "page",
-        page: ctx.page,
-      });
-      let screenshot: { data: string };
-      try {
-        screenshot = await cdpSession.send<{ data: string }>(
-          "Page.captureScreenshot"
-        );
+      const cdpSession = await cdpClient.acquireSession("screenshot");
+      const screenshot = await cdpSession.send<{ data: string }>(
+        "Page.captureScreenshot"
+      );
 
-        // Save screenshot to debug dir if exists
-        if (ctx.debugDir) {
-          fs.writeFileSync(
-            `${ctx.debugDir}/extract-screenshot.png`,
-            Buffer.from(screenshot.data, "base64")
-          );
-        }
-      } finally {
-        await cdpSession.detach();
+      // Save screenshot to debug dir if exists
+      if (ctx.debugDir) {
+        fs.writeFileSync(
+          `${ctx.debugDir}/extract-screenshot.png`,
+          Buffer.from(screenshot.data, "base64")
+        );
       }
 
       // Trim markdown to stay within token limit

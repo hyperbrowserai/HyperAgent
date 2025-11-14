@@ -19,15 +19,16 @@ import {
   getCDPClient,
   getOrCreateFrameContextManager,
 } from "@/cdp";
-import type { CDPClient, CDPSession } from "@/cdp";
+import type { CDPSession } from "@/cdp";
 import type { FrameContextManager } from "@/cdp/frame-context-manager";
 import { Protocol } from "devtools-protocol";
 import { performance } from "perf_hooks";
+import { getDebugOptions } from "@/debug/options";
 
 const NETWORK_IDLE_THRESHOLD_MS = 500;
 const STALLED_REQUEST_MS = 2000;
 const STALLED_SWEEP_INTERVAL_MS = 500;
-const TRACE_WAIT =
+const ENV_TRACE_WAIT =
   process.env.HYPERAGENT_TRACE_WAIT === "1" ||
   process.env.HYPERAGENT_TRACE_WAIT === "true";
 
@@ -53,7 +54,10 @@ export async function waitForSettledDOM(
   const ctx = page.context() as BrowserContext & {
     _options?: { recordVideo?: unknown };
   };
-  const traceWait = TRACE_WAIT || !!ctx._options?.recordVideo;
+  const debugOptions = getDebugOptions();
+  const traceWaitFlag = debugOptions.traceWait ?? ENV_TRACE_WAIT;
+  const traceWait =
+    traceWaitFlag || !!ctx._options?.recordVideo;
   const totalStart = performance.now();
 
   // Currently we only wait for network idle (historical behavior). Hook exists if we add DOM states later.
@@ -70,10 +74,13 @@ export async function waitForSettledDOM(
   const manager = getOrCreateFrameContextManager(cdpClient);
   await manager.enableAutoAttach(cdpClient.rootSession);
 
-  const lifecycleSession = await getLifecycleSession(page, cdpClient);
+  const lifecycleSession = await cdpClient.acquireSession("lifecycle");
 
   const networkStart = performance.now();
-  const stats = await waitForNetworkIdle(lifecycleSession, { timeoutMs });
+  const stats = await waitForNetworkIdle(lifecycleSession, {
+    timeoutMs,
+    trace: traceWaitFlag,
+  });
   const networkDuration = performance.now() - networkStart;
 
   if (traceWait) {
@@ -155,6 +162,7 @@ class LifecycleWatcher {
 
 interface NetworkIdleOptions {
   timeoutMs: number;
+  trace?: boolean;
 }
 
 interface NetworkIdleStats {
@@ -168,7 +176,7 @@ async function waitForNetworkIdle(
   session: CDPSession,
   options: NetworkIdleOptions
 ): Promise<NetworkIdleStats> {
-  const { timeoutMs } = options;
+  const { timeoutMs, trace = false } = options;
   const inflight = new Set<string>();
   let quietTimer: NodeJS.Timeout | null = null;
   let globalTimeout: NodeJS.Timeout | null = null;
@@ -209,9 +217,6 @@ async function waitForNetworkIdle(
       if (stalledSweepTimer) {
         clearInterval(stalledSweepTimer);
         stalledSweepTimer = null;
-      }
-      if (!isLifecycleSession(session)) {
-        session.detach().catch(() => {});
       }
     };
 
@@ -255,7 +260,7 @@ async function waitForNetworkIdle(
         if (now - meta.start > STALLED_REQUEST_MS) {
           if (inflight.delete(id)) {
             stats.forcedDrops += 1;
-            if (TRACE_WAIT) {
+            if (trace) {
               console.warn(
                 `[waitForSettledDOM] Forcing completion of stalled request ${id} (age=${now - meta.start}ms url=${meta.url ?? "unknown"})`
               );
@@ -279,52 +284,4 @@ async function waitForNetworkIdle(
   });
 
   return stats;
-}
-
-type LifecycleSessionRecord = {
-  session: CDPSession;
-  disposed: boolean;
-};
-
-const lifecycleSessionCache = new WeakMap<Page, Promise<LifecycleSessionRecord>>();
-type LifecycleTaggedSession = CDPSession & { __hyperLifecycleSession?: boolean };
-
-function markLifecycleSession(session: CDPSession): void {
-  (session as LifecycleTaggedSession).__hyperLifecycleSession = true;
-}
-
-function isLifecycleSession(session: CDPSession): session is LifecycleTaggedSession {
-  return Boolean((session as LifecycleTaggedSession).__hyperLifecycleSession);
-}
-
-async function getLifecycleSession(
-  page: Page,
-  client: CDPClient
-): Promise<CDPSession> {
-  let recordPromise = lifecycleSessionCache.get(page);
-  if (!recordPromise) {
-    recordPromise = (async () => {
-      const session = await client.createSession({ type: "page", page });
-      markLifecycleSession(session);
-      await session.send("Network.enable").catch(() => {});
-      await session.send("Page.enable").catch(() => {});
-      const record: LifecycleSessionRecord = { session, disposed: false };
-      const cleanup = (): void => {
-        if (record.disposed) return;
-        record.disposed = true;
-        session.detach().catch(() => {});
-        lifecycleSessionCache.delete(page);
-      };
-      page.once("close", cleanup);
-      return record;
-    })();
-    lifecycleSessionCache.set(page, recordPromise);
-  }
-
-  const record = await recordPromise;
-  if (record.disposed) {
-    lifecycleSessionCache.delete(page);
-    return getLifecycleSession(page, client);
-  }
-  return record.session;
 }

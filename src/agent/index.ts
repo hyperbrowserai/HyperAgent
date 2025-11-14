@@ -50,6 +50,7 @@ import {
 } from "@/cdp";
 import type { CDPActionMethod, ResolvedCDPElement } from "@/cdp";
 import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
+import { setDebugOptions } from "@/debug/options";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -110,6 +111,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.llm = params.llm;
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
+
+    setDebugOptions(params.debugOptions);
 
     // TODO(Phase4): This legacy provider branch will be replaced by connector configs.
     this.browserProvider = (

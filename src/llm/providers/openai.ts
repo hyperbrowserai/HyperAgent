@@ -10,10 +10,19 @@ import {
 } from "../types";
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
+import { getDebugOptions } from "@/debug/options";
 
-const STRUCTURED_SCHEMA_DEBUG =
+const ENV_STRUCTURED_SCHEMA_DEBUG =
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "1" ||
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "true";
+
+function shouldDebugStructuredSchema(): boolean {
+  const opts = getDebugOptions();
+  if (typeof opts.structuredSchema === "boolean") {
+    return opts.structuredSchema;
+  }
+  return ENV_STRUCTURED_SCHEMA_DEBUG;
+}
 
 export interface OpenAIClientConfig {
   apiKey?: string;
@@ -144,7 +153,7 @@ export class OpenAIClient implements HyperAgentLLM {
   ): Promise<HyperAgentStructuredResult<TSchema>> {
     const openAIMessages = convertToOpenAIMessages(messages);
     const responseFormat = convertToOpenAIJsonSchema(request.schema);
-    if (STRUCTURED_SCHEMA_DEBUG) {
+    if (shouldDebugStructuredSchema()) {
       const schemaPayload =
         (responseFormat as { json_schema?: { schema?: unknown } }).json_schema
           ?.schema ?? responseFormat;

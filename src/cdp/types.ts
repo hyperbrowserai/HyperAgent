@@ -7,9 +7,19 @@ export interface CDPSession {
   id?: string | null;
 }
 
+export type CDPSessionKind =
+  | "dom"
+  | "lifecycle"
+  | "screenshot"
+  | "extract";
+
 export interface CDPClient {
   rootSession: CDPSession;
   createSession(descriptor?: CDPTargetDescriptor): Promise<CDPSession>;
+  acquireSession(
+    kind: CDPSessionKind,
+    descriptor?: CDPTargetDescriptor
+  ): Promise<CDPSession>;
   dispose(): Promise<void>;
 }
 

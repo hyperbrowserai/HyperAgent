@@ -70,10 +70,28 @@ class DomChunkAggregator {
 }
 const READ_ONLY_ACTIONS = new Set(["thinking", "wait", "extract", "complete"]);
 
+const ensureFrameContextsReady = async (
+  page: Page,
+  debug?: boolean
+): Promise<void> => {
+  try {
+    const cdpClient = await getCDPClient(page);
+    const frameManager = getOrCreateFrameContextManager(cdpClient);
+    await frameManager.ensureInitialized();
+  } catch (error) {
+    if (debug) {
+      console.warn(
+        "[FrameContext] Failed to initialize frame context manager:",
+        error
+      );
+    }
+  }
+};
+
 const compositeScreenshot = async (page: Page, overlay: string) => {
   // Use CDP screenshot - faster, doesn't wait for fonts
   const cdpClient = await getCDPClient(page);
-  const client = await cdpClient.createSession({ type: "page", page });
+  const client = await cdpClient.acquireSession("screenshot");
 
   const { data } = await client.send<{ data: string }>(
     "Page.captureScreenshot",
@@ -81,8 +99,6 @@ const compositeScreenshot = async (page: Page, overlay: string) => {
       format: "png",
     }
   );
-  await client.detach();
-
   const [baseImage, overlayImage] = await Promise.all([
     Jimp.read(Buffer.from(data, "base64")),
     Jimp.read(Buffer.from(overlay, "base64")),
@@ -244,6 +260,7 @@ export const runAgentTask = async (
   let lastScreenshotBase64: string | undefined;
 
   try {
+    await ensureFrameContextsReady(page, ctx.debug);
     while (true) {
     // Status Checks
     if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
@@ -446,6 +463,17 @@ export const runAgentTask = async (
       actionExecStart
     );
     stepMetrics.actionMs = Math.round(actionDuration);
+    stepMetrics.actionType = action.type;
+    stepMetrics.actionSuccess = actionOutput.success;
+    if (
+      actionOutput.debug &&
+      typeof actionOutput.debug === "object" &&
+      "timings" in actionOutput.debug &&
+      actionOutput.debug.timings &&
+      typeof actionOutput.debug.timings === "object"
+    ) {
+      stepMetrics.actionTimings = actionOutput.debug.timings;
+    }
     if (!READ_ONLY_ACTIONS.has(action.type)) {
       markDomSnapshotDirty(page);
     }
@@ -507,6 +535,7 @@ export const runAgentTask = async (
     stepMetrics.waitForSettledMs = Math.round(waitStats.durationMs);
     stepMetrics.waitForSettled = {
       totalMs: Math.round(waitStats.durationMs),
+      lifecycleMs: Math.round(waitStats.lifecycleMs),
       networkMs: Math.round(waitStats.networkMs),
       requestsSeen: waitStats.requestsSeen,
       peakInflight: waitStats.peakInflight,

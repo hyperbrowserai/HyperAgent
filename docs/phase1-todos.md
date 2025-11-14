@@ -9,13 +9,7 @@
 - [x] Ensure `HyperAgent.closeAgent()` disposes cached clients and handles page close events gracefully.
 
 ## Workstream B — CDP Transport & Session Multiplexer
-- [x] Implement `CdpConnection` (`src/cdp/connection.ts`) with:
-  - [x] WebSocket connect/close + inflight request tracking.
-  - [x] `Target.setAutoAttach`, `Target.setDiscoverTargets`, attach/detach handling.
-  - [x] Session registry (`sessionId → CDPSession`) plus event routing.
-- [x] Expose `attachToTarget`, `getTargets`, `onTransportClosed`.
-- [ ] Unit tests: mock WebSocket, verify request routing and auto-attach logic.
-- [x] Integration smoke test: covered via the basic script runs.
+- ❌ **Deprecated:** We removed the standalone `CdpConnection` implementation because the current stack reuses Playwright's private CDP session IDs. The remaining transport responsibilities now live in `playwright-adapter.ts` and the frame/context managers.
 
 ## Workstream C — Script Injection Manager
 - [x] Build `src/cdp/script-injector.ts`:

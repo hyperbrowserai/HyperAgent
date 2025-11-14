@@ -197,10 +197,7 @@ async function ensureRootSession(
     }
     return session;
   } catch {
-    const session = await ctx.cdpClient.createSession({
-      type: "page",
-      page: ctx.page,
-    });
+    const session = await ctx.cdpClient.acquireSession("dom");
     const cache = getSessionCache(ctx.cdpClient);
     cache.set(0, session);
     return session;
