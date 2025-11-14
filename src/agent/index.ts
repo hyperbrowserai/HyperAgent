@@ -800,7 +800,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
         actionXPath = domState.xpathMap?.[encodedId];
 
-        console.log("DISPATCHING CDP ACTION", method, args);
         await dispatchCDPAction(method as CDPActionMethod, args, {
           element: {
             ...resolved,
