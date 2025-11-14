@@ -84,7 +84,8 @@ class PlaywrightCDPClient implements CDPClient {
   constructor(private readonly page: Page) {}
 
   private get sessionLogging(): boolean {
-    return !!getDebugOptions().cdpSessions;
+    const opts = getDebugOptions();
+    return !!(opts.enabled && opts.cdpSessions);
   }
 
   get rootSession(): CDPSession {

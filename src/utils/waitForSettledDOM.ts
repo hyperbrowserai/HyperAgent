@@ -55,7 +55,8 @@ export async function waitForSettledDOM(
     _options?: { recordVideo?: unknown };
   };
   const debugOptions = getDebugOptions();
-  const traceWaitFlag = debugOptions.traceWait ?? ENV_TRACE_WAIT;
+  const traceWaitFlag =
+    (debugOptions.enabled && debugOptions.traceWait) || ENV_TRACE_WAIT;
   const traceWait =
     traceWaitFlag || !!ctx._options?.recordVideo;
   const totalStart = performance.now();
@@ -72,6 +73,7 @@ export async function waitForSettledDOM(
 
   const cdpClient = await getCDPClient(page);
   const manager = getOrCreateFrameContextManager(cdpClient);
+  manager.setDebug(traceWait);
   await manager.enableAutoAttach(cdpClient.rootSession);
 
   const lifecycleSession = await cdpClient.acquireSession("lifecycle");

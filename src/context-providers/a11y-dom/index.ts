@@ -196,6 +196,7 @@ async function syncFrameContextManager({
   cdpClient,
   debug,
 }: SyncFrameContextOptions): Promise<void> {
+  manager.setDebug(debug);
   await manager.enableAutoAttach(rootSession).catch((error) => {
     if (debug) {
       console.warn("[FrameContext] Failed to enable auto-attach:", error);
@@ -304,6 +305,7 @@ async function hydrateFrameContextFromSnapshot(
   try {
     const cdpClient = await getCDPClient(page);
     const manager = getOrCreateFrameContextManager(cdpClient);
+    manager.setDebug(debug);
     await manager.ensureInitialized().catch(() => {});
     await syncFrameContextManager({
       manager,
@@ -749,7 +751,7 @@ export async function getA11yDOM(
   const debugOptions = getDebugOptions();
   const profileDom =
     debug ||
-    debugOptions.profileDomCapture ||
+    (debugOptions.enabled && debugOptions.profileDomCapture) ||
     process.env.HYPERAGENT_PROFILE_DOM === "1" ||
     !!debugDir;
   const tracker = profileDom ? new PerformanceTracker("getA11yDOM") : null;
@@ -787,6 +789,7 @@ export async function getA11yDOM(
     // Step 2: Create CDP session for main frame
     const cdpClient = await getCDPClient(page);
     const frameContextManager = getOrCreateFrameContextManager(cdpClient);
+    frameContextManager.setDebug(debug);
     await frameContextManager.ensureInitialized().catch((error) => {
       if (debug) {
         console.warn(

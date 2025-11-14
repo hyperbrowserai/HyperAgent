@@ -77,6 +77,7 @@ const ensureFrameContextsReady = async (
   try {
     const cdpClient = await getCDPClient(page);
     const frameManager = getOrCreateFrameContextManager(cdpClient);
+    frameManager.setDebug(debug);
     await frameManager.ensureInitialized();
   } catch (error) {
     if (debug) {
@@ -96,6 +97,7 @@ const writeFrameGraphSnapshot = async (
   try {
     const cdpClient = await getCDPClient(page);
     const frameManager = getOrCreateFrameContextManager(cdpClient);
+    frameManager.setDebug(debug);
     const data = frameManager.toJSON();
     fs.writeFileSync(
       `${dir}/frames.json`,
@@ -216,12 +218,14 @@ const runAction = async (
 
   if (ctx.cdpActions) {
     const cdpClient = await getCDPClient(page);
+    const frameContextManager = getOrCreateFrameContextManager(cdpClient);
+    frameContextManager.setDebug(ctx.debug);
     actionCtx.cdp = {
       resolveElement,
       dispatchCDPAction,
       client: cdpClient,
       preferScriptBoundingBox: !!ctx.debugDir,
-      frameContextManager: getOrCreateFrameContextManager(cdpClient),
+      frameContextManager,
       debug: ctx.debug,
     };
   }

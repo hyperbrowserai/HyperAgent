@@ -18,7 +18,7 @@ const ENV_STRUCTURED_SCHEMA_DEBUG =
 
 function shouldDebugStructuredSchema(): boolean {
   const opts = getDebugOptions();
-  if (typeof opts.structuredSchema === "boolean") {
+  if (opts.enabled && typeof opts.structuredSchema === "boolean") {
     return opts.structuredSchema;
   }
   return ENV_STRUCTURED_SCHEMA_DEBUG;

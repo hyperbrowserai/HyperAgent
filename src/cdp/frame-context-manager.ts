@@ -39,8 +39,19 @@ export class FrameContextManager {
   private nextFrameIndex = 0;
   private initialized = false;
   private initializingPromise: Promise<void> | null = null;
+  private debugLogs = false;
 
   constructor(private readonly client: CDPClient) {}
+
+  setDebug(debug?: boolean): void {
+    this.debugLogs = !!debug;
+  }
+
+  private log(message: string): void {
+    if (this.debugLogs) {
+      console.log(message);
+    }
+  }
 
   get frameGraph(): FrameGraph {
     return this.graph;
@@ -292,7 +303,7 @@ export class FrameContextManager {
       });
       await this.trackPageEvents(session);
       this.autoAttachEnabled = true;
-      console.log("[FrameContext] Target auto-attach enabled");
+      this.log("[FrameContext] Target auto-attach enabled");
     })().finally(() => {
       this.autoAttachSetupPromise = null;
     });
@@ -324,7 +335,7 @@ export class FrameContextManager {
         lastUpdated: Date.now(),
       });
 
-      console.log(
+      this.log(
         `[FrameContext] Auto-attached session ${session.id ?? event.sessionId} for frame ${frameId} (${event.targetInfo.url ||
           "n/a"})`
       );
@@ -358,7 +369,7 @@ export class FrameContextManager {
       // ignore
     }
 
-    console.log(
+    this.log(
       `[FrameContext] Auto-detached session ${session.id ?? event.sessionId} for frame ${frameId}`
     );
   };
@@ -424,7 +435,7 @@ export class FrameContextManager {
     const rootSession = this.autoAttachRootSession ?? this.client.rootSession;
     this.setFrameSession(frameId, rootSession);
     await this.populateFrameOwner(rootSession, frameId);
-    console.log(
+    this.log(
       `[FrameContext] Page.frameAttached: frameId=${frameId}, parent=${parentFrameId ?? "root"}`
     );
   }
@@ -435,7 +446,7 @@ export class FrameContextManager {
       return;
     }
     this.removeFrame(frameId);
-    console.log(`[FrameContext] Page.frameDetached: frameId=${frameId}`);
+    this.log(`[FrameContext] Page.frameDetached: frameId=${frameId}`);
   }
 
   private handlePageFrameNavigated(event: Protocol.Page.FrameNavigatedEvent): void {
@@ -447,7 +458,7 @@ export class FrameContextManager {
       url: event.frame.url,
       name: event.frame.name,
     });
-    console.log(`[FrameContext] Page.frameNavigated: frameId=${frameId}, url=${event.frame.url}`);
+    this.log(`[FrameContext] Page.frameNavigated: frameId=${frameId}, url=${event.frame.url}`);
   }
 
   private trackRuntimeForSession(session: CDPSession): void {

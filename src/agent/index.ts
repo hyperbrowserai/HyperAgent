@@ -112,7 +112,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
 
-    setDebugOptions(params.debugOptions);
+    setDebugOptions(params.debugOptions, this.debug);
 
     // TODO(Phase4): This legacy provider branch will be replaced by connector configs.
     this.browserProvider = (
@@ -783,6 +783,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (canUseCDP) {
         const cdpClient = await getCDPClient(page);
         const frameContextManager = getOrCreateFrameContextManager(cdpClient);
+        frameContextManager.setDebug(this.debug);
         await frameContextManager.ensureInitialized().catch(() => {});
         const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
         const resolved = await resolveElement(encodedId, {

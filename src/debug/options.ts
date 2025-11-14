@@ -6,13 +6,16 @@ export interface HyperAgentDebugOptions {
 }
 
 let currentDebugOptions: HyperAgentDebugOptions = {};
+let debugOptionsEnabled = false;
 
 export function setDebugOptions(
-  options?: HyperAgentDebugOptions
+  options?: HyperAgentDebugOptions,
+  enabled = false
 ): void {
   currentDebugOptions = options ?? {};
+  debugOptionsEnabled = enabled;
 }
 
-export function getDebugOptions(): HyperAgentDebugOptions {
-  return currentDebugOptions;
+export function getDebugOptions(): HyperAgentDebugOptions & { enabled: boolean } {
+  return { ...currentDebugOptions, enabled: debugOptionsEnabled };
 }
