@@ -144,6 +144,10 @@ class PlaywrightCDPClient implements CDPClient {
     }
   }
 
+  getPage(): Page {
+    return this.page;
+  }
+
   async dispose(): Promise<void> {
     this.sessionPoolCleanup.forEach((cleanup) => cleanup());
     this.sessionPoolCleanup.clear();

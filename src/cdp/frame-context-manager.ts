@@ -28,13 +28,7 @@ export class FrameContextManager {
     CDPSession,
     Array<{ event: string; handler: (...args: unknown[]) => void }>
   >();
-  private readonly autoAttachedSessions = new Map<
-    string,
-    { session: CDPSession; frameId: string }
-  >();
-  private autoAttachEnabled = false;
-  private autoAttachSetupPromise: Promise<void> | null = null;
-  private autoAttachRootSession: CDPSession | null = null;
+  private readonly oopifFrameIds = new Set<string>();
   private readonly pageTrackedSessions = new WeakSet<CDPSession>();
   private nextFrameIndex = 0;
   private initialized = false;
@@ -107,6 +101,10 @@ export class FrameContextManager {
     return this.graph.getFrame(frameId);
   }
 
+  getFrameIndex(frameId: string): number | undefined {
+    return this.graph.getFrameIndex(frameId);
+  }
+
   getExecutionContextId(frameId: string): number | undefined {
     return this.frameExecutionContexts.get(frameId);
   }
@@ -146,6 +144,31 @@ export class FrameContextManager {
     });
   }
 
+  /**
+   * Get all same-origin frames (use main session for these)
+   */
+  getSameOriginFrames(): FrameRecord[] {
+    return this.graph.getAllFrames().filter((frame: FrameRecord) => 
+      !this.oopifFrameIds.has(frame.frameId)
+    );
+  }
+
+  /**
+   * Get all OOPIF frames (each has its own session)
+   */
+  getOOPIFs(): FrameRecord[] {
+    return this.graph.getAllFrames().filter((frame: FrameRecord) => 
+      this.oopifFrameIds.has(frame.frameId)
+    );
+  }
+
+  /**
+   * Check if a frame is an OOPIF
+   */
+  isOOPIF(frameId: string): boolean {
+    return this.oopifFrameIds.has(frameId);
+  }
+
   toJSON(): { graph: ReturnType<FrameGraph["toJSON"]> } {
     return { graph: this.graph.toJSON() };
   }
@@ -171,9 +194,7 @@ export class FrameContextManager {
     }
     this.sessionListeners.clear();
 
-    this.autoAttachedSessions.clear();
-    this.autoAttachEnabled = false;
-    this.autoAttachRootSession = null;
+    this.oopifFrameIds.clear();
   }
 
   async ensureInitialized(): Promise<void> {
@@ -182,7 +203,6 @@ export class FrameContextManager {
 
     this.initializingPromise = (async () => {
       const rootSession = this.client.rootSession;
-      await this.enableAutoAttach(rootSession);
       await this.captureFrameTree(rootSession);
       this.initialized = true;
     })().finally(() => {
@@ -193,16 +213,8 @@ export class FrameContextManager {
   }
 
   private async captureFrameTree(session: CDPSession): Promise<void> {
-    const [{ frameTree }, { targetInfos }] = await Promise.all([
-      session.send<Protocol.Page.GetFrameTreeResponse>("Page.getFrameTree"),
-      session.send<Protocol.Target.GetTargetsResponse>("Target.getTargets"),
-    ]);
+    const { frameTree } = await session.send<Protocol.Page.GetFrameTreeResponse>("Page.getFrameTree");
     if (!frameTree) return;
-
-    const targetMap = new Map<string, Protocol.Target.TargetInfo>();
-    for (const target of targetInfos ?? []) {
-      targetMap.set(target.targetId, target);
-    }
 
     let indexCounter = 0;
     const traverse = async (node: FrameTreeNode, parentFrameId: string | null): Promise<void> => {
@@ -225,54 +237,17 @@ export class FrameContextManager {
         await this.populateFrameOwner(session, frameId);
       }
 
-      const target = this.findTargetForFrame(targetMap, frameId);
-      if (target && target.targetId && !this.autoAttachEnabled) {
-        await this.attachToTarget(session, target.targetId, frameId);
-      }
-
       for (const child of node.childFrames ?? []) {
         await traverse(child, frameId);
       }
     };
 
     await traverse(frameTree, frameTree.frame?.parentId ?? null);
+
+    // Discover and attach OOPIF frames
+    await this.captureOOPIFs(indexCounter);
   }
 
-  private findTargetForFrame(
-    targetMap: Map<string, Protocol.Target.TargetInfo>,
-    frameId: string
-  ): Protocol.Target.TargetInfo | undefined {
-    for (const target of targetMap.values()) {
-      const info = target as { frameId?: string };
-      if (info.frameId === frameId) {
-        return target;
-      }
-    }
-    return undefined;
-  }
-
-  private async attachToTarget(
-    session: CDPSession,
-    targetId: string,
-    frameId: string
-  ): Promise<void> {
-    try {
-      const { sessionId } = await session.send<Protocol.Target.AttachToTargetResponse>(
-        "Target.attachToTarget",
-        { targetId, flatten: true }
-      );
-      const childSession = await this.client.createSession({
-        type: "raw",
-        target: { sessionId },
-      });
-      this.setFrameSession(frameId, childSession);
-    } catch (error) {
-      console.warn(
-        `[FrameContextManager] Failed to attach to target ${targetId} for frame ${frameId}:`,
-        error
-      );
-    }
-  }
 
   private async populateFrameOwner(session: CDPSession, frameId: string): Promise<void> {
     try {
@@ -280,99 +255,134 @@ export class FrameContextManager {
       const record = this.graph.getFrame(frameId);
       if (!record) return;
       this.graph.upsertFrame({ ...record, backendNodeId: owner.backendNodeId ?? record.backendNodeId });
-    } catch {}
+    } catch {
+      // Ignore errors when getting frame owner (e.g., for main frame or OOPIF)
+    }
   }
 
-  async enableAutoAttach(session: CDPSession): Promise<void> {
-    if (this.autoAttachEnabled) {
+  private hasFrameWithUrl(url: string): boolean {
+    if (!url || url === 'about:blank') return false;
+    
+    for (const frame of this.graph.getAllFrames()) {
+      if (frame.url === url) return true;
+    }
+    return false;
+  }
+
+  private getFrameIdByUrl(url: string): string | null {
+    if (!url || url === 'about:blank') return null;
+    
+    for (const frame of this.graph.getAllFrames()) {
+      if (frame.url === url) return frame.frameId;
+    }
+    return null;
+  }
+
+  private async captureOOPIFs(startIndex: number): Promise<void> {
+    const pageUnknown = this.client.getPage?.();
+    if (!pageUnknown) {
+      this.log("[FrameContext] No page available for OOPIF discovery");
       return;
     }
-    if (this.autoAttachSetupPromise) {
-      return this.autoAttachSetupPromise;
-    }
 
-    this.autoAttachRootSession = session;
+    // Type cast to Playwright Page - this is safe because we're using PlaywrightCDPClient
+    const page = pageUnknown as {
+      context(): { newCDPSession(frame: unknown): Promise<CDPSession> };
+      frames(): Array<{
+        url(): string;
+        parentFrame(): unknown | null;
+        name(): string;
+      }>;
+      mainFrame(): unknown;
+    };
 
-    this.autoAttachSetupPromise = (async () => {
-      session.on("Target.attachedToTarget", this.handleTargetAttached);
-      session.on("Target.detachedFromTarget", this.handleTargetDetached);
-      await session.send("Target.setAutoAttach", {
-        autoAttach: true,
-        flatten: true,
-        waitForDebuggerOnStart: false,
-      });
-      await this.trackPageEvents(session);
-      this.autoAttachEnabled = true;
-      this.log("[FrameContext] Target auto-attach enabled");
-    })().finally(() => {
-      this.autoAttachSetupPromise = null;
+    const context = page.context();
+    const allFrames = page.frames();
+
+    // Filter frames to process (exclude main frame and already-captured same-origin frames)
+    const framesToCheck = allFrames.filter((frame) => {
+      if (frame === page.mainFrame()) return false;
+      const frameUrl = frame.url();
+      return !this.hasFrameWithUrl(frameUrl);
     });
 
-    return this.autoAttachSetupPromise;
-  }
-
-  private handleTargetAttached = async (
-    event: Protocol.Target.AttachedToTargetEvent
-  ): Promise<void> => {
-    const frameId = (event.targetInfo as { frameId?: string }).frameId;
-    if (!frameId) {
+    if (framesToCheck.length === 0) {
       return;
     }
 
-    try {
-      const session = await this.client.createSession({
-        type: "raw",
-        target: { sessionId: event.sessionId },
-      });
+    // Parallelize OOPIF discovery: try to create CDP session for all frames simultaneously
+    const discoveryPromises = framesToCheck.map(async (frame, index) => {
+      const frameUrl = frame.url();
+      
+      // Try to create CDP session - if it succeeds, this is an OOPIF
+      let oopifSession: CDPSession | null = null;
+      try {
+        oopifSession = await context.newCDPSession(frame);
+      } catch {
+        // Failed to create session = same-origin frame (already processed)
+        this.log(`[FrameContext] Frame ${frameUrl} is same-origin, skipping`);
+        return null;
+      }
 
-      this.autoAttachedSessions.set(event.sessionId, { session, frameId });
-      this.setFrameSession(frameId, session);
-      this.graph.upsertFrame({
-        frameId,
-        parentFrameId: event.targetInfo.openerFrameId ?? null,
-        name: event.targetInfo.title,
-        url: event.targetInfo.url,
-        lastUpdated: Date.now(),
-      });
+      // Success! This is an OOPIF - get its CDP frame ID
+      try {
+        await oopifSession.send("Page.enable");
+        const { frameTree } = await oopifSession.send("Page.getFrameTree");
+        const frameId = frameTree.frame.id;
 
-      this.log(
-        `[FrameContext] Auto-attached session ${session.id ?? event.sessionId} for frame ${frameId} (${event.targetInfo.url ||
-          "n/a"})`
-      );
-    } catch (error) {
-      console.warn(
-        `[FrameContext] Failed to auto-attach session for frame ${frameId}:`,
-        error
-      );
-    }
-  };
+        this.log(`[FrameContext] Discovered OOPIF: frameId=${frameId}, url=${frameUrl}`);
 
-  private handleTargetDetached = async (
-    event: Protocol.Target.DetachedFromTargetEvent
-  ): Promise<void> => {
-    const record = this.autoAttachedSessions.get(event.sessionId);
-    if (!record) {
-      return;
-    }
+        // Find parent frame
+        const parentFrameUnknown = frame.parentFrame();
+        const parentFrame = parentFrameUnknown as { url(): string } | null;
+        const parentFrameUrl = parentFrame?.url();
 
-    this.autoAttachedSessions.delete(event.sessionId);
-    const { session, frameId } = record;
+        return {
+          frameId,
+          session: oopifSession,
+          url: frameUrl,
+          name: frame.name() || undefined,
+          parentFrameUrl,
+          discoveryOrder: index, // Preserve original order for deterministic frame indices
+        };
+      } catch (_error) {
+        this.log(`[FrameContext] Failed to process OOPIF ${frameUrl}: ${_error}`);
+        if (oopifSession) {
+          await oopifSession.detach().catch(() => {
+            // ignore detach errors
+          });
+        }
+        return null;
+      }
+    });
 
-    if (this.sessions.get(frameId) === session) {
-      this.sessions.delete(frameId);
-      this.graph.removeFrame(frameId);
-    }
-
-    try {
-      await session.detach();
-    } catch {
-      // ignore
-    }
-
-    this.log(
-      `[FrameContext] Auto-detached session ${session.id ?? event.sessionId} for frame ${frameId}`
+    // Wait for all OOPIF discovery to complete in parallel
+    const discoveredOOPIFs = (await Promise.all(discoveryPromises)).filter(
+      (result): result is NonNullable<typeof result> => result !== null
     );
-  };
+
+    // Now assign frame indices and register all OOPIFs in deterministic order
+    // Sort by discovery order to maintain deterministic frame indices
+    discoveredOOPIFs.sort((a, b) => a.discoveryOrder - b.discoveryOrder);
+    
+    for (let i = 0; i < discoveredOOPIFs.length; i++) {
+      const oopif = discoveredOOPIFs[i];
+      const frameIndex = startIndex + i; // Sequential indices for discovered OOPIFs
+      const parentFrameId = oopif.parentFrameUrl
+        ? this.getFrameIdByUrl(oopif.parentFrameUrl)
+        : null;
+
+      this.setFrameSession(oopif.frameId, oopif.session);
+      this.assignFrameIndex(oopif.frameId, frameIndex);
+      this.oopifFrameIds.add(oopif.frameId);
+      this.upsertFrame({
+        frameId: oopif.frameId,
+        parentFrameId,
+        url: oopif.url,
+        name: oopif.name,
+      });
+    }
+  }
 
   private async trackPageEvents(session: CDPSession): Promise<void> {
     if (this.pageTrackedSessions.has(session)) {
@@ -432,7 +442,7 @@ export class FrameContextManager {
       const index = this.nextFrameIndex++;
       this.assignFrameIndex(frameId, index);
     }
-    const rootSession = this.autoAttachRootSession ?? this.client.rootSession;
+    const rootSession = this.client.rootSession;
     this.setFrameSession(frameId, rootSession);
     await this.populateFrameOwner(rootSession, frameId);
     this.log(

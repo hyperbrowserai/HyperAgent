@@ -21,6 +21,7 @@ export interface CDPClient {
     descriptor?: CDPTargetDescriptor
   ): Promise<CDPSession>;
   dispose(): Promise<void>;
+  getPage?(): unknown;
 }
 
 export interface CDPFrameHandle {

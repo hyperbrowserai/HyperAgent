@@ -25,16 +25,10 @@ import {
   injectScrollableDetection,
   findScrollableElementIds,
 } from "./scrollable-detection";
-import {
-  injectBoundingBoxScriptSession,
-  BoundingBoxTarget,
-} from "./bounding-box-batch";
+import { injectBoundingBoxScriptSession } from "./bounding-box-batch";
 import { hasInteractiveElements, createDOMFallbackNodes } from "./utils";
 import { renderA11yOverlay } from "./visual-overlay";
-import {
-  getCDPClient,
-  getOrCreateFrameContextManager,
-} from "@/cdp";
+import { getCDPClient, getOrCreateFrameContextManager } from "@/cdp";
 import type { CDPClient, CDPSession } from "@/cdp";
 import { domSnapshotCache } from "./dom-cache";
 import { PerformanceTracker } from "./performance";
@@ -53,8 +47,11 @@ async function collectExecutionContexts(
     debug?: boolean;
   } = {}
 ): Promise<Map<string, number>> {
-  const { frameIds, timeoutMs = DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS, debug } =
-    options;
+  const {
+    frameIds,
+    timeoutMs = DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS,
+    debug,
+  } = options;
 
   if (frameIds && frameIds.size === 0) {
     return new Map();
@@ -84,8 +81,9 @@ async function collectExecutionContexts(
   const handler = (
     event: Protocol.Runtime.ExecutionContextCreatedEvent
   ): void => {
-    const auxData = event.context
-      .auxData as { frameId?: string; type?: string } | undefined;
+    const auxData = event.context.auxData as
+      | { frameId?: string; type?: string }
+      | undefined;
     const frameId = auxData?.frameId;
     if (!frameId) return;
     if (targetFrames && !targetFrames.has(frameId)) return;
@@ -114,7 +112,7 @@ async function collectExecutionContexts(
       if (debug) {
         console.warn(
           "[A11y] Failed to enable Runtime domain for context collection. " +
-          "Execution contexts may be missing for iframe elements.",
+            "Execution contexts may be missing for iframe elements.",
           error
         );
       }
@@ -139,8 +137,7 @@ async function annotateFrameSessions(options: {
   }
 
   const indices =
-    frameIndices ??
-    Array.from(frameMap.entries()).map(([idx]) => idx);
+    frameIndices ?? Array.from(frameMap.entries()).map(([idx]) => idx);
 
   if (indices.length === 0) {
     return;
@@ -197,24 +194,18 @@ async function syncFrameContextManager({
   debug,
 }: SyncFrameContextOptions): Promise<void> {
   manager.setDebug(debug);
-  await manager.enableAutoAttach(rootSession).catch((error) => {
-    if (debug) {
-      console.warn("[FrameContext] Failed to enable auto-attach:", error);
-    }
-  });
 
-  if (debug) {
-    console.log("[FrameContext] Auto-attach requested for root session");
-  }
-
-  const { frameTree } = await rootSession.send<
-    Protocol.Page.GetFrameTreeResponse
-  >("Page.getFrameTree");
+  const { frameTree } =
+    await rootSession.send<Protocol.Page.GetFrameTreeResponse>(
+      "Page.getFrameTree"
+    );
   const rootFrame = frameTree?.frame;
 
   if (!rootFrame) {
     if (debug) {
-      console.warn("[FrameContext] No root frame returned from Page.getFrameTree");
+      console.warn(
+        "[FrameContext] No root frame returned from Page.getFrameTree"
+      );
     }
     return;
   }
@@ -264,7 +255,7 @@ async function syncFrameContextManager({
       const parentFrameId =
         parentIndex === null
           ? null
-          : frameIdByIndex.get(parentIndex ?? 0) ?? frameIdByIndex.get(0)!;
+          : (frameIdByIndex.get(parentIndex ?? 0) ?? frameIdByIndex.get(0)!);
 
       manager.upsertFrame({
         frameId,
@@ -386,7 +377,6 @@ function buildFramePaths(
   }
 }
 
-
 /**
  * Fetch accessibility trees for all iframes in the page
  * @param client CDP session
@@ -430,9 +420,10 @@ async function fetchIframeAXTrees(
 
   for (const [frameIndex, frameInfo] of frameEntries) {
     const frameId = frameInfo.frameId ?? frameInfo.cdpFrameId;
-    const session = frameId ? frameContextManager.getFrameSession(frameId) : undefined;
-    const isCrossOrigin =
-      frameId && session && session !== rootSession;
+    const session = frameId
+      ? frameContextManager.getFrameSession(frameId)
+      : undefined;
+    const isCrossOrigin = frameId && session && session !== rootSession;
 
     if (isCrossOrigin && frameId && session) {
       if (processedCrossOriginFrames.has(frameId)) {
@@ -508,6 +499,127 @@ async function fetchIframeAXTrees(
         `[A11y] Failed to fetch AX tree for frame ${frameIndex} (contentDocBackendNodeId=${contentDocumentBackendNodeId}):`,
         (error as Error).message || error
       );
+    }
+  }
+
+  // Process OOPIF frames discovered by FrameContextManager in parallel
+  const oopifFrames = frameContextManager.getOOPIFs();
+  if (debug && oopifFrames.length > 0) {
+    console.log(
+      `[A11y] Processing ${oopifFrames.length} OOPIF frames from FrameContextManager (parallel)`
+    );
+  }
+
+  const oopifPromises = oopifFrames.map(async (oopifFrame) => {
+    const { frameId, url } = oopifFrame;
+    const frameIndex = frameContextManager.getFrameIndex?.(frameId);
+    const session = frameContextManager.getFrameSession(frameId);
+
+    if (frameIndex === undefined || !session) {
+      if (debug) {
+        console.warn(
+          `[A11y] OOPIF frame ${frameId} missing frameIndex or session, skipping`
+        );
+      }
+      return null;
+    }
+
+    // Skip if already processed (shouldn't happen, but be safe)
+    if (processedCrossOriginFrames.has(frameId)) {
+      return null;
+    }
+
+    if (debug) {
+      console.log(`[A11y] Processing OOPIF frame ${frameIndex} (${url})`);
+    }
+
+    try {
+      const frameInfo: IframeInfo = {
+        frameIndex,
+        frameId,
+        cdpFrameId: frameId,
+        src: url,
+        xpath: `//iframe[@frame-index="${frameIndex}"]`,
+        parentFrameIndex: oopifFrame.parentFrameId
+          ? (frameContextManager.getFrameIndex(oopifFrame.parentFrameId) ?? 0)
+          : 0,
+        siblingPosition: 0,
+      };
+
+      // Collect data for this OOPIF independently
+      const oopifNodes: Array<AXNode & { _frameIndex: number }> = [];
+      const oopifDebugInfo: Array<{
+        frameIndex: number;
+        frameUrl: string;
+        totalNodes: number;
+        rawNodes: AXNode[];
+      }> = [];
+
+      // Create isolated maps for this OOPIF to avoid race conditions
+      const oopifMaps: BackendIdMaps = {
+        tagNameMap: {},
+        xpathMap: {},
+        accessibleNameMap: {},
+        backendNodeMap: {},
+        frameMap: new Map(),
+      };
+
+      await collectCrossOriginFrameData({
+        frameIndex,
+        frameInfo,
+        session,
+        maps: oopifMaps,
+        allNodes: oopifNodes,
+        frameDebugInfo: oopifDebugInfo,
+        debug,
+        enableVisualMode,
+        frameContextManager,
+      });
+
+      processedCrossOriginFrames.add(frameId);
+
+      return {
+        nodes: oopifNodes,
+        maps: oopifMaps,
+        debugInfo: oopifDebugInfo,
+      };
+    } catch (error) {
+      console.warn(
+        `[A11y] Failed to process OOPIF frame ${frameIndex} (${url}):`,
+        (error as Error).message || error
+      );
+      return null;
+    }
+  });
+
+  // Wait for all OOPIFs to complete in parallel
+  const oopifResults = await Promise.all(oopifPromises);
+
+  // Merge all OOPIF results into shared maps and allNodes
+  for (const result of oopifResults) {
+    if (result) {
+      // Merge nodes
+      allNodes.push(...result.nodes);
+
+      // Merge maps
+      Object.assign(maps.tagNameMap, result.maps.tagNameMap);
+      Object.assign(maps.xpathMap, result.maps.xpathMap);
+      Object.assign(maps.accessibleNameMap, result.maps.accessibleNameMap);
+      Object.assign(maps.backendNodeMap, result.maps.backendNodeMap);
+
+      // Merge frame maps
+      if (result.maps.frameMap) {
+        for (const [idx, info] of result.maps.frameMap.entries()) {
+          if (!maps.frameMap?.has(idx)) {
+            maps.frameMap?.set(idx, info);
+          }
+        }
+      }
+
+      // Merge debug info
+      if (debug) {
+        frameDebugInfo.push(...result.debugInfo);
+      }
     }
   }
 
@@ -593,9 +705,9 @@ async function collectCrossOriginFrameData({
     }
   }
 
-  const result = (await session.send(
-    "Accessibility.getFullAXTree"
-  )) as { nodes: AXNode[] };
+  const result = (await session.send("Accessibility.getFullAXTree")) as {
+    nodes: AXNode[];
+  };
   let nodes = result.nodes;
 
   if (!hasInteractiveElements(nodes)) {
@@ -802,257 +914,260 @@ export async function getA11yDOM(
       cdpClient.acquireSession("dom")
     );
 
-      await timeAsync("Accessibility.enable", () =>
-        client.send("Accessibility.enable")
+    await timeAsync("Accessibility.enable", () =>
+      client.send("Accessibility.enable")
+    );
+
+    if (enableVisualMode) {
+      await timeAsync("injectBoundingBoxScript", () =>
+        injectBoundingBoxScriptSession(client)
       );
+    }
 
-      if (enableVisualMode) {
-        await timeAsync("injectBoundingBoxScript", () =>
-          injectBoundingBoxScriptSession(client)
-        );
-      }
+    // Step 3: Build backend ID maps (tag names and XPaths)
+    // This traverses the full DOM including iframe content via DOM.getDocument with pierce: true
+    const maps = await timeAsync("buildBackendIdMaps", () =>
+      buildBackendIdMaps(client, 0, debug)
+    );
+    await annotateFrameSessions({
+      session: client,
+      frameMap: maps.frameMap,
+      debug,
+    });
 
-      // Step 3: Build backend ID maps (tag names and XPaths)
-      // This traverses the full DOM including iframe content via DOM.getDocument with pierce: true
-      const maps = await timeAsync("buildBackendIdMaps", () =>
-        buildBackendIdMaps(client, 0, debug)
-      );
-      await annotateFrameSessions({
-        session: client,
-        frameMap: maps.frameMap,
-        debug,
-      });
+    // Step 4: Fetch accessibility trees for main frame and all iframes
+    const allNodes: (AXNode & { _frameIndex: number })[] = [];
 
-      // Step 4: Fetch accessibility trees for main frame and all iframes
-      const allNodes: (AXNode & { _frameIndex: number })[] = [];
+    // 4a. Fetch main frame accessibility tree
+    const { nodes: mainNodes } = (await timeAsync(
+      "fetchMainFrameAXTree",
+      () =>
+        client.send("Accessibility.getFullAXTree") as Promise<{
+          nodes: AXNode[];
+        }>
+    )) as {
+      nodes: AXNode[];
+    };
+    allNodes.push(...mainNodes.map((n) => ({ ...n, _frameIndex: 0 })));
 
-      // 4a. Fetch main frame accessibility tree
-      const { nodes: mainNodes } = (await timeAsync(
-        "fetchMainFrameAXTree",
-        () =>
-          client.send("Accessibility.getFullAXTree") as Promise<{
-            nodes: AXNode[];
-          }>
-      )) as {
-        nodes: AXNode[];
-      };
-      allNodes.push(...mainNodes.map((n) => ({ ...n, _frameIndex: 0 })));
+    // 4b. Fetch accessibility trees for all iframes
+    if (debug) {
+      console.log("[A11y] Fetching iframe trees using CDP sessions");
+    }
 
-      // 4b. Fetch accessibility trees for all iframes
-      if (debug) {
-        console.log("[A11y] Fetching iframe trees using CDP sessions");
-      }
-
-      const { nodes: iframeNodes, debugInfo: frameDebugInfo } =
-        await timeAsync("fetchIframeAXTrees", () =>
-          fetchIframeAXTrees(
-            client,
-            maps,
-            debug,
-            enableVisualMode,
-            cdpClient,
-            frameContextManager
-          )
-        );
-      allNodes.push(...iframeNodes);
-
-      // 4c. Build frame hierarchy paths now that all frames are discovered
-      buildFramePaths(maps.frameMap || new Map(), debug);
-      await timeAsync("syncFrameContextManager", () =>
-        syncFrameContextManager({
-          manager: frameContextManager,
-          frameMap: maps.frameMap,
-          cdpClient,
-          rootSession: cdpClient.rootSession,
+    const { nodes: iframeNodes, debugInfo: frameDebugInfo } = await timeAsync(
+      "fetchIframeAXTrees",
+      () =>
+        fetchIframeAXTrees(
+          client,
+          maps,
           debug,
-        })
-      );
+          enableVisualMode,
+          cdpClient,
+          frameContextManager
+        )
+    );
+    allNodes.push(...iframeNodes);
 
-      // Step 4: Detect scrollable elements
-      const scrollableIds = await timeAsync("findScrollableElements", () =>
-        findScrollableElementIds(page, client)
-      );
+    // 4c. Build frame hierarchy paths now that all frames are discovered
+    buildFramePaths(maps.frameMap || new Map(), debug);
+    await timeAsync("syncFrameContextManager", () =>
+      syncFrameContextManager({
+        manager: frameContextManager,
+        frameMap: maps.frameMap,
+        cdpClient,
+        rootSession: cdpClient.rootSession,
+        debug,
+      })
+    );
 
-      // Step 5: Build hierarchical trees for each frame
-      const frameGroups = new Map<number, AXNode[]>();
-      for (const node of allNodes) {
-        const frameIdx = node._frameIndex || 0;
-        if (!frameGroups.has(frameIdx)) {
-          frameGroups.set(frameIdx, []);
-        }
-        frameGroups.get(frameIdx)!.push(node);
+    // Step 4: Detect scrollable elements
+    const scrollableIds = await timeAsync("findScrollableElements", () =>
+      findScrollableElementIds(page, client)
+    );
+
+    // Step 5: Build hierarchical trees for each frame
+    const frameGroups = new Map<number, AXNode[]>();
+    for (const node of allNodes) {
+      const frameIdx = node._frameIndex || 0;
+      if (!frameGroups.has(frameIdx)) {
+        frameGroups.set(frameIdx, []);
       }
+      frameGroups.get(frameIdx)!.push(node);
+    }
 
-      const frameEntries = Array.from(frameGroups.entries());
+    const frameEntries = Array.from(frameGroups.entries());
 
-      // Build trees for each frame (potentially in parallel)
-      const treeResults = await Promise.all(
-        frameEntries.map(async ([frameIdx, nodes], order) => {
-          let boundingBoxTarget: import("./bounding-box-batch").BoundingBoxTarget | undefined;
+    // Build trees for each frame (potentially in parallel)
+    const treeResults = await Promise.all(
+      frameEntries.map(async ([frameIdx, nodes], order) => {
+        let boundingBoxTarget:
+          | import("./bounding-box-batch").BoundingBoxTarget
+          | undefined;
 
-          if (enableVisualMode) {
-            if (frameIdx === 0) {
-              boundingBoxTarget = { kind: "playwright", target: page };
-            } else {
-              const frameInfo = maps.frameMap?.get(frameIdx);
-              const frameId = frameInfo?.frameId ?? frameInfo?.cdpFrameId;
-              if (frameId) {
-                const frameSession = frameContextManager.getFrameSession(frameId);
-                if (frameSession && frameSession !== cdpClient.rootSession) {
-                  const executionContextId =
-                    frameContextManager.getExecutionContextId(frameId) ??
-                    (await frameContextManager
-                      .waitForExecutionContext(frameId)
-                      .catch(() => undefined));
-                  boundingBoxTarget = {
-                    kind: "cdp",
-                    session: frameSession,
-                    executionContextId,
-                    frameId,
-                  };
-                } else {
-                  boundingBoxTarget = { kind: "playwright", target: page };
-                }
+        if (enableVisualMode) {
+          if (frameIdx === 0) {
+            boundingBoxTarget = { kind: "playwright", target: page };
+          } else {
+            const frameInfo = maps.frameMap?.get(frameIdx);
+            const frameId = frameInfo?.frameId ?? frameInfo?.cdpFrameId;
+            if (frameId) {
+              const frameSession = frameContextManager.getFrameSession(frameId);
+              if (frameSession && frameSession !== cdpClient.rootSession) {
+                const executionContextId =
+                  frameContextManager.getExecutionContextId(frameId) ??
+                  (await frameContextManager
+                    .waitForExecutionContext(frameId)
+                    .catch(() => undefined));
+                boundingBoxTarget = {
+                  kind: "cdp",
+                  session: frameSession,
+                  executionContextId,
+                  frameId,
+                };
               } else {
                 boundingBoxTarget = { kind: "playwright", target: page };
               }
+            } else {
+              boundingBoxTarget = { kind: "playwright", target: page };
             }
           }
+        }
 
-          const treeResult = await timeAsync(
-            `buildFrameTree:${frameIdx}`,
-            () =>
-              buildHierarchicalTree(
-                nodes,
-                maps,
-                frameIdx,
-                scrollableIds,
-                debug,
-                enableVisualMode,
-                boundingBoxTarget,
-                debugDir
+        const treeResult = await timeAsync(
+          `buildFrameTree:${frameIdx}`,
+          () =>
+            buildHierarchicalTree(
+              nodes,
+              maps,
+              frameIdx,
+              scrollableIds,
+              debug,
+              enableVisualMode,
+              boundingBoxTarget,
+              debugDir
             ),
-            { nodeCount: nodes.length }
-          );
+          { nodeCount: nodes.length }
+        );
 
-          if (onFrameChunk) {
-            const frameInfo = maps.frameMap?.get(frameIdx);
-            onFrameChunk({
-              frameIndex: frameIdx,
-              framePath: frameInfo?.framePath,
-              frameUrl:
-                frameInfo?.src ?? (frameIdx === 0 ? page.url() : undefined),
-              simplified: treeResult.simplified,
-              totalNodes: nodes.length,
-              order,
-            });
-          }
-
-          return treeResult;
-        })
-      );
-
-      // Step 6: Merge all trees into combined state
-      const {
-        elements: allElements,
-        xpathMap: allXpaths,
-        domState: combinedDomState,
-      } = mergeTreeResults(treeResults);
-
-      // Step 7: Process debug info - add computed fields from tree results (only if debug enabled)
-      const processedDebugInfo = debug
-        ? processFrameDebugInfo(frameDebugInfo, treeResults)
-        : undefined;
-
-      // Step 8: Generate visual overlay if enabled
-      let visualOverlay: string | undefined;
-      let boundingBoxMap: Map<EncodedId, DOMRect> | undefined;
-
-      if (enableVisualMode) {
-        // Collect all bounding boxes from tree results
-        boundingBoxMap = new Map();
-        for (const result of treeResults) {
-          if (result.boundingBoxMap) {
-            for (const [encodedId, rect] of result.boundingBoxMap) {
-              boundingBoxMap.set(encodedId, rect);
-            }
-          }
+        if (onFrameChunk) {
+          const frameInfo = maps.frameMap?.get(frameIdx);
+          onFrameChunk({
+            frameIndex: frameIdx,
+            framePath: frameInfo?.framePath,
+            frameUrl:
+              frameInfo?.src ?? (frameIdx === 0 ? page.url() : undefined),
+            simplified: treeResult.simplified,
+            totalNodes: nodes.length,
+            order,
+          });
         }
 
-        // Render overlay if we have bounding boxes
-        if (boundingBoxMap.size > 0) {
-          // Get viewport dimensions (calculate from page if not set)
-          let viewport = page.viewportSize();
-          if (!viewport) {
-            viewport = await page.evaluate(() => ({
-              width: window.innerWidth,
-              height: window.innerHeight,
-            }));
-          }
+        return treeResult;
+      })
+    );
 
-          // Filter to only include boxes that are within or overlap the viewport
-          const visibleBoundingBoxMap = new Map<EncodedId, DOMRect>();
-          for (const [encodedId, rect] of boundingBoxMap.entries()) {
-            // Check if box overlaps viewport (accounting for partial visibility)
-            const isVisible =
-              rect.right > 0 &&
-              rect.bottom > 0 &&
-              rect.left < viewport.width &&
-              rect.top < viewport.height;
+    // Step 6: Merge all trees into combined state
+    const {
+      elements: allElements,
+      xpathMap: allXpaths,
+      domState: combinedDomState,
+    } = mergeTreeResults(treeResults);
 
-            if (isVisible) {
-              visibleBoundingBoxMap.set(encodedId, rect);
-            }
-          }
+    // Step 7: Process debug info - add computed fields from tree results (only if debug enabled)
+    const processedDebugInfo = debug
+      ? processFrameDebugInfo(frameDebugInfo, treeResults)
+      : undefined;
 
-          visualOverlay = await timeAsync("renderA11yOverlay", () =>
-            renderA11yOverlay(visibleBoundingBoxMap, {
-              width: viewport.width,
-              height: viewport.height,
-              showEncodedIds: true,
-              colorScheme: "rainbow",
-            })
-          );
+    // Step 8: Generate visual overlay if enabled
+    let visualOverlay: string | undefined;
+    let boundingBoxMap: Map<EncodedId, DOMRect> | undefined;
 
-          if (debug) {
-            console.log(
-              `[A11y Visual] Rendered ${visibleBoundingBoxMap.size} elements (filtered from ${boundingBoxMap.size} total)`
-            );
+    if (enableVisualMode) {
+      // Collect all bounding boxes from tree results
+      boundingBoxMap = new Map();
+      for (const result of treeResults) {
+        if (result.boundingBoxMap) {
+          for (const [encodedId, rect] of result.boundingBoxMap) {
+            boundingBoxMap.set(encodedId, rect);
           }
         }
       }
 
-      const snapshot: A11yDOMState = {
-        elements: allElements,
-        domState: combinedDomState,
-        xpathMap: allXpaths,
-        backendNodeMap: maps.backendNodeMap,
-        frameMap: maps.frameMap,
-        ...(debug && { frameDebugInfo: processedDebugInfo }),
-        ...(enableVisualMode && { boundingBoxMap, visualOverlay }),
-      };
-
-      if (canUseCache) {
-        domSnapshotCache.set(page, snapshot);
-        tracker?.mark("cacheStore");
-      }
-
-      tracker?.finish();
-      if (tracker && debugDir) {
-        try {
-          fs.mkdirSync(debugDir, { recursive: true });
-          fs.writeFileSync(
-            path.join(debugDir, "dom-capture-metrics.json"),
-            tracker.toJSON()
-          );
-        } catch {
-          // best effort
+      // Render overlay if we have bounding boxes
+      if (boundingBoxMap.size > 0) {
+        // Get viewport dimensions (calculate from page if not set)
+        let viewport = page.viewportSize();
+        if (!viewport) {
+          viewport = await page.evaluate(() => ({
+            width: window.innerWidth,
+            height: window.innerHeight,
+          }));
         }
-      } else if (tracker && debug) {
-        console.log(tracker.formatReport());
-      }
 
-      return snapshot;
+        // Filter to only include boxes that are within or overlap the viewport
+        const visibleBoundingBoxMap = new Map<EncodedId, DOMRect>();
+        for (const [encodedId, rect] of boundingBoxMap.entries()) {
+          // Check if box overlaps viewport (accounting for partial visibility)
+          const isVisible =
+            rect.right > 0 &&
+            rect.bottom > 0 &&
+            rect.left < viewport.width &&
+            rect.top < viewport.height;
+
+          if (isVisible) {
+            visibleBoundingBoxMap.set(encodedId, rect);
+          }
+        }
+
+        visualOverlay = await timeAsync("renderA11yOverlay", () =>
+          renderA11yOverlay(visibleBoundingBoxMap, {
+            width: viewport.width,
+            height: viewport.height,
+            showEncodedIds: true,
+            colorScheme: "rainbow",
+          })
+        );
+
+        if (debug) {
+          console.log(
+            `[A11y Visual] Rendered ${visibleBoundingBoxMap.size} elements (filtered from ${boundingBoxMap.size} total)`
+          );
+        }
+      }
+    }
+
+    const snapshot: A11yDOMState = {
+      elements: allElements,
+      domState: combinedDomState,
+      xpathMap: allXpaths,
+      backendNodeMap: maps.backendNodeMap,
+      frameMap: maps.frameMap,
+      ...(debug && { frameDebugInfo: processedDebugInfo }),
+      ...(enableVisualMode && { boundingBoxMap, visualOverlay }),
+    };
+
+    if (canUseCache) {
+      domSnapshotCache.set(page, snapshot);
+      tracker?.mark("cacheStore");
+    }
+
+    tracker?.finish();
+    if (tracker && debugDir) {
+      try {
+        fs.mkdirSync(debugDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(debugDir, "dom-capture-metrics.json"),
+          tracker.toJSON()
+        );
+      } catch {
+        // best effort
+      }
+    } else if (tracker && debug) {
+      console.log(tracker.formatReport());
+    }
+
+    return snapshot;
   } catch (error) {
     console.error("Error extracting accessibility tree:", error);
 

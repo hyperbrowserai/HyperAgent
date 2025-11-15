@@ -74,7 +74,6 @@ export async function waitForSettledDOM(
   const cdpClient = await getCDPClient(page);
   const manager = getOrCreateFrameContextManager(cdpClient);
   manager.setDebug(traceWait);
-  await manager.enableAutoAttach(cdpClient.rootSession);
 
   const lifecycleSession = await cdpClient.acquireSession("lifecycle");
 

@@ -36,6 +36,10 @@ export class FrameGraph {
     return this.children.get(parentFrameId) ?? [];
   }
 
+  getAllFrames(): FrameRecord[] {
+    return Array.from(this.frames.values());
+  }
+
   upsertFrame(record: Omit<FrameRecord, "lastUpdated"> & { lastUpdated?: number }): FrameRecord {
     const existing = this.frames.get(record.frameId);
     const lastUpdated = record.lastUpdated ?? Date.now();
