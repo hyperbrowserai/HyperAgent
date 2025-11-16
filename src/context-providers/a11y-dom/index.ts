@@ -1018,31 +1018,30 @@ export async function getA11yDOM(
           | undefined;
 
         if (enableVisualMode) {
-          if (frameIdx === 0) {
-            boundingBoxTarget = { kind: "playwright", target: page };
-          } else {
-            const frameInfo = maps.frameMap?.get(frameIdx);
-            const frameId = frameInfo?.frameId ?? frameInfo?.cdpFrameId;
-            if (frameId) {
-              const frameSession = frameContextManager.getFrameSession(frameId);
-              if (frameSession && frameSession !== cdpClient.rootSession) {
-                const executionContextId =
-                  frameContextManager.getExecutionContextId(frameId) ??
-                  (await frameContextManager
-                    .waitForExecutionContext(frameId)
-                    .catch(() => undefined));
-                boundingBoxTarget = {
-                  kind: "cdp",
-                  session: frameSession,
-                  executionContextId,
-                  frameId,
-                };
-              } else {
-                boundingBoxTarget = { kind: "playwright", target: page };
-              }
-            } else {
-              boundingBoxTarget = { kind: "playwright", target: page };
-            }
+          const frameInfo = maps.frameMap?.get(frameIdx);
+          const frameId =
+            frameInfo?.frameId ??
+            frameInfo?.cdpFrameId ??
+            frameContextManager.getFrameIdByIndex(frameIdx);
+          if (frameId) {
+            const frameSession =
+              frameContextManager.getFrameSession(frameId) ??
+              cdpClient.rootSession;
+            const executionContextId =
+              frameContextManager.getExecutionContextId(frameId) ??
+              (await frameContextManager
+                .waitForExecutionContext(frameId)
+                .catch(() => undefined));
+            boundingBoxTarget = {
+              kind: "cdp",
+              session: frameSession,
+              executionContextId,
+              frameId,
+            };
+          } else if (debug) {
+            console.warn(
+              `[A11y] Skipping bounding box capture for frame ${frameIdx} - missing frameId`
+            );
           }
         }
 
@@ -1119,6 +1118,7 @@ export async function getA11yDOM(
 
         // Filter to only include boxes that are within or overlap the viewport
         const visibleBoundingBoxMap = new Map<EncodedId, DOMRect>();
+        let droppedByViewport = 0;
         for (const [encodedId, rect] of boundingBoxMap.entries()) {
           // Check if box overlaps viewport (accounting for partial visibility)
           const isVisible =
@@ -1129,7 +1129,15 @@ export async function getA11yDOM(
 
           if (isVisible) {
             visibleBoundingBoxMap.set(encodedId, rect);
+          } else {
+            droppedByViewport += 1;
           }
+        }
+
+        if (console.debug) {
+          console.debug(
+            `[A11y Visual] Frame 0 overlay: kept ${visibleBoundingBoxMap.size}/${boundingBoxMap.size} boxes (dropped ${droppedByViewport} offscreen)`
+          );
         }
 
         visualOverlay = await timeAsync("renderA11yOverlay", () =>

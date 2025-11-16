@@ -3,8 +3,58 @@
  */
 
 import type { CDPSession } from "@/cdp";
-import { DOMNode, BackendIdMaps, EncodedId, IframeInfo } from "./types";
+import { DOMNode, BackendIdMaps, EncodedId, IframeInfo, DOMRect } from "./types";
 import { createEncodedId } from "./utils";
+
+async function annotateIframeBoundingBoxes(
+  session: CDPSession,
+  frameMap: Map<number, IframeInfo>,
+  debug: boolean
+): Promise<void> {
+  if (!frameMap.size) {
+    return;
+  }
+
+  for (const [frameIndex, frameInfo] of frameMap.entries()) {
+    if (!frameInfo.iframeBackendNodeId) continue;
+    try {
+      const response = await session.send<{
+        model: {
+          content?: number[];
+        };
+      }>("DOM.getBoxModel", {
+        backendNodeId: frameInfo.iframeBackendNodeId,
+      });
+      const content = response?.model?.content;
+      if (!content || content.length < 8) continue;
+
+      const xs = [content[0], content[2], content[4], content[6]];
+      const ys = [content[1], content[3], content[5], content[7]];
+      const left = Math.min(...xs);
+      const right = Math.max(...xs);
+      const top = Math.min(...ys);
+      const bottom = Math.max(...ys);
+      const rect: DOMRect = {
+        x: left,
+        y: top,
+        left,
+        top,
+        right,
+        bottom,
+        width: right - left,
+        height: bottom - top,
+      };
+      frameInfo.absoluteBoundingBox = rect;
+    } catch (error) {
+      if (debug) {
+        console.warn(
+          `[DOM] Failed to compute bounding box for frame ${frameIndex}:`,
+          error
+        );
+      }
+    }
+  }
+}
 
 /**
  * Join XPath segments
@@ -289,6 +339,8 @@ export async function buildBackendIdMaps(
         );
       }
     }
+
+    await annotateIframeBoundingBoxes(session, frameMap, debug);
 
     return {
       tagNameMap,

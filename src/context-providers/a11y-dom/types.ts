@@ -107,6 +107,10 @@ export interface IframeInfo {
   iframeBackendNodeId?: number; // backendNodeId of the <iframe> element (for debugging)
   contentDocumentBackendNodeId?: number; // backendNodeId of the iframe's content document root (for getPartialAXTree)
   framePath?: string[]; // Full hierarchy path (e.g., ["Main", "Frame 1", "Frame 2"])
+  /**
+   * Absolute bounding box of the iframe element relative to the main viewport (populated in visual mode)
+   */
+  absoluteBoundingBox?: DOMRect;
 }
 
 /**

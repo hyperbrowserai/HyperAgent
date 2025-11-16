@@ -121,7 +121,7 @@ export async function buildHierarchicalTree(
       }
     }
 
-    // Batch collect all bounding boxes in a single page.evaluate call
+    // Batch collect all bounding boxes in a single CDP call
     if (nodesToCollect.length > 0) {
       const startTime = Date.now();
       const result = await batchCollectBoundingBoxesWithFailures(
