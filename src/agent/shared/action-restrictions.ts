@@ -1,39 +1,9 @@
+import type { CDPActionMethod } from "@/cdp";
+
 /**
  * Action restrictions for element interactions
  * Defines which Playwright methods are allowed for different contexts
  */
-
-/**
- * Actions allowed for aiAction (executeSingleAction)
- * These are all the Playwright methods that can be executed via natural language
- *
- * aiAction uses a high retry count (10) and is designed for one-off commands
- * where the user directly specifies what they want to do.
- */
-export const AIACTION_ALLOWED_ACTIONS = [
-  // Click actions
-  "click",
-
-  // Input actions
-  "fill", // Clear and fill input
-  "type", // Type character by character
-  "press", // Press keyboard key
-
-  // Selection actions
-  "selectOptionFromDropdown", // For <select> elements
-
-  // Checkbox actions
-  "check",
-  "uncheck",
-
-  // Hover action
-  "hover",
-
-  // Scroll actions
-  "scrollTo", // Scroll to position (%, 'top', 'bottom')
-  "nextChunk", // Scroll down one viewport
-  "prevChunk", // Scroll up one viewport
-] as const;
 
 export type AiActionAllowedAction = (typeof AIACTION_ALLOWED_ACTIONS)[number];
 
@@ -69,7 +39,13 @@ export const AGENT_ELEMENT_ACTIONS = [
   "scrollTo", // Scroll to position (%, 'top', 'bottom')
   "nextChunk", // Scroll down one viewport
   "prevChunk", // Scroll up one viewport
-] as const;
+] as const satisfies readonly CDPActionMethod[];
+
+/**
+ * Actions allowed for aiAction (executeSingleAction)
+ * Mirrors AGENT_ELEMENT_ACTIONS because both flows support the same action set.
+ */
+export const AIACTION_ALLOWED_ACTIONS = AGENT_ELEMENT_ACTIONS;
 
 export type AgentElementAction = (typeof AGENT_ELEMENT_ACTIONS)[number];
 

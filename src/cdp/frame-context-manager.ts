@@ -91,6 +91,12 @@ export class FrameContextManager {
     return this.graph.getFrame(frameId);
   }
 
+  getFrameByBackendNodeId(backendNodeId: number): FrameRecord | undefined {
+    return this.graph
+      .getAllFrames()
+      .find((frame) => frame.backendNodeId === backendNodeId);
+  }
+
   getFrameIdByIndex(index: number): string | undefined {
     return this.graph.getFrameIdByIndex(index);
   }
@@ -204,6 +210,7 @@ export class FrameContextManager {
     this.initializingPromise = (async () => {
       const rootSession = this.client.rootSession;
       await this.captureFrameTree(rootSession);
+      await this.trackPageEvents(rootSession);
       this.initialized = true;
     })().finally(() => {
       this.initializingPromise = null;

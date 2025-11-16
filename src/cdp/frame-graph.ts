@@ -33,7 +33,7 @@ export class FrameGraph {
   }
 
   getChildren(parentFrameId: string | null): string[] {
-    return this.children.get(parentFrameId) ?? [];
+    return Array.from(this.children.get(parentFrameId) ?? []);
   }
 
   getAllFrames(): FrameRecord[] {

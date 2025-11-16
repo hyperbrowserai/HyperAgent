@@ -6,7 +6,7 @@ import { getElementLocator } from "../shared/element-locator";
 import { AGENT_ELEMENT_ACTIONS } from "../shared/action-restrictions";
 import type { EncodedId } from "@/context-providers/a11y-dom/types";
 import { isEncodedId } from "@/context-providers/a11y-dom/types";
-import type { CDPActionMethod, ResolvedCDPElement } from "@/cdp";
+import type { ResolvedCDPElement } from "@/cdp";
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -83,7 +83,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
       };
     }
 
-    const encodedId = elementId as EncodedId;
+    const encodedId = elementId;
     const elementMetadata = ctx.domState.elements.get(encodedId);
     if (!elementMetadata) {
       return {
@@ -133,7 +133,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
         }
 
         const dispatchStart = performance.now();
-        await ctx.cdp!.dispatchCDPAction(method as CDPActionMethod, methodArgs, {
+        await ctx.cdp!.dispatchCDPAction(method, methodArgs, {
           element: {
             ...resolved,
             xpath: ctx.domState.xpathMap?.[encodedId],

@@ -178,6 +178,15 @@ export async function buildBackendIdMaps(
 
         // Get CDP frameId for fetching accessibility tree
         const cdpFrameId = node.contentDocument.frameId;
+        if (debug && !cdpFrameId) {
+          const availableKeys = Object.keys(
+            node.contentDocument as unknown as Record<string, unknown>
+          );
+          console.warn(
+            "[DOM] contentDocument missing frameId. Keys:",
+            availableKeys
+          );
+        }
 
         // Track sibling position for this iframe
         const siblingKey = `${currentFrameIndex}:${iframeSrc || "no-src"}`;

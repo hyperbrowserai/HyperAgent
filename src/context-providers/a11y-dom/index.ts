@@ -239,7 +239,19 @@ async function syncFrameContextManager({
 
   await Promise.all(
     entries.map(async ([frameIndex, info]) => {
-      const frameId = info.frameId ?? info.cdpFrameId;
+      let frameId = info.frameId ?? info.cdpFrameId;
+      if (!frameId && typeof info.iframeBackendNodeId === "number") {
+        const matched = manager.getFrameByBackendNodeId(info.iframeBackendNodeId);
+        if (matched) {
+          frameId = matched.frameId;
+          if (debug) {
+            console.log(
+              `[FrameContext] Resolved frame ${frameIndex} via backendNodeId ${info.iframeBackendNodeId} -> ${frameId}`
+            );
+          }
+        }
+      }
+
       if (!frameId) {
         if (debug) {
           console.warn(
@@ -1170,6 +1182,13 @@ export async function getA11yDOM(
     return snapshot;
   } catch (error) {
     console.error("Error extracting accessibility tree:", error);
+    if (error instanceof Error) {
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      });
+    }
 
     // Fallback to empty state
     return {

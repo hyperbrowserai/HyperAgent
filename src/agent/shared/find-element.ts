@@ -11,6 +11,7 @@ import {
   getA11yDOM,
   type A11yDOMState,
 } from "../../context-providers/a11y-dom";
+import type { AccessibilityNode } from "@/context-providers/a11y-dom/types";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 
 export interface FindElementOptions {
@@ -34,7 +35,7 @@ export interface FindElementResult {
   success: boolean;
   element?: ExamineDomResult;
   domState: A11yDOMState;
-  elementMap: Map<string, unknown>;
+  elementMap: Map<string, AccessibilityNode>;
   llmResponse?: { rawText: string; parsed: unknown };
 }
 
@@ -67,7 +68,7 @@ export async function findElementWithInstruction(
   const { maxRetries = 1, retryDelayMs = 1000, debug = false } = options;
 
   let lastDomState: A11yDOMState | null = null;
-  let lastElementMap: Map<string, unknown> | null = null;
+  let lastElementMap: Map<string, AccessibilityNode> | null = null;
   let lastLlmResponse: { rawText: string; parsed: unknown } | undefined;
 
   // Retry loop with DOM refresh (matches aiAction's findElementWithRetry pattern)
@@ -101,7 +102,7 @@ export async function findElementWithInstruction(
     }
 
     // Convert elements map to string-only keys for examineDom
-    const elementMap = new Map(
+    const elementMap = new Map<string, AccessibilityNode>(
       Array.from(domState.elements).map(([k, v]) => [String(k), v])
     );
 

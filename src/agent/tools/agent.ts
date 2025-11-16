@@ -157,7 +157,24 @@ const getActionSchema = (actions: Array<AgentActionDefinition>) => {
         ),
     })
   );
-  return z.union([zodDefs[0], zodDefs[1], ...zodDefs.splice(2)] as any);
+
+  if (zodDefs.length === 0) {
+    throw new Error("No actions registered for agent");
+  }
+
+  if (zodDefs.length === 1) {
+    const [single] = zodDefs;
+    return z.union([single, single] as [z.ZodTypeAny, z.ZodTypeAny]);
+  }
+
+  const [first, second, ...rest] = zodDefs;
+  return z.union(
+    [first, second, ...rest] as [
+      z.ZodTypeAny,
+      z.ZodTypeAny,
+      ...z.ZodTypeAny[],
+    ]
+  );
 };
 
 const getActionHandler = (
@@ -312,11 +329,12 @@ export const runAgentTask = async (
     await ensureFrameContextsReady(page, ctx.debug);
     while (true) {
     // Status Checks
-    if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
+    const status: TaskStatus = taskState.status;
+    if (status === TaskStatus.PAUSED) {
       await sleep(100);
       continue;
     }
-    if (endTaskStatuses.has(taskState.status)) {
+    if (endTaskStatuses.has(status)) {
       break;
     }
     if (params?.maxSteps && currStep >= params.maxSteps) {
@@ -502,11 +520,12 @@ export const runAgentTask = async (
     params?.debugOnAgentOutput?.(agentOutput);
 
     // Status Checks
-    if ((taskState.status as TaskStatus) == TaskStatus.PAUSED) {
+    const statusAfterLLM: TaskStatus = taskState.status;
+    if (statusAfterLLM === TaskStatus.PAUSED) {
       await sleep(100);
       continue;
     }
-    if (endTaskStatuses.has(taskState.status)) {
+    if (endTaskStatuses.has(statusAfterLLM)) {
       break;
     }
 

@@ -15,12 +15,8 @@
  */
 
 import type { BrowserContext, Page } from "playwright-core";
-import {
-  getCDPClient,
-  getOrCreateFrameContextManager,
-} from "@/cdp";
+import { getCDPClient, getOrCreateFrameContextManager } from "@/cdp";
 import type { CDPSession } from "@/cdp";
-import type { FrameContextManager } from "@/cdp/frame-context-manager";
 import { Protocol } from "devtools-protocol";
 import { performance } from "perf_hooks";
 import { getDebugOptions } from "@/debug/options";
@@ -57,8 +53,7 @@ export async function waitForSettledDOM(
   const debugOptions = getDebugOptions();
   const traceWaitFlag =
     (debugOptions.enabled && debugOptions.traceWait) || ENV_TRACE_WAIT;
-  const traceWait =
-    traceWaitFlag || !!ctx._options?.recordVideo;
+  const traceWait = traceWaitFlag || !!ctx._options?.recordVideo;
   const totalStart = performance.now();
 
   // Currently we only wait for network idle (historical behavior). Hook exists if we add DOM states later.
@@ -110,57 +105,6 @@ export async function waitForSettledDOM(
   };
 }
 
-export async function waitForLifecycle(
-  page: Page,
-  options: LifecycleOptions = {}
-): Promise<void> {
-  const { waitUntil = ["domcontentloaded"], timeoutMs = 10000 } = options;
-  const domStates = waitUntil.filter(
-    (state) => state === "domcontentloaded" || state === "load"
-  );
-  if (domStates.length === 0) return;
-
-  const watcher = new LifecycleWatcher({
-    page,
-    waitUntil: domStates,
-    timeoutMs,
-  });
-
-  await watcher.waitForLifecycle();
-}
-
-interface LifecycleWatcherConfig {
-  page: Page;
-  waitUntil: Array<"domcontentloaded" | "load" | "networkidle">;
-  timeoutMs: number;
-  frameId?: string;
-}
-
-class LifecycleWatcher {
-  private readonly page: Page;
-  private readonly waitUntil: Set<"domcontentloaded" | "load" | "networkidle">;
-  private readonly timeoutMs: number;
-  constructor({ page, waitUntil, timeoutMs }: LifecycleWatcherConfig) {
-    this.page = page;
-    this.waitUntil = new Set(waitUntil);
-    this.timeoutMs = timeoutMs;
-  }
-
-  async waitForLifecycle(): Promise<void> {
-    if (this.waitUntil.has("domcontentloaded")) {
-      await this.page.waitForLoadState("domcontentloaded", {
-        timeout: this.timeoutMs,
-      });
-    }
-
-    if (this.waitUntil.has("load")) {
-      await this.page.waitForLoadState("load", { timeout: this.timeoutMs });
-    }
-
-    // networkidle handled outside to avoid duplicate logic
-  }
-}
-
 interface NetworkIdleOptions {
   timeoutMs: number;
   trace?: boolean;
@@ -189,15 +133,15 @@ async function waitForNetworkIdle(
   };
 
   await new Promise<void>((resolve) => {
-    const requestMeta = new Map<
-      string,
-      { url?: string; start: number }
-    >();
+    const requestMeta = new Map<string, { url?: string; start: number }>();
     let stalledSweepTimer: NodeJS.Timeout | null = null;
 
     const maybeResolve = () => {
       if (inflight.size === 0 && !quietTimer) {
-        quietTimer = setTimeout(() => resolveDone(false), NETWORK_IDLE_THRESHOLD_MS);
+        quietTimer = setTimeout(
+          () => resolveDone(false),
+          NETWORK_IDLE_THRESHOLD_MS
+        );
       }
     };
 
@@ -242,11 +186,15 @@ async function waitForNetworkIdle(
       }
     };
 
-    const onLoadingFinished = (event: Protocol.Network.LoadingFinishedEvent): void => {
+    const onLoadingFinished = (
+      event: Protocol.Network.LoadingFinishedEvent
+    ): void => {
       finishRequest(event.requestId);
     };
 
-    const onLoadingFailed = (event: Protocol.Network.LoadingFailedEvent): void => {
+    const onLoadingFailed = (
+      event: Protocol.Network.LoadingFailedEvent
+    ): void => {
       finishRequest(event.requestId);
     };
 

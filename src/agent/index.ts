@@ -31,7 +31,11 @@ import { HyperagentError } from "./error";
 import { findElementWithInstruction } from "./shared/find-element";
 import { executePlaywrightMethod } from "./shared/execute-playwright-method";
 import { getElementLocator } from "./shared/element-locator";
-import { A11yDOMState } from "../context-providers/a11y-dom/types";
+import {
+  A11yDOMState,
+  AccessibilityNode,
+  isEncodedId,
+} from "../context-providers/a11y-dom/types";
 import type { EncodedId } from "../context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
@@ -48,7 +52,7 @@ import {
   dispatchCDPAction,
   getOrCreateFrameContextManager,
 } from "@/cdp";
-import type { CDPActionMethod, ResolvedCDPElement } from "@/cdp";
+import type { ResolvedCDPElement } from "@/cdp";
 import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import { setDebugOptions } from "@/debug/options";
 
@@ -491,7 +495,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   ): Promise<{
     element: ExamineDomResult;
     domState: A11yDOMState;
-    elementMap: Map<string, unknown>;
+    elementMap: Map<string, AccessibilityNode>;
     llmResponse: { rawText: string; parsed: unknown };
   }> {
     // Delegate to shared utility
@@ -556,7 +560,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     domState: Awaited<
       ReturnType<typeof import("../context-providers/a11y-dom").getA11yDOM>
     > | null;
-    elementMap: Map<string, unknown> | null;
+    elementMap: Map<string, AccessibilityNode> | null;
     element?: {
       elementId: string;
       method: string;
@@ -642,7 +646,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Array of interactive elements with id, role, and label
    */
   private collectInteractiveElements(
-    elementMap: Map<string, unknown>,
+    elementMap: Map<string, AccessibilityNode>,
     limit: number = 20
   ): Array<{ id: string; role: string; label: string }> {
     // Group elements by frame
@@ -652,11 +656,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     >();
 
     for (const [id, elem] of elementMap) {
-      // Type guard: ensure elem is an object with expected properties
-      if (!elem || typeof elem !== "object") continue;
-
-      const node = elem as Record<string, unknown>;
-      const role = typeof node.role === "string" ? node.role : undefined;
+      const role = elem.role;
 
       if (
         role &&
@@ -671,11 +671,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           "menuitem",
         ].includes(role)
       ) {
-        const name = typeof node.name === "string" ? node.name : undefined;
-        const description =
-          typeof node.description === "string" ? node.description : undefined;
-        const value = typeof node.value === "string" ? node.value : undefined;
-        const label = name || description || value || "";
+        const label = elem.name || elem.description || elem.value || "";
 
         if (label) {
           // Extract frame index from ID (format: "frameIndex-backendNodeId")
@@ -734,7 +730,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     let domState: A11yDOMState | null = null;
-    let elementMap: Map<string, unknown> | null = null;
+    let elementMap: Map<string, AccessibilityNode> | null = null;
 
     try {
       // Find element with retry logic
@@ -774,7 +770,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       const method = element.method;
       const args = element.arguments || [];
-      const encodedId = element.elementId as EncodedId;
+      if (!isEncodedId(element.elementId)) {
+        throw new HyperagentError(
+          `Element ID "${element.elementId}" is not in encoded format (frameIndex-backendNodeId).`,
+          400
+        );
+      }
+      const encodedId: EncodedId = element.elementId;
       let actionXPath: string | undefined;
 
       const canUseCDP = this.cdpActionsEnabled && !!domState.backendNodeMap;
@@ -800,7 +802,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
         actionXPath = domState.xpathMap?.[encodedId];
 
-        await dispatchCDPAction(method as CDPActionMethod, args, {
+        await dispatchCDPAction(method, args, {
           element: {
             ...resolved,
             xpath: actionXPath,
@@ -1083,26 +1085,33 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           page
         );
         if (outputSchema) {
-          if (!res.output || res.output === "") {
+          const outputText = res.output;
+          if (typeof outputText !== "string" || outputText === "") {
             throw new Error(
               `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
             );
           }
-          return JSON.parse(res.output as string);
+          return JSON.parse(outputText);
         }
-        return res.output as string;
+        const outputText = res.output;
+        if (typeof outputText !== "string" || outputText === "") {
+          throw new Error(
+            `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
+          );
+        }
+        return outputText;
       } else {
         const res = await this.executeTask(
           "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
           taskParams,
           page
         );
-        if (!res.output || res.output === "") {
+        if (typeof res.output !== "string" || res.output === "") {
           throw new Error(
             `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
           );
         }
-        return JSON.parse(res.output as string);
+        return JSON.parse(res.output);
       }
     };
     return hyperPage;

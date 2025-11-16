@@ -7,10 +7,6 @@ export {
 } from "./playwright-adapter";
 export { getBoundingBox } from "./bounding-box";
 export {
-  attachDriverToCDP,
-  AttachDriverToCDPOptions,
-} from "./connector-helpers";
-export {
   resolveElement,
   ResolvedCDPElement,
   ElementResolveContext,

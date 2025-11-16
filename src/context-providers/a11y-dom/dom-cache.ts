@@ -58,5 +58,3 @@ export const domSnapshotCache = new DomSnapshotCache();
 export function markDomSnapshotDirty(page: Page): void {
   domSnapshotCache.invalidate(page);
 }
-
-export const invalidateDomSnapshotCache = markDomSnapshotDirty;
