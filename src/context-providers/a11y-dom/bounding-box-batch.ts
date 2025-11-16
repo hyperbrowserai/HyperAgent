@@ -259,29 +259,6 @@ async function batchCollectBoundingBoxesViaCDP(
       executionContextId
     );
 
-    if (executionContextId !== undefined) {
-      try {
-        const { result } = await session.send<{
-          result: { type: string; value?: string };
-        }>("Runtime.evaluate", {
-          expression:
-            "typeof window.__hyperagent_collectBoundingBoxesByXPath",
-          executionContextId,
-          returnByValue: true,
-        });
-        console.debug?.(
-          `[BoundingBox] Frame ${frameIndex}: collector type in context ${executionContextId} = ${String(
-            result.value
-          )}`
-        );
-      } catch (error) {
-        console.warn?.(
-          `[BoundingBox] Frame ${frameIndex}: failed to inspect collector in context ${executionContextId}:`,
-          error
-        );
-      }
-    }
-
     const xpathToBackendIdObj = Object.fromEntries(xpathToBackendId);
     const response = await session.send<{
       result: { type: string; value?: Record<string, DOMRect> };
@@ -309,12 +286,6 @@ async function batchCollectBoundingBoxesViaCDP(
         : frameInfo?.absoluteBoundingBox?.top ??
           frameInfo?.absoluteBoundingBox?.y ??
           0;
-
-    if (frameIndex !== 0 && !frameInfo?.absoluteBoundingBox && console.debug) {
-      console.debug(
-        `[BoundingBox] Frame ${frameIndex}: missing iframe bounding box; overlay alignment may be off`
-      );
-    }
 
     const boundingBoxMap = new Map<EncodedId, DOMRect>();
 
@@ -375,15 +346,6 @@ export async function batchCollectBoundingBoxesWithFailures(
   console.debug?.(
     `[BoundingBox] Frame ${frameIndex}: collecting ${xpathToBackendId.size} boxes via CDP session`
   );
-  const sampleXPaths = Array.from(xpathToBackendId.entries())
-    .slice(0, 3)
-    .map(([xpath, backendId]) => `${xpath} (backendNodeId=${backendId})`);
-  if (sampleXPaths.length) {
-    console.debug?.(
-      `[BoundingBox] Frame ${frameIndex}: sample xpaths -> ${sampleXPaths.join("; ")}`
-    );
-  }
-
   const boundingBoxMap = await batchCollectBoundingBoxesViaCDP(
     target.session,
     target.executionContextId,

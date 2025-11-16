@@ -25,7 +25,7 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 const methodSchema = z
   .enum(AGENT_ELEMENT_ACTIONS)
   .describe(
-    "Method to execute (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollTo, nextChunk, prevChunk)."
+    "Method to execute (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollToElement, scrollToPercentage, nextChunk, prevChunk)."
   );
 
 const ActElementAction = z
@@ -42,7 +42,7 @@ const ActElementAction = z
         'Encoded element identifier from the DOM listing (format "frameIndex-backendNodeId", e.g., "0-5125").'
       ),
     method: methodSchema.describe(
-      "CDP/Playwright method to invoke (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollTo, nextChunk, prevChunk)."
+      "CDP/Playwright method to invoke (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollToElement, scrollToPercentage, nextChunk, prevChunk)."
     ),
     arguments: z
       .array(jsonValueSchema)

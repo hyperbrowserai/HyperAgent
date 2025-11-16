@@ -25,6 +25,8 @@ export type CDPActionMethod =
   | "uncheck"
   | "selectOptionFromDropdown"
   | "scrollTo"
+  | "scrollToElement"
+  | "scrollToPercentage"
   | "nextChunk"
   | "prevChunk";
 
@@ -302,6 +304,19 @@ export async function dispatchCDPAction(
         value: (args[0] as string) ?? "",
       });
       return;
+    case "scrollToElement": {
+      await scrollElementIntoView(ctx);
+      return;
+    }
+    case "scrollToPercentage": {
+      const targetArg = args[0];
+      const options =
+        typeof targetArg === "object" && !Array.isArray(targetArg)
+          ? (targetArg as ScrollToOptions)
+          : { target: targetArg as string | number };
+      await scrollToPosition(ctx, options);
+      return;
+    }
     case "scrollTo": {
       const targetArg = args[0];
       if (targetArg == null) {

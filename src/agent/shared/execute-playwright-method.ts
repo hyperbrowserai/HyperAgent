@@ -70,9 +70,15 @@ export async function executePlaywrightMethod(
     case "uncheck":
       await locator.uncheck();
       break;
-    case "scrollTo":
+    case "scrollToElement":
+      await locator.evaluate((element) => {
+        if (typeof element.scrollIntoView === "function") {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      });
+      break;
+    case "scrollToPercentage":
       {
-        // Scroll to percentage of element or viewport height
         const scrollArg = (args[0] || "50%").toString();
         await locator.evaluate(
           (element, { yArg }) => {
@@ -94,21 +100,18 @@ export async function executePlaywrightMethod(
                 behavior: "smooth",
               });
             } else {
-              // Check if element is scrollable
               const scrollHeight = element.scrollHeight;
               const clientHeight = element.clientHeight;
               const isScrollable = scrollHeight > clientHeight;
 
               if (isScrollable) {
-                // Element has scrollable content - scroll within it
                 const scrollTop = (scrollHeight - clientHeight) * (yPct / 100);
                 element.scrollTo({
                   top: scrollTop,
                   left: element.scrollLeft,
                   behavior: "smooth",
                 });
-              } else {
-                // Element is not scrollable (e.g., iframe) - scroll it into view
+              } else if (typeof element.scrollIntoView === "function") {
                 element.scrollIntoView({
                   behavior: "smooth",
                   block: yPct < 30 ? "start" : yPct > 70 ? "end" : "center",
@@ -118,6 +121,20 @@ export async function executePlaywrightMethod(
           },
           { yArg: scrollArg }
         );
+      }
+      break;
+    case "scrollTo":
+      {
+        const target = args[0];
+        if (target == null) {
+          await executePlaywrightMethod("scrollToElement", [], locator);
+        } else {
+          await executePlaywrightMethod(
+            "scrollToPercentage",
+            [target],
+            locator
+          );
+        }
       }
       break;
     case "nextChunk":

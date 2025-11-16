@@ -33,9 +33,9 @@ ${OUTPUT_FORMAT}
 ## Element Interaction
 - actElement: Perform action on element using natural language
   * Supported interactions: click, fill, type, press, select, check, uncheck, hover
-  * Scrolling: scrollTo (scroll element to specific position), scrollNextChunk (scroll down one viewport), scrollPrevChunk (scroll up one viewport)
+  * Scrolling: scrollToElement (scroll the chosen element into view), scrollToPercentage (scroll the page/container to a %), scrollNextChunk (scroll down one viewport), scrollPrevChunk (scroll up one viewport)
   * Be specific: mention element type and identifying text
-  * Examples: "click the Login button", "fill 'text' into search box", "scroll to 50% of the page", "scroll down one page"
+  * Examples: "click the Login button", "fill 'text' into search box", "scroll to the pricing section", "scroll to 50% of the page", "scroll down one page"
 
 ## Utilities
 - extract: Extract structured data from the page

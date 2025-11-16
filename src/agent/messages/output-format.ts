@@ -13,6 +13,6 @@ export const OUTPUT_FORMAT = `Your response MUST be in this exact format:
 For actElement:
 - params.instruction -> short explanation of why the action is needed
 - params.elementId -> encoded ID from the DOM listing (e.g., "0-5125")
-- params.method -> one of click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollTo, nextChunk, prevChunk
+- params.method -> one of click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollToElement, scrollToPercentage, nextChunk, prevChunk
 - params.arguments -> array of arguments for the method (use [] when none are needed)
 - params.confidence -> number between 0 and 1`;

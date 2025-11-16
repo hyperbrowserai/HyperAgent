@@ -36,7 +36,8 @@ export const AGENT_ELEMENT_ACTIONS = [
   "hover",
 
   // Scroll actions
-  "scrollTo", // Scroll to position (%, 'top', 'bottom')
+  "scrollToElement", // Scroll until the element is visible
+  "scrollToPercentage", // Scroll container/page to a percentage position
   "nextChunk", // Scroll down one viewport
   "prevChunk", // Scroll up one viewport
 ] as const satisfies readonly CDPActionMethod[];
@@ -94,9 +95,14 @@ export const ACTION_DESCRIPTIONS = {
     description: "Hover over element",
     example: "hover over profile menu",
   },
-  scrollTo: {
+  scrollToElement: {
+    arguments: "none",
+    description: "Scroll element into view",
+    example: "scroll to the pricing section",
+  },
+  scrollToPercentage: {
     arguments: "position: string",
-    description: "Scroll to position",
+    description: "Scroll to a specific percentage",
     example: "scroll to 50%",
   },
   nextChunk: {
