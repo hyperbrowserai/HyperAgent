@@ -11,8 +11,7 @@ import { HyperagentError } from "../error";
  * Get a Playwright locator for an element by its encoded ID
  *
  * Handles both main frame (frameIndex 0) and iframe elements.
- * - OOPIF iframes: Uses pre-resolved playwrightFrame from frameMap
- * - Same-origin iframes: Lazily resolves frame using XPath traversal
+ * Iframes are resolved lazily using their XPath path / URL metadata.
  *
  * @param elementId - Element ID (will be converted to EncodedId format)
  * @param xpathMap - Map of encodedId to xpath strings
@@ -59,7 +58,6 @@ export async function getElementLocator(
     return { locator: page.locator(`xpath=${xpath}`), xpath };
   }
 
-  // Iframe element - need to find the correct frame
   if (!frameMap || !frameMap.has(frameIndex)) {
     const errorMsg = `Frame metadata not found for frame ${frameIndex}`;
     if (debug) {
@@ -70,20 +68,13 @@ export async function getElementLocator(
 
   const iframeInfo = frameMap.get(frameIndex)!;
 
-  // OOPIF frames have playwrightFrame pre-resolved during tree extraction
-  // Same-origin frames use lazy XPath resolution
-  let targetFrame = iframeInfo.playwrightFrame;
-
-  if (!targetFrame) {
-    // Lazily resolve same-origin frame using XPath traversal
-    if (debug) {
-      console.log(
-        `[getElementLocator] Lazily resolving same-origin frame ${frameIndex}`
-      );
-    }
-    const resolvedFrame = await resolveFrameByXPath(page, frameMap, frameIndex);
-    targetFrame = resolvedFrame ?? undefined;
+  if (debug) {
+    console.log(
+      `[getElementLocator] Resolving frame ${frameIndex} via XPath/URL metadata`
+    );
   }
+  const targetFrame =
+    (await resolveFrameByXPath(page, frameMap, frameIndex)) ?? undefined;
 
   if (!targetFrame) {
     const errorMsg = `Could not resolve frame for element ${elementId} (frameIndex: ${frameIndex})`;

@@ -350,18 +350,9 @@ export function createDOMFallbackNodes(
 }
 
 /**
- * Resolve a frame by walking XPath chain from main frame
- * For same-origin iframes only (OOPIF already has playwrightFrame set)
- *
- * This function lazily resolves the Playwright Frame for a given frameIndex by:
- * 1. Building the frame path by walking parent references
- * 2. Starting from the main frame and traversing through each iframe using XPath
- * 3. Using Playwright's contentFrame() to navigate into nested iframes
- *
- * @param page - Main page
- * @param frameMap - Map of frame indices to IframeInfo
- * @param targetFrameIndex - Frame index to resolve
- * @returns Resolved Frame or null if resolution fails
+ * Resolve a Playwright frame for a given frame index by:
+ * 1. Matching known iframe URLs against page.frames() (handles cross-origin/OOPIF)
+ * 2. Falling back to XPath traversal for same-origin nested frames
  */
 export async function resolveFrameByXPath(
   page: Page,
@@ -380,9 +371,14 @@ export async function resolveFrameByXPath(
       return null;
     }
 
-    // OOPIF frames have playwrightFrame pre-resolved
-    if (targetFrameInfo.playwrightFrame) {
-      return targetFrameInfo.playwrightFrame;
+    // Try matching by URL (works for cross-origin frames)
+    if (targetFrameInfo.src) {
+      const matchByUrl = page
+        .frames()
+        .find((frame) => frame.url() === targetFrameInfo.src);
+      if (matchByUrl) {
+        return matchByUrl;
+      }
     }
 
     // Build frame path by walking parent chain: [0, 2, 5] for nested frames
@@ -444,18 +440,6 @@ export async function resolveFrameByXPath(
         );
         return null;
       }
-    }
-
-    // Inject bounding box collection script into same-origin frame (if not already injected)
-    // Note: Multiple injections are safe - the script is idempotent
-    try {
-      const { injectBoundingBoxScript } = await import('./bounding-box-batch');
-      await injectBoundingBoxScript(currentFrame);
-    } catch (error) {
-      console.warn(
-        `[A11y] Failed to inject bounding box script into frame ${targetFrameIndex}:`,
-        error
-      );
     }
 
     return currentFrame;

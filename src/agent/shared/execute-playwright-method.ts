@@ -28,7 +28,6 @@ export async function executePlaywrightMethod(
       try {
         await locator.click({ timeout: clickTimeout });
       } catch (e) {
-        // Fallback to JavaScript click if Playwright click fails (e.g., element interception)
         const errorMsg = e instanceof Error ? e.message : String(e);
         if (debug) {
           console.log(
@@ -42,7 +41,6 @@ export async function executePlaywrightMethod(
             { timeout: clickTimeout }
           );
         } catch (jsClickError) {
-          // Re-throw with context from both attempts
           const jsErrorMsg =
             jsClickError instanceof Error
               ? jsClickError.message

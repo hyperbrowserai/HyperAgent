@@ -7,7 +7,6 @@ import ora from "ora";
 import boxen from "boxen";
 import chalk from "chalk";
 import readline from "readline";
-import { zipWith } from "lodash";
 
 import { HyperAgent } from "@/agent";
 import { UserInteractionAction } from "@/custom-actions";

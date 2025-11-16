@@ -3,7 +3,11 @@ import { ActionOutput } from "./actions/types";
 import { Page } from "playwright-core";
 import { ErrorEmitter } from "@/utils";
 
-export const AgentOutputFn = (actionsSchema: z.ZodUnion<readonly [z.ZodType<any>, ...z.ZodType<any>[]]>) =>
+export const AgentOutputFn = (
+  actionsSchema: z.ZodUnion<
+    readonly [z.ZodType<any>, ...z.ZodType<any>[]]
+  >
+) =>
   z.object({
     thoughts: z
       .string()
@@ -34,6 +38,8 @@ export interface TaskParams {
   onComplete?: (output: TaskOutput) => Promise<void> | void;
   debugOnAgentOutput?: (step: AgentOutput) => void;
   enableVisualMode?: boolean;
+  useDomCache?: boolean;
+  enableDomStreaming?: boolean;
 }
 
 export interface TaskOutput {
@@ -94,7 +100,7 @@ export interface HyperPage extends Page {
    * Best for: Single actions like "click login", "fill email with test@example.com"
    * Mode: Always a11y (accessibility tree, faster and more reliable)
    */
-  aiAction: (instruction: string) => Promise<TaskOutput>;
+  aiAction: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
 
   aiAsync: (task: string, params?: TaskParams) => Promise<Task>;
   extract<T extends z.ZodType<any> | undefined = undefined>(

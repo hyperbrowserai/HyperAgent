@@ -5,6 +5,7 @@
 
 import { ExamineDomResultSchema } from "./schema";
 import { z } from "zod";
+import type { AccessibilityNode } from "@/context-providers/a11y-dom/types";
 
 /**
  * Playwright methods that can be performed on elements
@@ -35,7 +36,7 @@ export interface ExamineDomContext {
   xpathMap: Record<string, string>;
 
   /** Map of elementIds to accessibility node objects */
-  elements: Map<string, unknown>;
+  elements: Map<string, AccessibilityNode>;
 
   /** Current page URL */
   url: string;

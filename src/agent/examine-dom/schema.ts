@@ -1,4 +1,5 @@
-import { z } from 'zod';
+import { z } from "zod";
+import { AGENT_ELEMENT_ACTIONS } from "../shared/action-restrictions";
 
 /**
  * Zod schema for a single element match result
@@ -16,20 +17,8 @@ export const ExamineDomResultSchema = z.object({
     .max(1)
     .describe('Confidence score 0-1 indicating match quality'),
   method: z
-    .enum([
-      'click',
-      'fill',
-      'type',
-      'press',
-      'scrollTo',
-      'nextChunk',
-      'prevChunk',
-      'selectOptionFromDropdown',
-      'hover',
-      'check',
-      'uncheck',
-    ])
-    .default('click')
+    .enum(AGENT_ELEMENT_ACTIONS)
+    .default("click")
     .describe('Suggested Playwright method to use'),
   arguments: z
     .array(z.string())

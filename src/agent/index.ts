@@ -31,14 +31,30 @@ import { HyperagentError } from "./error";
 import { findElementWithInstruction } from "./shared/find-element";
 import { executePlaywrightMethod } from "./shared/execute-playwright-method";
 import { getElementLocator } from "./shared/element-locator";
-import { A11yDOMState } from "../context-providers/a11y-dom/types";
+import {
+  A11yDOMState,
+  AccessibilityNode,
+  isEncodedId,
+} from "../context-providers/a11y-dom/types";
+import type { EncodedId } from "../context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "../types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
+import { performance } from "perf_hooks";
 import { ExamineDomResult } from "./examine-dom/types";
+import {
+  disposeAllCDPClients,
+  getCDPClient,
+  resolveElement,
+  dispatchCDPAction,
+  getOrCreateFrameContextManager,
+} from "@/cdp";
+import type { ResolvedCDPElement } from "@/cdp";
+import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
+import { setDebugOptions } from "@/debug/options";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -61,7 +77,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
-  private actionConfig: HyperAgentConfig["actionConfig"];
+  private cdpActionsEnabled: boolean;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -100,6 +116,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
 
+    setDebugOptions(params.debugOptions, this.debug);
+
+    // TODO(Phase4): This legacy provider branch will be replaced by connector configs.
     this.browserProvider = (
       this.browserProviderType === "Hyperbrowser"
         ? new HyperbrowserProvider({
@@ -114,7 +133,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     this.debug = params.debug ?? false;
-    this.actionConfig = params.actionConfig;
+    this.cdpActionsEnabled = params.cdpActions ?? true;
     this.errorEmitter = new ErrorEmitter();
   }
 
@@ -287,6 +306,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Close the agent and all associated resources
    */
   public async closeAgent(): Promise<void> {
+    await disposeAllCDPClients().catch((error) => {
+      console.warn("[HyperAgent] Failed to dispose CDP clients:", error);
+    });
     for (const taskId in this.tasks) {
       const task = this.tasks[taskId];
       if (!endTaskStatuses.has(task.status)) {
@@ -381,18 +403,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       steps: [],
     };
     this.tasks[taskId] = taskState;
+    const mergedParams = params ?? {};
     runAgentTask(
       {
         llm: this.llm,
-        actions: this.getActions(params?.outputSchema),
+        actions: this.getActions(mergedParams.outputSchema),
         tokenLimit: this.tokenLimit,
         debug: this.debug,
         mcpClient: this.mcpClient,
         variables: this._variables,
-        actionConfig: this.actionConfig,
+        cdpActions: this.cdpActionsEnabled,
       },
       taskState,
-      params
+      mergedParams
     ).catch((error: Error) => {
       // Retrieve the correct state to update
       const failedTaskState = this.tasks[taskId];
@@ -432,18 +455,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     try {
+      const mergedParams = params ?? {};
       return await runAgentTask(
         {
           llm: this.llm,
-          actions: this.getActions(params?.outputSchema),
+          actions: this.getActions(mergedParams?.outputSchema),
           tokenLimit: this.tokenLimit,
           debug: this.debug,
           mcpClient: this.mcpClient,
           variables: this._variables,
-          actionConfig: this.actionConfig,
+          cdpActions: this.cdpActionsEnabled,
         },
         taskState,
-        params
+        mergedParams
       );
     } catch (error) {
       taskState.status = TaskStatus.FAILED;
@@ -471,7 +495,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   ): Promise<{
     element: ExamineDomResult;
     domState: A11yDOMState;
-    elementMap: Map<string, unknown>;
+    elementMap: Map<string, AccessibilityNode>;
     llmResponse: { rawText: string; parsed: unknown };
   }> {
     // Delegate to shared utility
@@ -529,13 +553,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     );
   }
 
-  /**
-   * Write debug data for aiAction execution
-   * Captures screenshot, DOM state, and execution details for debugging
-   *
-   * @param params Debug data parameters
-   * @returns Promise that resolves when debug data is written
-   */
   private async writeDebugData(params: {
     instruction: string;
     page: Page;
@@ -543,7 +560,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     domState: Awaited<
       ReturnType<typeof import("../context-providers/a11y-dom").getA11yDOM>
     > | null;
-    elementMap: Map<string, unknown> | null;
+    elementMap: Map<string, AccessibilityNode> | null;
     element?: {
       elementId: string;
       method: string;
@@ -629,7 +646,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Array of interactive elements with id, role, and label
    */
   private collectInteractiveElements(
-    elementMap: Map<string, unknown>,
+    elementMap: Map<string, AccessibilityNode>,
     limit: number = 20
   ): Array<{ id: string; role: string; label: string }> {
     // Group elements by frame
@@ -639,11 +656,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     >();
 
     for (const [id, elem] of elementMap) {
-      // Type guard: ensure elem is an object with expected properties
-      if (!elem || typeof elem !== "object") continue;
-
-      const node = elem as Record<string, unknown>;
-      const role = typeof node.role === "string" ? node.role : undefined;
+      const role = elem.role;
 
       if (
         role &&
@@ -658,11 +671,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           "menuitem",
         ].includes(role)
       ) {
-        const name = typeof node.name === "string" ? node.name : undefined;
-        const description =
-          typeof node.description === "string" ? node.description : undefined;
-        const value = typeof node.value === "string" ? node.value : undefined;
-        const label = name || description || value || "";
+        const label = elem.name || elem.description || elem.value || "";
 
         if (label) {
           // Extract frame index from ID (format: "frameIndex-backendNodeId")
@@ -711,19 +720,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   private async executeSingleAction(
     instruction: string,
-    page: Page
+    page: Page,
+    params?: TaskParams
   ): Promise<TaskOutput> {
+    const actionStart = performance.now();
     const startTime = new Date().toISOString();
-
     if (this.debug) {
       console.log(`[aiAction] Instruction: ${instruction}`);
     }
 
     let domState: A11yDOMState | null = null;
-    let elementMap: Map<string, unknown> | null = null;
+    let elementMap: Map<string, AccessibilityNode> | null = null;
 
     try {
       // Find element with retry logic
+      const findStart = performance.now();
       const {
         element,
         domState: foundDomState,
@@ -739,6 +750,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       domState = foundDomState;
       elementMap = foundElementMap;
+      logPerf(
+        this.debug,
+        "[Perf][executeSingleAction] findElementWithRetry",
+        findStart
+      );
 
       if (this.debug) {
         console.log(`[aiAction] Found element: ${element.elementId}`);
@@ -746,16 +762,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         console.log(`[aiAction] Arguments:`, element.arguments);
       }
 
-      // Get Playwright locator for the element (xpath is already trimmed by getElementLocator)
-      const { locator, xpath } = await getElementLocator(
-        element.elementId,
-        domState.xpathMap,
-        page,
-        domState.frameMap,
-        this.debug
-      );
-
-      // Execute the Playwright method
       if (!element.method) {
         throw new HyperagentError(
           "Element method is missing from LLM response",
@@ -764,13 +770,70 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       const method = element.method;
       const args = element.arguments || [];
-      await executePlaywrightMethod(method, args, locator, {
-        clickTimeout: HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT,
-        debug: this.debug,
-      });
+      if (!isEncodedId(element.elementId)) {
+        throw new HyperagentError(
+          `Element ID "${element.elementId}" is not in encoded format (frameIndex-backendNodeId).`,
+          400
+        );
+      }
+      const encodedId: EncodedId = element.elementId;
+      let actionXPath: string | undefined;
+
+      const canUseCDP = this.cdpActionsEnabled && !!domState.backendNodeMap;
+
+      const execStart = performance.now();
+      if (canUseCDP) {
+        const cdpClient = await getCDPClient(page);
+        const frameContextManager = getOrCreateFrameContextManager(cdpClient);
+        frameContextManager.setDebug(this.debug);
+        await frameContextManager.ensureInitialized().catch(() => {});
+        const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
+        const resolved = await resolveElement(encodedId, {
+          page,
+          cdpClient,
+          backendNodeMap: domState.backendNodeMap,
+          xpathMap: domState.xpathMap,
+          frameMap: domState.frameMap,
+          resolvedElementsCache,
+          frameContextManager,
+          debug: this.debug,
+          strictFrameValidation: true,
+        });
+
+        actionXPath = domState.xpathMap?.[encodedId];
+
+        await dispatchCDPAction(method, args, {
+          element: {
+            ...resolved,
+            xpath: actionXPath,
+          },
+          boundingBox: domState.boundingBoxMap?.get(encodedId) ?? undefined,
+          preferScriptBoundingBox: this.debug,
+          debug: this.debug,
+        });
+      } else {
+        // Get Playwright locator for the element (xpath is already trimmed by getElementLocator)
+        const { locator, xpath } = await getElementLocator(
+          element.elementId,
+          domState.xpathMap,
+          page,
+          domState.frameMap,
+          this.debug
+        );
+        actionXPath = xpath;
+
+        await executePlaywrightMethod(method, args, locator, {
+          clickTimeout: HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT,
+          debug: this.debug,
+        });
+      }
 
       // Wait for DOM to settle after action
-      await waitForSettledDOM(page);
+      const waitStart = performance.now();
+      const waitStats = await waitForSettledDOM(page);
+      markDomSnapshotDirty(page);
+      logPerf(this.debug, "[Perf][executeSingleAction] action dispatch", execStart);
+      logPerf(this.debug, "[Perf][executeSingleAction] waitForSettledDOM", waitStart);
 
       // Write debug data on success
       await this.writeDebugData({
@@ -783,12 +846,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           elementId: element.elementId,
           method,
           arguments: args,
-          xpath,
+          xpath: actionXPath,
         },
         llmResponse,
         success: true,
       });
 
+      logPerf(
+        this.debug,
+        "[Perf][executeSingleAction] total",
+        actionStart
+      );
       return {
         status: TaskStatus.COMPLETED,
         steps: [],
@@ -994,8 +1062,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const hyperPage = page as HyperPage;
     hyperPage.ai = (task: string, params?: TaskParams) =>
       this.executeTask(task, params, page);
-    hyperPage.aiAction = (instruction: string) =>
-      this.executeSingleAction(instruction, page);
+    hyperPage.aiAction = (instruction: string, params?: TaskParams) =>
+      this.executeSingleAction(instruction, page, params);
     hyperPage.aiAsync = (task: string, params?: TaskParams) =>
       this.executeTaskAsync(task, params, page);
     hyperPage.extract = async (task, outputSchema, params) => {
@@ -1017,28 +1085,41 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           page
         );
         if (outputSchema) {
-          if (!res.output || res.output === "") {
+          const outputText = res.output;
+          if (typeof outputText !== "string" || outputText === "") {
             throw new Error(
               `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
             );
           }
-          return JSON.parse(res.output as string);
+          return JSON.parse(outputText);
         }
-        return res.output as string;
+        const outputText = res.output;
+        if (typeof outputText !== "string" || outputText === "") {
+          throw new Error(
+            `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
+          );
+        }
+        return outputText;
       } else {
         const res = await this.executeTask(
           "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
           taskParams,
           page
         );
-        if (!res.output || res.output === "") {
+        if (typeof res.output !== "string" || res.output === "") {
           throw new Error(
             `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
           );
         }
-        return JSON.parse(res.output as string);
+        return JSON.parse(res.output);
       }
     };
     return hyperPage;
   }
+}
+
+function logPerf(debug: boolean | undefined, label: string, start: number): void {
+  if (!debug) return;
+  const duration = performance.now() - start;
+  console.log(`${label} took ${Math.round(duration)}ms`);
 }

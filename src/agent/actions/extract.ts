@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { parseMarkdown } from "@/utils/html-to-markdown";
 import fs from "fs";
+import { getCDPClient } from "@/cdp";
 
 export const ExtractAction = z
   .object({
@@ -26,20 +27,18 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       const objective = action.objective;
 
       // Take a screenshot of the page
-      const cdpSession = await ctx.page.context().newCDPSession(ctx.page);
-      let screenshot;
-      try {
-        screenshot = await cdpSession.send("Page.captureScreenshot");
+      const cdpClient = await getCDPClient(ctx.page);
+      const cdpSession = await cdpClient.acquireSession("screenshot");
+      const screenshot = await cdpSession.send<{ data: string }>(
+        "Page.captureScreenshot"
+      );
 
-        // Save screenshot to debug dir if exists
-        if (ctx.debugDir) {
-          fs.writeFileSync(
-            `${ctx.debugDir}/extract-screenshot.png`,
-            Buffer.from(screenshot.data, "base64")
-          );
-        }
-      } finally {
-        await cdpSession.detach();
+      // Save screenshot to debug dir if exists
+      if (ctx.debugDir) {
+        fs.writeFileSync(
+          `${ctx.debugDir}/extract-screenshot.png`,
+          Buffer.from(screenshot.data, "base64")
+        );
       }
 
       // Trim markdown to stay within token limit
@@ -63,7 +62,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           content: [
             {
               type: "text",
-              text: `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nHere is as screenshot of the page:\n`,
+              text: `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nHere is a screenshot of the page:\n`,
             },
             {
               type: "image",

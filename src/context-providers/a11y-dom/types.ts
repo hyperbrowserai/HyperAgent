@@ -2,8 +2,6 @@
  * Types for accessibility tree extraction using Chrome DevTools Protocol
  */
 
-import { Frame } from "playwright-core";
-
 /**
  * Raw AX Node from CDP Accessibility.getFullAXTree
  * Matches Chrome DevTools Protocol format
@@ -97,12 +95,17 @@ export interface IframeInfo {
   src?: string;
   name?: string;
   xpath: string;
+  /**
+   * CDP frame identifier (mirrors chrome Frame.id). Prefer this over the legacy cdpFrameId field.
+   */
+  frameId?: string;
   cdpFrameId?: string; // CDP frameId (not unique, kept for debugging)
+  cdpSessionId?: string;
+  executionContextId?: number;
   parentFrameIndex: number | null; // Parent frame index (null for root frames, 0 for main frame's children)
   siblingPosition: number; // Position among siblings with same (parent, URL)
   iframeBackendNodeId?: number; // backendNodeId of the <iframe> element (for debugging)
   contentDocumentBackendNodeId?: number; // backendNodeId of the iframe's content document root (for getPartialAXTree)
-  playwrightFrame?: Frame; // Playwright Frame object (for OOPIF frame resolution)
   framePath?: string[]; // Full hierarchy path (e.g., ["Main", "Frame 1", "Frame 2"])
 }
 
@@ -114,6 +117,7 @@ export interface BackendIdMaps {
   tagNameMap: Record<EncodedId, string>;
   xpathMap: Record<EncodedId, string>;
   accessibleNameMap: Record<EncodedId, string>; // Maps encodedId to accessible names from aria-label/title/placeholder
+  backendNodeMap: Record<EncodedId, number>;
   frameMap?: Map<number, IframeInfo>; // Maps frameIndex to iframe metadata
 }
 
@@ -184,6 +188,15 @@ export interface FrameMetadata {
   frameName: string;
 }
 
+export interface FrameChunkEvent {
+  frameIndex: number;
+  framePath?: string[];
+  frameUrl?: string;
+  simplified: string;
+  totalNodes: number;
+  order: number;
+}
+
 /**
  * Debug information about frame extraction
  */
@@ -220,6 +233,11 @@ export interface A11yDOMState {
    * Map of encoded IDs to XPaths for element location
    */
   xpathMap: Record<EncodedId, string>;
+
+  /**
+   * Map of encoded IDs to backend node IDs for CDP resolution
+   */
+  backendNodeMap: Record<EncodedId, number>;
 
   /**
    * Optional screenshot (only in hybrid/visual-debug modes)

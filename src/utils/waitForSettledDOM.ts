@@ -14,186 +14,223 @@
  * 6. Global timeout ensures we don't wait forever
  */
 
-import { Page } from "playwright-core";
+import type { BrowserContext, Page } from "playwright-core";
+import { getCDPClient, getOrCreateFrameContextManager } from "@/cdp";
+import type { CDPSession } from "@/cdp";
 import { Protocol } from "devtools-protocol";
+import { performance } from "perf_hooks";
+import { getDebugOptions } from "@/debug/options";
+
+const NETWORK_IDLE_THRESHOLD_MS = 500;
+const STALLED_REQUEST_MS = 2000;
+const STALLED_SWEEP_INTERVAL_MS = 500;
+const ENV_TRACE_WAIT =
+  process.env.HYPERAGENT_TRACE_WAIT === "1" ||
+  process.env.HYPERAGENT_TRACE_WAIT === "true";
+
+export interface LifecycleOptions {
+  waitUntil?: Array<"domcontentloaded" | "load" | "networkidle">;
+  timeoutMs?: number;
+}
+
+export interface WaitForSettledStats {
+  durationMs: number;
+  lifecycleMs: number;
+  networkMs: number;
+  requestsSeen: number;
+  peakInflight: number;
+  resolvedByTimeout: boolean;
+  forcedDrops: number;
+}
 
 export async function waitForSettledDOM(
   page: Page,
   timeoutMs: number = 10000
-): Promise<void> {
-  try {
-    const client = await page.context().newCDPSession(page);
+): Promise<WaitForSettledStats> {
+  const ctx = page.context() as BrowserContext & {
+    _options?: { recordVideo?: unknown };
+  };
+  const debugOptions = getDebugOptions();
+  const traceWaitFlag =
+    (debugOptions.enabled && debugOptions.traceWait) || ENV_TRACE_WAIT;
+  const traceWait = traceWaitFlag || !!ctx._options?.recordVideo;
+  const totalStart = performance.now();
 
-    try {
-      // Check if document exists
-      const hasDoc = !!(await page.title().catch(() => false));
-      if (!hasDoc) {
-        await page.waitForLoadState("domcontentloaded");
-      }
-
-      await client.send("Network.enable");
-      await client.send("Page.enable");
-      await client.send("Target.setAutoAttach", {
-        autoAttach: true,
-        waitForDebuggerOnStart: false,
-        flatten: true,
-        filter: [
-          { type: "worker", exclude: true },
-          { type: "shared_worker", exclude: true },
-        ],
-      });
-
-      return await new Promise<void>((resolve) => {
-        const inflight = new Set<string>();
-        const meta = new Map<string, { url: string; start: number }>();
-        const docByFrame = new Map<string, string>();
-
-        let quietTimer: NodeJS.Timeout | null = null;
-        let stalledRequestSweepTimer: NodeJS.Timeout | null = null;
-        let globalTimeout: NodeJS.Timeout | null = null;
-
-        const clearQuiet = () => {
-          if (quietTimer) {
-            clearTimeout(quietTimer);
-            quietTimer = null;
-          }
-        };
-
-        const maybeQuiet = () => {
-          if (inflight.size === 0 && !quietTimer) {
-            // Wait 500ms for no network activity before considering DOM settled
-            quietTimer = setTimeout(() => resolveDone(), 500);
-          }
-        };
-
-        const finishReq = (id: string) => {
-          if (!inflight.delete(id)) return;
-          meta.delete(id);
-          for (const [fid, rid] of docByFrame) {
-            if (rid === id) docByFrame.delete(fid);
-          }
-          clearQuiet();
-          maybeQuiet();
-        };
-
-        const resolveDone = () => {
-          cleanup();
-          resolve();
-        };
-
-        // Define event handlers as named functions so we can remove them in cleanup
-        const onRequestWillBeSent = (
-          params: Protocol.Network.RequestWillBeSentEvent
-        ) => {
-          // Skip WebSocket and EventSource
-          if (params.type === "WebSocket" || params.type === "EventSource") {
-            return;
-          }
-
-          inflight.add(params.requestId);
-          meta.set(params.requestId, {
-            url: params.request.url,
-            start: Date.now(),
-          });
-
-          // Track Document requests by frame
-          if (params.type === "Document" && params.frameId) {
-            docByFrame.set(params.frameId, params.requestId);
-          }
-
-          clearQuiet();
-        };
-
-        const onLoadingFinished = (params: { requestId: string }) => {
-          finishReq(params.requestId);
-        };
-
-        const onLoadingFailed = (params: { requestId: string }) => {
-          finishReq(params.requestId);
-        };
-
-        const onRequestServedFromCache = (params: { requestId: string }) => {
-          finishReq(params.requestId);
-        };
-
-        const onResponseReceived = (
-          params: Protocol.Network.ResponseReceivedEvent
-        ) => {
-          // Handle data: URLs - they don't get loadingFinished events
-          if (params.response.url.startsWith("data:")) {
-            finishReq(params.requestId);
-          }
-        };
-
-        const onFrameStoppedLoading = (
-          params: Protocol.Page.FrameStoppedLoadingEvent
-        ) => {
-          const id = docByFrame.get(params.frameId);
-          if (id) finishReq(id);
-        };
-
-        const cleanup = () => {
-          if (quietTimer) clearTimeout(quietTimer);
-          if (globalTimeout) clearTimeout(globalTimeout);
-          if (stalledRequestSweepTimer) clearInterval(stalledRequestSweepTimer);
-
-          // Remove event listeners
-          client.off("Network.requestWillBeSent", onRequestWillBeSent);
-          client.off("Network.loadingFinished", onLoadingFinished);
-          client.off("Network.loadingFailed", onLoadingFailed);
-          client.off(
-            "Network.requestServedFromCache",
-            onRequestServedFromCache
-          );
-          client.off("Network.responseReceived", onResponseReceived);
-          client.off("Page.frameStoppedLoading", onFrameStoppedLoading);
-        };
-
-        // Global timeout
-        globalTimeout = setTimeout(() => {
-          if (inflight.size) {
-            // console.log(
-            //   `[waitForSettledDOM] Timeout after ${timeoutMs}ms, ${inflight.size} requests still in flight`
-            // );
-          }
-          resolveDone();
-        }, timeoutMs);
-
-        // Stalled request sweep - force complete requests stuck for >2 seconds
-        stalledRequestSweepTimer = setInterval(() => {
-          const now = Date.now();
-          for (const [id, m] of meta) {
-            if (now - m.start > 2000) {
-              inflight.delete(id);
-              meta.delete(id);
-              // console.log(
-              //   `[waitForSettledDOM] Forcing completion of stalled request: ${m.url.slice(0, 120)}`
-              // );
-            }
-          }
-          maybeQuiet();
-        }, 500);
-
-        // Register network event handlers
-        client.on("Network.requestWillBeSent", onRequestWillBeSent);
-        client.on("Network.loadingFinished", onLoadingFinished);
-        client.on("Network.loadingFailed", onLoadingFailed);
-        client.on("Network.requestServedFromCache", onRequestServedFromCache);
-        client.on("Network.responseReceived", onResponseReceived);
-        client.on("Page.frameStoppedLoading", onFrameStoppedLoading);
-
-        // Start the quiet check
-        maybeQuiet();
-      });
-    } finally {
-      await client.detach();
-    }
-  } catch (error) {
-    // If CDP fails, just wait a fixed time
-    console.warn(
-      "[waitForSettledDOM] CDP failed, falling back to fixed wait:",
-      error
+  // Currently we only wait for network idle (historical behavior). Hook exists if we add DOM states later.
+  const lifecycleDuration = 0;
+  if (traceWait) {
+    console.log(
+      `[Perf][waitForSettledDOM] lifecycle took ${lifecycleDuration.toFixed(
+        0
+      )}ms`
     );
-    await page.waitForTimeout(1000);
   }
+
+  const cdpClient = await getCDPClient(page);
+  const manager = getOrCreateFrameContextManager(cdpClient);
+  manager.setDebug(traceWait);
+
+  const lifecycleSession = await cdpClient.acquireSession("lifecycle");
+
+  const networkStart = performance.now();
+  const stats = await waitForNetworkIdle(lifecycleSession, {
+    timeoutMs,
+    trace: traceWaitFlag,
+  });
+  const networkDuration = performance.now() - networkStart;
+
+  if (traceWait) {
+    console.log(
+      `[Perf][waitForSettledDOM] networkidle took ${networkDuration.toFixed(
+        0
+      )}ms (requests=${stats.requestsSeen}, peakInflight=${
+        stats.peakInflight
+      }, reason=${stats.resolvedByTimeout ? "timeout" : "quiet"})`
+    );
+    const totalDuration = performance.now() - totalStart;
+    console.log(
+      `[Perf][waitForSettledDOM] total took ${totalDuration.toFixed(0)}ms`
+    );
+  }
+
+  const totalDuration = performance.now() - totalStart;
+  return {
+    durationMs: totalDuration,
+    lifecycleMs: lifecycleDuration,
+    networkMs: networkDuration,
+    requestsSeen: stats.requestsSeen,
+    peakInflight: stats.peakInflight,
+    resolvedByTimeout: stats.resolvedByTimeout,
+    forcedDrops: stats.forcedDrops,
+  };
+}
+
+interface NetworkIdleOptions {
+  timeoutMs: number;
+  trace?: boolean;
+}
+
+interface NetworkIdleStats {
+  requestsSeen: number;
+  peakInflight: number;
+  resolvedByTimeout: boolean;
+  forcedDrops: number;
+}
+
+async function waitForNetworkIdle(
+  session: CDPSession,
+  options: NetworkIdleOptions
+): Promise<NetworkIdleStats> {
+  const { timeoutMs, trace = false } = options;
+  const inflight = new Set<string>();
+  let quietTimer: NodeJS.Timeout | null = null;
+  let globalTimeout: NodeJS.Timeout | null = null;
+  const stats: NetworkIdleStats = {
+    requestsSeen: 0,
+    peakInflight: 0,
+    resolvedByTimeout: false,
+    forcedDrops: 0,
+  };
+
+  await new Promise<void>((resolve) => {
+    const requestMeta = new Map<string, { url?: string; start: number }>();
+    let stalledSweepTimer: NodeJS.Timeout | null = null;
+
+    const maybeResolve = () => {
+      if (inflight.size === 0 && !quietTimer) {
+        quietTimer = setTimeout(
+          () => resolveDone(false),
+          NETWORK_IDLE_THRESHOLD_MS
+        );
+      }
+    };
+
+    const resolveDone = (byTimeout: boolean) => {
+      stats.resolvedByTimeout = byTimeout;
+      if (quietTimer) clearTimeout(quietTimer);
+      if (globalTimeout) clearTimeout(globalTimeout);
+      cleanup();
+      resolve();
+    };
+
+    const cleanup = () => {
+      if (session.off) {
+        session.off("Network.requestWillBeSent", onRequestWillBeSent);
+        session.off("Network.loadingFinished", onLoadingFinished);
+        session.off("Network.loadingFailed", onLoadingFailed);
+      }
+      if (stalledSweepTimer) {
+        clearInterval(stalledSweepTimer);
+        stalledSweepTimer = null;
+      }
+    };
+
+    const onRequestWillBeSent = (
+      event: Protocol.Network.RequestWillBeSentEvent
+    ): void => {
+      if (event.type === "WebSocket" || event.type === "EventSource") {
+        return;
+      }
+      inflight.add(event.requestId);
+      stats.requestsSeen += 1;
+      if (inflight.size > stats.peakInflight) {
+        stats.peakInflight = inflight.size;
+      }
+      requestMeta.set(event.requestId, {
+        url: event.request.url,
+        start: Date.now(),
+      });
+      if (quietTimer) {
+        clearTimeout(quietTimer);
+        quietTimer = null;
+      }
+    };
+
+    const onLoadingFinished = (
+      event: Protocol.Network.LoadingFinishedEvent
+    ): void => {
+      finishRequest(event.requestId);
+    };
+
+    const onLoadingFailed = (
+      event: Protocol.Network.LoadingFailedEvent
+    ): void => {
+      finishRequest(event.requestId);
+    };
+
+    session.on("Network.requestWillBeSent", onRequestWillBeSent);
+    session.on("Network.loadingFinished", onLoadingFinished);
+    session.on("Network.loadingFailed", onLoadingFailed);
+
+    stalledSweepTimer = setInterval(() => {
+      if (!requestMeta.size) return;
+      const now = Date.now();
+      for (const [id, meta] of requestMeta.entries()) {
+        if (now - meta.start > STALLED_REQUEST_MS) {
+          if (inflight.delete(id)) {
+            stats.forcedDrops += 1;
+            if (trace) {
+              console.warn(
+                `[waitForSettledDOM] Forcing completion of stalled request ${id} (age=${now - meta.start}ms url=${meta.url ?? "unknown"})`
+              );
+            }
+            requestMeta.delete(id);
+            maybeResolve();
+          }
+        }
+      }
+    }, STALLED_SWEEP_INTERVAL_MS);
+
+    globalTimeout = setTimeout(() => resolveDone(true), timeoutMs);
+    maybeResolve();
+
+    function finishRequest(requestId: string): void {
+      if (inflight.delete(requestId)) {
+        requestMeta.delete(requestId);
+        maybeResolve();
+      }
+    }
+  });
+
+  return stats;
 }

@@ -3,9 +3,20 @@
  * Collects bounding boxes for multiple elements in a single browser evaluation
  */
 
-import { Page, Frame } from 'playwright-core';
+import type { Page, Frame } from "playwright-core";
+import type { CDPSession } from "@/cdp";
+import { ensureScriptInjected } from '@/cdp/script-injector';
 import { EncodedId, DOMRect } from './types';
 import { createEncodedId } from './utils';
+
+export type BoundingBoxTarget =
+  | { kind: "playwright"; target: Page | Frame }
+  | {
+      kind: "cdp";
+      session: CDPSession;
+      executionContextId?: number;
+      frameId: string;
+    };
 
 /**
  * Browser-side script to collect bounding boxes by backend node IDs
@@ -218,12 +229,16 @@ window.__hyperagent_collectBoundingBoxesForSameOriginIframe = function(elementsD
  * Inject bounding box collection script into a frame
  * Should be called once per frame before collecting bounding boxes
  */
-export async function injectBoundingBoxScript(pageOrFrame: Page | Frame): Promise<void> {
-  try {
-    await pageOrFrame.evaluate(boundingBoxCollectionScript);
-  } catch (error) {
-    console.warn('[A11y] Failed to inject bounding box collection script:', error);
-  }
+const BOUNDING_BOX_SCRIPT_KEY = "bounding-box-collector";
+
+export async function injectBoundingBoxScriptSession(
+  session: CDPSession
+): Promise<void> {
+  await ensureScriptInjected(
+    session,
+    BOUNDING_BOX_SCRIPT_KEY,
+    boundingBoxCollectionScript
+  );
 }
 
 /**
@@ -380,6 +395,48 @@ export async function batchCollectBoundingBoxes(
   }
 }
 
+async function batchCollectBoundingBoxesViaCDP(
+  session: CDPSession,
+  executionContextId: number | undefined,
+  xpathToBackendId: Map<string, number>,
+  frameIndex: number,
+  frameId: string
+): Promise<Map<EncodedId, DOMRect>> {
+  if (xpathToBackendId.size === 0) {
+    return new Map();
+  }
+
+  try {
+    const xpathToBackendIdObj = Object.fromEntries(xpathToBackendId);
+    const response = await session.send<{
+      result: { type: string; value?: Record<string, DOMRect> };
+    }>("Runtime.callFunctionOn", {
+      functionDeclaration:
+        "function(xpathMappingJson) { try { const data = JSON.parse(xpathMappingJson); return (window.__hyperagent_collectBoundingBoxesByXPath && window.__hyperagent_collectBoundingBoxesByXPath(data)) || {}; } catch (error) { return {}; } }",
+      arguments: [{ value: JSON.stringify(xpathToBackendIdObj) }],
+      executionContextId,
+      returnByValue: true,
+    });
+
+    const boundingBoxes = response.result.value ?? {};
+    const boundingBoxMap = new Map<EncodedId, DOMRect>();
+
+    for (const [backendNodeIdStr, rect] of Object.entries(boundingBoxes)) {
+      const backendNodeId = parseInt(backendNodeIdStr, 10);
+      const encodedId = createEncodedId(frameIndex, backendNodeId);
+      boundingBoxMap.set(encodedId, rect as DOMRect);
+    }
+
+    return boundingBoxMap;
+  } catch (error) {
+    console.warn(
+      `[A11y] Batch bounding box collection via CDP failed for frame ${frameIndex} (${frameId}):`,
+      error
+    );
+    return new Map();
+  }
+}
+
 /**
  * Collect bounding boxes for nodes, with fallback tracking
  * Returns both successful boxes and a list of failed backend node IDs
@@ -392,7 +449,7 @@ export async function batchCollectBoundingBoxes(
  * @returns Object with boundingBoxMap and failures array
  */
 export async function batchCollectBoundingBoxesWithFailures(
-  pageOrFrame: Page | Frame,
+  target: BoundingBoxTarget,
   xpathMap: Record<EncodedId, string>,
   nodesToCollect: Array<{ backendDOMNodeId?: number; encodedId?: EncodedId }>,
   frameIndex: number,
@@ -404,9 +461,8 @@ export async function batchCollectBoundingBoxesWithFailures(
   // Check if this is a same-origin iframe (needs frame path navigation)
   const isSameOriginIframe =
     frameIndex !== 0 &&
-    frameMap &&
-    frameMap.get(frameIndex) &&
-    !frameMap.get(frameIndex)?.playwrightFrame;
+    target.kind === "playwright" &&
+    Boolean(frameMap);
 
   // Build xpath → backendNodeId mapping for batch collection
   const xpathToBackendId = new Map<string, number>();
@@ -425,20 +481,29 @@ export async function batchCollectBoundingBoxesWithFailures(
   // Perform batch collection
   let boundingBoxMap: Map<EncodedId, DOMRect>;
 
-  if (isSameOriginIframe && frameMap) {
+  if (isSameOriginIframe && frameMap && target.kind === "playwright") {
     // Same-origin iframe: need to navigate through iframe chain using XPaths
     boundingBoxMap = await batchCollectBoundingBoxesForSameOriginIframe(
-      pageOrFrame,
+      target.target,
       xpathToBackendId,
       frameIndex,
       frameMap
     );
-  } else {
-    // OOPIF or main frame: use current behavior
+  } else if (target.kind === "playwright") {
+    // OOPIF or main frame evaluated via Playwright context
     boundingBoxMap = await batchCollectBoundingBoxes(
-      pageOrFrame,
+      target.target,
       xpathToBackendId,
       frameIndex
+    );
+  } else {
+    // CDP session evaluation (cross-origin frames)
+    boundingBoxMap = await batchCollectBoundingBoxesViaCDP(
+      target.session,
+      target.executionContextId,
+      xpathToBackendId,
+      frameIndex,
+      target.frameId
     );
   }
 

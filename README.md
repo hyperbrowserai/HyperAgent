@@ -136,7 +136,7 @@ await page.aiAction("click the login button");
 **Best for**: Complex workflows requiring multiple steps and visual context
 
 **Advantages**:
-- 🖼️ **Visual Understanding** - Uses screenshots with element overlays
+- 🖼️ **Visual Understanding** - Can use screenshots with element overlays
 - 🎭 **Complex Tasks** - Handles multi-step workflows automatically
 - 🧠 **Context-Aware** - Better at understanding page layout and relationships
 - 🔄 **Adaptive** - Can adjust strategy based on page state
@@ -369,6 +369,16 @@ const agent = new HyperAgent({
   customActions: [RunSearchActionDefinition],
 });
 ```
+
+## CDP First
+
+HyperAgent speaks Chrome DevTools Protocol natively. Element lookup, scrolling, typing, frame management, and screenshots all go through CDP so every action has exact coordinates, execution contexts, and browser events. This allows for more custom commands and deep iframe tracking.
+
+HyperAgent integrates seamlessly with Playwright, so you can still use familiar commands, while the actions take full advantage of native CDP protocol with fast locators and advanced iframe tracking.
+
+Keep in mind that CDP is still experimental, and stability is not guaranteed. If you’d like the agent to use Playwright’s native locators/actions instead, set `cdpActions: false` when you create the agent and it will fall back automatically.
+
+The CDP layer is still evolving—expect rapid polish (and the occasional sharp edge). If you hit something quirky you can toggle CDP off for that workflow and drop us a bug report.
 
 ## Contributing
 
