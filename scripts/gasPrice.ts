@@ -25,6 +25,12 @@ async function runWorkflow() {
         model: "claude-sonnet-4-0",
       },
       debug: true,
+      cdpActions: true,
+      debugOptions: {
+        cdpSessions: true,
+        traceWait: true,
+        profileDomCapture: true,
+      },
     });
 
     // Get the page instance
@@ -64,18 +70,18 @@ async function runWorkflow() {
     await page.aiAction(`click the Gas button`);
 
     // Scroll: Scrolled down 300 pixels
-    await page.aiAction(`Scroll down 300 pixels`);
+    await page.aiAction(`Scroll down to bottom`);
 
     // Scroll: Scrolled down 500 pixels
-    await page.aiAction(`Scroll down 500 pixels`);
+    await page.aiAction(`Scroll down to bottom`);
 
     // Scroll: Scrolled down 800 pixels
-    await page.aiAction(`Scroll down 800 pixels`);
+    await page.aiAction(`Scroll down to bottom`);
 
     // Step 11: Extract data
-    console.log(
-      `Extracting: Extract all gas stations shown in the results list with their names, addresses, and regular gas prices per gallon`
-    );
+    // console.log(
+    //   `Extracting: Extract all gas stations shown in the results list with their names, addresses, and regular gas prices per gallon`
+    // );
     // const extractedData11 = await page.extract({
     //   instruction: `Extract all gas stations shown in the results list with their names, addresses, and regular gas prices per gallon`,
     //   schema: z.object({

@@ -40,7 +40,18 @@ async function runEval() {
       provider: "openai",
       model: "gpt-4o",
     },
-    debug: true,
+    // llm: {
+    //   provider: "anthropic",
+    //   model: "claude-sonnet-4-0",
+    // },
+    // debug: true,
+    browserProvider: "Hyperbrowser",
+    cdpActions: true,
+    debugOptions: {
+      cdpSessions: true,
+      traceWait: true,
+      profileDomCapture: true,
+    },
   });
 
   await sleep(1000);
@@ -60,6 +71,8 @@ async function runEval() {
       releaseYear: z.number().describe("The year the movie was released"),
       rating: z.string().describe("The IMDb rating of the movie"),
     }),
+    useDomCache: true,
+    // enableVisualMode: true,
   });
   await agent.closeAgent();
   console.log(chalk.green.bold("\nResult:"));
