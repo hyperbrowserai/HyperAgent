@@ -9,7 +9,9 @@ interface FrameTreeNode {
 }
 
 interface UpsertFrameInput
-  extends Partial<Omit<FrameRecord, "frameId" | "parentFrameId" | "lastUpdated">> {
+  extends Partial<
+    Omit<FrameRecord, "frameId" | "parentFrameId" | "lastUpdated">
+  > {
   frameId: string;
   parentFrameId: string | null;
 }
@@ -154,18 +156,18 @@ export class FrameContextManager {
    * Get all same-origin frames (use main session for these)
    */
   getSameOriginFrames(): FrameRecord[] {
-    return this.graph.getAllFrames().filter((frame: FrameRecord) => 
-      !this.oopifFrameIds.has(frame.frameId)
-    );
+    return this.graph
+      .getAllFrames()
+      .filter((frame: FrameRecord) => !this.oopifFrameIds.has(frame.frameId));
   }
 
   /**
    * Get all OOPIF frames (each has its own session)
    */
   getOOPIFs(): FrameRecord[] {
-    return this.graph.getAllFrames().filter((frame: FrameRecord) => 
-      this.oopifFrameIds.has(frame.frameId)
-    );
+    return this.graph
+      .getAllFrames()
+      .filter((frame: FrameRecord) => this.oopifFrameIds.has(frame.frameId));
   }
 
   /**
@@ -225,11 +227,16 @@ export class FrameContextManager {
    * in syncFrameContextManager for same-origin iframes
    */
   private async captureFrameTree(session: CDPSession): Promise<void> {
-    const { frameTree } = await session.send<Protocol.Page.GetFrameTreeResponse>("Page.getFrameTree");
+    const { frameTree } =
+      await session.send<Protocol.Page.GetFrameTreeResponse>(
+        "Page.getFrameTree"
+      );
     if (!frameTree) return;
 
-    let indexCounter = 0;
-    const traverse = async (node: FrameTreeNode, parentFrameId: string | null): Promise<void> => {
+    const traverse = async (
+      node: FrameTreeNode,
+      parentFrameId: string | null
+    ): Promise<void> => {
       const frameId = node.frame.id;
       const record = this.upsertFrame({
         frameId,
@@ -238,11 +245,6 @@ export class FrameContextManager {
         name: node.frame.name,
         url: node.frame.url,
       });
-
-      // Assign preliminary frameIndex (may be overwritten by DOM traversal for same-origin iframes)
-      if (typeof this.graph.getFrameIndex(frameId) === "undefined") {
-        this.assignFrameIndex(frameId, indexCounter++);
-      }
 
       this.setFrameSession(frameId, session);
 
@@ -256,11 +258,7 @@ export class FrameContextManager {
     };
 
     await traverse(frameTree, frameTree.frame?.parentId ?? null);
-
-    // Discover and attach OOPIF frames
-    await this.captureOOPIFs(indexCounter);
   }
-
 
   /**
    * Get the backendNodeId of the <iframe> element that owns this frame
@@ -268,20 +266,29 @@ export class FrameContextManager {
    * - DOM traversal (buildBackendIdMaps) which has backendNodeId but may not have frameId
    * - CDP events (FrameContextManager) which has frameId from Page.frameAttached
    */
-  private async populateFrameOwner(session: CDPSession, frameId: string): Promise<void> {
+  private async populateFrameOwner(
+    session: CDPSession,
+    frameId: string
+  ): Promise<void> {
     try {
-      const owner = await session.send<Protocol.DOM.GetFrameOwnerResponse>("DOM.getFrameOwner", { frameId });
+      const owner = await session.send<Protocol.DOM.GetFrameOwnerResponse>(
+        "DOM.getFrameOwner",
+        { frameId }
+      );
       const record = this.graph.getFrame(frameId);
       if (!record) return;
-      this.graph.upsertFrame({ ...record, backendNodeId: owner.backendNodeId ?? record.backendNodeId });
+      this.graph.upsertFrame({
+        ...record,
+        backendNodeId: owner.backendNodeId ?? record.backendNodeId,
+      });
     } catch {
       // Ignore errors when getting frame owner (e.g., for main frame or OOPIF)
     }
   }
 
   private hasFrameWithUrl(url: string): boolean {
-    if (!url || url === 'about:blank') return false;
-    
+    if (!url || url === "about:blank") return false;
+
     for (const frame of this.graph.getAllFrames()) {
       if (frame.url === url) return true;
     }
@@ -289,8 +296,8 @@ export class FrameContextManager {
   }
 
   private getFrameIdByUrl(url: string): string | null {
-    if (!url || url === 'about:blank') return null;
-    
+    if (!url || url === "about:blank") return null;
+
     for (const frame of this.graph.getAllFrames()) {
       if (frame.url === url) return frame.frameId;
     }
@@ -299,16 +306,16 @@ export class FrameContextManager {
 
   /**
    * Discover OOPIF (Out-of-Process IFrame) frames
-   * 
+   *
    * OOPIF frames are cross-origin and WON'T appear in DOM.getDocument response
    * (pierce:true doesn't cross origin boundaries for security reasons)
-   * 
+   *
    * They must be discovered via CDP Target/Session events and have their own CDP sessions.
    * OOPIF frames always have frameId since they're separate CDP targets.
-   * 
+   *
    * Discovery strategy: Try to create a CDP session for each frame - if it succeeds, it's an OOPIF
    */
-  private async captureOOPIFs(startIndex: number): Promise<void> {
+  public async captureOOPIFs(startIndex: number): Promise<void> {
     const pageUnknown = this.client.getPage?.();
     if (!pageUnknown) {
       this.log("[FrameContext] No page available for OOPIF discovery");
@@ -343,7 +350,7 @@ export class FrameContextManager {
     // Parallelize OOPIF discovery: try to create CDP session for all frames simultaneously
     const discoveryPromises = framesToCheck.map(async (frame, index) => {
       const frameUrl = frame.url();
-      
+
       // Try to create CDP session - if it succeeds, this is an OOPIF
       let oopifSession: CDPSession | null = null;
       try {
@@ -360,7 +367,9 @@ export class FrameContextManager {
         const { frameTree } = await oopifSession.send("Page.getFrameTree");
         const frameId = frameTree.frame.id;
 
-        this.log(`[FrameContext] Discovered OOPIF: frameId=${frameId}, url=${frameUrl}`);
+        this.log(
+          `[FrameContext] Discovered OOPIF: frameId=${frameId}, url=${frameUrl}`
+        );
 
         // Find parent frame
         const parentFrameUnknown = frame.parentFrame();
@@ -376,7 +385,9 @@ export class FrameContextManager {
           discoveryOrder: index, // Preserve original order for deterministic frame indices
         };
       } catch (_error) {
-        this.log(`[FrameContext] Failed to process OOPIF ${frameUrl}: ${_error}`);
+        this.log(
+          `[FrameContext] Failed to process OOPIF ${frameUrl}: ${_error}`
+        );
         if (oopifSession) {
           await oopifSession.detach().catch(() => {
             // ignore detach errors
@@ -394,7 +405,7 @@ export class FrameContextManager {
     // Now assign frame indices and register all OOPIFs in deterministic order
     // Sort by discovery order to maintain deterministic frame indices
     discoveredOOPIFs.sort((a, b) => a.discoveryOrder - b.discoveryOrder);
-    
+
     for (let i = 0; i < discoveredOOPIFs.length; i++) {
       const oopif = discoveredOOPIFs[i];
       const frameIndex = startIndex + i; // Sequential indices for discovered OOPIFs
@@ -436,7 +447,9 @@ export class FrameContextManager {
       this.handlePageFrameDetached(event);
     };
 
-    const navigatedHandler = (event: Protocol.Page.FrameNavigatedEvent): void => {
+    const navigatedHandler = (
+      event: Protocol.Page.FrameNavigatedEvent
+    ): void => {
       this.handlePageFrameNavigated(event);
     };
 
@@ -444,13 +457,20 @@ export class FrameContextManager {
     session.on("Page.frameDetached", detachedHandler);
     session.on("Page.frameNavigated", navigatedHandler);
 
-    const listeners =
-      this.sessionListeners.get(session) ??
-      [];
+    const listeners = this.sessionListeners.get(session) ?? [];
     listeners.push(
-      { event: "Page.frameAttached", handler: attachedHandler as (...args: unknown[]) => void },
-      { event: "Page.frameDetached", handler: detachedHandler as (...args: unknown[]) => void },
-      { event: "Page.frameNavigated", handler: navigatedHandler as (...args: unknown[]) => void }
+      {
+        event: "Page.frameAttached",
+        handler: attachedHandler as (...args: unknown[]) => void,
+      },
+      {
+        event: "Page.frameDetached",
+        handler: detachedHandler as (...args: unknown[]) => void,
+      },
+      {
+        event: "Page.frameNavigated",
+        handler: navigatedHandler as (...args: unknown[]) => void,
+      }
     );
     this.sessionListeners.set(session, listeners);
   }
@@ -480,7 +500,9 @@ export class FrameContextManager {
     );
   }
 
-  private handlePageFrameDetached(event: Protocol.Page.FrameDetachedEvent): void {
+  private handlePageFrameDetached(
+    event: Protocol.Page.FrameDetachedEvent
+  ): void {
     const frameId = event.frameId;
     if (!this.graph.getFrame(frameId)) {
       return;
@@ -489,7 +511,9 @@ export class FrameContextManager {
     this.log(`[FrameContext] Page.frameDetached: frameId=${frameId}`);
   }
 
-  private handlePageFrameNavigated(event: Protocol.Page.FrameNavigatedEvent): void {
+  private handlePageFrameNavigated(
+    event: Protocol.Page.FrameNavigatedEvent
+  ): void {
     const frameId = event.frame.id;
     this.upsertFrame({
       frameId,
@@ -498,7 +522,9 @@ export class FrameContextManager {
       url: event.frame.url,
       name: event.frame.name,
     });
-    this.log(`[FrameContext] Page.frameNavigated: frameId=${frameId}, url=${event.frame.url}`);
+    this.log(
+      `[FrameContext] Page.frameNavigated: frameId=${frameId}, url=${event.frame.url}`
+    );
   }
 
   private trackRuntimeForSession(session: CDPSession): void {
@@ -507,9 +533,12 @@ export class FrameContextManager {
     }
     this.runtimeTrackedSessions.add(session);
 
-    const createdHandler = (event: Protocol.Runtime.ExecutionContextCreatedEvent): void => {
-      const auxData = event.context
-        .auxData as { frameId?: string; type?: string } | undefined;
+    const createdHandler = (
+      event: Protocol.Runtime.ExecutionContextCreatedEvent
+    ): void => {
+      const auxData = event.context.auxData as
+        | { frameId?: string; type?: string }
+        | undefined;
       const frameId = auxData?.frameId;
       if (!frameId) return;
       const contextType = auxData?.type;
@@ -536,8 +565,12 @@ export class FrameContextManager {
       }
     };
 
-    const destroyedHandler = (event: Protocol.Runtime.ExecutionContextDestroyedEvent): void => {
-      const frameId = this.executionContextToFrame.get(event.executionContextId);
+    const destroyedHandler = (
+      event: Protocol.Runtime.ExecutionContextDestroyedEvent
+    ): void => {
+      const frameId = this.executionContextToFrame.get(
+        event.executionContextId
+      );
       if (!frameId) {
         return;
       }
@@ -576,14 +609,19 @@ export class FrameContextManager {
     ]);
 
     session.send("Runtime.enable").catch((error) => {
-      console.warn("[FrameContextManager] Failed to enable Runtime domain:", error);
+      console.warn(
+        "[FrameContextManager] Failed to enable Runtime domain:",
+        error
+      );
     });
   }
 }
 
 const managerCache = new WeakMap<CDPClient, FrameContextManager>();
 
-export function getOrCreateFrameContextManager(client: CDPClient): FrameContextManager {
+export function getOrCreateFrameContextManager(
+  client: CDPClient
+): FrameContextManager {
   let manager = managerCache.get(client);
   if (!manager) {
     manager = new FrameContextManager(client);

@@ -187,26 +187,26 @@ interface SyncFrameContextOptions {
 
 /**
  * Sync FrameContextManager with frameMap from DOM traversal
- * 
+ *
  * TWO-WAY SYNCHRONIZATION:
  * ========================
- * 
+ *
  * SAME-ORIGIN IFRAMES:
  * -------------------
  * - DOM.getDocument (buildBackendIdMaps) discovers same-origin iframes via contentDocument
  * - contentDocument.frameId is typically UNDEFINED for same-origin iframes
  * - buildBackendIdMaps assigns frameIndex based on DFS traversal order (AUTHORITATIVE)
  * - buildBackendIdMaps stores iframeBackendNodeId (the <iframe> element's backendNodeId)
- * 
+ *
  * - FrameContextManager tracks frames via Page.frameAttached CDP events
  * - FrameContextManager has frameId from CDP events
  * - FrameContextManager calls populateFrameOwner to get backendNodeId of <iframe> element
- * 
+ *
  * - syncFrameContextManager matches by backendNodeId (primary key)
  * - Copies frameId from FrameContextManager → frameMap
  * - Copies executionContextId from FrameContextManager → frameMap
  * - Overwrites frameIndex in FrameContextManager with DOM traversal order
- * 
+ *
  * OOPIF (Cross-Origin):
  * --------------------
  * - DOM.getDocument does NOT include OOPIF (pierce:true stops at origin boundaries)
@@ -269,11 +269,13 @@ async function syncFrameContextManager({
     entries.map(async ([frameIndex, info]) => {
       // Try to get frameId from DOM response (usually undefined for same-origin iframes)
       let frameId = info.frameId ?? info.cdpFrameId;
-      
+
       // Primary matching strategy: use backendNodeId to find frameId from FrameContextManager
       // FrameContextManager has frameId from CDP events (Page.frameAttached, etc.)
       if (!frameId && typeof info.iframeBackendNodeId === "number") {
-        const matched = manager.getFrameByBackendNodeId(info.iframeBackendNodeId);
+        const matched = manager.getFrameByBackendNodeId(
+          info.iframeBackendNodeId
+        );
         if (matched) {
           frameId = matched.frameId;
           if (debug) {
@@ -490,62 +492,66 @@ async function fetchIframeAXTrees(
   }
 
   // Process same-origin iframes in parallel for better performance
-  const sameOriginPromises = sameOriginFrames.map(async ([frameIndex, frameInfo]) => {
-    const { contentDocumentBackendNodeId, src } = frameInfo;
-    if (!contentDocumentBackendNodeId) {
-      return null;
-    }
-
-    try {
-      if (debug) {
-        console.log(
-          `[A11y] Processing same-origin frame ${frameIndex} from DOM traversal`
-        );
+  const sameOriginPromises = sameOriginFrames.map(
+    async ([frameIndex, frameInfo]) => {
+      const { contentDocumentBackendNodeId, src } = frameInfo;
+      if (!contentDocumentBackendNodeId) {
+        return null;
       }
 
-      const result = (await client.send("Accessibility.getPartialAXTree", {
-        backendNodeId: contentDocumentBackendNodeId,
-        fetchRelatives: true,
-      })) as { nodes: AXNode[] };
-
-      let iframeNodes = result.nodes;
-
-      if (!hasInteractiveElements(iframeNodes)) {
-        const domFallbackNodes = createDOMFallbackNodes(
-          frameIndex,
-          maps.tagNameMap,
-          maps.frameMap || new Map(),
-          maps.accessibleNameMap
-        );
-
-        if (domFallbackNodes.length > 0) {
-          iframeNodes = domFallbackNodes;
+      try {
+        if (debug) {
+          console.log(
+            `[A11y] Processing same-origin frame ${frameIndex} from DOM traversal`
+          );
         }
-      }
 
-      const taggedNodes = iframeNodes.map((n) => ({
-        ...n,
-        _frameIndex: frameIndex,
-      }));
+        const result = (await client.send("Accessibility.getPartialAXTree", {
+          backendNodeId: contentDocumentBackendNodeId,
+          fetchRelatives: true,
+        })) as { nodes: AXNode[] };
 
-      return {
-        frameIndex,
-        nodes: taggedNodes,
-        debugInfo: debug ? {
+        let iframeNodes = result.nodes;
+
+        if (!hasInteractiveElements(iframeNodes)) {
+          const domFallbackNodes = createDOMFallbackNodes(
+            frameIndex,
+            maps.tagNameMap,
+            maps.frameMap || new Map(),
+            maps.accessibleNameMap
+          );
+
+          if (domFallbackNodes.length > 0) {
+            iframeNodes = domFallbackNodes;
+          }
+        }
+
+        const taggedNodes = iframeNodes.map((n) => ({
+          ...n,
+          _frameIndex: frameIndex,
+        }));
+
+        return {
           frameIndex,
-          frameUrl: src || "unknown",
-          totalNodes: iframeNodes.length,
-          rawNodes: iframeNodes,
-        } : null,
-      };
-    } catch (error) {
-      console.warn(
-        `[A11y] Failed to fetch AX tree for frame ${frameIndex} (contentDocBackendNodeId=${contentDocumentBackendNodeId}):`,
-        (error as Error).message || error
-      );
-      return null;
+          nodes: taggedNodes,
+          debugInfo: debug
+            ? {
+                frameIndex,
+                frameUrl: src || "unknown",
+                totalNodes: iframeNodes.length,
+                rawNodes: iframeNodes,
+              }
+            : null,
+        };
+      } catch (error) {
+        console.warn(
+          `[A11y] Failed to fetch AX tree for frame ${frameIndex} (contentDocBackendNodeId=${contentDocumentBackendNodeId}):`,
+          (error as Error).message || error
+        );
+        return null;
+      }
     }
-  });
+  );
 
   // Wait for all same-origin iframe processing to complete in parallel
   const sameOriginResults = await Promise.all(sameOriginPromises);
@@ -995,6 +1001,11 @@ export async function getA11yDOM(
       frameMap: maps.frameMap,
       debug,
     });
+
+    // Discover and attach OOPIF frames
+    // TODO: In the future we might want to consider patching playwright so we can we access underlying CDP session ID for frame attach events for OOPIF
+    // current problem is that the event only exposes sessionId, but this does not match any internal session ID playwright page.createCDPSession() creates.
+    await frameContextManager.captureOOPIFs((maps.frameMap?.size ?? 0) + 1);
 
     // Step 4: Fetch accessibility trees for main frame and all iframes
     const allNodes: (AXNode & { _frameIndex: number })[] = [];
