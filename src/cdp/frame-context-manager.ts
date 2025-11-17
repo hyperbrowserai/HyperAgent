@@ -8,6 +8,20 @@ interface FrameTreeNode {
   childFrames?: FrameTreeNode[];
 }
 
+type PlaywrightFrameHandle = {
+  url(): string;
+  parentFrame(): unknown | null;
+  name(): string;
+};
+
+interface PlaywrightOOPIFRecord {
+  frameId: string;
+  session: CDPSession;
+  url: string;
+  name?: string;
+  parentFrameUrl?: string | null;
+}
+
 interface UpsertFrameInput
   extends Partial<
     Omit<FrameRecord, "frameId" | "parentFrameId" | "lastUpdated">
@@ -32,6 +46,10 @@ export class FrameContextManager {
   >();
   private readonly oopifFrameIds = new Set<string>();
   private readonly pageTrackedSessions = new WeakSet<CDPSession>();
+  private readonly playwrightOopifCache = new Map<
+    PlaywrightFrameHandle,
+    PlaywrightOOPIFRecord
+  >();
   private nextFrameIndex = 0;
   private initialized = false;
   private initializingPromise: Promise<void> | null = null;
@@ -286,15 +304,6 @@ export class FrameContextManager {
     }
   }
 
-  private hasFrameWithUrl(url: string): boolean {
-    if (!url || url === "about:blank") return false;
-
-    for (const frame of this.graph.getAllFrames()) {
-      if (frame.url === url) return true;
-    }
-    return false;
-  }
-
   private getFrameIdByUrl(url: string): string | null {
     if (!url || url === "about:blank") return null;
 
@@ -336,12 +345,17 @@ export class FrameContextManager {
     const context = page.context();
     const allFrames = page.frames();
 
-    // Filter frames to process (exclude main frame and already-captured same-origin frames)
-    const framesToCheck = allFrames.filter((frame) => {
-      if (frame === page.mainFrame()) return false;
-      const frameUrl = frame.url();
-      return !this.hasFrameWithUrl(frameUrl);
-    });
+    // Cleanup any previously tracked Playwright frames that are no longer present
+    for (const tracked of Array.from(this.playwrightOopifCache.keys())) {
+      if (!allFrames.includes(tracked)) {
+        this.playwrightOopifCache.delete(tracked);
+      }
+    }
+
+    // Filter frames to process (exclude main frame)
+    const framesToCheck = allFrames.filter(
+      (frame) => frame !== page.mainFrame()
+    );
 
     if (framesToCheck.length === 0) {
       return;
@@ -349,6 +363,28 @@ export class FrameContextManager {
 
     // Parallelize OOPIF discovery: try to create CDP session for all frames simultaneously
     const discoveryPromises = framesToCheck.map(async (frame, index) => {
+      const cachedRecord = this.playwrightOopifCache.get(frame);
+      const parentFrameUnknown = frame.parentFrame();
+      const parentFrame = parentFrameUnknown as { url(): string } | null;
+      const parentFrameUrl = parentFrame?.url();
+
+      if (cachedRecord) {
+        this.log(
+          `[FrameContext] Frame ${frame.url()} already has a cached record, skipping`
+        );
+        const updatedRecord: PlaywrightOOPIFRecord = {
+          ...cachedRecord,
+          url: frame.url(),
+          name: frame.name() || undefined,
+          parentFrameUrl,
+        };
+        this.playwrightOopifCache.set(frame, updatedRecord);
+        return {
+          ...updatedRecord,
+          discoveryOrder: index,
+          playwrightFrame: frame,
+        };
+      }
       const frameUrl = frame.url();
 
       // Try to create CDP session - if it succeeds, this is an OOPIF
@@ -371,18 +407,19 @@ export class FrameContextManager {
           `[FrameContext] Discovered OOPIF: frameId=${frameId}, url=${frameUrl}`
         );
 
-        // Find parent frame
-        const parentFrameUnknown = frame.parentFrame();
-        const parentFrame = parentFrameUnknown as { url(): string } | null;
-        const parentFrameUrl = parentFrame?.url();
-
-        return {
+        const record: PlaywrightOOPIFRecord = {
           frameId,
           session: oopifSession,
           url: frameUrl,
           name: frame.name() || undefined,
           parentFrameUrl,
+        };
+        this.playwrightOopifCache.set(frame, record);
+
+        return {
+          ...record,
           discoveryOrder: index, // Preserve original order for deterministic frame indices
+          playwrightFrame: frame,
         };
       } catch (_error) {
         this.log(
@@ -408,13 +445,14 @@ export class FrameContextManager {
 
     for (let i = 0; i < discoveredOOPIFs.length; i++) {
       const oopif = discoveredOOPIFs[i];
-      const frameIndex = startIndex + i; // Sequential indices for discovered OOPIFs
+      const frameIndex = startIndex + i;
       const parentFrameId = oopif.parentFrameUrl
         ? this.getFrameIdByUrl(oopif.parentFrameUrl)
         : null;
 
       this.setFrameSession(oopif.frameId, oopif.session);
       this.assignFrameIndex(oopif.frameId, frameIndex);
+
       this.oopifFrameIds.add(oopif.frameId);
       this.upsertFrame({
         frameId: oopif.frameId,
