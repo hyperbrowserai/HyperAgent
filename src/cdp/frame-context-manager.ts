@@ -219,6 +219,11 @@ export class FrameContextManager {
     return this.initializingPromise;
   }
 
+  /**
+   * Capture initial frame tree from CDP (both same-origin and OOPIF frames)
+   * Assigns preliminary frameIndex values which may be overwritten by DOM traversal order
+   * in syncFrameContextManager for same-origin iframes
+   */
   private async captureFrameTree(session: CDPSession): Promise<void> {
     const { frameTree } = await session.send<Protocol.Page.GetFrameTreeResponse>("Page.getFrameTree");
     if (!frameTree) return;
@@ -234,6 +239,7 @@ export class FrameContextManager {
         url: node.frame.url,
       });
 
+      // Assign preliminary frameIndex (may be overwritten by DOM traversal for same-origin iframes)
       if (typeof this.graph.getFrameIndex(frameId) === "undefined") {
         this.assignFrameIndex(frameId, indexCounter++);
       }
@@ -256,6 +262,12 @@ export class FrameContextManager {
   }
 
 
+  /**
+   * Get the backendNodeId of the <iframe> element that owns this frame
+   * This backendNodeId is crucial for matching same-origin iframes between:
+   * - DOM traversal (buildBackendIdMaps) which has backendNodeId but may not have frameId
+   * - CDP events (FrameContextManager) which has frameId from Page.frameAttached
+   */
   private async populateFrameOwner(session: CDPSession, frameId: string): Promise<void> {
     try {
       const owner = await session.send<Protocol.DOM.GetFrameOwnerResponse>("DOM.getFrameOwner", { frameId });
@@ -285,6 +297,17 @@ export class FrameContextManager {
     return null;
   }
 
+  /**
+   * Discover OOPIF (Out-of-Process IFrame) frames
+   * 
+   * OOPIF frames are cross-origin and WON'T appear in DOM.getDocument response
+   * (pierce:true doesn't cross origin boundaries for security reasons)
+   * 
+   * They must be discovered via CDP Target/Session events and have their own CDP sessions.
+   * OOPIF frames always have frameId since they're separate CDP targets.
+   * 
+   * Discovery strategy: Try to create a CDP session for each frame - if it succeeds, it's an OOPIF
+   */
   private async captureOOPIFs(startIndex: number): Promise<void> {
     const pageUnknown = this.client.getPage?.();
     if (!pageUnknown) {
@@ -326,7 +349,7 @@ export class FrameContextManager {
       try {
         oopifSession = await context.newCDPSession(frame);
       } catch {
-        // Failed to create session = same-origin frame (already processed)
+        // Failed to create session = same-origin frame (already processed via DOM.getDocument)
         this.log(`[FrameContext] Frame ${frameUrl} is same-origin, skipping`);
         return null;
       }

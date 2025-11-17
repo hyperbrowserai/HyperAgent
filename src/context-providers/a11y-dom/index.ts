@@ -182,15 +182,43 @@ interface SyncFrameContextOptions {
   manager: ReturnType<typeof getOrCreateFrameContextManager>;
   frameMap?: Map<number, IframeInfo>;
   rootSession: CDPSession;
-  cdpClient: CDPClient;
   debug?: boolean;
 }
 
+/**
+ * Sync FrameContextManager with frameMap from DOM traversal
+ * 
+ * TWO-WAY SYNCHRONIZATION:
+ * ========================
+ * 
+ * SAME-ORIGIN IFRAMES:
+ * -------------------
+ * - DOM.getDocument (buildBackendIdMaps) discovers same-origin iframes via contentDocument
+ * - contentDocument.frameId is typically UNDEFINED for same-origin iframes
+ * - buildBackendIdMaps assigns frameIndex based on DFS traversal order (AUTHORITATIVE)
+ * - buildBackendIdMaps stores iframeBackendNodeId (the <iframe> element's backendNodeId)
+ * 
+ * - FrameContextManager tracks frames via Page.frameAttached CDP events
+ * - FrameContextManager has frameId from CDP events
+ * - FrameContextManager calls populateFrameOwner to get backendNodeId of <iframe> element
+ * 
+ * - syncFrameContextManager matches by backendNodeId (primary key)
+ * - Copies frameId from FrameContextManager → frameMap
+ * - Copies executionContextId from FrameContextManager → frameMap
+ * - Overwrites frameIndex in FrameContextManager with DOM traversal order
+ * 
+ * OOPIF (Cross-Origin):
+ * --------------------
+ * - DOM.getDocument does NOT include OOPIF (pierce:true stops at origin boundaries)
+ * - FrameContextManager discovers OOPIF via captureOOPIFs (separate CDP sessions)
+ * - OOPIF always has frameId (they're separate CDP targets)
+ * - OOPIF gets frameIndex when discovered or later added to frameMap
+ * - No DOM traversal involvement for OOPIF
+ */
 async function syncFrameContextManager({
   manager,
   frameMap,
   rootSession,
-  cdpClient,
   debug,
 }: SyncFrameContextOptions): Promise<void> {
   manager.setDebug(debug);
@@ -239,14 +267,18 @@ async function syncFrameContextManager({
 
   await Promise.all(
     entries.map(async ([frameIndex, info]) => {
+      // Try to get frameId from DOM response (usually undefined for same-origin iframes)
       let frameId = info.frameId ?? info.cdpFrameId;
+      
+      // Primary matching strategy: use backendNodeId to find frameId from FrameContextManager
+      // FrameContextManager has frameId from CDP events (Page.frameAttached, etc.)
       if (!frameId && typeof info.iframeBackendNodeId === "number") {
         const matched = manager.getFrameByBackendNodeId(info.iframeBackendNodeId);
         if (matched) {
           frameId = matched.frameId;
           if (debug) {
             console.log(
-              `[FrameContext] Resolved frame ${frameIndex} via backendNodeId ${info.iframeBackendNodeId} -> ${frameId}`
+              `[FrameContext] Matched same-origin frame ${frameIndex} via backendNodeId ${info.iframeBackendNodeId} -> frameId ${frameId}`
             );
           }
         }
@@ -255,7 +287,7 @@ async function syncFrameContextManager({
       if (!frameId) {
         if (debug) {
           console.warn(
-            `[FrameContext] Frame ${frameIndex} missing frameId/cdpFrameId (likely same-origin iframe without separate target)`
+            `[FrameContext] Frame ${frameIndex} could not be matched (backendNodeId=${info.iframeBackendNodeId}). Likely not ready or detached.`
           );
         }
         return;
@@ -313,7 +345,6 @@ async function hydrateFrameContextFromSnapshot(
     await syncFrameContextManager({
       manager,
       frameMap: snapshot.frameMap,
-      cdpClient,
       rootSession: cdpClient.rootSession,
       debug,
     });
@@ -686,7 +717,9 @@ async function collectCrossOriginFrameData({
     await injectBoundingBoxScriptSession(session);
   }
 
-  const subMaps = await buildBackendIdMaps(session, frameIndex, debug);
+  // Use pierce:false for OOPIF to prevent capturing transient/loading nested iframes
+  // Any legitimate nested OOPIFs will be discovered via their own CDP sessions
+  const subMaps = await buildBackendIdMaps(session, frameIndex, debug, false);
 
   Object.assign(maps.tagNameMap, subMaps.tagNameMap);
   Object.assign(maps.xpathMap, subMaps.xpathMap);
@@ -987,7 +1020,6 @@ export async function getA11yDOM(
       syncFrameContextManager({
         manager: frameContextManager,
         frameMap: maps.frameMap,
-        cdpClient,
         rootSession: cdpClient.rootSession,
         debug,
       })

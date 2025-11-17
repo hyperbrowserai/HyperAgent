@@ -102,13 +102,16 @@ function extractAccessibleName(
 export async function buildBackendIdMaps(
   session: CDPSession,
   frameIndex = 0,
-  debug = false
+  debug = false,
+  pierce = true // Default true for main frame, false for OOPIF to avoid capturing transient nested frames
 ): Promise<BackendIdMaps> {
   try {
     // Step 1: Get full DOM tree from CDP
+    // pierce=true: traverses into same-origin iframes (main frame needs this)
+    // pierce=false: stops at iframe boundaries (OOPIF processing - nested OOPIFs have their own sessions)
     const { root } = (await session.send("DOM.getDocument", {
       depth: -1,
-      pierce: true,
+      pierce,
     })) as { root: DOMNode };
 
     // Step 2: Initialize maps
@@ -200,13 +203,15 @@ export async function buildBackendIdMaps(
         );
       }
 
-      // Handle iframe content documents
+      // Handle iframe content documents (same-origin iframes only)
+      // OOPIF (cross-origin) iframes won't have contentDocument due to security restrictions
       if (
         node.nodeName &&
         node.nodeName.toLowerCase() === "iframe" &&
         node.contentDocument
       ) {
-        // Assign a new frame index to this iframe's content
+        // Assign a new frame index to this same-origin iframe's content
+        // This frameIndex is based on DOM traversal order (DFS) and is authoritative
         const iframeFrameIndex = nextFrameIndex++;
 
         // Extract iframe attributes for frame resolution
@@ -226,15 +231,13 @@ export async function buildBackendIdMaps(
           }
         }
 
-        // Get CDP frameId for fetching accessibility tree
+        // Try to get CDP frameId (typically undefined for same-origin iframes)
+        // Same-origin iframes usually don't have a frameId in the DOM.getDocument response
+        // because they're pierced inline. We'll match by backendNodeId later in syncFrameContextManager.
         const cdpFrameId = node.contentDocument.frameId;
         if (debug && !cdpFrameId) {
-          const availableKeys = Object.keys(
-            node.contentDocument as unknown as Record<string, unknown>
-          );
-          console.warn(
-            "[DOM] contentDocument missing frameId. Keys:",
-            availableKeys
+          console.log(
+            `[DOM] Same-origin iframe without frameId (expected) - will match by backendNodeId=${node.backendNodeId}`
           );
         }
 
@@ -244,16 +247,18 @@ export async function buildBackendIdMaps(
         siblingPositions.set(siblingKey, siblingPosition + 1);
 
         // Store iframe metadata for later frame resolution
+        // Note: cdpFrameId is typically undefined for same-origin iframes in DOM.getDocument response
+        // We rely on iframeBackendNodeId for matching in syncFrameContextManager
         const iframeInfo: IframeInfo = {
           frameIndex: iframeFrameIndex,
           src: iframeSrc,
           name: iframeName,
           xpath: path, // XPath to the iframe element itself
-          frameId: cdpFrameId,
-          cdpFrameId, // CDP frameId (not unique, kept for debugging)
+          frameId: cdpFrameId, // Usually undefined for same-origin
+          cdpFrameId, // Usually undefined for same-origin (kept for debugging)
           parentFrameIndex: currentFrameIndex, // Parent frame
           siblingPosition, // Position among siblings with same parent+URL
-          iframeBackendNodeId: node.backendNodeId, // backendNodeId of <iframe> element
+          iframeBackendNodeId: node.backendNodeId, // backendNodeId of <iframe> element (PRIMARY matching key)
           contentDocumentBackendNodeId: node.contentDocument.backendNodeId, // backendNodeId of content document root
         };
         frameMap.set(iframeFrameIndex, iframeInfo);
