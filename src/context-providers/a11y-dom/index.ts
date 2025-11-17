@@ -489,10 +489,11 @@ async function fetchIframeAXTrees(
     }
   }
 
-  for (const [frameIndex, frameInfo] of sameOriginFrames) {
+  // Process same-origin iframes in parallel for better performance
+  const sameOriginPromises = sameOriginFrames.map(async ([frameIndex, frameInfo]) => {
     const { contentDocumentBackendNodeId, src } = frameInfo;
     if (!contentDocumentBackendNodeId) {
-      continue;
+      return null;
     }
 
     try {
@@ -527,21 +528,35 @@ async function fetchIframeAXTrees(
         _frameIndex: frameIndex,
       }));
 
-      allNodes.push(...taggedNodes);
-
-      if (debug) {
-        frameDebugInfo.push({
+      return {
+        frameIndex,
+        nodes: taggedNodes,
+        debugInfo: debug ? {
           frameIndex,
           frameUrl: src || "unknown",
           totalNodes: iframeNodes.length,
           rawNodes: iframeNodes,
-        });
-      }
+        } : null,
+      };
     } catch (error) {
       console.warn(
         `[A11y] Failed to fetch AX tree for frame ${frameIndex} (contentDocBackendNodeId=${contentDocumentBackendNodeId}):`,
         (error as Error).message || error
       );
+      return null;
+    }
+  });
+
+  // Wait for all same-origin iframe processing to complete in parallel
+  const sameOriginResults = await Promise.all(sameOriginPromises);
+
+  // Merge results into allNodes and frameDebugInfo
+  for (const result of sameOriginResults) {
+    if (result) {
+      allNodes.push(...result.nodes);
+      if (result.debugInfo) {
+        frameDebugInfo.push(result.debugInfo);
+      }
     }
   }
 
