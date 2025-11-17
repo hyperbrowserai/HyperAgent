@@ -724,6 +724,7 @@ async function collectCrossOriginFrameData({
   Object.assign(maps.tagNameMap, subMaps.tagNameMap);
   Object.assign(maps.xpathMap, subMaps.xpathMap);
   Object.assign(maps.accessibleNameMap, subMaps.accessibleNameMap);
+  Object.assign(maps.backendNodeMap, subMaps.backendNodeMap);
   maps.frameMap = maps.frameMap ?? new Map();
 
   const executionContextId =
