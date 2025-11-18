@@ -68,6 +68,7 @@ class DomChunkAggregator {
     return this.parts.join("\n\n");
   }
 }
+
 const READ_ONLY_ACTIONS = new Set(["thinking", "wait", "extract", "complete"]);
 
 const ensureFrameContextsReady = async (
@@ -99,10 +100,7 @@ const writeFrameGraphSnapshot = async (
     const frameManager = getOrCreateFrameContextManager(cdpClient);
     frameManager.setDebug(debug);
     const data = frameManager.toJSON();
-    fs.writeFileSync(
-      `${dir}/frames.json`,
-      JSON.stringify(data, null, 2)
-    );
+    fs.writeFileSync(`${dir}/frames.json`, JSON.stringify(data, null, 2));
   } catch (error) {
     if (debug) {
       console.warn("[FrameContext] Failed to write frame graph:", error);
@@ -150,11 +148,6 @@ const getActionSchema = (actions: Array<AgentActionDefinition>) => {
     z.object({
       type: z.literal(action.type),
       params: action.actionParams,
-      actionDescription: z
-        .string()
-        .describe(
-          "Describe why you are performing this action and what you aim to perform with this action."
-        ),
     })
   );
 
@@ -164,17 +157,17 @@ const getActionSchema = (actions: Array<AgentActionDefinition>) => {
 
   if (zodDefs.length === 1) {
     const [single] = zodDefs;
-    return z.union([single, single] as [z.ZodTypeAny, z.ZodTypeAny]);
+    const schema = z.union([single, single] as [z.ZodTypeAny, z.ZodTypeAny]);
+    return schema;
   }
 
   const [first, second, ...rest] = zodDefs;
-  return z.union(
-    [first, second, ...rest] as [
-      z.ZodTypeAny,
-      z.ZodTypeAny,
-      ...z.ZodTypeAny[],
-    ]
-  );
+  const schema = z.union([first, second, ...rest] as [
+    z.ZodTypeAny,
+    z.ZodTypeAny,
+    ...z.ZodTypeAny[],
+  ]);
+  return schema;
 };
 
 const getActionHandler = (
@@ -259,7 +252,11 @@ const runAction = async (
     logPerf(ctx.debug, `[Perf][runAction][${action.type}]`, actionStart);
     return result;
   } catch (error) {
-    logPerf(ctx.debug, `[Perf][runAction][${action.type}] (error)`, actionStart);
+    logPerf(
+      ctx.debug,
+      `[Perf][runAction][${action.type}] (error)`,
+      actionStart
+    );
     return {
       success: false,
       message: `Action ${action.type} failed: ${error}`,
@@ -267,7 +264,11 @@ const runAction = async (
   }
 };
 
-function logPerf(debug: boolean | undefined, label: string, start: number): void {
+function logPerf(
+  debug: boolean | undefined,
+  label: string,
+  start: number
+): void {
   if (!debug) return;
   const duration = performance.now() - start;
   console.log(`${label} took ${Math.round(duration)}ms`);
@@ -328,352 +329,350 @@ export const runAgentTask = async (
   try {
     await ensureFrameContextsReady(page, ctx.debug);
     while (true) {
-    // Status Checks
-    const status: TaskStatus = taskState.status;
-    if (status === TaskStatus.PAUSED) {
-      await sleep(100);
-      continue;
-    }
-    if (endTaskStatuses.has(status)) {
-      break;
-    }
-    if (params?.maxSteps && currStep >= params.maxSteps) {
-      taskState.status = TaskStatus.CANCELLED;
-      break;
-    }
-    const debugStepDir = `${debugDir}/step-${currStep}`;
-    const stepStart = performance.now();
-    const stepMetrics: Record<string, unknown> = {
-      stepIndex: currStep,
-    };
-    if (ctx.debug) {
-      fs.mkdirSync(debugStepDir, { recursive: true });
-    }
-
-    // Get A11y DOM State (visual mode optional, default false for performance)
-    let domState: A11yDOMState | null = null;
-    let domChunks: string | null = null;
-    try {
-      const domFetchStart = performance.now();
-      const captureDomState = async (): Promise<A11yDOMState> => {
-        let lastError: unknown;
-        for (let attempt = 0; attempt < DOM_CAPTURE_MAX_ATTEMPTS; attempt++) {
-          const attemptAggregator = enableDomStreaming
-            ? new DomChunkAggregator()
-            : null;
-          try {
-            const snapshot = await getA11yDOM(
-              page,
-              ctx.debug,
-              params?.enableVisualMode ?? false,
-              ctx.debug ? debugStepDir : undefined,
-              {
-                useCache: useDomCache,
-                enableStreaming: enableDomStreaming,
-                onFrameChunk: attemptAggregator
-                  ? (chunk) => attemptAggregator.push(chunk)
-                  : undefined,
-              }
-            );
-            if (!snapshot) {
-              throw new Error("Failed to capture DOM state");
-            }
-            if (isPlaceholderSnapshot(snapshot)) {
-              lastError = new Error(snapshot.domState);
-            } else {
-              domChunks = attemptAggregator?.hasContent()
-                ? attemptAggregator.toString()
-                : null;
-              return snapshot;
-            }
-          } catch (error) {
-            if (!isRecoverableDomError(error)) {
-              throw error;
-            }
-            lastError = error;
-          }
-          if (ctx.debug) {
-            console.warn(
-              `[DOM] Capture failed (attempt ${attempt + 1}/${DOM_CAPTURE_MAX_ATTEMPTS}), waiting for navigation to settle...`
-            );
-          }
-          await waitForSettledDOM(page).catch(() => {});
-        }
-        throw lastError ?? new Error("Failed to capture DOM state");
+      // Status Checks
+      const status: TaskStatus = taskState.status;
+      if (status === TaskStatus.PAUSED) {
+        await sleep(100);
+        continue;
+      }
+      if (endTaskStatuses.has(status)) {
+        break;
+      }
+      if (params?.maxSteps && currStep >= params.maxSteps) {
+        taskState.status = TaskStatus.CANCELLED;
+        break;
+      }
+      const debugStepDir = `${debugDir}/step-${currStep}`;
+      const stepStart = performance.now();
+      const stepMetrics: Record<string, unknown> = {
+        stepIndex: currStep,
       };
+      if (ctx.debug) {
+        fs.mkdirSync(debugStepDir, { recursive: true });
+      }
 
-      domState = await captureDomState();
-      const domDuration = performance.now() - domFetchStart;
+      // Get A11y DOM State (visual mode optional, default false for performance)
+      let domState: A11yDOMState | null = null;
+      let domChunks: string | null = null;
+      try {
+        const domFetchStart = performance.now();
+        const captureDomState = async (): Promise<A11yDOMState> => {
+          let lastError: unknown;
+          for (let attempt = 0; attempt < DOM_CAPTURE_MAX_ATTEMPTS; attempt++) {
+            const attemptAggregator = enableDomStreaming
+              ? new DomChunkAggregator()
+              : null;
+            try {
+              const snapshot = await getA11yDOM(
+                page,
+                ctx.debug,
+                params?.enableVisualMode ?? false,
+                ctx.debug ? debugStepDir : undefined,
+                {
+                  useCache: useDomCache,
+                  enableStreaming: enableDomStreaming,
+                  onFrameChunk: attemptAggregator
+                    ? (chunk) => attemptAggregator.push(chunk)
+                    : undefined,
+                }
+              );
+              if (!snapshot) {
+                throw new Error("Failed to capture DOM state");
+              }
+              if (isPlaceholderSnapshot(snapshot)) {
+                lastError = new Error(snapshot.domState);
+              } else {
+                domChunks = attemptAggregator?.hasContent()
+                  ? attemptAggregator.toString()
+                  : null;
+                return snapshot;
+              }
+            } catch (error) {
+              if (!isRecoverableDomError(error)) {
+                throw error;
+              }
+              lastError = error;
+            }
+            if (ctx.debug) {
+              console.warn(
+                `[DOM] Capture failed (attempt ${attempt + 1}/${DOM_CAPTURE_MAX_ATTEMPTS}), waiting for navigation to settle...`
+              );
+            }
+            await waitForSettledDOM(page).catch(() => {});
+          }
+          throw lastError ?? new Error("Failed to capture DOM state");
+        };
+
+        domState = await captureDomState();
+        const domDuration = performance.now() - domFetchStart;
+        logPerf(
+          ctx.debug,
+          `[Perf][runAgentTask] getA11yDOM(step ${currStep})`,
+          domFetchStart
+        );
+        stepMetrics.domCaptureMs = Math.round(domDuration);
+      } catch (error) {
+        if (ctx.debug) {
+          console.log(
+            "Failed to retrieve DOM state after 3 retries. Failing task.",
+            error
+          );
+        }
+        taskState.status = TaskStatus.FAILED;
+        taskState.error = "Failed to retrieve DOM state";
+        break;
+      }
+
+      if (!domState) {
+        taskState.status = TaskStatus.FAILED;
+        taskState.error = "Failed to retrieve DOM state";
+        break;
+      }
+
+      // If visual mode enabled, composite screenshot with overlay
+      let trimmedScreenshot: string | undefined;
+      if (domState.visualOverlay) {
+        const overlayKey = domState.visualOverlay;
+        if (overlayKey === lastOverlayKey && lastScreenshotBase64) {
+          trimmedScreenshot = lastScreenshotBase64;
+        } else {
+          trimmedScreenshot = await compositeScreenshot(page, overlayKey);
+          lastOverlayKey = overlayKey;
+          lastScreenshotBase64 = trimmedScreenshot;
+        }
+      } else {
+        lastOverlayKey = null;
+        lastScreenshotBase64 = undefined;
+      }
+
+      // Store Dom State for Debugging
+      if (ctx.debug) {
+        fs.mkdirSync(debugDir, { recursive: true });
+        fs.writeFileSync(`${debugStepDir}/elems.txt`, domState.domState);
+        if (trimmedScreenshot) {
+          fs.writeFileSync(
+            `${debugStepDir}/screenshot.png`,
+            Buffer.from(trimmedScreenshot, "base64")
+          );
+        }
+      }
+
+      if (domChunks) {
+        domState.domState = domChunks;
+      }
+
+      // Build Agent Step Messages
+      const msgs = await buildAgentStepMessages(
+        baseMsgs,
+        taskState.steps,
+        taskState.task,
+        page,
+        domState,
+        trimmedScreenshot,
+        Object.values(ctx.variables)
+      );
+
+      // Store Agent Step Messages for Debugging
+      if (ctx.debug) {
+        fs.writeFileSync(
+          `${debugStepDir}/msgs.json`,
+          JSON.stringify(msgs, null, 2)
+        );
+      }
+
+      // Invoke LLM with structured output
+      const structuredResult = await retry({
+        func: () =>
+          (async () => {
+            const llmStart = performance.now();
+            const result = await ctx.llm.invokeStructured(
+              {
+                schema: AgentOutputFn(actionSchema),
+                options: {
+                  temperature: 0,
+                },
+                actions: ctx.actions,
+              },
+              msgs
+            );
+            const llmDuration = performance.now() - llmStart;
+            logPerf(
+              ctx.debug,
+              `[Perf][runAgentTask] llm.invokeStructured(step ${currStep})`,
+              llmStart
+            );
+            stepMetrics.llmMs = Math.round(llmDuration);
+            return result;
+          })(),
+        onError: (...args: Array<unknown>) => {
+          console.error("[LLM][StructuredOutput] Retry error", ...args);
+        },
+      });
+
+      if (!structuredResult.parsed) {
+        const providerId = ctx.llm?.getProviderId?.() ?? "unknown-provider";
+        const modelId = ctx.llm?.getModelId?.() ?? "unknown-model";
+        console.error(
+          `[LLM][StructuredOutput] Failed to parse response from ${providerId} (${modelId}). Raw response: ${
+            structuredResult.rawText?.trim() || "<empty>"
+          }`
+        );
+        throw new Error("Failed to get structured output from LLM");
+      }
+
+      const agentOutput = structuredResult.parsed;
+
+      params?.debugOnAgentOutput?.(agentOutput);
+
+      // Status Checks
+      const statusAfterLLM: TaskStatus = taskState.status;
+      if (statusAfterLLM === TaskStatus.PAUSED) {
+        await sleep(100);
+        continue;
+      }
+      if (endTaskStatuses.has(statusAfterLLM)) {
+        break;
+      }
+
+      // Run single action
+      const action = agentOutput.action;
+
+      // Handle complete action specially
+      if (action.type === "complete") {
+        taskState.status = TaskStatus.COMPLETED;
+        const actionDefinition = ctx.actions.find(
+          (actionDefinition) => actionDefinition.type === "complete"
+        );
+        if (actionDefinition) {
+          output =
+            (await actionDefinition.completeAction?.(action.params)) ??
+            "No complete action found";
+        } else {
+          output = "No complete action found";
+        }
+      }
+
+      // Execute the action
+      const actionExecStart = performance.now();
+      const actionOutput = await runAction(action, domState, page, ctx);
+      const actionDuration = performance.now() - actionExecStart;
       logPerf(
         ctx.debug,
-        `[Perf][runAgentTask] getA11yDOM(step ${currStep})`,
-        domFetchStart
+        `[Perf][runAgentTask] runAction(step ${currStep})`,
+        actionExecStart
       );
-      stepMetrics.domCaptureMs = Math.round(domDuration);
-    } catch (error) {
-      if (ctx.debug) {
-        console.log(
-          "Failed to retrieve DOM state after 3 retries. Failing task.",
-          error
-        );
+      stepMetrics.actionMs = Math.round(actionDuration);
+      stepMetrics.actionType = action.type;
+      stepMetrics.actionSuccess = actionOutput.success;
+      if (
+        actionOutput.debug &&
+        typeof actionOutput.debug === "object" &&
+        "timings" in actionOutput.debug &&
+        actionOutput.debug.timings &&
+        typeof actionOutput.debug.timings === "object"
+      ) {
+        stepMetrics.actionTimings = actionOutput.debug.timings;
       }
-      taskState.status = TaskStatus.FAILED;
-      taskState.error = "Failed to retrieve DOM state";
-      break;
-    }
+      if (!READ_ONLY_ACTIONS.has(action.type)) {
+        markDomSnapshotDirty(page);
+      }
 
-    if (!domState) {
-      taskState.status = TaskStatus.FAILED;
-      taskState.error = "Failed to retrieve DOM state";
-      break;
-    }
+      // Check action result and handle retry logic
+      if (action.type === "wait") {
+        // Wait action - increment counter
+        consecutiveFailuresOrWaits++;
 
-    // If visual mode enabled, composite screenshot with overlay
-    let trimmedScreenshot: string | undefined;
-    if (domState.visualOverlay) {
-      const overlayKey = domState.visualOverlay;
-      if (overlayKey === lastOverlayKey && lastScreenshotBase64) {
-        trimmedScreenshot = lastScreenshotBase64;
+        if (consecutiveFailuresOrWaits >= MAX_CONSECUTIVE_FAILURES_OR_WAITS) {
+          taskState.status = TaskStatus.FAILED;
+          taskState.error = `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress.`;
+
+          const step: AgentStep = {
+            idx: currStep,
+            agentOutput: agentOutput,
+            actionOutput,
+          };
+          taskState.steps.push(step);
+          await params?.onStep?.(step);
+          break;
+        }
+
+        if (ctx.debug) {
+          console.log(
+            `[agent] Wait action (${consecutiveFailuresOrWaits}/${MAX_CONSECUTIVE_FAILURES_OR_WAITS}): ${actionOutput.message}`
+          );
+        }
+      } else if (!actionOutput.success) {
+        // Action failed - increment counter
+        consecutiveFailuresOrWaits++;
+
+        if (consecutiveFailuresOrWaits >= MAX_CONSECUTIVE_FAILURES_OR_WAITS) {
+          taskState.status = TaskStatus.FAILED;
+          taskState.error = `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress. Last error: ${actionOutput.message}`;
+
+          const step: AgentStep = {
+            idx: currStep,
+            agentOutput: agentOutput,
+            actionOutput,
+          };
+          taskState.steps.push(step);
+          await params?.onStep?.(step);
+          break;
+        }
+
+        if (ctx.debug) {
+          console.log(
+            `[agent] Action failed (${consecutiveFailuresOrWaits}/${MAX_CONSECUTIVE_FAILURES_OR_WAITS}): ${actionOutput.message}`
+          );
+        }
       } else {
-        trimmedScreenshot = await compositeScreenshot(page, overlayKey);
-        lastOverlayKey = overlayKey;
-        lastScreenshotBase64 = trimmedScreenshot;
+        // Success - reset counter
+        consecutiveFailuresOrWaits = 0;
       }
-    } else {
-      lastOverlayKey = null;
-      lastScreenshotBase64 = undefined;
-    }
 
-    // Store Dom State for Debugging
-    if (ctx.debug) {
-      fs.mkdirSync(debugDir, { recursive: true });
-      fs.writeFileSync(`${debugStepDir}/elems.txt`, domState.domState);
-      if (trimmedScreenshot) {
+      // Wait for DOM to settle after action
+      const waitStats = await waitForSettledDOM(page);
+      stepMetrics.waitForSettledMs = Math.round(waitStats.durationMs);
+      stepMetrics.waitForSettled = {
+        totalMs: Math.round(waitStats.durationMs),
+        lifecycleMs: Math.round(waitStats.lifecycleMs),
+        networkMs: Math.round(waitStats.networkMs),
+        requestsSeen: waitStats.requestsSeen,
+        peakInflight: waitStats.peakInflight,
+        reason: waitStats.resolvedByTimeout ? "timeout" : "quiet",
+        forcedDrops: waitStats.forcedDrops,
+      };
+
+      const step: AgentStep = {
+        idx: currStep,
+        agentOutput,
+        actionOutput,
+      };
+      taskState.steps.push(step);
+      await params?.onStep?.(step);
+      currStep = currStep + 1;
+      const totalDuration = performance.now() - stepStart;
+      logPerf(
+        ctx.debug,
+        `[Perf][runAgentTask] step ${currStep - 1} total`,
+        stepStart
+      );
+      stepMetrics.totalMs = Math.round(totalDuration);
+
+      if (ctx.debug) {
+        await writeFrameGraphSnapshot(page, debugStepDir, ctx.debug);
         fs.writeFileSync(
-          `${debugStepDir}/screenshot.png`,
-          Buffer.from(trimmedScreenshot, "base64")
+          `${debugStepDir}/stepOutput.json`,
+          JSON.stringify(step, null, 2)
+        );
+        fs.writeFileSync(
+          `${debugStepDir}/perf.json`,
+          JSON.stringify(stepMetrics, null, 2)
         );
       }
     }
 
-    if (domChunks) {
-      domState.domState = domChunks;
-    }
-
-    // Build Agent Step Messages
-    const msgs = await buildAgentStepMessages(
-      baseMsgs,
-      taskState.steps,
-      taskState.task,
-      page,
-      domState,
-      trimmedScreenshot,
-      Object.values(ctx.variables)
-    );
-
-    // Store Agent Step Messages for Debugging
-    if (ctx.debug) {
-      fs.writeFileSync(
-        `${debugStepDir}/msgs.json`,
-        JSON.stringify(msgs, null, 2)
-      );
-    }
-
-    // Invoke LLM with structured output
-    const structuredResult = await retry({
-      func: () =>
-        (async () => {
-          const llmStart = performance.now();
-          const result = await ctx.llm.invokeStructured(
-            {
-              schema: AgentOutputFn(actionSchema),
-              options: {
-                temperature: 0,
-              },
-            },
-            msgs
-          );
-          const llmDuration = performance.now() - llmStart;
-          logPerf(
-            ctx.debug,
-            `[Perf][runAgentTask] llm.invokeStructured(step ${currStep})`,
-            llmStart
-          );
-          stepMetrics.llmMs = Math.round(llmDuration);
-          return result;
-        })(),
-    });
-
-    if (!structuredResult.parsed) {
-      const providerId = ctx.llm?.getProviderId?.() ?? "unknown-provider";
-      const modelId = ctx.llm?.getModelId?.() ?? "unknown-model";
-      console.error(
-        `[LLM][StructuredOutput] Failed to parse response from ${providerId} (${modelId}). Raw response: ${
-          structuredResult.rawText?.trim() || "<empty>"
-        }`
-      );
-      throw new Error("Failed to get structured output from LLM");
-    }
-
-    const agentOutput = structuredResult.parsed;
-
-    params?.debugOnAgentOutput?.(agentOutput);
-
-    // Status Checks
-    const statusAfterLLM: TaskStatus = taskState.status;
-    if (statusAfterLLM === TaskStatus.PAUSED) {
-      await sleep(100);
-      continue;
-    }
-    if (endTaskStatuses.has(statusAfterLLM)) {
-      break;
-    }
-
-    // Run single action
-    const action = agentOutput.action;
-
-    // Handle complete action specially
-    if (action.type === "complete") {
-      taskState.status = TaskStatus.COMPLETED;
-      const actionDefinition = ctx.actions.find(
-        (actionDefinition) => actionDefinition.type === "complete"
-      );
-      if (actionDefinition) {
-        output =
-          (await actionDefinition.completeAction?.(action.params)) ??
-          "No complete action found";
-      } else {
-        output = "No complete action found";
-      }
-    }
-
-    // Execute the action
-    const actionExecStart = performance.now();
-    const actionOutput = await runAction(action, domState, page, ctx);
-    const actionDuration = performance.now() - actionExecStart;
-    logPerf(
-      ctx.debug,
-      `[Perf][runAgentTask] runAction(step ${currStep})`,
-      actionExecStart
-    );
-    stepMetrics.actionMs = Math.round(actionDuration);
-    stepMetrics.actionType = action.type;
-    stepMetrics.actionSuccess = actionOutput.success;
-    if (
-      actionOutput.debug &&
-      typeof actionOutput.debug === "object" &&
-      "timings" in actionOutput.debug &&
-      actionOutput.debug.timings &&
-      typeof actionOutput.debug.timings === "object"
-    ) {
-      stepMetrics.actionTimings = actionOutput.debug.timings;
-    }
-    if (!READ_ONLY_ACTIONS.has(action.type)) {
-      markDomSnapshotDirty(page);
-    }
-
-    // Check action result and handle retry logic
-    if (action.type === "wait") {
-      // Wait action - increment counter
-      consecutiveFailuresOrWaits++;
-
-      if (consecutiveFailuresOrWaits >= MAX_CONSECUTIVE_FAILURES_OR_WAITS) {
-        taskState.status = TaskStatus.FAILED;
-        taskState.error = `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress.`;
-
-        const step: AgentStep = {
-          idx: currStep,
-          agentOutput: agentOutput,
-          actionOutput,
-        };
-        taskState.steps.push(step);
-        await params?.onStep?.(step);
-        break;
-      }
-
-      if (ctx.debug) {
-        console.log(
-          `[agent] Wait action (${consecutiveFailuresOrWaits}/${MAX_CONSECUTIVE_FAILURES_OR_WAITS}): ${actionOutput.message}`
-        );
-      }
-    } else if (!actionOutput.success) {
-      // Action failed - increment counter
-      consecutiveFailuresOrWaits++;
-
-      if (consecutiveFailuresOrWaits >= MAX_CONSECUTIVE_FAILURES_OR_WAITS) {
-        taskState.status = TaskStatus.FAILED;
-        taskState.error = `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress. Last error: ${actionOutput.message}`;
-
-        const step: AgentStep = {
-          idx: currStep,
-          agentOutput: agentOutput,
-          actionOutput,
-        };
-        taskState.steps.push(step);
-        await params?.onStep?.(step);
-        break;
-      }
-
-      if (ctx.debug) {
-        console.log(
-          `[agent] Action failed (${consecutiveFailuresOrWaits}/${MAX_CONSECUTIVE_FAILURES_OR_WAITS}): ${actionOutput.message}`
-        );
-      }
-    } else {
-      // Success - reset counter
-      consecutiveFailuresOrWaits = 0;
-    }
-
-    // Wait for DOM to settle after action
-    const waitStats = await waitForSettledDOM(page);
-    stepMetrics.waitForSettledMs = Math.round(waitStats.durationMs);
-    stepMetrics.waitForSettled = {
-      totalMs: Math.round(waitStats.durationMs),
-      lifecycleMs: Math.round(waitStats.lifecycleMs),
-      networkMs: Math.round(waitStats.networkMs),
-      requestsSeen: waitStats.requestsSeen,
-      peakInflight: waitStats.peakInflight,
-      reason: waitStats.resolvedByTimeout ? "timeout" : "quiet",
-      forcedDrops: waitStats.forcedDrops,
-    };
-
-    const step: AgentStep = {
-      idx: currStep,
-      agentOutput,
-      actionOutput,
-    };
-    taskState.steps.push(step);
-    await params?.onStep?.(step);
-    currStep = currStep + 1;
-    const totalDuration = performance.now() - stepStart;
-    logPerf(
-      ctx.debug,
-      `[Perf][runAgentTask] step ${currStep - 1} total`,
-      stepStart
-    );
-    stepMetrics.totalMs = Math.round(totalDuration);
-
-    if (ctx.debug) {
-      await writeFrameGraphSnapshot(page, debugStepDir, ctx.debug);
-      fs.writeFileSync(
-        `${debugStepDir}/stepOutput.json`,
-        JSON.stringify(step, null, 2)
-      );
-      fs.writeFileSync(
-        `${debugStepDir}/perf.json`,
-        JSON.stringify(stepMetrics, null, 2)
-      );
-    }
-  }
-
-  logPerf(
-    ctx.debug,
-    `[Perf][runAgentTask] Task ${taskId}`,
-    taskStart
-  );
-
-  }
-  finally {
+    logPerf(ctx.debug, `[Perf][runAgentTask] Task ${taskId}`, taskStart);
+  } finally {
     cleanupDomListeners();
   }
 

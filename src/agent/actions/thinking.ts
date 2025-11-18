@@ -3,12 +3,13 @@ import { ActionContext, AgentActionDefinition } from "@/types";
 
 export const ThinkingAction = z
   .object({
-    thought: z
+    plan: z
       .string()
       .describe(
-        "Think about what your current course of action, and your future steps, and what difficulties you might encounter, and how you'd tackle them."
+        "Describe your strategic plan for the next steps, including potential obstacles and how you'll tackle them."
       ),
   })
+  .required()
   .describe(
     `Think about a course of action. Think what your current task is, what your next should be, and how you would possibly do that. This step is especially useful if performing a complex task, and/or working on a visually complex page (think nodes > 300).`
   );
@@ -19,13 +20,13 @@ export const ThinkingActionDefinition: AgentActionDefinition = {
   type: "thinking" as const,
   actionParams: ThinkingAction,
   run: async (ctx: ActionContext, action: ThinkingActionType) => {
-    const { thought } = action;
+    const { plan } = action;
     return {
       success: true,
-      message: `A simple thought process about your next steps. You thought about: ${thought}`,
+      message: `A simple thought process about your next steps. You planned: ${plan}`,
     };
   },
-  pprintAction: function(params: ThinkingActionType): string {
-    return `Think about: "${params.thought}"`;
+  pprintAction: function (params: ThinkingActionType): string {
+    return `Think about: "${params.plan}"`;
   },
 };

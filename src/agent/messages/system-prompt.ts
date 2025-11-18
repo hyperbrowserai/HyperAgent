@@ -41,7 +41,7 @@ ${OUTPUT_FORMAT}
 - extract: Extract structured data from the page
 - wait: Use when not confident enough to take action (page loading, elements not visible yet)
 - complete: Mark task as complete (with success/failure)
-- thinking: Think about your course of action (useful for complex tasks or complex pages)
+- thinking: Think about your course of action. Only use when you are stuck.
 
 ${EXAMPLE_ACTIONS}
 
@@ -49,11 +49,12 @@ ${EXAMPLE_ACTIONS}
 
 ## Action Rules
 - Return EXACTLY ONE action per step
-- Think step-by-step - one operation at a time
+- Execute step-by-step - one operation at a time
 - After each action, you will see the result and can decide the next step
 - Do not try to predict multiple steps ahead - focus on the immediate next action
 - If you're not confident about what action to take (page loading, unclear state), use the "wait" action
 - The wait action will let the page settle and give you a fresh view
+- Use the think action sparingly, and only when you are stuck
 
 ## Element Interaction Strategy
 - Use actElement for ALL button clicks, form fills, and element interactions

@@ -260,7 +260,9 @@ function() {
 
 function ensureActionContext(ctx: CDPActionContext): void {
   if (!ctx || !ctx.element) {
-    throw new Error("[CDP][Interactions] Action context missing element handle");
+    throw new Error(
+      "[CDP][Interactions] Action context missing element handle"
+    );
   }
 }
 
@@ -291,7 +293,11 @@ export async function dispatchCDPAction(
       await fillElement(ctx, (args[0] as string) ?? "", args[1] as FillOptions);
       return;
     case "press":
-      await pressKey(ctx, (args[0] as string) ?? "Enter", args[1] as PressOptions);
+      await pressKey(
+        ctx,
+        (args[0] as string) ?? "Enter",
+        args[1] as PressOptions
+      );
       return;
     case "check":
       await setChecked(ctx, true);
@@ -337,7 +343,9 @@ export async function dispatchCDPAction(
       await scrollByChunk(ctx, "prevChunk");
       return;
     default:
-      throw new Error(`[CDP][Interactions] Unsupported action method: ${method}`);
+      throw new Error(
+        `[CDP][Interactions] Unsupported action method: ${method}`
+      );
   }
 }
 
@@ -353,7 +361,9 @@ async function clickElement(
   await scrollIntoViewIfNeeded(ctx);
   const box = await getEffectiveBoundingBox(ctx);
   if (!box) {
-    throw new Error("[CDP][Interactions] Unable to determine element bounding box");
+    throw new Error(
+      "[CDP][Interactions] Unable to determine element bounding box"
+    );
   }
 
   const x = box.x + box.width / 2;
@@ -394,7 +404,9 @@ async function hoverElement(ctx: CDPActionContext): Promise<void> {
 
   const box = await getEffectiveBoundingBox(ctx);
   if (!box) {
-    throw new Error("[CDP][Interactions] Unable to determine element bounding box");
+    throw new Error(
+      "[CDP][Interactions] Unable to determine element bounding box"
+    );
   }
 
   await ensureInputEnabled(session);
@@ -439,18 +451,18 @@ async function fillElement(
   const objectId = await ensureObjectHandle(element);
 
   await ensureRuntimeEnabled(session);
-  const fillResponse = await session.send<Protocol.Runtime.CallFunctionOnResponse>(
-    "Runtime.callFunctionOn",
-    {
-      objectId,
-      functionDeclaration: FILL_ELEMENT_SCRIPT,
-      arguments: [{ value }],
-      returnByValue: true,
-    }
-  );
+  const fillResponse =
+    await session.send<Protocol.Runtime.CallFunctionOnResponse>(
+      "Runtime.callFunctionOn",
+      {
+        objectId,
+        functionDeclaration: FILL_ELEMENT_SCRIPT,
+        arguments: [{ value }],
+        returnByValue: true,
+      }
+    );
 
-  const fillResult = (fillResponse.result?.value ??
-    {}) as FillElementResult;
+  const fillResult = (fillResponse.result?.value ?? {}) as FillElementResult;
 
   if (fillResult.status === "error") {
     throw new Error(
@@ -459,8 +471,7 @@ async function fillElement(
   }
 
   if (fillResult.status === "needsinput") {
-    const textToType =
-      fillResult.value ?? value ?? "";
+    const textToType = fillResult.value ?? value ?? "";
 
     await session
       .send("Runtime.callFunctionOn", {
@@ -641,12 +652,9 @@ async function selectOption(
     }
   );
 
-  const selection = (result.result?.value ??
-    {}) as SelectOptionResult;
+  const selection = (result.result?.value ?? {}) as SelectOptionResult;
   if (selection.status !== "selected") {
-    throw new Error(
-      `Failed to select "${value}" (no matching option)`
-    );
+    throw new Error(`Failed to select "${value}" (no matching option)`);
   }
 }
 
@@ -661,7 +669,9 @@ async function scrollToPosition(
   await ensureRuntimeEnabled(session);
 
   const beforeMetrics =
-    ctx.debug && objectId ? await captureScrollMetrics(session, objectId) : null;
+    ctx.debug && objectId
+      ? await captureScrollMetrics(session, objectId)
+      : null;
   const intendedScrollTop =
     beforeMetrics !== null ? beforeMetrics.maxScroll * (percent / 100) : null;
 
@@ -780,8 +790,11 @@ async function scrollToPosition(
         returnByValue: true,
       }
     );
-  const scrollResult = (scrollResponse.result?.value ??
-    null) as { status?: string; finalTop?: number; maxScroll?: number } | null;
+  const scrollResult = (scrollResponse.result?.value ?? null) as {
+    status?: string;
+    finalTop?: number;
+    maxScroll?: number;
+  } | null;
 
   if (ctx.debug) {
     const afterMetrics =
@@ -912,8 +925,8 @@ async function scrollIntoViewIfNeeded(ctx: CDPActionContext): Promise<void> {
       // Re-throw with context about both failures
       throw new Error(
         `[CDP][Interactions] Failed to scroll element into view. ` +
-        `Primary method failed: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}. ` +
-        `Fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+          `Primary method failed: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}. ` +
+          `Fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
       );
     }
   }
@@ -976,17 +989,17 @@ async function ensureInputEnabled(session: CDPSession): Promise<void> {
   inputEnabledSessions.add(session);
 }
 
-async function ensureObjectHandle(
-  element: CDPActionElement
-): Promise<string> {
+async function ensureObjectHandle(element: CDPActionElement): Promise<string> {
   if (element.objectId) {
     return element.objectId;
   }
-  const response = (await element.session.send<
-    Protocol.DOM.ResolveNodeResponse
-  >("DOM.resolveNode", {
-    backendNodeId: element.backendNodeId,
-  })) as Protocol.DOM.ResolveNodeResponse;
+  const response =
+    (await element.session.send<Protocol.DOM.ResolveNodeResponse>(
+      "DOM.resolveNode",
+      {
+        backendNodeId: element.backendNodeId,
+      }
+    )) as Protocol.DOM.ResolveNodeResponse;
 
   const objectId = response.object?.objectId;
   if (!objectId) {
@@ -1037,12 +1050,11 @@ async function captureScrollMetrics(
   objectId: string
 ): Promise<ScrollDebugMetrics | null> {
   await ensureRuntimeEnabled(session);
-  const response =
-    await session.send<Protocol.Runtime.CallFunctionOnResponse>(
-      "Runtime.callFunctionOn",
-      {
-        objectId,
-        functionDeclaration: `
+  const response = await session.send<Protocol.Runtime.CallFunctionOnResponse>(
+    "Runtime.callFunctionOn",
+    {
+      objectId,
+      functionDeclaration: `
           function() {
             try {
               const target = this;
@@ -1073,12 +1085,11 @@ async function captureScrollMetrics(
             }
           }
         `,
-        returnByValue: true,
-      }
-    );
+      returnByValue: true,
+    }
+  );
 
-  return (response.result?.value ??
-    null) as ScrollDebugMetrics | null;
+  return (response.result?.value ?? null) as ScrollDebugMetrics | null;
 }
 
 function logScrollMetrics(
@@ -1098,9 +1109,7 @@ function logScrollMetrics(
   }
   if (typeof extras?.previousTop === "number") {
     parts.push(
-      `delta=${formatScrollNumber(
-        metrics.scrollTop - extras.previousTop
-      )}`
+      `delta=${formatScrollNumber(metrics.scrollTop - extras.previousTop)}`
     );
   }
   console.log(parts.join(" "));
@@ -1175,9 +1184,7 @@ function getKeyEventData(inputKey: string): KeyEventData {
       : isDigit
         ? `Digit${char}`
         : `Key${upper}`;
-    const keyCode = isDigit
-      ? char.charCodeAt(0)
-      : upper.charCodeAt(0);
+    const keyCode = isDigit ? char.charCodeAt(0) : upper.charCodeAt(0);
     return {
       key: char,
       code,

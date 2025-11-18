@@ -45,6 +45,8 @@ export interface AgentActionDefinition<
   T extends z.ZodType<any> = z.ZodType<any>,
 > {
   readonly type: string;
+  readonly toolName?: string;
+  readonly toolDescription?: string;
   actionParams: T;
 
   run(ctx: ActionContext, params: z.infer<T>): Promise<ActionOutput>;

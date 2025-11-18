@@ -1,3 +1,4 @@
+import { AgentActionDefinition } from "@/types/agent/actions/types";
 import { z } from "zod";
 
 export type HyperAgentRole = "system" | "user" | "assistant" | "tool";
@@ -64,6 +65,7 @@ export type StructuredOutputRequest<TSchema extends z.ZodTypeAny> = {
     toolName?: string;
   };
   options?: HyperAgentInvokeOptions;
+  actions?: AgentActionDefinition[];
 };
 
 export type HyperAgentStructuredResult<TSchema extends z.ZodTypeAny> = {

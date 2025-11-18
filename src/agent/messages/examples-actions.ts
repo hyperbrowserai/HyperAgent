@@ -18,5 +18,5 @@ export const EXAMPLE_ACTIONS = `# Action Examples
 - Navigate: {"type": "goToUrl", "params": {"url": "https://example.com"}}
 - Extract content: {"type": "extract", "params": {"objective": "extract the product price and title"}}
 - Wait: {"type": "wait", "params": {"reason": "Waiting for page to finish loading"}}
-- Think: {"type": "thinking", "params": {"thought": "I need to find the login form first before attempting to log in"}}
-- Complete: {"type": "complete", "params": {"success": true, "output": "Task completed successfully"}}`;
+- Think: {"type": "thinking", "params": {"plan": "I need to find the login form first before attempting to log in"}}
+- Complete: {"type": "complete", "params": {"success": true, "text": "Task completed successfully"}}`;

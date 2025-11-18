@@ -1,4 +1,10 @@
 import { HyperAgentMessage, HyperAgentContentPart } from "../types";
+import type {
+  MessageParam,
+  ContentBlockParam,
+  ImageBlockParam,
+  TextBlockParam,
+} from "@anthropic-ai/sdk/resources/messages/index";
 
 /**
  * Utility functions for converting between different message formats
@@ -53,7 +59,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
 }
 
 export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
-  const anthropicMessages: Record<string, unknown>[] = [];
+  const anthropicMessages: MessageParam[] = [];
   let systemMessage: string | undefined;
 
   for (const msg of messages) {
@@ -62,40 +68,63 @@ export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
       continue;
     }
 
-    const anthropicMessage: Record<string, unknown> = {
-      role: msg.role === "assistant" ? "assistant" : "user",
-    };
+    const role = msg.role === "assistant" ? "assistant" : "user";
 
+    let content: string | ContentBlockParam[];
     if (typeof msg.content === "string") {
-      anthropicMessage.content = msg.content;
+      content = msg.content;
     } else {
-      anthropicMessage.content = msg.content.map(
-        (part: HyperAgentContentPart) => {
-          if (part.type === "text") {
-            return { type: "text", text: part.text };
-          } else if (part.type === "image") {
-            // Extract base64 data from data URL
-            const base64Data = part.url.startsWith("data:")
-              ? part.url.split(",")[1]
-              : part.url;
-            return {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: part.mimeType || "image/png",
-                data: base64Data,
-              },
-            };
-          }
-          return part;
+      const blocks: ContentBlockParam[] = [];
+      for (const part of msg.content) {
+        if (part.type === "text") {
+          const textBlock: TextBlockParam = { type: "text", text: part.text };
+          blocks.push(textBlock);
+        } else if (part.type === "image") {
+          const base64Data = part.url.startsWith("data:")
+            ? part.url.split(",")[1]
+            : part.url;
+          const mediaType = normalizeImageMimeType(part.mimeType);
+          const imageBlock: ImageBlockParam = {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mediaType,
+              data: base64Data,
+            },
+          };
+          blocks.push(imageBlock);
         }
-      );
+      }
+      content = blocks;
     }
 
-    anthropicMessages.push(anthropicMessage);
+    anthropicMessages.push({
+      role,
+      content,
+    });
   }
 
   return { messages: anthropicMessages, system: systemMessage };
+}
+
+const ANTHROPIC_IMAGE_MEDIA_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+
+function normalizeImageMimeType(
+  mimeType?: string
+): "image/jpeg" | "image/png" | "image/gif" | "image/webp" {
+  if (mimeType && ANTHROPIC_IMAGE_MEDIA_TYPES.has(mimeType)) {
+    return mimeType as
+      | "image/jpeg"
+      | "image/png"
+      | "image/gif"
+      | "image/webp";
+  }
+  return "image/png";
 }
 
 export function convertToGeminiMessages(messages: HyperAgentMessage[]) {

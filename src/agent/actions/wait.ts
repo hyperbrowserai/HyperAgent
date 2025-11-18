@@ -4,9 +4,11 @@ import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 
 const WaitAction = z
   .object({
-    reason: z.string().describe(
-      "Explain why you cannot confidently take an action right now (e.g., 'Page is still loading', 'Expected element not visible yet', 'Waiting for dynamic content to appear', 'Page may still be transitioning')"
-    ),
+    reason: z
+      .string()
+      .describe(
+        "Explain why you cannot confidently take an action right now (e.g., 'Page is still loading', 'Expected element not visible yet', 'Waiting for dynamic content to appear', 'Page may still be transitioning')"
+      ),
   })
   .describe("Use this action when you are not confident enough to take a meaningful action. The page may still be loading, elements may not be visible yet, or the page state may be unclear. The system will wait for the DOM to settle and give you a fresh view.");
 

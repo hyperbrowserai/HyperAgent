@@ -8,20 +8,6 @@ import type { EncodedId } from "@/context-providers/a11y-dom/types";
 import { isEncodedId } from "@/context-providers/a11y-dom/types";
 import type { ResolvedCDPElement } from "@/cdp";
 
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.object({}).catchall(jsonValueSchema),
-  ]) as z.ZodType<JsonValue>
-);
-
 const methodSchema = z
   .enum(AGENT_ELEMENT_ACTIONS)
   .describe(
@@ -32,9 +18,7 @@ const ActElementAction = z
   .object({
     instruction: z
       .string()
-      .describe(
-        "Short explanation of why this action is needed."
-      ),
+      .describe("Short explanation of why this action is needed."),
     elementId: z
       .string()
       .min(1)
@@ -45,19 +29,19 @@ const ActElementAction = z
       "CDP/Playwright method to invoke (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollToElement, scrollToPercentage, nextChunk, prevChunk)."
     ),
     arguments: z
-      .array(jsonValueSchema)
+      .array(z.string())
       .describe(
         "Arguments for the method (e.g., text to fill, key to press, scroll target). Use an empty array when no arguments are required."
       ),
     confidence: z
       .number()
-      .min(0)
-      .max(1)
       .describe(
         "LLM-estimated confidence (0-1). Used for debugging/telemetry; execution does not depend on it."
       ),
   })
-  .describe("Perform a single action on an element by referencing an encoded ID from the DOM listing.");
+  .describe(
+    "Perform a single action on an element by referencing an encoded ID from the DOM listing."
+  );
 
 type ActElementActionType = z.infer<typeof ActElementAction>;
 
@@ -92,7 +76,9 @@ export const ActElementActionDefinition: AgentActionDefinition = {
       };
     }
 
-    const timings: Record<string, number> | undefined = ctx.debug ? {} : undefined;
+    const timings: Record<string, number> | undefined = ctx.debug
+      ? {}
+      : undefined;
     const debugInfo =
       ctx.debug && elementMetadata
         ? {
@@ -109,9 +95,7 @@ export const ActElementActionDefinition: AgentActionDefinition = {
         : undefined;
 
     const shouldUseCDP =
-      !!ctx.cdp &&
-      ctx.cdpActions !== false &&
-      !!ctx.domState.backendNodeMap;
+      !!ctx.cdp && ctx.cdpActions !== false && !!ctx.domState.backendNodeMap;
 
     if (shouldUseCDP) {
       const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
@@ -129,7 +113,9 @@ export const ActElementActionDefinition: AgentActionDefinition = {
           strictFrameValidation: true,
         });
         if (timings) {
-          timings.resolveElementMs = Math.round(performance.now() - resolveStart);
+          timings.resolveElementMs = Math.round(
+            performance.now() - resolveStart
+          );
         }
 
         const dispatchStart = performance.now();

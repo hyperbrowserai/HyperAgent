@@ -12,6 +12,7 @@ type PlaywrightFrameHandle = {
   url(): string;
   parentFrame(): unknown | null;
   name(): string;
+  isDetached?: () => boolean;
 };
 
 interface PlaywrightOOPIFRecord {
@@ -20,6 +21,8 @@ interface PlaywrightOOPIFRecord {
   url: string;
   name?: string;
   parentFrameUrl?: string | null;
+  playwrightFrame: PlaywrightFrameHandle;
+  detachHandler?: () => void;
 }
 
 interface UpsertFrameInput
@@ -65,6 +68,15 @@ export class FrameContextManager {
     if (this.debugLogs) {
       console.log(message);
     }
+  }
+  private removeCachedPlaywrightFrame(frame: PlaywrightFrameHandle): void {
+    const record = this.playwrightOopifCache.get(frame);
+    if (!record) return;
+    if (record.detachHandler) {
+      record.session.off?.("Detached", record.detachHandler);
+      record.detachHandler = undefined;
+    }
+    this.playwrightOopifCache.delete(frame);
   }
 
   get frameGraph(): FrameGraph {
@@ -334,21 +346,20 @@ export class FrameContextManager {
     // Type cast to Playwright Page - this is safe because we're using PlaywrightCDPClient
     const page = pageUnknown as {
       context(): { newCDPSession(frame: unknown): Promise<CDPSession> };
-      frames(): Array<{
-        url(): string;
-        parentFrame(): unknown | null;
-        name(): string;
-      }>;
+      frames(): Array<PlaywrightFrameHandle>;
       mainFrame(): unknown;
     };
 
     const context = page.context();
     const allFrames = page.frames();
 
-    // Cleanup any previously tracked Playwright frames that are no longer present
+    // Cleanup any previously tracked Playwright frames that are no longer present or detached
+    const frameSet = new Set(allFrames);
     for (const tracked of Array.from(this.playwrightOopifCache.keys())) {
-      if (!allFrames.includes(tracked)) {
-        this.playwrightOopifCache.delete(tracked);
+      const isDetached =
+        typeof tracked.isDetached === "function" && tracked.isDetached();
+      if (!frameSet.has(tracked) || isDetached) {
+        this.removeCachedPlaywrightFrame(tracked);
       }
     }
 
@@ -372,15 +383,19 @@ export class FrameContextManager {
         this.log(
           `[FrameContext] Frame ${frame.url()} already has a cached record, skipping`
         );
-        const updatedRecord: PlaywrightOOPIFRecord = {
-          ...cachedRecord,
-          url: frame.url(),
-          name: frame.name() || undefined,
-          parentFrameUrl,
-        };
-        this.playwrightOopifCache.set(frame, updatedRecord);
+        if (typeof frame.isDetached === "function" && frame.isDetached()) {
+          this.log(
+            `[FrameContext] Frame ${frame.url()} is detached, removing cached record`
+          );
+          this.removeCachedPlaywrightFrame(frame);
+          return null;
+        }
+        cachedRecord.url = frame.url();
+        cachedRecord.name = frame.name() || undefined;
+        cachedRecord.parentFrameUrl = parentFrameUrl;
+        cachedRecord.playwrightFrame = frame;
         return {
-          ...updatedRecord,
+          ...cachedRecord,
           discoveryOrder: index,
           playwrightFrame: frame,
         };
@@ -413,7 +428,14 @@ export class FrameContextManager {
           url: frameUrl,
           name: frame.name() || undefined,
           parentFrameUrl,
+          playwrightFrame: frame,
         };
+        const detachHandler = (): void => {
+          this.removeCachedPlaywrightFrame(frame);
+          oopifSession?.off?.("Detached", detachHandler);
+        };
+        record.detachHandler = detachHandler;
+        oopifSession.on?.("Detached", detachHandler);
         this.playwrightOopifCache.set(frame, record);
 
         return {

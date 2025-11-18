@@ -42,16 +42,19 @@ export const buildAgentStepMessages = async (
       content: "=== Previous Actions ===\n",
     });
     for (const step of steps) {
+      const { thoughts, memory, action } = step.agentOutput;
       messages.push({
         role: "assistant",
-        content: JSON.stringify(step.agentOutput),
+        content: `Thoughts: ${thoughts}\nMemory: ${memory}\nAction: ${JSON.stringify(
+          action
+        )}`,
       });
-      const actionOutput = step.actionOutput;
+      const actionResult = step.actionOutput;
       messages.push({
         role: "user",
-        content: actionOutput.extract
-          ? `${actionOutput.message} :\n ${JSON.stringify(actionOutput.extract)}`
-          : actionOutput.message,
+        content: actionResult.extract
+          ? `${actionResult.message} :\n ${JSON.stringify(actionResult.extract)}`
+          : actionResult.message,
       });
     }
   }

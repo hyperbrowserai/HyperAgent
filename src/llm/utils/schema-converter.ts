@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentActionDefinition } from "@/types/agent/actions/types";
 
 /**
  * Utility functions for converting Zod schemas to provider-specific formats
@@ -21,25 +22,52 @@ export function convertToOpenAIJsonSchema(
   };
 }
 
-export function convertToAnthropicTool(
-  schema: z.ZodTypeAny
-): Record<string, unknown> {
-  const jsonSchema = z.toJSONSchema(schema, {
-    target: "draft-7",
-    io: "output",
-  });
+const THOUGHTS_DESCRIPTION =
+  "Your reasoning about the current state and what needs to be done next based on the task goal and previous actions.";
+const MEMORY_DESCRIPTION =
+  "A summary of successful actions completed so far and key state changes (e.g., 'Clicked login button -> login form appeared').";
 
-  return {
-    name: "structured_output",
-    description: "Generate structured output according to the provided schema",
-    input_schema: {
-      type: "object",
-      properties: {
-        result: jsonSchema,
+export function convertActionsToAnthropicTools(
+  actions: AgentActionDefinition[]
+): Array<Record<string, unknown>> {
+  return actions.map((action) => {
+    const paramsSchema = z.toJSONSchema(action.actionParams, {
+      target: "draft-4",
+      io: "output",
+    });
+
+    return {
+      name: action.toolName ?? action.type,
+      description: action.toolDescription ?? action.actionParams.description,
+      input_schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          thoughts: {
+            type: "string",
+            description: THOUGHTS_DESCRIPTION,
+          },
+          memory: {
+            type: "string",
+            description: MEMORY_DESCRIPTION,
+          },
+          action: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              type: {
+                type: "string",
+                const: action.type,
+              },
+              params: paramsSchema,
+            },
+            required: ["type", "params"],
+          },
+        },
+        required: ["thoughts", "memory", "action"],
       },
-      required: ["result"],
-    },
-  };
+    };
+  });
 }
 
 /**
@@ -140,13 +168,4 @@ function convertJsonSchemaToGemini(
   if (jsonSchema.nullable !== undefined) result.nullable = jsonSchema.nullable;
 
   return result;
-}
-
-export function createAnthropicToolChoice(
-  toolName: string
-): Record<string, unknown> {
-  return {
-    type: "tool",
-    name: toolName,
-  };
 }

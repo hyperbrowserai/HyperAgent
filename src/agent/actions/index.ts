@@ -29,8 +29,8 @@ export class ActionNotFoundError extends Error {
 const DEFAULT_ACTIONS = [
   // Navigation actions
   GoToURLActionDefinition,
-  PageBackActionDefinition,
-  PageForwardActionDefinition,
+  // PageBackActionDefinition,
+  // PageForwardActionDefinition,
   RefreshPageActionDefinition,
 
   // Element interaction (natural language)

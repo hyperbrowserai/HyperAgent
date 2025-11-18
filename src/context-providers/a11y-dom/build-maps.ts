@@ -3,7 +3,13 @@
  */
 
 import type { CDPSession } from "@/cdp";
-import { DOMNode, BackendIdMaps, EncodedId, IframeInfo, DOMRect } from "./types";
+import {
+  DOMNode,
+  BackendIdMaps,
+  EncodedId,
+  IframeInfo,
+  DOMRect,
+} from "./types";
 import { createEncodedId } from "./utils";
 
 async function annotateIframeBoundingBoxes(
@@ -45,13 +51,14 @@ async function annotateIframeBoundingBoxes(
         height: bottom - top,
       };
       frameInfo.absoluteBoundingBox = rect;
-    } catch (error) {
-      if (debug) {
-        console.warn(
-          `[DOM] Failed to compute bounding box for frame ${frameIndex}:`,
-          error
-        );
-      }
+    } catch {
+      // error just means it's out of viewport
+      // if (debug) {
+      //   console.warn(
+      //     `[DOM] Failed to compute bounding box for frame ${frameIndex}:`,
+      //     error
+      //   );
+      // }
     }
   }
 }
