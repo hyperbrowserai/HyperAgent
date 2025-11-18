@@ -12,4 +12,9 @@ export interface AgentCtx {
   tokenLimit: number;
   llm: HyperAgentLLM;
   cdpActions?: boolean;
+  schemaErrors?: Array<{
+    stepIndex: number;
+    error: string;
+    rawResponse: string;
+  }>;
 }

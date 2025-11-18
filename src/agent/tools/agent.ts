@@ -236,6 +236,12 @@ export const runAgentTask = async (
   const page = taskState.startingPage;
   const useDomCache = params?.useDomCache === true;
   const enableDomStreaming = params?.enableDomStreaming === true;
+  
+  // Track schema validation errors across steps
+  if (!ctx.schemaErrors) {
+    ctx.schemaErrors = [];
+  }
+  
   const navigationDirtyHandler = (): void => {
     markDomSnapshotDirty(page);
   };
@@ -351,7 +357,7 @@ export const runAgentTask = async (
       }
 
       // Build Agent Step Messages
-      const msgs = await buildAgentStepMessages(
+      let msgs = await buildAgentStepMessages(
         baseMsgs,
         taskState.steps,
         taskState.task,
@@ -360,6 +366,22 @@ export const runAgentTask = async (
         trimmedScreenshot,
         Object.values(ctx.variables)
       );
+      
+      // Append accumulated schema errors from previous steps
+      if (ctx.schemaErrors && ctx.schemaErrors.length > 0) {
+        const errorSummary = ctx.schemaErrors
+          .slice(-3) // Only keep last 3 errors to avoid context bloat
+          .map(err => `Step ${err.stepIndex}: ${err.error}`)
+          .join('\n');
+        
+        msgs = [
+          ...msgs,
+          {
+            role: "user",
+            content: `Note: Previous steps had schema validation errors. Learn from these:\n${errorSummary}\n\nEnsure your response follows the exact schema structure.`,
+          },
+        ];
+      }
 
       // Store Agent Step Messages for Debugging
       if (ctx.debug) {
@@ -430,6 +452,13 @@ export const runAgentTask = async (
               structuredResult.rawText?.trim() || "<empty>"
             } (attempt ${attempt + 1}/${maxAttempts})`
           );
+          
+          // Store error for cross-step learning
+          ctx.schemaErrors?.push({
+            stepIndex: currStep,
+            error: validationError,
+            rawResponse: structuredResult.rawText || "",
+          });
           
           // Append error feedback for next retry
           if (attempt < maxAttempts - 1) {
