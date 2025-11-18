@@ -118,7 +118,7 @@ HyperAgent provides two complementary APIs optimized for different use cases:
 - ⚡ **Fast** - Uses accessibility tree (no screenshots)
 - 💰 **Cheap** - Single LLM call per action
 - 🎯 **Reliable** - Direct element finding and execution
-- 📊 **Efficient** - Text-based DOM analysis
+- 📊 **Efficient** - Text-based DOM analysis with automatic ad-frame filtering
 
 **Example**:
 ```typescript
@@ -136,18 +136,27 @@ await page.aiAction("click the login button");
 **Best for**: Complex workflows requiring multiple steps and visual context
 
 **Advantages**:
+
 - 🖼️ **Visual Understanding** - Can use screenshots with element overlays
 - 🎭 **Complex Tasks** - Handles multi-step workflows automatically
 - 🧠 **Context-Aware** - Better at understanding page layout and relationships
 - 🔄 **Adaptive** - Can adjust strategy based on page state
 
+**Parameters**:
+
+- `useDomCache` (boolean): Reuse DOM snapshots for speed
+- `enableVisualMode` (boolean): Enable screenshots and overlays (default: false)
+
 **Example**:
+
 ```typescript
 const page = await agent.newPage();
 await page.goto("https://flights.google.com");
 
 // Complex task with multiple steps handled automatically
-await page.ai("search for flights from Miami to New Orleans on July 16");
+await page.ai("search for flights from Miami to New Orleans on July 16", {
+  useDomCache: true,
+});
 ```
 
 ### 🎨 Mix and Match
@@ -375,6 +384,12 @@ const agent = new HyperAgent({
 HyperAgent speaks Chrome DevTools Protocol natively. Element lookup, scrolling, typing, frame management, and screenshots all go through CDP so every action has exact coordinates, execution contexts, and browser events. This allows for more custom commands and deep iframe tracking.
 
 HyperAgent integrates seamlessly with Playwright, so you can still use familiar commands, while the actions take full advantage of native CDP protocol with fast locators and advanced iframe tracking.
+
+**Key Features:**
+
+- **Auto-Ad Filtering**: Automatically filters out ad and tracking iframes to keep context clean
+- **Deep Iframe Support**: Tracking across nested and cross-origin iframes (OOPIFs)
+- **Exact Coordinates**: Actions use precise CDP coordinates for reliability
 
 Keep in mind that CDP is still experimental, and stability is not guaranteed. If you’d like the agent to use Playwright’s native locators/actions instead, set `cdpActions: false` when you create the agent and it will fall back automatically.
 
