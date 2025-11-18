@@ -8,7 +8,11 @@ import {
   StructuredOutputRequest,
 } from "../types";
 import { convertToAnthropicMessages } from "../utils/message-converter";
-import { convertActionsToAnthropicTools } from "../utils/schema-converter";
+import {
+  convertActionsToAnthropicTools,
+  convertToAnthropicTool,
+  createAnthropicToolChoice,
+} from "../utils/schema-converter";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages/index";
 import { getDebugOptions } from "@/debug/options";
 
@@ -93,7 +97,17 @@ export class AnthropicClient implements HyperAgentLLM {
     const { messages: anthropicMessages, system } =
       convertToAnthropicMessages(messages);
 
-    return await this.invokeStructuredViaTools(
+    // If actions are provided, use the agent-style tool calling path
+    if (request.actions && request.actions.length > 0) {
+      return await this.invokeStructuredViaTools(
+        request,
+        anthropicMessages,
+        system
+      );
+    }
+
+    // Otherwise, use simple tool calling for arbitrary schemas
+    return await this.invokeStructuredViaSimpleTool(
       request,
       anthropicMessages,
       system
@@ -210,6 +224,59 @@ export class AnthropicClient implements HyperAgentLLM {
       );
       return {
         rawText: JSON.stringify(toolContent),
+        parsed: null,
+      };
+    }
+  }
+
+  /**
+   * Structured output for simple schemas (non-agent use cases like examineDom)
+   * Uses the original simple tool approach with "result" wrapper
+   */
+  private async invokeStructuredViaSimpleTool<TSchema extends z.ZodTypeAny>(
+    request: StructuredOutputRequest<TSchema>,
+    messages: MessageParam[],
+    system?: string
+  ): Promise<HyperAgentStructuredResult<TSchema>> {
+    const tool = convertToAnthropicTool(request.schema);
+    const toolChoice = createAnthropicToolChoice("structured_output");
+
+    if (shouldDebugStructuredSchema()) {
+      console.log(
+        "[LLM][Anthropic] Simple structured output tool:",
+        JSON.stringify(tool, null, 2)
+      );
+    }
+
+    const response = await this.client.messages.create({
+      model: this.model,
+      messages,
+      ...(system ? { system } : {}),
+      temperature: request.options?.temperature ?? this.temperature,
+      max_tokens: request.options?.maxTokens ?? this.maxTokens,
+      tools: [tool as any],
+      tool_choice: toolChoice as any,
+      ...request.options?.providerOptions,
+    });
+
+    const content = response.content[0];
+    if (!content || content.type !== "tool_use") {
+      return {
+        rawText: "",
+        parsed: null,
+      };
+    }
+
+    try {
+      const input = content.input as any;
+      const validated = request.schema.parse(input.result);
+      return {
+        rawText: JSON.stringify(input),
+        parsed: validated,
+      };
+    } catch {
+      return {
+        rawText: JSON.stringify(content.input),
         parsed: null,
       };
     }

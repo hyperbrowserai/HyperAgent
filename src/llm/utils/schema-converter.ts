@@ -27,6 +27,43 @@ const THOUGHTS_DESCRIPTION =
 const MEMORY_DESCRIPTION =
   "A summary of successful actions completed so far and key state changes (e.g., 'Clicked login button -> login form appeared').";
 
+/**
+ * Convert a simple Zod schema to an Anthropic tool (for non-agent use cases)
+ * Wraps the schema in a "result" field for consistent parsing
+ */
+export function convertToAnthropicTool(
+  schema: z.ZodTypeAny
+): Record<string, unknown> {
+  const jsonSchema = z.toJSONSchema(schema, {
+    target: "draft-7",
+    io: "output",
+  });
+
+  return {
+    name: "structured_output",
+    description: "Generate structured output according to the provided schema",
+    input_schema: {
+      type: "object",
+      properties: {
+        result: jsonSchema,
+      },
+      required: ["result"],
+    },
+  };
+}
+
+/**
+ * Create tool choice object for Anthropic
+ */
+export function createAnthropicToolChoice(
+  toolName: string
+): Record<string, unknown> {
+  return {
+    type: "tool",
+    name: toolName,
+  };
+}
+
 export function convertActionsToAnthropicTools(
   actions: AgentActionDefinition[]
 ): Array<Record<string, unknown>> {
@@ -36,9 +73,26 @@ export function convertActionsToAnthropicTools(
       io: "output",
     });
 
+    // Create enhanced description with structure example
+    const baseDescription =
+      action.toolDescription ?? action.actionParams.description;
+    const enhancedDescription = `${baseDescription}
+
+IMPORTANT: Response must have this exact structure:
+{
+  "thoughts": "your reasoning",
+  "memory": "summary of actions",
+  "action": {
+    "type": "${action.type}",
+    "params": { ...action parameters here... }
+  }
+}
+
+Do NOT put params directly at root level. They MUST be nested inside action.params.`;
+
     return {
       name: action.toolName ?? action.type,
-      description: action.toolDescription ?? action.actionParams.description,
+      description: enhancedDescription,
       input_schema: {
         type: "object",
         additionalProperties: false,
@@ -53,13 +107,18 @@ export function convertActionsToAnthropicTools(
           },
           action: {
             type: "object",
+            description: `The action object. MUST contain 'type' field set to "${action.type}" and 'params' field with the action parameters.`,
             additionalProperties: false,
             properties: {
               type: {
                 type: "string",
                 const: action.type,
+                description: `Must be exactly "${action.type}"`,
               },
-              params: paramsSchema,
+              params: {
+                ...paramsSchema,
+                description: `Parameters for the ${action.type} action. These must be nested here, not at the root level.`,
+              },
             },
             required: ["type", "params"],
           },

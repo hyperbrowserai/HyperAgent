@@ -9,6 +9,7 @@ import {
 } from "@/types/config";
 import { HyperAgentLLM, createLLMClient } from "@/llm/providers";
 import {
+  ActionContext,
   ActionType,
   AgentActionDefinition,
   endTaskStatuses,
@@ -29,14 +30,11 @@ import {
 } from "../browser-providers";
 import { HyperagentError } from "./error";
 import { findElementWithInstruction } from "./shared/find-element";
-import { executePlaywrightMethod } from "./shared/execute-playwright-method";
-import { getElementLocator } from "./shared/element-locator";
 import {
   A11yDOMState,
   AccessibilityNode,
   isEncodedId,
 } from "../context-providers/a11y-dom/types";
-import type { EncodedId } from "../context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
 import { HyperPage, HyperVariable } from "../types/agent/types";
@@ -45,16 +43,11 @@ import { ErrorEmitter } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { performance } from "perf_hooks";
 import { ExamineDomResult } from "./examine-dom/types";
-import {
-  disposeAllCDPClients,
-  getCDPClient,
-  resolveElement,
-  dispatchCDPAction,
-  getOrCreateFrameContextManager,
-} from "@/cdp";
-import type { ResolvedCDPElement } from "@/cdp";
+import { disposeAllCDPClients, resolveElement, dispatchCDPAction } from "@/cdp";
 import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import { setDebugOptions } from "@/debug/options";
+import { initializeRuntimeContext } from "./shared/runtime-context";
+import { performAction } from "./actions/shared/perform-action";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -721,7 +714,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private async executeSingleAction(
     instruction: string,
     page: Page,
-    params?: TaskParams
+    _params?: TaskParams
   ): Promise<TaskOutput> {
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
@@ -776,64 +769,77 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           400
         );
       }
-      const encodedId: EncodedId = element.elementId;
       let actionXPath: string | undefined;
 
-      const canUseCDP = this.cdpActionsEnabled && !!domState.backendNodeMap;
+      // Use shared runtime context
+      const { cdpClient, frameContextManager } = await initializeRuntimeContext(
+        page,
+        this.debug
+      );
 
-      const execStart = performance.now();
-      if (canUseCDP) {
-        const cdpClient = await getCDPClient(page);
-        const frameContextManager = getOrCreateFrameContextManager(cdpClient);
-        frameContextManager.setDebug(this.debug);
-        await frameContextManager.ensureInitialized().catch(() => {});
-        const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
-        const resolved = await resolveElement(encodedId, {
-          page,
-          cdpClient,
-          backendNodeMap: domState.backendNodeMap,
-          xpathMap: domState.xpathMap,
-          frameMap: domState.frameMap,
-          resolvedElementsCache,
-          frameContextManager,
-          debug: this.debug,
-          strictFrameValidation: true,
-        });
+      // Create a context object compatible with performAction
+      // We need to mock the ActionContext shape since performAction expects it
+      // but we don't have a full AgentCtx/TaskState here
+      const actionContext: ActionContext = {
+        domState,
+        page,
+        tokenLimit: this.tokenLimit,
+        llm: this.llm,
+        debug: this.debug,
+        // Only provide CDP if enabled
+        cdpActions: this.cdpActionsEnabled,
+        cdp: this.cdpActionsEnabled
+          ? {
+              client: cdpClient,
+              frameContextManager,
+              resolveElement: resolveElement,
+              dispatchCDPAction: dispatchCDPAction,
+              preferScriptBoundingBox: this.debug,
+              debug: this.debug,
+            }
+          : undefined,
+        // These are required by ActionContext but not used by performAction
+        debugDir: undefined,
+        mcpClient: this.mcpClient,
+        variables: Object.values(this._variables),
+        invalidateDomCache: () => markDomSnapshotDirty(page),
+      };
 
-        actionXPath = domState.xpathMap?.[encodedId];
+      // Use shared performAction to execute
+      const actionOutput = await performAction(actionContext, {
+        elementId: element.elementId,
+        method,
+        arguments: args,
+        instruction,
+        confidence: 1, // Implicit confidence for single action
+      });
 
-        await dispatchCDPAction(method, args, {
-          element: {
-            ...resolved,
-            xpath: actionXPath,
-          },
-          boundingBox: domState.boundingBoxMap?.get(encodedId) ?? undefined,
-          preferScriptBoundingBox: this.debug,
-          debug: this.debug,
-        });
-      } else {
-        // Get Playwright locator for the element (xpath is already trimmed by getElementLocator)
-        const { locator, xpath } = await getElementLocator(
-          element.elementId,
-          domState.xpathMap,
-          page,
-          domState.frameMap,
-          this.debug
-        );
-        actionXPath = xpath;
+      if (
+        actionOutput.debug &&
+        typeof actionOutput.debug === "object" &&
+        "requestedAction" in actionOutput.debug
+      ) {
+        actionXPath = (actionOutput.debug as any).elementMetadata?.xpath;
+      }
 
-        await executePlaywrightMethod(method, args, locator, {
-          clickTimeout: HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT,
-          debug: this.debug,
-        });
+      if (!actionOutput.success) {
+        throw new Error(actionOutput.message);
       }
 
       // Wait for DOM to settle after action
       const waitStart = performance.now();
-      const waitStats = await waitForSettledDOM(page);
+      await waitForSettledDOM(page);
       markDomSnapshotDirty(page);
-      logPerf(this.debug, "[Perf][executeSingleAction] action dispatch", execStart);
-      logPerf(this.debug, "[Perf][executeSingleAction] waitForSettledDOM", waitStart);
+      logPerf(
+        this.debug,
+        "[Perf][executeSingleAction] action execution",
+        actionStart
+      );
+      logPerf(
+        this.debug,
+        "[Perf][executeSingleAction] waitForSettledDOM",
+        waitStart
+      );
 
       // Write debug data on success
       await this.writeDebugData({
@@ -852,11 +858,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         success: true,
       });
 
-      logPerf(
-        this.debug,
-        "[Perf][executeSingleAction] total",
-        actionStart
-      );
+      logPerf(this.debug, "[Perf][executeSingleAction] total", actionStart);
       return {
         status: TaskStatus.COMPLETED,
         steps: [],
@@ -1118,7 +1120,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 }
 
-function logPerf(debug: boolean | undefined, label: string, start: number): void {
+function logPerf(
+  debug: boolean | undefined,
+  label: string,
+  start: number
+): void {
   if (!debug) return;
   const duration = performance.now() - start;
   console.log(`${label} took ${Math.round(duration)}ms`);

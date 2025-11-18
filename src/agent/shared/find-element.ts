@@ -7,12 +7,9 @@ import type { Page } from "playwright-core";
 import type { HyperAgentLLM } from "@/llm/types";
 import { examineDom } from "../examine-dom";
 import type { ExamineDomResult } from "../examine-dom/types";
-import {
-  getA11yDOM,
-  type A11yDOMState,
-} from "../../context-providers/a11y-dom";
 import type { AccessibilityNode } from "@/context-providers/a11y-dom/types";
-import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
+import { captureDOMState } from "./dom-capture";
+import type { A11yDOMState } from "@/context-providers/a11y-dom/types";
 
 export interface FindElementOptions {
   /**
@@ -43,7 +40,7 @@ export interface FindElementResult {
  * Find an element via natural language instruction with retry logic
  *
  * This function:
- * 1. Waits for DOM to settle
+ * 1. Waits for DOM to settle (handled by captureDOMState)
  * 2. Fetches FRESH a11y DOM state
  * 3. Calls examineDom to find the element
  * 4. Retries on failure (with DOM refresh on each attempt)
@@ -73,27 +70,26 @@ export async function findElementWithInstruction(
 
   // Retry loop with DOM refresh (matches aiAction's findElementWithRetry pattern)
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    // Wait for DOM to settle (ensures dynamic content like dropdowns have finished loading)
+    
     if (debug) {
       if (attempt === 0) {
-        console.log(`[findElement] Waiting for DOM to settle...`);
+        console.log(`[findElement] Starting attempt ${attempt + 1}`);
       } else {
         console.log(
-          `[findElement] Retry ${attempt + 1}/${maxRetries}: Waiting for DOM to settle...`
+          `[findElement] Retry ${attempt + 1}/${maxRetries}`
         );
       }
     }
-    await waitForSettledDOM(page);
 
-    if (debug) {
-      console.log(`[findElement] DOM settled`);
-    }
-
-    // Fetch FRESH a11y tree
-    const domState = await getA11yDOM(page, debug);
-    if (!domState) {
-      throw new Error("Failed to fetch page structure");
-    }
+    // Fetch FRESH a11y tree using the robust shared utility
+    // captureDOMState handles DOM settling and retries for bad snapshots internally for this *single* capture attempt
+    // We still need our outer loop for retrying the *finding* logic (e.g. if the LLM can't find the element)
+    const domState = await captureDOMState(page, {
+      debug,
+      // Don't retry capture inside captureDOMState too aggressively since we have an outer loop here
+      // But we do want it to handle transient CDP errors
+      maxRetries: 2 
+    });
 
     if (debug) {
       console.log(
@@ -152,7 +148,7 @@ export async function findElementWithInstruction(
         );
       }
       await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-      // DOM settling happens at start of next iteration
+      // DOM settling happens at start of next captureDOMState call
     }
   }
 

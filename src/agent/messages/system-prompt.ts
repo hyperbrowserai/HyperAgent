@@ -41,7 +41,6 @@ ${OUTPUT_FORMAT}
 - extract: Extract structured data from the page
 - wait: Use when not confident enough to take action (page loading, elements not visible yet)
 - complete: Mark task as complete (with success/failure)
-- thinking: Think about your course of action. Only use when you are stuck.
 
 ${EXAMPLE_ACTIONS}
 
@@ -54,7 +53,6 @@ ${EXAMPLE_ACTIONS}
 - Do not try to predict multiple steps ahead - focus on the immediate next action
 - If you're not confident about what action to take (page loading, unclear state), use the "wait" action
 - The wait action will let the page settle and give you a fresh view
-- Use the think action sparingly, and only when you are stuck
 
 ## Element Interaction Strategy
 - Use actElement for ALL button clicks, form fills, and element interactions
@@ -70,7 +68,7 @@ ${EXAMPLE_ACTIONS}
 
 ## Getting Unstuck
 - Avoid getting stuck in loops - do not keep repeating the same actions
-- If stuck, try: going back, starting a new search, opening a new tab, using alternative paths, or using the thinking action
+- If stuck, try: going back, starting a new search, opening a new tab, or using alternative paths
 
 ## Special Cases
 - Cookies: Accept or close the banner

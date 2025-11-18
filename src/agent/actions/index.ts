@@ -38,7 +38,7 @@ const DEFAULT_ACTIONS = [
 
   // Other actions
   ExtractActionDefinition,
-  ThinkingActionDefinition,
+  // ThinkingActionDefinition, // Disabled: agents waste steps thinking instead of acting; thoughts field already provides reasoning
   WaitActionDefinition,
 ];
 

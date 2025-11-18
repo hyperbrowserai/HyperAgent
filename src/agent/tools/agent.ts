@@ -1,5 +1,4 @@
 import { AgentStep } from "@/types/agent/types";
-import type { FrameChunkEvent } from "@/context-providers/a11y-dom/types";
 import fs from "fs";
 
 import { performance } from "perf_hooks";
@@ -9,17 +8,18 @@ import {
   ActionType,
   AgentActionDefinition,
 } from "@/types";
-import { getA11yDOM } from "@/context-providers/a11y-dom";
 import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import {
-  getCDPClient,
   resolveElement,
   dispatchCDPAction,
+  getCDPClient,
   getOrCreateFrameContextManager,
 } from "@/cdp";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
+import { captureDOMState } from "../shared/dom-capture";
+import { initializeRuntimeContext } from "../shared/runtime-context";
 
 import { AgentOutputFn, endTaskStatuses } from "@hyperbrowser/agent/types";
 import {
@@ -40,55 +40,9 @@ import { AgentCtx } from "./types";
 import { HyperAgentMessage } from "@/llm/types";
 import { Jimp } from "jimp";
 
-class DomChunkAggregator {
-  private parts: string[] = [];
-  private pending = new Map<number, FrameChunkEvent>();
-  private nextOrder = 0;
+// DomChunkAggregator logic moved to shared/dom-capture.ts
 
-  push(chunk: FrameChunkEvent): void {
-    this.pending.set(chunk.order, chunk);
-    this.flush();
-  }
-
-  private flush(): void {
-    while (true) {
-      const chunk = this.pending.get(this.nextOrder);
-      if (!chunk) break;
-      this.pending.delete(this.nextOrder);
-      this.parts.push(chunk.simplified.trim());
-      this.nextOrder += 1;
-    }
-  }
-
-  hasContent(): boolean {
-    return this.parts.length > 0;
-  }
-
-  toString(): string {
-    return this.parts.join("\n\n");
-  }
-}
-
-const READ_ONLY_ACTIONS = new Set(["thinking", "wait", "extract", "complete"]);
-
-const ensureFrameContextsReady = async (
-  page: Page,
-  debug: boolean | undefined
-): Promise<void> => {
-  try {
-    const cdpClient = await getCDPClient(page);
-    const frameManager = getOrCreateFrameContextManager(cdpClient);
-    frameManager.setDebug(debug);
-    await frameManager.ensureInitialized();
-  } catch (error) {
-    if (debug) {
-      console.warn(
-        "[FrameContext] Failed to initialize frame context manager:",
-        error
-      );
-    }
-  }
-};
+const READ_ONLY_ACTIONS = new Set(["wait", "extract", "complete"]);
 
 const writeFrameGraphSnapshot = async (
   page: Page,
@@ -182,30 +136,6 @@ const getActionHandler = (
   }
 };
 
-const DOM_CAPTURE_MAX_ATTEMPTS = 3;
-const NAVIGATION_ERROR_SNIPPETS = [
-  "Execution context was destroyed",
-  "Cannot find context",
-  "Target closed",
-];
-
-const isRecoverableDomError = (error: unknown): boolean => {
-  if (!(error instanceof Error) || !error.message) {
-    return false;
-  }
-  return NAVIGATION_ERROR_SNIPPETS.some((snippet) =>
-    error.message.includes(snippet)
-  );
-};
-
-const isPlaceholderSnapshot = (snapshot: A11yDOMState): boolean => {
-  if (snapshot.elements.size > 0) return false;
-  return (
-    typeof snapshot.domState === "string" &&
-    snapshot.domState.startsWith("Error: Could not extract accessibility tree")
-  );
-};
-
 const runAction = async (
   action: ActionType,
   domState: A11yDOMState,
@@ -227,9 +157,7 @@ const runAction = async (
   };
 
   if (ctx.cdpActions) {
-    const cdpClient = await getCDPClient(page);
-    const frameContextManager = getOrCreateFrameContextManager(cdpClient);
-    frameContextManager.setDebug(ctx.debug);
+    const { cdpClient, frameContextManager } = await initializeRuntimeContext(page, ctx.debug);
     actionCtx.cdp = {
       resolveElement,
       dispatchCDPAction,
@@ -327,7 +255,9 @@ export const runAgentTask = async (
   let lastScreenshotBase64: string | undefined;
 
   try {
-    await ensureFrameContextsReady(page, ctx.debug);
+    // Initialize context at the start of the task
+    await initializeRuntimeContext(page, ctx.debug);
+    
     while (true) {
       // Status Checks
       const status: TaskStatus = taskState.status;
@@ -353,63 +283,22 @@ export const runAgentTask = async (
 
       // Get A11y DOM State (visual mode optional, default false for performance)
       let domState: A11yDOMState | null = null;
-      let domChunks: string | null = null;
+      const domChunks: string | null = null;
       try {
         const domFetchStart = performance.now();
-        const captureDomState = async (): Promise<A11yDOMState> => {
-          let lastError: unknown;
-          for (let attempt = 0; attempt < DOM_CAPTURE_MAX_ATTEMPTS; attempt++) {
-            const attemptAggregator = enableDomStreaming
-              ? new DomChunkAggregator()
-              : null;
-            try {
-              const snapshot = await getA11yDOM(
-                page,
-                ctx.debug,
-                params?.enableVisualMode ?? false,
-                ctx.debug ? debugStepDir : undefined,
-                {
-                  useCache: useDomCache,
-                  enableStreaming: enableDomStreaming,
-                  onFrameChunk: attemptAggregator
-                    ? (chunk) => attemptAggregator.push(chunk)
-                    : undefined,
-                }
-              );
-              if (!snapshot) {
-                throw new Error("Failed to capture DOM state");
-              }
-              if (isPlaceholderSnapshot(snapshot)) {
-                lastError = new Error(snapshot.domState);
-              } else {
-                domChunks = attemptAggregator?.hasContent()
-                  ? attemptAggregator.toString()
-                  : null;
-                return snapshot;
-              }
-            } catch (error) {
-              if (!isRecoverableDomError(error)) {
-                throw error;
-              }
-              lastError = error;
-            }
-            if (ctx.debug) {
-              console.warn(
-                `[DOM] Capture failed (attempt ${attempt + 1}/${DOM_CAPTURE_MAX_ATTEMPTS}), waiting for navigation to settle...`
-              );
-            }
-            await waitForSettledDOM(page).catch(() => {});
-          }
-          throw lastError ?? new Error("Failed to capture DOM state");
-        };
+        
+        domState = await captureDOMState(page, {
+          useCache: useDomCache,
+          debug: ctx.debug,
+          enableVisualMode: params?.enableVisualMode ?? false,
+          debugStepDir: ctx.debug ? debugStepDir : undefined,
+          enableStreaming: enableDomStreaming,
+          onFrameChunk: enableDomStreaming ? () => {
+            // captureDOMState handles aggregation
+          } : undefined
+        });
 
-        domState = await captureDomState();
         const domDuration = performance.now() - domFetchStart;
-        logPerf(
-          ctx.debug,
-          `[Perf][runAgentTask] getA11yDOM(step ${currStep})`,
-          domFetchStart
-        );
         stepMetrics.domCaptureMs = Math.round(domDuration);
       } catch (error) {
         if (ctx.debug) {
@@ -481,46 +370,84 @@ export const runAgentTask = async (
       }
 
       // Invoke LLM with structured output
-      const structuredResult = await retry({
-        func: () =>
-          (async () => {
-            const llmStart = performance.now();
-            const result = await ctx.llm.invokeStructured(
+      const agentOutput = await (async () => {
+        const maxAttempts = 3;
+        let currentMsgs = msgs;
+        
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const structuredResult = await retry({
+            func: () =>
+              (async () => {
+                const llmStart = performance.now();
+                const result = await ctx.llm.invokeStructured(
+                  {
+                    schema: AgentOutputFn(actionSchema),
+                    options: {
+                      temperature: 0,
+                    },
+                    actions: ctx.actions,
+                  },
+                  currentMsgs
+                );
+                const llmDuration = performance.now() - llmStart;
+                logPerf(
+                  ctx.debug,
+                  `[Perf][runAgentTask] llm.invokeStructured(step ${currStep})`,
+                  llmStart
+                );
+                stepMetrics.llmMs = Math.round(llmDuration);
+                return result;
+              })(),
+            onError: (...args: Array<unknown>) => {
+              console.error("[LLM][StructuredOutput] Retry error", ...args);
+            },
+          });
+
+          if (structuredResult.parsed) {
+            return structuredResult.parsed;
+          }
+
+          const providerId = ctx.llm?.getProviderId?.() ?? "unknown-provider";
+          const modelId = ctx.llm?.getModelId?.() ?? "unknown-model";
+          
+          // Try to get detailed Zod validation error
+          let validationError = "Unknown validation error";
+          if (structuredResult.rawText) {
+            try {
+              const parsed = JSON.parse(structuredResult.rawText);
+              AgentOutputFn(actionSchema).parse(parsed);
+            } catch (zodError) {
+              if (zodError instanceof z.ZodError) {
+                validationError = JSON.stringify(zodError.issues, null, 2);
+              } else {
+                validationError = String(zodError);
+              }
+            }
+          }
+          
+          console.error(
+            `[LLM][StructuredOutput] Failed to parse response from ${providerId} (${modelId}). Raw response: ${
+              structuredResult.rawText?.trim() || "<empty>"
+            } (attempt ${attempt + 1}/${maxAttempts})`
+          );
+          
+          // Append error feedback for next retry
+          if (attempt < maxAttempts - 1) {
+            currentMsgs = [
+              ...currentMsgs,
               {
-                schema: AgentOutputFn(actionSchema),
-                options: {
-                  temperature: 0,
-                },
-                actions: ctx.actions,
+                role: "assistant",
+                content: structuredResult.rawText || "Failed to generate response",
               },
-              msgs
-            );
-            const llmDuration = performance.now() - llmStart;
-            logPerf(
-              ctx.debug,
-              `[Perf][runAgentTask] llm.invokeStructured(step ${currStep})`,
-              llmStart
-            );
-            stepMetrics.llmMs = Math.round(llmDuration);
-            return result;
-          })(),
-        onError: (...args: Array<unknown>) => {
-          console.error("[LLM][StructuredOutput] Retry error", ...args);
-        },
-      });
-
-      if (!structuredResult.parsed) {
-        const providerId = ctx.llm?.getProviderId?.() ?? "unknown-provider";
-        const modelId = ctx.llm?.getModelId?.() ?? "unknown-model";
-        console.error(
-          `[LLM][StructuredOutput] Failed to parse response from ${providerId} (${modelId}). Raw response: ${
-            structuredResult.rawText?.trim() || "<empty>"
-          }`
-        );
+              {
+                role: "user",
+                content: `The previous response failed validation. Zod validation errors:\n\`\`\`json\n${validationError}\n\`\`\`\n\nPlease fix these errors and return valid structured output matching the schema.`,
+              },
+            ];
+          }
+        }
         throw new Error("Failed to get structured output from LLM");
-      }
-
-      const agentOutput = structuredResult.parsed;
+      })();
 
       params?.debugOnAgentOutput?.(agentOutput);
 

@@ -2,6 +2,7 @@ import type { Protocol } from "devtools-protocol";
 import type { CDPSession, CDPClient } from "./types";
 import type { FrameRecord } from "./frame-graph";
 import { FrameGraph } from "./frame-graph";
+import { isAdOrTrackingFrame } from "./frame-filters";
 
 interface FrameTreeNode {
   frame: Protocol.Page.Frame;
@@ -401,6 +402,12 @@ export class FrameContextManager {
         };
       }
       const frameUrl = frame.url();
+
+      // Filter ad/tracking frames before attempting CDP session creation
+      if (isAdOrTrackingFrame({ url: frameUrl, name: frame.name(), parentUrl: parentFrameUrl || undefined })) {
+        this.log(`[FrameContext] Skipping ad/tracking frame: ${frameUrl}`);
+        return null;
+      }
 
       // Try to create CDP session - if it succeeds, this is an OOPIF
       let oopifSession: CDPSession | null = null;
