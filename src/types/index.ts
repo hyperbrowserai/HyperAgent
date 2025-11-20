@@ -21,7 +21,14 @@ import {
 } from "./agent/types";
 
 // Config Types
-import { MCPServerConfig, MCPConfig, HyperAgentConfig } from "./config";
+import {
+  MCPServerConfig,
+  MCPConfig,
+  HyperAgentConfig,
+  HyperAgentOptions,
+} from "./config";
+import { HyperMetrics, OpMetrics, OperationType } from "./metrics";
+import { AgentHistoryEntry } from "./history";
 
 // Browser Provider Types
 import BrowserProvider from "./browser-providers/types";
@@ -49,6 +56,11 @@ export {
   MCPServerConfig,
   MCPConfig,
   HyperAgentConfig,
+  HyperAgentOptions,
+  HyperMetrics,
+  OpMetrics,
+  OperationType,
+  AgentHistoryEntry,
 
   // Browser Provider Types
   BrowserProvider,

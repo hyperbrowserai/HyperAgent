@@ -72,7 +72,7 @@ export interface HyperAgentConnectorConfig {
   options: PlaywrightConnectorOptions;
 }
 
-export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
+export interface HyperAgentOptions<T extends BrowserProviders = "Local"> {
   customActions?: Array<AgentActionDefinition>;
 
   browserProvider?: T;
@@ -100,4 +100,31 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
     profileDomCapture?: boolean;
     structuredSchema?: boolean;
   };
+
+  /**
+   * Directory to persist deterministic cache entries. Relative paths are resolved from CWD.
+   * Caching is disabled when omitted.
+   */
+  cacheDir?: string;
+
+  /**
+   * Maximum history entries to keep in-memory. Defaults to 200.
+   */
+  historyLimit?: number;
+
+  /**
+   * Write inference traces to the provided path. When true, defaults to debug/llm.log.
+   */
+  logInferenceToFile?: string | true;
+
+  /**
+   * Opt-in per-run metrics logging.
+   */
+  logMetrics?: boolean;
 }
+
+/**
+ * Backwards compatible alias for consumers still importing HyperAgentConfig.
+ */
+export type HyperAgentConfig<T extends BrowserProviders = "Local"> =
+  HyperAgentOptions<T>;

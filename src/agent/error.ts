@@ -1,9 +1,12 @@
-export class HyperagentError extends Error {
+import { HyperAgentError, HyperAgentErrorContext } from "@/error";
+
+export class HyperagentError extends HyperAgentError {
   constructor(
     message: string,
-    public statusCode?: number
+    statusCode?: number,
+    context?: Omit<HyperAgentErrorContext, "statusCode" | "opType">
   ) {
-    super(`[Hyperagent]: ${message}`);
+    super(`[Hyperagent]: ${message}`, { ...context, statusCode });
     this.name = "HyperagentError";
   }
 }
