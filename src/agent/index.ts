@@ -711,7 +711,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           id: taskId,
           ts: Date.now(),
           opType,
-          url: page.url(),
+          url: activeTaskPage.url(),
           instruction: task,
           selector: mergedParams.selector,
           model: this.llm.getModelId?.() ?? "unknown-model",
@@ -763,7 +763,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         id: taskId,
         ts: Date.now(),
         opType,
-        url: page.url(),
+        url: activeTaskPage.url(),
         instruction: task,
         selector: mergedParams.selector,
         model: this.llm.getModelId?.() ?? "unknown-model",
@@ -786,7 +786,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         id: taskId,
         ts: Date.now(),
         opType,
-        url: page.url(),
+        url: activeTaskPage.url(),
         instruction: task,
         selector: mergedParams.selector,
         model: this.llm.getModelId?.() ?? "unknown-model",
@@ -801,7 +801,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (error instanceof HyperAgentError) {
         throw error;
       }
-      throw this.toOperationError(opType, errorMsg, page, task, error);
+      throw this.toOperationError(opType, errorMsg, activeTaskPage, task, error);
     }
   }
 
@@ -1101,7 +1101,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         id: uuidv4(),
         ts: Date.now(),
         opType,
-        url: page.url(),
+        url: initialPage.url(),
         instruction,
         selector: params.selector,
         model: this.llm.getModelId?.() ?? "unknown-model",
@@ -1283,7 +1283,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         id: uuidv4(),
         ts: Date.now(),
         opType,
-        url: page.url(),
+        url: initialPage.url(),
         instruction,
         selector: params.selector,
         model: this.llm.getModelId?.() ?? "unknown-model",
@@ -1327,7 +1327,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         id: uuidv4(),
         ts: Date.now(),
         opType,
-        url: page.url(),
+        url: initialPage.url(),
         instruction,
         selector: params.selector,
         model: this.llm.getModelId?.() ?? "unknown-model",
@@ -1347,7 +1347,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw this.toOperationError(
         opType,
         `Failed to execute action: ${errorMsg}`,
-        page,
+        initialPage,
         instruction,
         error
       );

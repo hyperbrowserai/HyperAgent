@@ -16,6 +16,11 @@ jest.mock("@/context-providers/dom/dom-hash");
 jest.mock("@/context-providers/dom/selector-scope");
 jest.mock("@/agent/tools/agent");
 
+// Reuse cache across tests by unique temp dir per test
+const tmpBase = path.join(os.tmpdir(), "hyperagent-cache-tests");
+beforeAll(async () => {
+  await fs.mkdir(tmpBase, { recursive: true }).catch(() => {});
+});
 const mockCaptureDomState = captureDOMState as jest.MockedFunction<
   typeof captureDOMState
 >;
@@ -48,7 +53,7 @@ const fakeLLM = {
 } as any;
 
 const createAgentWithCache = async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hyperagent-cache-"));
+  const tmpDir = await fs.mkdtemp(path.join(tmpBase, "cache-"));
   return new HyperAgent({
     llm: fakeLLM,
     cacheDir: tmpDir,
@@ -73,8 +78,15 @@ describe("page.extract cache smoke test", () => {
 
   it("reuses cached extract results and scopes DOM for selectors", async () => {
     const agent = await createAgentWithCache();
+    const contextStub = {
+      on: jest.fn(),
+      off: jest.fn(),
+    };
     const pageStub = {
       url: () => "https://example.com",
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => contextStub,
     } as any;
 
     agent.currentPage = pageStub;
@@ -110,3 +122,69 @@ describe("page.extract cache smoke test", () => {
     expect(metrics.cache.writes).toBe(1);
   });
 });
+
+describe("async task cache", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCaptureDomState.mockResolvedValue(fakeDomState() as any);
+    mockComputeDomHash.mockResolvedValue("dom-hash-async");
+    mockRunAgentTask.mockResolvedValue({
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: JSON.stringify("async-result"),
+    });
+  });
+
+  it("returns cached result for executeTaskAsync and fires onComplete", async () => {
+    const agent = await createAgentWithCache();
+    const pageStub = {
+      url: () => "https://example.com/async",
+    } as any;
+    agent.currentPage = pageStub;
+
+    const onComplete = jest.fn();
+
+    // First run writes cache
+    const schema = z.string();
+
+    const control1 = await agent.executeTaskAsync(
+      "Do async thing",
+      { outputSchema: schema },
+      pageStub
+    );
+    await waitFor(() => mockRunAgentTask.mock.calls.length >= 1);
+    await (agent as any).cacheManager.flushPending?.();
+
+    // Second run should hit cache and still call onComplete
+    const control2 = await agent.executeTaskAsync(
+      "Do async thing",
+      { onComplete, outputSchema: schema },
+      pageStub
+    );
+
+    // Allow microtasks
+    await waitFor(() => mockRunAgentTask.mock.calls.length >= 2 || onComplete.mock.calls.length >= 1);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockRunAgentTask).toHaveBeenCalledTimes(1); // cache hit should skip second run
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    // Ensure control objects still usable
+    expect(control1.getStatus()).not.toBe(TaskStatus.FAILED);
+    expect(control2.getStatus()).not.toBe(TaskStatus.FAILED);
+  });
+});
+
+async function waitFor(predicate: () => boolean, timeoutMs = 100): Promise<void> {
+  const start = Date.now();
+  return new Promise<void>((resolve, reject) => {
+    const check = () => {
+      if (predicate()) return resolve();
+      if (Date.now() - start > timeoutMs) {
+        return reject(new Error("waitFor timeout"));
+      }
+      setTimeout(check, 0);
+    };
+    check();
+  });
+}
