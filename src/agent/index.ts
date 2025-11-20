@@ -343,6 +343,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Close the agent and all associated resources
    */
   public async closeAgent(): Promise<void> {
+    await this.cacheManager.flushPending().catch((error) => {
+      if (this.debug) {
+        console.debug("[HyperAgent] Failed to flush cache writes:", error);
+      }
+    });
     await disposeAllCDPClients().catch((error) => {
       console.warn("[HyperAgent] Failed to dispose CDP clients:", error);
     });
@@ -1321,6 +1326,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     before: HyperMetrics,
     after: HyperMetrics
   ): { promptTokens: number; completionTokens: number; durationMs: number } {
+    // Assumes operations are measured sequentially; concurrent runs may skew deltas
     const beforeOp = before.byOp[opType];
     const afterOp = after.byOp[opType];
     return {
@@ -1390,7 +1396,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       useCache: useDomCache,
       enableVisualMode,
       enableStreaming,
-    }).catch(() => null);
+    }).catch((error) => {
+      if (this.debug) {
+        console.debug("[HyperAgent][cache] DOM capture failed:", error);
+      }
+      return null;
+    });
 
     if (!domState) {
       return null;
@@ -1412,6 +1423,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const domHash = await computeDomHash(page, workingDomState.domState);
     if (!domHash) {
+      if (this.debug) {
+        console.debug("[HyperAgent][cache] Skipping cache, domHash unavailable");
+      }
       return null;
     }
 
@@ -1419,7 +1433,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       opType: options.opType,
       url: page.url(),
       instruction: options.instruction,
-      selector: options.selector,
+      selector: options.opType === "extract" ? options.selector : undefined,
       schemaHash: this.computeSchemaHash(options.outputSchema),
       domHash,
     };

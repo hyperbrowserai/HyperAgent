@@ -114,7 +114,7 @@ describe("selector scoping", () => {
     const result = await scopeDomWithSelector(page, domState, ".missing", "css");
 
     expect(result.matched).toBe(false);
-    expect(result.warning).toContain("multi-frame");
+    expect(result.warning).toContain("not yet supported");
     expect(result.domState).toBe(domState);
   });
 });

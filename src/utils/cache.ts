@@ -95,8 +95,9 @@ export class CacheManager {
     const writePromise = fs
       .mkdir(path.dirname(filePath), { recursive: true })
       .then(() => fs.writeFile(filePath, JSON.stringify(entry, null, 2), "utf8"))
-      .catch(() => {
-        // Silent failure - cache is best-effort
+      .catch((error) => {
+        // Best-effort cache; surface details for debug visibility
+        console.debug?.("[HyperAgent][cache] Failed to write cache entry:", error);
       });
 
     this.track(writePromise);

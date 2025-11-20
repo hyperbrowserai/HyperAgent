@@ -175,6 +175,11 @@ async function resolveEncodedIds(
     const hasMultipleFrames = page.frames().length > 1;
 
     if (!handles.length) {
+      if (hasMultipleFrames) {
+        throw new Error(
+          "Selector scoping across multiple frames is not yet supported"
+        );
+      }
       return {
         ids: [],
         warning: hasMultipleFrames
