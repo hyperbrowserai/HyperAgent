@@ -16,13 +16,11 @@ export class HyperAgentError extends Error {
   public readonly instruction?: string;
   public readonly selector?: string;
   public readonly step?: string;
-  public override readonly cause?: unknown;
+  public readonly cause?: unknown;
   public readonly statusCode?: number;
 
   constructor(message: string, context: HyperAgentErrorContext = {}) {
-    super(message, {
-      cause: context.cause instanceof Error ? context.cause : undefined,
-    });
+    super(message);
     this.name = "HyperAgentError";
     this.opType = context.opType;
     this.url = context.url;
