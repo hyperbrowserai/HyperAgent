@@ -88,11 +88,19 @@ export class GeminiClient implements HyperAgentLLM {
       },
     });
 
+    const usage = response.usageMetadata
+      ? {
+          inputTokens: response.usageMetadata.promptTokenCount,
+          outputTokens: response.usageMetadata.candidatesTokenCount,
+        }
+      : undefined;
+
     const text = response.text;
     if (!text) {
       return {
         rawText: "",
         parsed: null,
+        usage,
       };
     }
 
@@ -103,11 +111,13 @@ export class GeminiClient implements HyperAgentLLM {
       return {
         rawText: text,
         parsed: validated,
+        usage,
       };
     } catch {
       return {
         rawText: text,
         parsed: null,
+        usage,
       };
     }
   }

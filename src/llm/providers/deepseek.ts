@@ -128,17 +128,25 @@ export class DeepSeekClient implements HyperAgentLLM {
     }
 
     const content = choice.message.content || "";
+    const usage = response.usage
+      ? {
+          inputTokens: response.usage.prompt_tokens,
+          outputTokens: response.usage.completion_tokens,
+        }
+      : undefined;
     try {
       const parsed = JSON.parse(content);
       const validated = request.schema.parse(parsed);
       return {
         rawText: content,
         parsed: validated,
+        usage,
       };
     } catch {
       return {
         rawText: content,
         parsed: null,
+        usage,
       };
     }
   }

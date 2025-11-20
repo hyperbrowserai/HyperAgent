@@ -4,7 +4,8 @@
  */
 
 import type { Page } from "playwright-core";
-import type { HyperAgentLLM } from "@/llm/types";
+import { performance } from "perf_hooks";
+import type { HyperAgentLLM, HyperAgentMessage } from "@/llm/types";
 import { examineDom } from "../examine-dom";
 import type { ExamineDomResult } from "../examine-dom/types";
 import type { AccessibilityNode } from "@/context-providers/a11y-dom/types";
@@ -39,7 +40,9 @@ export interface FindElementResult {
   element?: ExamineDomResult;
   domState: A11yDOMState;
   elementMap: Map<string, AccessibilityNode>;
-  llmResponse?: { rawText: string; parsed: unknown };
+  llmResponse?: { rawText: string; parsed: unknown; usage?: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number } };
+  llmDurationMs?: number;
+  messages?: HyperAgentMessage[];
 }
 
 /**
@@ -77,7 +80,11 @@ export async function findElementWithInstruction(
 
   let lastDomState: A11yDOMState | null = null;
   let lastElementMap: Map<string, AccessibilityNode> | null = null;
-  let lastLlmResponse: { rawText: string; parsed: unknown } | undefined;
+  let lastLlmResponse:
+    | { rawText: string; parsed: unknown; usage?: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number } }
+    | undefined;
+  let lastMessages: HyperAgentMessage[] | undefined;
+  let lastDuration: number | undefined;
 
   // Retry loop with DOM refresh (matches aiAction's findElementWithRetry pattern)
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -120,6 +127,7 @@ export async function findElementWithInstruction(
       );
     }
 
+    const llmStart = performance.now();
     const examineResult = await examineDom(
       instruction,
       {
@@ -130,11 +138,14 @@ export async function findElementWithInstruction(
       },
       llm
     );
+    const llmDurationMs = performance.now() - llmStart;
 
     // Store last attempt's data for error case
     lastDomState = domState;
     lastElementMap = elementMap;
     lastLlmResponse = examineResult?.llmResponse;
+    lastMessages = examineResult.messages;
+    lastDuration = llmDurationMs;
 
     // Check if element was found
     if (examineResult && examineResult.elements.length > 0) {
@@ -149,6 +160,8 @@ export async function findElementWithInstruction(
         domState,
         elementMap,
         llmResponse: examineResult.llmResponse,
+        llmDurationMs,
+        messages: examineResult.messages,
       };
     }
 
@@ -170,5 +183,7 @@ export async function findElementWithInstruction(
     domState: lastDomState!,
     elementMap: lastElementMap!,
     llmResponse: lastLlmResponse,
+    llmDurationMs: lastDuration,
+    messages: lastMessages,
   };
 }

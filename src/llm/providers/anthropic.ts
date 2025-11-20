@@ -158,6 +158,12 @@ export class AnthropicClient implements HyperAgentLLM {
       tool_choice: toolChoice as any,
       ...request.options?.providerOptions,
     });
+    const usage = response.usage
+      ? {
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+        }
+      : undefined;
 
     const toolContent = response.content.find(
       (block: any) => block.type === "tool_use"
@@ -169,6 +175,7 @@ export class AnthropicClient implements HyperAgentLLM {
       return {
         rawText: JSON.stringify(response.content ?? []),
         parsed: null,
+        usage,
       };
     }
 
@@ -179,6 +186,7 @@ export class AnthropicClient implements HyperAgentLLM {
       return {
         rawText: JSON.stringify(toolContent),
         parsed: null,
+        usage,
       };
     }
 
@@ -199,6 +207,7 @@ export class AnthropicClient implements HyperAgentLLM {
       return {
         rawText: JSON.stringify(toolContent),
         parsed: null,
+        usage,
       };
     }
 
@@ -216,6 +225,7 @@ export class AnthropicClient implements HyperAgentLLM {
       return {
         rawText: JSON.stringify(toolContent),
         parsed: validated,
+        usage,
       };
     } catch (error) {
       console.warn(
@@ -225,6 +235,7 @@ export class AnthropicClient implements HyperAgentLLM {
       return {
         rawText: JSON.stringify(toolContent),
         parsed: null,
+        usage,
       };
     }
   }
@@ -258,12 +269,19 @@ export class AnthropicClient implements HyperAgentLLM {
       tool_choice: toolChoice as any,
       ...request.options?.providerOptions,
     });
+    const usage = response.usage
+      ? {
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+        }
+      : undefined;
 
     const content = response.content[0];
     if (!content || content.type !== "tool_use") {
       return {
         rawText: "",
         parsed: null,
+        usage,
       };
     }
 
@@ -273,11 +291,13 @@ export class AnthropicClient implements HyperAgentLLM {
       return {
         rawText: JSON.stringify(input),
         parsed: validated,
+        usage,
       };
     } catch {
       return {
         rawText: JSON.stringify(content.input),
         parsed: null,
+        usage,
       };
     }
   }

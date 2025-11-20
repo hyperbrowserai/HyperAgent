@@ -447,6 +447,7 @@ export const runAgentTask = async (
       const agentOutput = await (async () => {
         const maxAttempts = 3;
         let currentMsgs = msgs;
+        let lastLlmDuration = 0;
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
           const structuredResult = await retry({
@@ -464,6 +465,7 @@ export const runAgentTask = async (
                   currentMsgs
                 );
                 const llmDuration = performance.now() - llmStart;
+                lastLlmDuration = llmDuration;
                 logPerf(
                   ctx.debug,
                   `[Perf][runAgentTask] llm.invokeStructured(step ${currStep})`,
@@ -475,6 +477,17 @@ export const runAgentTask = async (
             onError: (...args: Array<unknown>) => {
               console.error("[LLM][StructuredOutput] Retry error", ...args);
             },
+          });
+
+          ctx.recordLLMUsage?.(ctx.opType ?? "act", {
+            usage: structuredResult.usage,
+            durationMs: lastLlmDuration,
+            prompt: currentMsgs,
+            response: structuredResult.rawText,
+            url: page.url(),
+            instruction: taskState.task,
+            selector: params?.selector,
+            model: ctx.llm.getModelId?.() ?? "unknown-model",
           });
 
           if (structuredResult.parsed) {

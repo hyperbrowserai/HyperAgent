@@ -5,7 +5,7 @@
  * matching elements from the accessibility tree with confidence scores.
  */
 
-import { HyperAgentLLM } from "@/llm/types";
+import { HyperAgentLLM, HyperAgentMessage } from "@/llm/types";
 import { ExamineDomContext, ExamineDomResult } from "./types";
 import {
   buildExamineDomSystemPrompt,
@@ -43,11 +43,16 @@ export async function examineDom(
   llm: HyperAgentLLM
 ): Promise<{
   elements: ExamineDomResultsType["elements"];
-  llmResponse: { rawText: string; parsed: unknown };
+  llmResponse: { rawText: string; parsed: unknown; usage?: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number } };
+  messages: HyperAgentMessage[];
 }> {
   // Build prompts for element finding
   const systemPrompt = buildExamineDomSystemPrompt();
   const userPrompt = buildExamineDomUserPrompt(instruction, context.tree);
+  const messages: HyperAgentMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
 
   try {
     // Call LLM with structured output to find elements
@@ -58,20 +63,18 @@ export async function examineDom(
           temperature: 0, // Deterministic for element finding
         },
       },
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ]
+      messages
     );
 
     const llmResponse = {
       rawText: response.rawText,
       parsed: response.parsed,
+      usage: response.usage,
     };
 
     if (!response.parsed || !response.parsed.elements) {
       // No elements found or parsing failed
-      return { elements: [], llmResponse };
+      return { elements: [], llmResponse, messages };
     }
 
     // Sort by confidence descending (highest confidence first)
@@ -95,7 +98,7 @@ export async function examineDom(
       return true;
     });
 
-    return { elements: validatedResults, llmResponse };
+    return { elements: validatedResults, llmResponse, messages };
   } catch (error) {
     console.error("[examineDom] Error finding elements:", error);
     // Return empty result on error (graceful degradation)
@@ -105,6 +108,7 @@ export async function examineDom(
         rawText: "",
         parsed: null,
       },
+      messages,
     };
   }
 }

@@ -71,6 +71,11 @@ export type StructuredOutputRequest<TSchema extends z.ZodTypeAny> = {
 export type HyperAgentStructuredResult<TSchema extends z.ZodTypeAny> = {
   rawText: string;
   parsed: z.infer<TSchema> | null;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    reasoningTokens?: number;
+  };
 };
 
 export interface HyperAgentLLM {

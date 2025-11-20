@@ -183,10 +183,17 @@ export class OpenAIClient implements HyperAgentLLM {
     }
 
     const content = choice.message.content;
+    const usage = response.usage
+      ? {
+          inputTokens: response.usage.prompt_tokens,
+          outputTokens: response.usage.completion_tokens,
+        }
+      : undefined;
     if (!content || typeof content !== "string") {
       return {
         rawText: "",
         parsed: null,
+        usage,
       };
     }
 
@@ -196,11 +203,13 @@ export class OpenAIClient implements HyperAgentLLM {
       return {
         rawText: content,
         parsed: validated,
+        usage,
       };
     } catch {
       return {
         rawText: content,
         parsed: null,
+        usage,
       };
     }
   }

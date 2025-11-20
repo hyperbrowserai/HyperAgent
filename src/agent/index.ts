@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs/promises";
 import { Browser, BrowserContext, Page } from "playwright-core";
 import { v4 as uuidv4 } from "uuid";
 
@@ -9,6 +10,7 @@ import {
   MCPServerConfig,
 } from "@/types/config";
 import { HyperAgentLLM, createLLMClient } from "@/llm/providers";
+import { HyperAgentMessage } from "@/llm/types";
 import {
   ActionContext,
   ActionType,
@@ -30,6 +32,12 @@ import {
   LocalBrowserProvider,
 } from "../browser-providers";
 import { HyperagentError } from "./error";
+import {
+  HyperAgentActError,
+  HyperAgentError,
+  HyperAgentExtractError,
+  HyperAgentObserveError,
+} from "@/error";
 import { findElementWithInstruction } from "./shared/find-element";
 import {
   A11yDOMState,
@@ -38,9 +46,10 @@ import {
 } from "../context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
+import { LLMUsagePayload } from "./tools/types";
 import { HyperPage, HyperVariable } from "../types/agent/types";
 import { z } from "zod";
-import { ErrorEmitter } from "../utils";
+import { AgentHistory, ErrorEmitter, MetricsTracker } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { performance } from "perf_hooks";
 import { ExamineDomResult } from "./examine-dom/types";
@@ -56,6 +65,12 @@ import { captureDOMState } from "./shared/dom-capture";
 import { OperationType } from "@/types/metrics";
 import { sha256, stableStringify } from "@/utils/hash";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import {
+  AgentHistoryEntry,
+  HyperMetrics,
+  InferenceLogEntry,
+  TokenUsage,
+} from "@/types";
 
 type CacheTokens = {
   promptTokens?: number;
@@ -95,6 +110,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private cdpActionsEnabled: boolean;
   private cacheDir?: string;
   private cacheManager: CacheManager;
+  private metricsTracker: MetricsTracker;
+  private historyBuffer: AgentHistory;
+  private inferenceLogPath?: string;
+  private logMetricsEnabled: boolean;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -137,6 +156,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const resolvedCacheDir = params.cacheDir ?? cacheDirFromEnv;
     this.cacheDir = resolvedCacheDir ? path.resolve(resolvedCacheDir) : undefined;
     this.cacheManager = new CacheManager(this.cacheDir);
+    this.metricsTracker = new MetricsTracker();
+    this.historyBuffer = new AgentHistory(params.historyLimit ?? 200);
+    this.inferenceLogPath = this.resolveInferenceLogPath(
+      params.logInferenceToFile
+    );
+    this.logMetricsEnabled = params.logMetrics ?? false;
 
     setDebugOptions(params.debugOptions, this.debug);
 
@@ -249,6 +274,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public getVariables(): Record<string, HyperVariable> {
     return this._variables;
+  }
+
+  public get metrics(): HyperMetrics {
+    return this.metricsTracker.snapshot();
+  }
+
+  public get history(): AgentHistoryEntry[] {
+    return this.historyBuffer.snapshot();
   }
 
   /**
@@ -472,6 +505,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         activePage: async () => activeTaskPage,
         opType,
         selectorWarnings,
+        recordLLMUsage: this.recordLLMUsage.bind(this),
       },
       taskState,
       mergedParams
@@ -535,12 +569,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       steps: [],
     };
     this.tasks[taskId] = taskState;
+    const mergedParams = params ?? {};
+    const opType: OperationType = mergedParams?.outputSchema ? "extract" : "act";
+    const selectorWarnings: string[] = [];
+    const metricsBefore = this.metricsTracker.snapshot();
+    const opStart = performance.now();
     try {
-      const mergedParams = params ?? {};
-      const opType: OperationType = mergedParams?.outputSchema
-        ? "extract"
-        : "act";
-      const selectorWarnings: string[] = [];
 
       const cachePrep = await this.prepareCache<TaskOutput>(activeTaskPage, {
         opType,
@@ -562,6 +596,27 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         taskState.status = TaskStatus.COMPLETED;
         taskState.output = cachePrep.hit.output;
         taskState.steps = cachePrep.hit.steps ?? [];
+        const metricsAfter = this.metricsTracker.snapshot();
+        const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+        const duration = performance.now() - opStart;
+        const warningText =
+          selectorWarnings.length > 0
+            ? selectorWarnings.join(" | ")
+            : cachePrep.warning;
+        this.pushHistoryEntry({
+          id: taskId,
+          ts: Date.now(),
+          opType,
+          url: page.url(),
+          instruction: task,
+          selector: mergedParams.selector,
+          model: this.llm.getModelId?.() ?? "unknown-model",
+          durationMs: Math.round(duration),
+          promptTokens: delta.promptTokens,
+          completionTokens: delta.completionTokens,
+          cacheHit: true,
+          warning: warningText,
+        });
         return cachePrep.hit;
       }
 
@@ -579,20 +634,67 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           initialDomState: cachePrep?.domState,
           opType,
           selectorWarnings,
+          recordLLMUsage: this.recordLLMUsage.bind(this),
         },
         taskState,
         mergedParams
       );
       this.context?.off("page", onPage);
       const duration = performance.now() - taskStart;
+      const metricsAfter = this.metricsTracker.snapshot();
+      const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+      const opDuration = performance.now() - opStart;
       if (cachePrep && result.status === TaskStatus.COMPLETED) {
-        cachePrep.write(result, Math.round(duration));
+        cachePrep.write(result, Math.round(duration), {
+          promptTokens: delta.promptTokens,
+          completionTokens: delta.completionTokens,
+        });
       }
+      const warningText =
+        selectorWarnings.length > 0 ? selectorWarnings.join(" | ") : undefined;
+      this.pushHistoryEntry({
+        id: taskId,
+        ts: Date.now(),
+        opType,
+        url: page.url(),
+        instruction: task,
+        selector: mergedParams.selector,
+        model: this.llm.getModelId?.() ?? "unknown-model",
+        durationMs: Math.round(opDuration),
+        promptTokens: delta.promptTokens,
+        completionTokens: delta.completionTokens,
+        cacheHit: false,
+        warning: warningText,
+      });
       return result;
     } catch (error) {
       this.context?.off("page", onPage);
       taskState.status = TaskStatus.FAILED;
-      throw error;
+      const metricsAfter = this.metricsTracker.snapshot();
+      const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+      const opDuration = performance.now() - opStart;
+      const warningText =
+        selectorWarnings.length > 0 ? selectorWarnings.join(" | ") : undefined;
+      this.pushHistoryEntry({
+        id: taskId,
+        ts: Date.now(),
+        opType,
+        url: page.url(),
+        instruction: task,
+        selector: mergedParams.selector,
+        model: this.llm.getModelId?.() ?? "unknown-model",
+        durationMs: Math.round(opDuration),
+        promptTokens: delta.promptTokens,
+        completionTokens: delta.completionTokens,
+        cacheHit: false,
+        warning: warningText,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (error instanceof HyperAgentError) {
+        throw error;
+      }
+      throw this.toOperationError(opType, errorMsg, page, task, error);
     }
   }
 
@@ -618,7 +720,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     element: ExamineDomResult;
     domState: A11yDOMState;
     elementMap: Map<string, AccessibilityNode>;
-    llmResponse: { rawText: string; parsed: unknown };
+    llmResponse: {
+      rawText: string;
+      parsed: unknown;
+      usage?: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number };
+    };
+    llmDurationMs?: number;
+    messages?: HyperAgentMessage[];
   }> {
     // Delegate to shared utility
     const result = await findElementWithInstruction(
@@ -632,6 +740,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         initialDomState,
       }
     );
+    this.recordLLMUsage("act", {
+      usage: result.llmResponse?.usage,
+      durationMs: result.llmDurationMs,
+      prompt: result.messages,
+      response: result.llmResponse?.rawText,
+      url: page.url(),
+      instruction,
+    });
 
     // Check if element was found
     if (result.success && result.element) {
@@ -641,6 +757,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         domState: result.domState,
         elementMap: result.elementMap,
         llmResponse: result.llmResponse!,
+        llmDurationMs: result.llmDurationMs,
+        messages: result.messages,
       };
     }
 
@@ -846,6 +964,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     pageOrGetter: Page | (() => Page),
     _params?: TaskParams
   ): Promise<TaskOutput> {
+    const opType: OperationType = "act";
+    const metricsBefore = this.metricsTracker.snapshot();
+    const opStart = performance.now();
     const params = _params ?? {};
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
@@ -865,6 +986,24 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     });
 
     if (cachePrep?.hit) {
+      const metricsAfter = this.metricsTracker.snapshot();
+      const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+      const opDuration = performance.now() - opStart;
+      const warningText = cachePrep?.warning;
+      this.pushHistoryEntry({
+        id: uuidv4(),
+        ts: Date.now(),
+        opType,
+        url: page.url(),
+        instruction,
+        selector: params.selector,
+        model: this.llm.getModelId?.() ?? "unknown-model",
+        durationMs: Math.round(opDuration),
+        promptTokens: delta.promptTokens,
+        completionTokens: delta.completionTokens,
+        cacheHit: true,
+        warning: warningText,
+      });
       return cachePrep.hit;
     }
 
@@ -1015,6 +1154,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         success: true,
       });
 
+      const metricsAfter = this.metricsTracker.snapshot();
+      const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+      const opDuration = performance.now() - opStart;
       if (cachePrep) {
         cachePrep.write(
           {
@@ -1022,9 +1164,28 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             steps: [],
             output: `Successfully executed: ${instruction}`,
           },
-          Math.round(performance.now() - actionStart)
+          Math.round(performance.now() - actionStart),
+          {
+            promptTokens: delta.promptTokens,
+            completionTokens: delta.completionTokens,
+          }
         );
       }
+      const warningText = cachePrep?.warning;
+      this.pushHistoryEntry({
+        id: uuidv4(),
+        ts: Date.now(),
+        opType,
+        url: page.url(),
+        instruction,
+        selector: params.selector,
+        model: this.llm.getModelId?.() ?? "unknown-model",
+        durationMs: Math.round(opDuration),
+        promptTokens: delta.promptTokens,
+        completionTokens: delta.completionTokens,
+        cacheHit: false,
+        warning: warningText,
+      });
 
       logPerf(this.debug, "[Perf][executeSingleAction] total", actionStart);
       return {
@@ -1050,14 +1211,149 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         success: false,
       });
 
+      const metricsAfter = this.metricsTracker.snapshot();
+      const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+      const opDuration = performance.now() - opStart;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const warningText = cachePrep?.warning;
+      this.pushHistoryEntry({
+        id: uuidv4(),
+        ts: Date.now(),
+        opType,
+        url: page.url(),
+        instruction,
+        selector: params.selector,
+        model: this.llm.getModelId?.() ?? "unknown-model",
+        durationMs: Math.round(opDuration),
+        promptTokens: delta.promptTokens,
+        completionTokens: delta.completionTokens,
+        cacheHit: false,
+        warning: warningText,
+        error: errorMsg,
+      });
+
       // Re-throw HyperagentErrors as-is
-      if (error instanceof HyperagentError) {
+      if (error instanceof HyperAgentError) {
         throw error;
       }
       // Wrap other errors
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new HyperagentError(`Failed to execute action: ${errorMsg}`, 500);
+      throw this.toOperationError(
+        opType,
+        `Failed to execute action: ${errorMsg}`,
+        page,
+        instruction,
+        error
+      );
     }
+  }
+
+  private resolveInferenceLogPath(
+    target?: string | true
+  ): string | undefined {
+    if (!target) return undefined;
+    return target === true
+      ? path.resolve("debug/llm.log")
+      : path.resolve(target);
+  }
+
+  private async appendInferenceLog(entry: InferenceLogEntry): Promise<void> {
+    if (!this.inferenceLogPath) return;
+    try {
+      await fs.mkdir(path.dirname(this.inferenceLogPath), { recursive: true });
+      await fs.appendFile(
+        this.inferenceLogPath,
+        `${JSON.stringify(entry)}\n`,
+        "utf8"
+      );
+    } catch (error) {
+      if (this.debug) {
+        console.warn("[HyperAgent] Failed to write inference log:", error);
+      }
+    }
+  }
+
+  private recordLLMUsage(
+    opType: OperationType,
+    payload: LLMUsagePayload
+  ): void {
+    const usage = payload.usage as
+      | (TokenUsage & { inputTokens?: number; outputTokens?: number })
+      | undefined;
+    const promptTokens =
+      usage?.promptTokens ?? usage?.inputTokens ?? 0;
+    const completionTokens =
+      usage?.completionTokens ?? usage?.outputTokens ?? 0;
+    const reasoningTokens = usage?.reasoningTokens;
+    const durationMs = payload.durationMs ?? 0;
+
+    this.metricsTracker.recordOperation(opType, {
+      promptTokens,
+      completionTokens,
+      reasoningTokens,
+      durationMs,
+    });
+
+    if (!this.inferenceLogPath) {
+      return;
+    }
+
+    const entry: InferenceLogEntry = {
+      ts: new Date().toISOString(),
+      opType,
+      model: payload.model ?? this.llm.getModelId?.() ?? "unknown-model",
+      cacheHit: payload.cacheHit ?? false,
+      prompt: payload.prompt ?? [],
+      response: payload.response ?? "",
+      promptTokens,
+      completionTokens,
+      reasoningTokens,
+      durationMs,
+      url: payload.url,
+      instruction: payload.instruction,
+      selector: payload.selector,
+    };
+
+    void this.appendInferenceLog(entry);
+  }
+
+  private computeOpDelta(
+    opType: OperationType,
+    before: HyperMetrics,
+    after: HyperMetrics
+  ): { promptTokens: number; completionTokens: number; durationMs: number } {
+    const beforeOp = before.byOp[opType];
+    const afterOp = after.byOp[opType];
+    return {
+      promptTokens: afterOp.promptTokens - beforeOp.promptTokens,
+      completionTokens: afterOp.completionTokens - beforeOp.completionTokens,
+      durationMs: afterOp.durationMs - beforeOp.durationMs,
+    };
+  }
+
+  private pushHistoryEntry(entry: AgentHistoryEntry): void {
+    this.historyBuffer.add(entry);
+  }
+
+  private toOperationError(
+    opType: OperationType,
+    message: string,
+    page: Page,
+    instruction: string,
+    cause?: unknown
+  ): HyperAgentError {
+    const context = {
+      opType,
+      url: page.url(),
+      instruction,
+      cause,
+    };
+    if (opType === "extract") {
+      return new HyperAgentExtractError(message, context);
+    }
+    if (opType === "observe") {
+      return new HyperAgentObserveError(message, context);
+    }
+    return new HyperAgentActError(message, context);
   }
 
   private computeSchemaHash(schema?: z.ZodTypeAny): string | undefined {
@@ -1129,6 +1425,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const cached = await this.cacheManager.read<Result>(keyParts);
     if (cached) {
+      this.metricsTracker.recordCacheHit();
       return {
         hit: cached.result,
         domHash,
@@ -1137,12 +1434,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       };
     }
 
+    this.metricsTracker.recordCacheMiss();
+
     return {
       domState: workingDomState,
       domHash,
       keyParts,
       warning,
       write: (result, durationMs, tokens) => {
+        this.metricsTracker.recordCacheWrite();
         this.cacheManager.write({
           ...keyParts,
           result,

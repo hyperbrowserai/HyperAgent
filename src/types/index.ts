@@ -27,7 +27,13 @@ import {
   HyperAgentConfig,
   HyperAgentOptions,
 } from "./config";
-import { HyperMetrics, OpMetrics, OperationType } from "./metrics";
+import {
+  HyperMetrics,
+  OpMetrics,
+  OperationType,
+  TokenUsage,
+  InferenceLogEntry,
+} from "./metrics";
 import { AgentHistoryEntry } from "./history";
 
 // Browser Provider Types
@@ -60,6 +66,8 @@ export {
   HyperMetrics,
   OpMetrics,
   OperationType,
+  TokenUsage,
+  InferenceLogEntry,
   AgentHistoryEntry,
 
   // Browser Provider Types

@@ -20,6 +20,7 @@ import {
   TaskStatus,
 } from "@/types";
 import { HyperagentError } from "@/agent/error";
+import { BrowserProviders } from "@/types/config";
 import { SessionDetail } from "@hyperbrowser/sdk/types";
 
 const program = new Command();
@@ -39,6 +40,12 @@ program
   .option("-f, --file <file path>", "Path to a file containing a command")
   .option("-m, --mcp <mcp config file>", "Path to a file containing mcp config")
   .option("--hyperbrowser", "Use Hyperbrowser for the browser provider")
+  .option("--cache-dir <path>", "Directory to persist the deterministic cache")
+  .option("--log-metrics", "Print aggregated metrics when the CLI exits")
+  .option(
+    "--log-inference [path]",
+    "Append inference JSONL (defaults to debug/llm.log when no path is provided)"
+  )
   .action(async function () {
     const options = this.opts();
     const debug = (options.debug as boolean) || false;
@@ -46,6 +53,32 @@ program
     let taskDescription = (options.command as string) || undefined;
     const filePath = (options.file as string) || undefined;
     const mcpPath = (options.mcp as string) || undefined;
+    const cacheDir = (options.cacheDir as string) || undefined;
+    const logMetrics = Boolean(options.logMetrics);
+    const logInferenceOpt = options.logInference as string | boolean | undefined;
+    const logInferenceToFile =
+      logInferenceOpt === true
+        ? true
+        : (logInferenceOpt as string | undefined);
+    let agent!: HyperAgent<BrowserProviders>;
+    const shutdown = async (code = 0): Promise<void> => {
+      if (logMetrics && agent) {
+        console.log(
+          chalk.blue("Metrics summary"),
+          "\n",
+          JSON.stringify(agent.metrics, null, 2)
+        );
+      }
+      if (agent) {
+        try {
+          await agent.closeAgent();
+        } catch (err) {
+          console.error("Error during shutdown:", err);
+          code = 1;
+        }
+      }
+      process.exit(code);
+    };
 
     console.log(chalk.blue("HyperAgent CLI"));
     currentSpinner.info(
@@ -68,9 +101,12 @@ program
         process.env.HYPERBROWSER_API_KEY = apiKey; // Set it for the current process
       }
 
-      const agent = new HyperAgent({
+      agent = new HyperAgent({
         debug: debug,
         browserProvider: useHB ? "Hyperbrowser" : "Local",
+        cacheDir,
+        logMetrics,
+        logInferenceToFile,
         customActions: [
           UserInteractionAction(
             async ({ message, kind, choices }): Promise<ActionOutput> => {
@@ -170,13 +206,7 @@ program
             currentSpinner.stopAndPersist();
           }
           console.log("\nShutting down HyperAgent");
-          try {
-            await agent.closeAgent();
-            process.exit(0);
-          } catch (err) {
-            console.error("Error during shutdown:", err);
-            process.exit(1);
-          }
+          await shutdown(0);
         }
       });
 
@@ -246,7 +276,7 @@ program
             throw error;
           });
         } else {
-          process.exit(0);
+          await shutdown(0);
         }
       };
       if (!taskDescription) {
@@ -294,6 +324,7 @@ program
           console.trace(err);
         }
       }
+      await shutdown(1);
     }
   });
 
