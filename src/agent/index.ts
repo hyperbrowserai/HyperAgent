@@ -1376,7 +1376,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       params?: TaskParams;
     }
   ): Promise<CachePreparation<Result> | null> {
-    if (!this.cacheManager.isEnabled()) {
+    // Do not cache mutating actions; cache is only safe for extract/observe flows
+    if (!this.cacheManager.isEnabled() || options.opType === "act") {
       return null;
     }
 
