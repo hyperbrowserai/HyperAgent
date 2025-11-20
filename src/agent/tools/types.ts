@@ -4,6 +4,7 @@ import { HyperAgentLLM } from "@/llm/types";
 import { HyperVariable } from "@/types/agent/types";
 import { Page } from "playwright-core";
 import { A11yDOMState } from "@/context-providers/a11y-dom/types";
+import { OperationType } from "@/types/metrics";
 
 export interface AgentCtx {
   mcpClient?: MCPClient;
@@ -21,4 +22,6 @@ export interface AgentCtx {
   }>;
   activePage?: () => Promise<Page>;
   initialDomState?: A11yDOMState;
+  opType?: OperationType;
+  selectorWarnings?: string[];
 }

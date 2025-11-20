@@ -39,6 +39,7 @@ import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
 import { HyperAgentMessage } from "@/llm/types";
 import { Jimp } from "jimp";
+import { scopeDomWithSelector } from "@/context-providers/dom/selector-scope";
 
 // DomChunkAggregator logic moved to shared/dom-capture.ts
 
@@ -354,6 +355,25 @@ export const runAgentTask = async (
         taskState.status = TaskStatus.FAILED;
         taskState.error = "Failed to retrieve DOM state";
         break;
+      }
+
+      let selectorWarning: string | undefined;
+      if (params?.selector && ctx.opType === "extract") {
+        const scoped = await scopeDomWithSelector(
+          page,
+          domState,
+          params.selector,
+          params.selectorType
+        );
+        selectorWarning = scoped.warning;
+        domState = scoped.domState;
+      }
+      if (
+        selectorWarning &&
+        ctx.selectorWarnings &&
+        !ctx.selectorWarnings.includes(selectorWarning)
+      ) {
+        ctx.selectorWarnings.push(selectorWarning);
       }
 
       // If visual mode enabled, composite screenshot with overlay

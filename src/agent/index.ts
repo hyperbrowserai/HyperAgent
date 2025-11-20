@@ -51,6 +51,7 @@ import { initializeRuntimeContext } from "./shared/runtime-context";
 import { performAction } from "./actions/shared/perform-action";
 import { CacheKeyParts, CacheManager } from "@/utils/cache";
 import { computeDomHash } from "@/context-providers/dom/dom-hash";
+import { scopeDomWithSelector } from "@/context-providers/dom/selector-scope";
 import { captureDOMState } from "./shared/dom-capture";
 import { OperationType } from "@/types/metrics";
 import { sha256, stableStringify } from "@/utils/hash";
@@ -66,6 +67,7 @@ interface CachePreparation<Result> {
   domState?: A11yDOMState;
   domHash?: string;
   keyParts?: CacheKeyParts;
+  warning?: string;
   write: (result: Result, durationMs: number, tokens?: CacheTokens) => void;
 }
 
@@ -456,6 +458,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     const mergedParams = params ?? {};
+    const opType: OperationType = mergedParams.outputSchema ? "extract" : "act";
+    const selectorWarnings: string[] = [];
     runAgentTask(
       {
         llm: this.llm,
@@ -466,6 +470,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         variables: this._variables,
         cdpActions: this.cdpActionsEnabled,
         activePage: async () => activeTaskPage,
+        opType,
+        selectorWarnings,
       },
       taskState,
       mergedParams
@@ -534,6 +540,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const opType: OperationType = mergedParams?.outputSchema
         ? "extract"
         : "act";
+      const selectorWarnings: string[] = [];
 
       const cachePrep = await this.prepareCache<TaskOutput>(activeTaskPage, {
         opType,
@@ -542,6 +549,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         outputSchema: mergedParams.outputSchema,
         params: mergedParams,
       });
+
+      if (
+        cachePrep?.warning &&
+        !selectorWarnings.includes(cachePrep.warning)
+      ) {
+        selectorWarnings.push(cachePrep.warning);
+      }
 
       if (cachePrep?.hit) {
         this.context?.off("page", onPage);
@@ -563,6 +577,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           cdpActions: this.cdpActionsEnabled,
           activePage: async () => activeTaskPage,
           initialDomState: cachePrep?.domState,
+          opType,
+          selectorWarnings,
         },
         taskState,
         mergedParams
@@ -1083,7 +1099,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return null;
     }
 
-    const domHash = await computeDomHash(page, domState.domState);
+    let workingDomState = domState;
+    let warning: string | undefined;
+
+    if (options.selector && options.opType === "extract") {
+      const scoped = await scopeDomWithSelector(
+        page,
+        domState,
+        options.selector,
+        options.params?.selectorType
+      );
+      workingDomState = scoped.domState;
+      warning = scoped.warning;
+    }
+
+    const domHash = await computeDomHash(page, workingDomState.domState);
     if (!domHash) {
       return null;
     }
@@ -1102,14 +1132,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return {
         hit: cached.result,
         domHash,
+        warning,
         write: () => {},
       };
     }
 
     return {
-      domState,
+      domState: workingDomState,
       domHash,
       keyParts,
+      warning,
       write: (result, durationMs, tokens) => {
         this.cacheManager.write({
           ...keyParts,
