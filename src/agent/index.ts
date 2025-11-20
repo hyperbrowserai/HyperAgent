@@ -1,9 +1,10 @@
+import path from "path";
 import { Browser, BrowserContext, Page } from "playwright-core";
 import { v4 as uuidv4 } from "uuid";
 
 import {
   BrowserProviders,
-  HyperAgentConfig,
+  HyperAgentOptions,
   MCPConfig,
   MCPServerConfig,
 } from "@/types/config";
@@ -48,6 +49,25 @@ import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import { setDebugOptions } from "@/debug/options";
 import { initializeRuntimeContext } from "./shared/runtime-context";
 import { performAction } from "./actions/shared/perform-action";
+import { CacheKeyParts, CacheManager } from "@/utils/cache";
+import { computeDomHash } from "@/context-providers/dom/dom-hash";
+import { captureDOMState } from "./shared/dom-capture";
+import { OperationType } from "@/types/metrics";
+import { sha256, stableStringify } from "@/utils/hash";
+import { zodToJsonSchema } from "zod-to-json-schema";
+
+type CacheTokens = {
+  promptTokens?: number;
+  completionTokens?: number;
+};
+
+interface CachePreparation<Result> {
+  hit?: Result;
+  domState?: A11yDOMState;
+  domHash?: string;
+  keyParts?: CacheKeyParts;
+  write: (result: Result, durationMs: number, tokens?: CacheTokens) => void;
+}
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -67,10 +87,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private mcpClient: MCPClient | undefined;
   private browserProvider: T extends "Hyperbrowser"
     ? HyperbrowserProvider
-    : LocalBrowserProvider;
+  : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private cdpActionsEnabled: boolean;
+  private cacheDir?: string;
+  private cacheManager: CacheManager;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -89,7 +111,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     this._currentPage = page;
   }
 
-  constructor(params: HyperAgentConfig<T> = {}) {
+  constructor(params: HyperAgentOptions<T> = {}) {
     if (!params.llm) {
       if (process.env.OPENAI_API_KEY) {
         this.llm = createLLMClient({
@@ -108,6 +130,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.llm = params.llm;
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
+
+    const cacheDirFromEnv = process.env.HYPERAGENT_CACHE_DIR;
+    const resolvedCacheDir = params.cacheDir ?? cacheDirFromEnv;
+    this.cacheDir = resolvedCacheDir ? path.resolve(resolvedCacheDir) : undefined;
+    this.cacheManager = new CacheManager(this.cacheDir);
 
     setDebugOptions(params.debugOptions, this.debug);
 
@@ -304,6 +331,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   /**
+   * Clear all deterministic cache entries (best-effort).
+   */
+  public async clearCache(): Promise<void> {
+    await this.cacheManager.clear();
+  }
+
+  /**
    * Get the current page or create a new one if none exists
    * @returns The current page
    */
@@ -497,6 +531,27 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     this.tasks[taskId] = taskState;
     try {
       const mergedParams = params ?? {};
+      const opType: OperationType = mergedParams?.outputSchema
+        ? "extract"
+        : "act";
+
+      const cachePrep = await this.prepareCache<TaskOutput>(activeTaskPage, {
+        opType,
+        instruction: task,
+        selector: mergedParams.selector,
+        outputSchema: mergedParams.outputSchema,
+        params: mergedParams,
+      });
+
+      if (cachePrep?.hit) {
+        this.context?.off("page", onPage);
+        taskState.status = TaskStatus.COMPLETED;
+        taskState.output = cachePrep.hit.output;
+        taskState.steps = cachePrep.hit.steps ?? [];
+        return cachePrep.hit;
+      }
+
+      const taskStart = performance.now();
       const result = await runAgentTask(
         {
           llm: this.llm,
@@ -507,11 +562,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           variables: this._variables,
           cdpActions: this.cdpActionsEnabled,
           activePage: async () => activeTaskPage,
+          initialDomState: cachePrep?.domState,
         },
         taskState,
         mergedParams
       );
       this.context?.off("page", onPage);
+      const duration = performance.now() - taskStart;
+      if (cachePrep && result.status === TaskStatus.COMPLETED) {
+        cachePrep.write(result, Math.round(duration));
+      }
       return result;
     } catch (error) {
       this.context?.off("page", onPage);
@@ -536,7 +596,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     page: Page,
     maxRetries: number,
     retryDelayMs: number,
-    startTime: string
+    startTime: string,
+    initialDomState?: A11yDOMState
   ): Promise<{
     element: ExamineDomResult;
     domState: A11yDOMState;
@@ -552,6 +613,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         maxRetries,
         retryDelayMs,
         debug: this.debug,
+        initialDomState,
       }
     );
 
@@ -768,6 +830,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     pageOrGetter: Page | (() => Page),
     _params?: TaskParams
   ): Promise<TaskOutput> {
+    const params = _params ?? {};
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
     if (this.debug) {
@@ -778,7 +841,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       typeof pageOrGetter === "function" ? pageOrGetter() : pageOrGetter;
     const initialPage = getPage();
 
-    let domState: A11yDOMState | null = null;
+    const cachePrep = await this.prepareCache<TaskOutput>(initialPage, {
+      opType: "act",
+      instruction,
+      selector: params.selector,
+      params,
+    });
+
+    if (cachePrep?.hit) {
+      return cachePrep.hit;
+    }
+
+    let domState: A11yDOMState | null = cachePrep?.domState ?? null;
     let elementMap: Map<string, AccessibilityNode> | null = null;
 
     try {
@@ -794,7 +868,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         initialPage,
         HyperAgent.AIACTION_CONFIG.MAX_RETRIES,
         HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS,
-        startTime
+        startTime,
+        domState ?? undefined
       );
 
       // Check if page context switched during findElement (e.g. new tab opened by previous action)
@@ -924,6 +999,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         success: true,
       });
 
+      if (cachePrep) {
+        cachePrep.write(
+          {
+            status: TaskStatus.COMPLETED,
+            steps: [],
+            output: `Successfully executed: ${instruction}`,
+          },
+          Math.round(performance.now() - actionStart)
+        );
+      }
+
       logPerf(this.debug, "[Perf][executeSingleAction] total", actionStart);
       return {
         status: TaskStatus.COMPLETED,
@@ -956,6 +1042,86 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const errorMsg = error instanceof Error ? error.message : String(error);
       throw new HyperagentError(`Failed to execute action: ${errorMsg}`, 500);
     }
+  }
+
+  private computeSchemaHash(schema?: z.ZodTypeAny): string | undefined {
+    if (!schema) return undefined;
+    try {
+      const schemaJson = zodToJsonSchema(schema);
+      return sha256(stableStringify(schemaJson));
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async prepareCache<Result>(
+    page: Page,
+    options: {
+      opType: OperationType;
+      instruction: string;
+      selector?: string;
+      outputSchema?: z.ZodTypeAny;
+      params?: TaskParams;
+    }
+  ): Promise<CachePreparation<Result> | null> {
+    if (!this.cacheManager.isEnabled()) {
+      return null;
+    }
+
+    const useDomCache = options.params?.useDomCache === true;
+    const enableStreaming = options.params?.enableDomStreaming === true;
+    const enableVisualMode = options.params?.enableVisualMode ?? false;
+
+    const domState = await captureDOMState(page, {
+      debug: this.debug,
+      useCache: useDomCache,
+      enableVisualMode,
+      enableStreaming,
+    }).catch(() => null);
+
+    if (!domState) {
+      return null;
+    }
+
+    const domHash = await computeDomHash(page, domState.domState);
+    if (!domHash) {
+      return null;
+    }
+
+    const keyParts: CacheKeyParts = {
+      opType: options.opType,
+      url: page.url(),
+      instruction: options.instruction,
+      selector: options.selector,
+      schemaHash: this.computeSchemaHash(options.outputSchema),
+      domHash,
+    };
+
+    const cached = await this.cacheManager.read<Result>(keyParts);
+    if (cached) {
+      return {
+        hit: cached.result,
+        domHash,
+        write: () => {},
+      };
+    }
+
+    return {
+      domState,
+      domHash,
+      keyParts,
+      write: (result, durationMs, tokens) => {
+        this.cacheManager.write({
+          ...keyParts,
+          result,
+          createdAt: new Date().toISOString(),
+          durationMs,
+          model: this.llm.getModelId?.() ?? "unknown-model",
+          promptTokens: tokens?.promptTokens,
+          completionTokens: tokens?.completionTokens,
+        });
+      },
+    };
   }
 
   /**

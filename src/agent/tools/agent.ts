@@ -267,6 +267,7 @@ export const runAgentTask = async (
   const MAX_CONSECUTIVE_FAILURES_OR_WAITS = 5;
   let lastOverlayKey: string | null = null;
   let lastScreenshotBase64: string | undefined;
+  let usedInitialDomState = false;
 
   try {
     // Initialize context at the start of the task
@@ -317,18 +318,23 @@ export const runAgentTask = async (
         const domFetchStart = performance.now();
 
         await waitForSettledDOM(page);
-        domState = await captureDOMState(page, {
-          useCache: useDomCache,
-          debug: ctx.debug,
-          enableVisualMode: params?.enableVisualMode ?? false,
-          debugStepDir: ctx.debug ? debugStepDir : undefined,
-          enableStreaming: enableDomStreaming,
-          onFrameChunk: enableDomStreaming
-            ? () => {
-                // captureDOMState handles aggregation
-              }
-            : undefined,
-        });
+        if (!usedInitialDomState && ctx.initialDomState) {
+          domState = ctx.initialDomState;
+          usedInitialDomState = true;
+        } else {
+          domState = await captureDOMState(page, {
+            useCache: useDomCache,
+            debug: ctx.debug,
+            enableVisualMode: params?.enableVisualMode ?? false,
+            debugStepDir: ctx.debug ? debugStepDir : undefined,
+            enableStreaming: enableDomStreaming,
+            onFrameChunk: enableDomStreaming
+              ? () => {
+                  // captureDOMState handles aggregation
+                }
+              : undefined,
+          });
+        }
 
         const domDuration = performance.now() - domFetchStart;
         stepMetrics.domCaptureMs = Math.round(domDuration);

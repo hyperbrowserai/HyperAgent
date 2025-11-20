@@ -40,6 +40,8 @@ export interface TaskParams {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
+  selector?: string;
+  selectorType?: "css" | "xpath";
 }
 
 export interface TaskOutput {

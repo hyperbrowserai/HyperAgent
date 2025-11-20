@@ -3,6 +3,7 @@ import { MCPClient } from "../mcp/client";
 import { HyperAgentLLM } from "@/llm/types";
 import { HyperVariable } from "@/types/agent/types";
 import { Page } from "playwright-core";
+import { A11yDOMState } from "@/context-providers/a11y-dom/types";
 
 export interface AgentCtx {
   mcpClient?: MCPClient;
@@ -19,4 +20,5 @@ export interface AgentCtx {
     rawResponse: string;
   }>;
   activePage?: () => Promise<Page>;
+  initialDomState?: A11yDOMState;
 }

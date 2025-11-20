@@ -27,6 +27,11 @@ export interface FindElementOptions {
    * Enable debug logging
    */
   debug?: boolean;
+
+  /**
+   * Optional pre-captured DOM snapshot to use on the first attempt.
+   */
+  initialDomState?: A11yDOMState;
 }
 
 export interface FindElementResult {
@@ -63,7 +68,12 @@ export async function findElementWithInstruction(
   llm: HyperAgentLLM,
   options: FindElementOptions = {}
 ): Promise<FindElementResult> {
-  const { maxRetries = 1, retryDelayMs = 1000, debug = false } = options;
+  const {
+    maxRetries = 1,
+    retryDelayMs = 1000,
+    debug = false,
+    initialDomState,
+  } = options;
 
   let lastDomState: A11yDOMState | null = null;
   let lastElementMap: Map<string, AccessibilityNode> | null = null;
@@ -83,12 +93,15 @@ export async function findElementWithInstruction(
     // Fetch FRESH a11y tree using the robust shared utility
     // captureDOMState handles DOM settling and retries for bad snapshots internally for this *single* capture attempt
     // We still need our outer loop for retrying the *finding* logic (e.g. if the LLM can't find the element)
-    const domState = await captureDOMState(page, {
-      debug,
-      // Don't retry capture inside captureDOMState too aggressively since we have an outer loop here
-      // But we do want it to handle transient CDP errors
-      maxRetries: 2,
-    });
+    const domState =
+      attempt === 0 && initialDomState
+        ? initialDomState
+        : await captureDOMState(page, {
+            debug,
+            // Don't retry capture inside captureDOMState too aggressively since we have an outer loop here
+            // But we do want it to handle transient CDP errors
+            maxRetries: 2,
+          });
 
     if (debug) {
       console.log(
