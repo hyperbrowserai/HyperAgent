@@ -498,38 +498,137 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const mergedParams = params ?? {};
     const opType: OperationType = mergedParams.outputSchema ? "extract" : "act";
     const selectorWarnings: string[] = [];
-    runAgentTask(
-      {
-        llm: this.llm,
-        actions: this.getActions(mergedParams.outputSchema),
-        tokenLimit: this.tokenLimit,
-        debug: this.debug,
-        mcpClient: this.mcpClient,
-        variables: this._variables,
-        cdpActions: this.cdpActionsEnabled,
-        activePage: async () => activeTaskPage,
-        opType,
-        selectorWarnings,
-        recordLLMUsage: this.recordLLMUsage.bind(this),
-      },
-      taskState,
-      mergedParams
-    )
-      .then(() => cleanup())
+    const metricsBefore = this.metricsTracker.snapshot();
+    const opStart = performance.now();
+
+    void this.prepareCache<TaskOutput>(activeTaskPage, {
+      opType,
+      instruction: task,
+      selector: mergedParams.selector,
+      outputSchema: mergedParams.outputSchema,
+      params: mergedParams,
+    })
+      .then((cachePrep) => {
+        if (cachePrep?.hit) {
+          cleanup();
+          taskState.status = TaskStatus.COMPLETED;
+          taskState.output = cachePrep.hit.output;
+          taskState.steps = cachePrep.hit.steps ?? [];
+          const metricsAfter = this.metricsTracker.snapshot();
+          const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+          const duration = performance.now() - opStart;
+          const warningText =
+            selectorWarnings.length > 0
+              ? selectorWarnings.join(" | ")
+              : cachePrep.warning;
+          this.pushHistoryEntry({
+            id: taskId,
+            ts: Date.now(),
+            opType,
+            url: activeTaskPage.url(),
+            instruction: task,
+            selector: mergedParams.selector,
+            model: this.llm.getModelId?.() ?? "unknown-model",
+            durationMs: Math.round(duration),
+            promptTokens: delta.promptTokens,
+            completionTokens: delta.completionTokens,
+            cacheHit: true,
+            warning: warningText,
+          });
+          return Promise.resolve(
+            mergedParams.onComplete?.(cachePrep.hit)
+          ).catch(() => {});
+        }
+
+        return runAgentTask(
+          {
+            llm: this.llm,
+            actions: this.getActions(mergedParams.outputSchema),
+            tokenLimit: this.tokenLimit,
+            debug: this.debug,
+            mcpClient: this.mcpClient,
+            variables: this._variables,
+            cdpActions: this.cdpActionsEnabled,
+            activePage: async () => activeTaskPage,
+            initialDomState: cachePrep?.domState,
+            opType,
+            selectorWarnings,
+            recordLLMUsage: this.recordLLMUsage.bind(this),
+          },
+          taskState,
+          mergedParams
+        )
+          .then((result) => {
+            cleanup();
+            const metricsAfter = this.metricsTracker.snapshot();
+            const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+            const duration = performance.now() - opStart;
+            if (cachePrep && result.status === TaskStatus.COMPLETED) {
+              cachePrep.write(result, Math.round(duration), {
+                promptTokens: delta.promptTokens,
+                completionTokens: delta.completionTokens,
+              });
+            }
+            const warningText =
+              selectorWarnings.length > 0 ? selectorWarnings.join(" | ") : undefined;
+            this.pushHistoryEntry({
+              id: taskId,
+              ts: Date.now(),
+              opType,
+              url: activeTaskPage.url(),
+              instruction: task,
+              selector: mergedParams.selector,
+              model: this.llm.getModelId?.() ?? "unknown-model",
+              durationMs: Math.round(duration),
+              promptTokens: delta.promptTokens,
+              completionTokens: delta.completionTokens,
+              cacheHit: false,
+              warning: warningText,
+            });
+          })
+          .catch((error: Error) => {
+            cleanup();
+            const failedTaskState = this.tasks[taskId];
+            const metricsAfter = this.metricsTracker.snapshot();
+            const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
+            const duration = performance.now() - opStart;
+            const warningText =
+              selectorWarnings.length > 0 ? selectorWarnings.join(" | ") : undefined;
+            this.pushHistoryEntry({
+              id: taskId,
+              ts: Date.now(),
+              opType,
+              url: activeTaskPage.url(),
+              instruction: task,
+              selector: mergedParams.selector,
+              model: this.llm.getModelId?.() ?? "unknown-model",
+              durationMs: Math.round(duration),
+              promptTokens: delta.promptTokens,
+              completionTokens: delta.completionTokens,
+              cacheHit: false,
+              warning: warningText,
+              error: error.message,
+            });
+            if (failedTaskState) {
+              failedTaskState.status = TaskStatus.FAILED;
+              failedTaskState.error = error.message;
+              this.errorEmitter.emit("error", error);
+            } else {
+              console.error(`Task state ${taskId} not found during error handling.`);
+            }
+          });
+      })
       .catch((error: Error) => {
         cleanup();
-        // Retrieve the correct state to update
         const failedTaskState = this.tasks[taskId];
-      if (failedTaskState) {
-        failedTaskState.status = TaskStatus.FAILED;
-        failedTaskState.error = error.message;
-        // Emit error on the central emitter, including the taskId
-        this.errorEmitter.emit("error", error);
-      } else {
-        // Fallback if task state somehow doesn't exist
-        console.error(`Task state ${taskId} not found during error handling.`);
-      }
-    });
+        if (failedTaskState) {
+          failedTaskState.status = TaskStatus.FAILED;
+          failedTaskState.error = error.message;
+          this.errorEmitter.emit("error", error);
+        } else {
+          console.error(`Task state ${taskId} not found during error handling.`);
+        }
+      });
     return this.getTaskControl(taskId);
   }
 
@@ -622,6 +721,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           cacheHit: true,
           warning: warningText,
         });
+        if (mergedParams.onComplete) {
+          await mergedParams.onComplete(cachePrep.hit);
+        }
         return cachePrep.hit;
       }
 
