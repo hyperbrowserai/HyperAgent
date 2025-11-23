@@ -10,6 +10,7 @@ import type { ExamineDomResult } from "../examine-dom/types";
 import type { AccessibilityNode } from "@/context-providers/a11y-dom/types";
 import { captureDOMState } from "./dom-capture";
 import type { A11yDOMState } from "@/context-providers/a11y-dom/types";
+import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 
 export interface FindElementOptions {
   /**
@@ -70,17 +71,15 @@ export async function findElementWithInstruction(
 
   // Retry loop with DOM refresh (matches aiAction's findElementWithRetry pattern)
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    
     if (debug) {
       if (attempt === 0) {
         console.log(`[findElement] Starting attempt ${attempt + 1}`);
       } else {
-        console.log(
-          `[findElement] Retry ${attempt + 1}/${maxRetries}`
-        );
+        console.log(`[findElement] Retry ${attempt + 1}/${maxRetries}`);
       }
     }
 
+    await waitForSettledDOM(page);
     // Fetch FRESH a11y tree using the robust shared utility
     // captureDOMState handles DOM settling and retries for bad snapshots internally for this *single* capture attempt
     // We still need our outer loop for retrying the *finding* logic (e.g. if the LLM can't find the element)
@@ -88,7 +87,7 @@ export async function findElementWithInstruction(
       debug,
       // Don't retry capture inside captureDOMState too aggressively since we have an outer loop here
       // But we do want it to handle transient CDP errors
-      maxRetries: 2 
+      maxRetries: 2,
     });
 
     if (debug) {

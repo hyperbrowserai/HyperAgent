@@ -332,6 +332,29 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.context) {
       throw new HyperagentError("No context found");
     }
+
+    // Poll context for new pages to catch any that opened since the last check
+    // This handles race conditions where the 'page' event might not have fired yet
+    // or where we missed it during a heavy operation.
+    const pages = this.context.pages();
+    if (pages.length > 0) {
+      const lastPage = pages[pages.length - 1];
+      // If the last page is different and not closed, switch to it
+      // We prefer the newest page as it's likely the result of the user's last action
+      if (
+        lastPage &&
+        !lastPage.isClosed() &&
+        lastPage !== this._currentPage
+      ) {
+        if (this.debug) {
+          console.log(
+            `[HyperAgent] Polling detected new page, switching focus: ${lastPage.url()}`
+          );
+        }
+        this._currentPage = lastPage;
+      }
+    }
+
     if (!this.currentPage || this.currentPage.isClosed()) {
       this._currentPage = await this.context.newPage();
 
@@ -406,6 +429,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mcpClient: this.mcpClient,
         variables: this._variables,
         cdpActions: this.cdpActionsEnabled,
+        activePage: () => this.getCurrentPage(),
       },
       taskState,
       mergedParams
@@ -458,6 +482,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           cdpActions: this.cdpActionsEnabled,
+          activePage: () => this.getCurrentPage(),
         },
         taskState,
         mergedParams
@@ -1062,12 +1087,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   private setupHyperPage(page: Page): HyperPage {
     const hyperPage = page as HyperPage;
-    hyperPage.ai = (task: string, params?: TaskParams) =>
-      this.executeTask(task, params, page);
-    hyperPage.aiAction = (instruction: string, params?: TaskParams) =>
-      this.executeSingleAction(instruction, page, params);
-    hyperPage.aiAsync = (task: string, params?: TaskParams) =>
-      this.executeTaskAsync(task, params, page);
+    hyperPage.ai = async (task: string, params?: TaskParams) => {
+      const activePage = await this.getCurrentPage();
+      return this.executeTask(task, params, activePage);
+    };
+    hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
+      const activePage = await this.getCurrentPage();
+      return this.executeSingleAction(instruction, activePage, params);
+    };
+    hyperPage.aiAsync = async (task: string, params?: TaskParams) => {
+      const activePage = await this.getCurrentPage();
+      return this.executeTaskAsync(task, params, activePage);
+    };
     hyperPage.extract = async (task, outputSchema, params) => {
       if (!task && !outputSchema) {
         throw new HyperagentError(
@@ -1080,11 +1111,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         ...params,
         outputSchema,
       };
+      
+      const activePage = await this.getCurrentPage();
+      
       if (task) {
         const res = await this.executeTask(
           `You have to perform an extraction on the current page. You have to perform the extraction according to the task: ${task}. Make sure your final response only contains the extracted content`,
           taskParams,
-          page
+          activePage
         );
         if (outputSchema) {
           const outputText = res.output;
@@ -1106,7 +1140,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         const res = await this.executeTask(
           "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
           taskParams,
-          page
+          activePage
         );
         if (typeof res.output !== "string" || res.output === "") {
           throw new Error(

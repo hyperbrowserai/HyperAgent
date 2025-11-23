@@ -2,6 +2,7 @@ import { AgentActionDefinition } from "@/types/agent/actions/types";
 import { MCPClient } from "../mcp/client";
 import { HyperAgentLLM } from "@/llm/types";
 import { HyperVariable } from "@/types/agent/types";
+import { Page } from "playwright-core";
 
 export interface AgentCtx {
   mcpClient?: MCPClient;
@@ -17,4 +18,5 @@ export interface AgentCtx {
     error: string;
     rawResponse: string;
   }>;
+  activePage?: () => Promise<Page>;
 }

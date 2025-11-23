@@ -157,7 +157,10 @@ const runAction = async (
   };
 
   if (ctx.cdpActions) {
-    const { cdpClient, frameContextManager } = await initializeRuntimeContext(page, ctx.debug);
+    const { cdpClient, frameContextManager } = await initializeRuntimeContext(
+      page,
+      ctx.debug
+    );
     actionCtx.cdp = {
       resolveElement,
       dispatchCDPAction,
@@ -233,27 +236,32 @@ export const runAgentTask = async (
   ];
 
   let output = "";
-  const page = taskState.startingPage;
+  let page = taskState.startingPage;
   const useDomCache = params?.useDomCache === true;
   const enableDomStreaming = params?.enableDomStreaming === true;
-  
+
   // Track schema validation errors across steps
   if (!ctx.schemaErrors) {
     ctx.schemaErrors = [];
   }
-  
+
   const navigationDirtyHandler = (): void => {
     markDomSnapshotDirty(page);
   };
-  page.on("framenavigated", navigationDirtyHandler);
-  page.on("framedetached", navigationDirtyHandler);
-  page.on("load", navigationDirtyHandler);
 
-  const cleanupDomListeners = (): void => {
-    page.off?.("framenavigated", navigationDirtyHandler);
-    page.off?.("framedetached", navigationDirtyHandler);
-    page.off?.("load", navigationDirtyHandler);
+  const setupDomListeners = (p: Page) => {
+    p.on("framenavigated", navigationDirtyHandler);
+    p.on("framedetached", navigationDirtyHandler);
+    p.on("load", navigationDirtyHandler);
   };
+
+  const cleanupDomListeners = (p: Page) => {
+    p.off?.("framenavigated", navigationDirtyHandler);
+    p.off?.("framedetached", navigationDirtyHandler);
+    p.off?.("load", navigationDirtyHandler);
+  };
+
+  setupDomListeners(page);
   let currStep = 0;
   let consecutiveFailuresOrWaits = 0;
   const MAX_CONSECUTIVE_FAILURES_OR_WAITS = 5;
@@ -263,8 +271,23 @@ export const runAgentTask = async (
   try {
     // Initialize context at the start of the task
     await initializeRuntimeContext(page, ctx.debug);
-    
+
     while (true) {
+      // Check for page context switch
+      if (ctx.activePage) {
+        const newPage = await ctx.activePage();
+        if (newPage && newPage !== page) {
+          if (ctx.debug) {
+            console.log(`[Agent] Switching active page context to ${newPage.url()}`);
+          }
+          cleanupDomListeners(page);
+          page = newPage;
+          setupDomListeners(page);
+          await initializeRuntimeContext(page, ctx.debug);
+          markDomSnapshotDirty(page);
+        }
+      }
+
       // Status Checks
       const status: TaskStatus = taskState.status;
       if (status === TaskStatus.PAUSED) {
@@ -292,16 +315,19 @@ export const runAgentTask = async (
       const domChunks: string | null = null;
       try {
         const domFetchStart = performance.now();
-        
+
+        await waitForSettledDOM(page);
         domState = await captureDOMState(page, {
           useCache: useDomCache,
           debug: ctx.debug,
           enableVisualMode: params?.enableVisualMode ?? false,
           debugStepDir: ctx.debug ? debugStepDir : undefined,
           enableStreaming: enableDomStreaming,
-          onFrameChunk: enableDomStreaming ? () => {
-            // captureDOMState handles aggregation
-          } : undefined
+          onFrameChunk: enableDomStreaming
+            ? () => {
+                // captureDOMState handles aggregation
+              }
+            : undefined,
         });
 
         const domDuration = performance.now() - domFetchStart;
@@ -366,14 +392,14 @@ export const runAgentTask = async (
         trimmedScreenshot,
         Object.values(ctx.variables)
       );
-      
+
       // Append accumulated schema errors from previous steps
       if (ctx.schemaErrors && ctx.schemaErrors.length > 0) {
         const errorSummary = ctx.schemaErrors
           .slice(-3) // Only keep last 3 errors to avoid context bloat
-          .map(err => `Step ${err.stepIndex}: ${err.error}`)
-          .join('\n');
-        
+          .map((err) => `Step ${err.stepIndex}: ${err.error}`)
+          .join("\n");
+
         msgs = [
           ...msgs,
           {
@@ -395,7 +421,7 @@ export const runAgentTask = async (
       const agentOutput = await (async () => {
         const maxAttempts = 3;
         let currentMsgs = msgs;
-        
+
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
           const structuredResult = await retry({
             func: () =>
@@ -431,7 +457,7 @@ export const runAgentTask = async (
 
           const providerId = ctx.llm?.getProviderId?.() ?? "unknown-provider";
           const modelId = ctx.llm?.getModelId?.() ?? "unknown-model";
-          
+
           // Try to get detailed Zod validation error
           let validationError = "Unknown validation error";
           if (structuredResult.rawText) {
@@ -446,27 +472,28 @@ export const runAgentTask = async (
               }
             }
           }
-          
+
           console.error(
             `[LLM][StructuredOutput] Failed to parse response from ${providerId} (${modelId}). Raw response: ${
               structuredResult.rawText?.trim() || "<empty>"
             } (attempt ${attempt + 1}/${maxAttempts})`
           );
-          
+
           // Store error for cross-step learning
           ctx.schemaErrors?.push({
             stepIndex: currStep,
             error: validationError,
             rawResponse: structuredResult.rawText || "",
           });
-          
+
           // Append error feedback for next retry
           if (attempt < maxAttempts - 1) {
             currentMsgs = [
               ...currentMsgs,
               {
                 role: "assistant",
-                content: structuredResult.rawText || "Failed to generate response",
+                content:
+                  structuredResult.rawText || "Failed to generate response",
               },
               {
                 role: "user",
@@ -629,7 +656,7 @@ export const runAgentTask = async (
 
     logPerf(ctx.debug, `[Perf][runAgentTask] Task ${taskId}`, taskStart);
   } finally {
-    cleanupDomListeners();
+    cleanupDomListeners(page);
   }
 
   const taskOutput: TaskOutput = {

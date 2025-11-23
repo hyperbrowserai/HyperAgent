@@ -563,21 +563,80 @@ async function setChecked(
   const objectId = await ensureObjectHandle(element);
 
   await ensureRuntimeEnabled(session);
-  await session.send("Runtime.callFunctionOn", {
-    objectId,
-    functionDeclaration: `
+  const result = await session.send<Protocol.Runtime.CallFunctionOnResponse>(
+    "Runtime.callFunctionOn",
+    {
+      objectId,
+      functionDeclaration: `
       function(shouldCheck) {
-        if (!this) return;
-        if (this.checked === shouldCheck) return;
-        this.checked = shouldCheck;
-        if (typeof this.dispatchEvent === "function") {
-          this.dispatchEvent(new Event("input", { bubbles: true }));
-          this.dispatchEvent(new Event("change", { bubbles: true }));
+        if (!this) return { status: "error", reason: "Element missing" };
+        
+        // 1. Native Checkbox
+        if (this.tagName === "INPUT" && this.type === "checkbox") {
+          if (this.checked === shouldCheck) {
+            return { status: "noop" };
+          }
+          // Try native JS click first - this fires proper events and handles most frameworks
+          this.click();
+          
+          // Verify if it worked
+          if (this.checked !== shouldCheck) {
+             // Click failed (maybe preventDefault or detached), force property
+             this.checked = shouldCheck;
+             this.dispatchEvent(new Event("input", { bubbles: true }));
+             this.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          return { status: "done" };
         }
+
+        // 2. ARIA Checkbox (role=checkbox/switch/etc)
+        const role = this.getAttribute("role");
+        if (role === "checkbox" || role === "switch" || role === "menuitemcheckbox") {
+          const ariaChecked = this.getAttribute("aria-checked");
+          const isChecked = ariaChecked === "true";
+          if (isChecked === shouldCheck) {
+            return { status: "noop" };
+          }
+          // Need to click to toggle
+          return { status: "needs_click" };
+        }
+
+        // 3. Fallback: Check specific 'checked' property existence (e.g. Web Components)
+        if ("checked" in this) {
+           if (this.checked === shouldCheck) {
+             return { status: "noop" };
+           }
+           this.checked = shouldCheck;
+           this.dispatchEvent(new Event("input", { bubbles: true }));
+           this.dispatchEvent(new Event("change", { bubbles: true }));
+           return { status: "done" };
+        }
+
+        // 4. Ambiguous element (e.g. label, div) - assume clicking toggles it
+        return { status: "needs_click" };
       }
     `,
-    arguments: [{ value: checked }],
-  });
+      arguments: [{ value: checked }],
+      returnByValue: true,
+    }
+  );
+
+  const value = (result.result?.value ?? {}) as {
+    status: string;
+    reason?: string;
+  };
+
+  if (value.status === "error") {
+    throw new Error(
+      `Failed to ${checked ? "check" : "uncheck"} element: ${
+        value.reason || "unknown error"
+      }`
+    );
+  }
+
+  if (value.status === "needs_click") {
+    await clickElement(ctx);
+  }
 }
 
 async function selectOption(
