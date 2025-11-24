@@ -137,9 +137,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async initBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await this.browserProvider.start();
-      this.context = await this.browser.newContext({
-        viewport: null,
-      });
+      if (this.browserProviderType === "Hyperbrowser") {
+        this.context = this.browser.contexts()[0];
+      } else {
+        this.context = await this.browser.newContext({
+          viewport: null,
+        });
+      }
 
       // Inject script to track event listeners
       await this.context.addInitScript(() => {

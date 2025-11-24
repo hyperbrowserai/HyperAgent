@@ -250,15 +250,15 @@
   resolved "https://registry.yarnpkg.com/@humanwhocodes/retry/-/retry-0.4.3.tgz#c2b9d2e374ee62c586d3adbea87199b1d7a7a6ba"
   integrity sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==
 
-"@hyperbrowser/sdk@^0.46.0":
-  version "0.46.0"
-  resolved "https://registry.yarnpkg.com/@hyperbrowser/sdk/-/sdk-0.46.0.tgz#1937b2855342661f2dca6535792bd022858d1e8a"
-  integrity sha512-LItlKUdaKeTIwYu1DeHNAuA88ZbAGoX4yLUsmSQd2jEanHuYb2qW5ELQJPggyQpUO9KG9KIFK9yaf+XJsA+krQ==
+"@hyperbrowser/sdk@0.78.0":
+  version "0.78.0"
+  resolved "https://registry.yarnpkg.com/@hyperbrowser/sdk/-/sdk-0.78.0.tgz#6c0824962932e7fc328cbad79858b55eb71aab25"
+  integrity sha512-w0sthsK0fI41ZLpYPeWcJllf2YVtoL1icAzm3t4mbsHDvDom1lF4uuDXCGyDUjXHnhXe8chqlrLnECUF8h2CQQ==
   dependencies:
     form-data "^4.0.1"
     node-fetch "2.7.0"
-    zod "^3.24.1"
-    zod-to-json-schema "^3.24.1"
+    zod "^4.1.12"
+    zod-to-json-schema "^3.25.0"
 
 "@inquirer/ansi@^1.0.1":
   version "1.0.1"
@@ -3289,10 +3289,20 @@ zod-to-json-schema@^3.20.0, zod-to-json-schema@^3.24.1:
   resolved "https://registry.yarnpkg.com/zod-to-json-schema/-/zod-to-json-schema-3.24.6.tgz#5920f020c4d2647edfbb954fa036082b92c9e12d"
   integrity sha512-h/z3PKvcTcTetyjl1fkj79MHNEjm+HpD6NXheWjzOekY7kV+lwDYnHw+ivHkijnCSMz1yJaWBD9vu/Fcmk+vEg==
 
-zod@^3.22.0, zod@^3.23.8, zod@^3.24.1:
+zod-to-json-schema@^3.25.0:
+  version "3.25.0"
+  resolved "https://registry.yarnpkg.com/zod-to-json-schema/-/zod-to-json-schema-3.25.0.tgz#df504c957c4fb0feff467c74d03e6aab0b013e1c"
+  integrity sha512-HvWtU2UG41LALjajJrML6uQejQhNJx+JBO9IflpSja4R03iNWfKXrj6W2h7ljuLyc1nKS+9yDyL/9tD1U/yBnQ==
+
+zod@^3.22.0, zod@^3.23.8:
   version "3.25.76"
   resolved "https://registry.yarnpkg.com/zod/-/zod-3.25.76.tgz#26841c3f6fd22a6a2760e7ccb719179768471e34"
   integrity sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==
+
+zod@^4.1.12:
+  version "4.1.13"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-4.1.13.tgz#93699a8afe937ba96badbb0ce8be6033c0a4b6b1"
+  integrity sha512-AvvthqfqrAhNH9dnfmrfKzX5upOdjUVJYFqNSlkmGf64gRaTzlPwz99IHYnVs28qYAybvAlBV+H7pn0saFY4Ig==
 
 zod@^4.1.8:
   version "4.1.12"
