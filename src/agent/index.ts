@@ -171,41 +171,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         };
       });
 
-      // Listen for new pages (tabs/popups) and automatically switch to them
-      this.context.on("page", (newPage) => {
+      // Listen for new pages (tabs/popups)
+      this.context.on("page", () => {
         if (this.debug) {
-          console.log("New tab/popup detected, switching focus immediately");
+          console.log("New tab/popup detected");
         }
 
-        // Immediately switch to the new page
-        // Don't wait for load - Playwright will handle that when actions are performed
-        this._currentPage = newPage;
-
-        if (this.debug) {
-          console.log(`Now focused on new page (URL will load shortly)`);
-        }
-
-        // Set up close handler for this page
-        newPage.on("close", () => {
-          if (this.debug) {
-            console.log("Page closed, switching to another available page");
-          }
-
-          // If the closed page was the current page, switch to another
-          if (this._currentPage === newPage) {
-            const pages = this.context?.pages() || [];
-            if (pages.length > 0) {
-              this._currentPage = pages[pages.length - 1];
-              if (this.debug) {
-                console.log(
-                  `Switched to page: ${this._currentPage?.url() || "unknown"}`
-                );
-              }
-            } else {
-              this._currentPage = null;
-            }
-          }
-        });
+        // Note: We used to auto-switch this._currentPage here, but that breaks
+        // scoped page interactions. If a user is awaiting pageA.ai(), and a new
+        // tab opens, we don't want pageA to suddenly become pageB.
+        // The user or the specific task logic should handle tab switching if desired.
       });
 
       return this.browser;
@@ -410,12 +385,32 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     initPage?: Page
   ): Promise<Task> {
     const taskId = uuidv4();
-    const page = initPage || (await this.getCurrentPage());
+    let activeTaskPage = initPage || (await this.getCurrentPage());
+
+    // Follow new tabs opened by the current active page
+    const onPage = async (newPage: Page) => {
+      try {
+        const opener = await newPage.opener();
+        if (opener === activeTaskPage) {
+          if (this.debug) {
+            console.log(
+              `[HyperAgent] Task following new tab: ${newPage.url()}`
+            );
+          }
+          activeTaskPage = newPage;
+        }
+      } catch {
+        // Ignore
+      }
+    };
+    this.context?.on("page", onPage);
+    const cleanup = () => this.context?.off("page", onPage);
+
     const taskState: TaskState = {
       id: taskId,
       task: task,
       status: TaskStatus.PENDING,
-      startingPage: page,
+      startingPage: activeTaskPage,
       steps: [],
     };
     this.tasks[taskId] = taskState;
@@ -429,13 +424,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mcpClient: this.mcpClient,
         variables: this._variables,
         cdpActions: this.cdpActionsEnabled,
-        activePage: () => this.getCurrentPage(),
+        activePage: async () => activeTaskPage,
       },
       taskState,
       mergedParams
-    ).catch((error: Error) => {
-      // Retrieve the correct state to update
-      const failedTaskState = this.tasks[taskId];
+    )
+      .then(() => cleanup())
+      .catch((error: Error) => {
+        cleanup();
+        // Retrieve the correct state to update
+        const failedTaskState = this.tasks[taskId];
       if (failedTaskState) {
         failedTaskState.status = TaskStatus.FAILED;
         failedTaskState.error = error.message;
@@ -462,18 +460,37 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     initPage?: Page
   ): Promise<TaskOutput> {
     const taskId = uuidv4();
-    const page = initPage || (await this.getCurrentPage());
+    let activeTaskPage = initPage || (await this.getCurrentPage());
+
+    // Follow new tabs opened by the current active page
+    const onPage = async (newPage: Page) => {
+      try {
+        const opener = await newPage.opener();
+        if (opener === activeTaskPage) {
+          if (this.debug) {
+            console.log(
+              `[HyperAgent] Task following new tab: ${newPage.url()}`
+            );
+          }
+          activeTaskPage = newPage;
+        }
+      } catch {
+        // Ignore
+      }
+    };
+    this.context?.on("page", onPage);
+
     const taskState: TaskState = {
       id: taskId,
       task: task,
       status: TaskStatus.PENDING,
-      startingPage: page,
+      startingPage: activeTaskPage,
       steps: [],
     };
     this.tasks[taskId] = taskState;
     try {
       const mergedParams = params ?? {};
-      return await runAgentTask(
+      const result = await runAgentTask(
         {
           llm: this.llm,
           actions: this.getActions(mergedParams?.outputSchema),
@@ -482,12 +499,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           cdpActions: this.cdpActionsEnabled,
-          activePage: () => this.getCurrentPage(),
+          activePage: async () => activeTaskPage,
         },
         taskState,
         mergedParams
       );
+      this.context?.off("page", onPage);
+      return result;
     } catch (error) {
+      this.context?.off("page", onPage);
       taskState.status = TaskStatus.FAILED;
       throw error;
     }
@@ -738,7 +758,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   private async executeSingleAction(
     instruction: string,
-    page: Page,
+    pageOrGetter: Page | (() => Page),
     _params?: TaskParams
   ): Promise<TaskOutput> {
     const actionStart = performance.now();
@@ -746,6 +766,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (this.debug) {
       console.log(`[aiAction] Instruction: ${instruction}`);
     }
+
+    const getPage = () =>
+      typeof pageOrGetter === "function" ? pageOrGetter() : pageOrGetter;
+    const initialPage = getPage();
 
     let domState: A11yDOMState | null = null;
     let elementMap: Map<string, AccessibilityNode> | null = null;
@@ -760,11 +784,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         llmResponse,
       } = await this.findElementWithRetry(
         instruction,
-        page,
+        initialPage,
         HyperAgent.AIACTION_CONFIG.MAX_RETRIES,
         HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS,
         startTime
       );
+
+      // Check if page context switched during findElement (e.g. new tab opened by previous action)
+      if (getPage() !== initialPage) {
+        throw new HyperagentError("Page context switched during execution", 409);
+      }
 
       domState = foundDomState;
       elementMap = foundElementMap;
@@ -798,16 +827,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       // Use shared runtime context
       const { cdpClient, frameContextManager } = await initializeRuntimeContext(
-        page,
+        initialPage,
         this.debug
       );
+
+      // Check context switch again before action
+      if (getPage() !== initialPage) {
+        throw new HyperagentError("Page context switched during execution", 409);
+      }
 
       // Create a context object compatible with performAction
       // We need to mock the ActionContext shape since performAction expects it
       // but we don't have a full AgentCtx/TaskState here
       const actionContext: ActionContext = {
         domState,
-        page,
+        page: initialPage,
         tokenLimit: this.tokenLimit,
         llm: this.llm,
         debug: this.debug,
@@ -827,7 +861,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         debugDir: undefined,
         mcpClient: this.mcpClient,
         variables: Object.values(this._variables),
-        invalidateDomCache: () => markDomSnapshotDirty(page),
+        invalidateDomCache: () => markDomSnapshotDirty(initialPage),
       };
 
       // Use shared performAction to execute
@@ -853,8 +887,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       // Wait for DOM to settle after action
       const waitStart = performance.now();
-      await waitForSettledDOM(page);
-      markDomSnapshotDirty(page);
+      await waitForSettledDOM(initialPage);
+      markDomSnapshotDirty(initialPage);
       logPerf(
         this.debug,
         "[Perf][executeSingleAction] action execution",
@@ -869,7 +903,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       // Write debug data on success
       await this.writeDebugData({
         instruction,
-        page,
+        page: initialPage,
         startTime,
         domState,
         elementMap,
@@ -890,10 +924,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         output: `Successfully executed: ${instruction}`,
       };
     } catch (error) {
+      // If page switched during execution, prioritize that over the error
+      // This catches cases where findElement failed because the old page closed/navigated
+      if (getPage() !== initialPage) {
+        throw new HyperagentError("Page context switched during execution", 409);
+      }
+
       // Write debug data on error
       await this.writeDebugData({
         instruction,
-        page,
+        page: initialPage,
         startTime,
         domState,
         elementMap,
@@ -1087,18 +1127,96 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   private setupHyperPage(page: Page): HyperPage {
     const hyperPage = page as HyperPage;
-    hyperPage.ai = async (task: string, params?: TaskParams) => {
-      const activePage = await this.getCurrentPage();
-      return this.executeTask(task, params, activePage);
+
+    // Clean up existing listener if this page was already setup
+    if ((hyperPage as any)._scopeListenerCleanup) {
+      (hyperPage as any)._scopeListenerCleanup();
+    }
+
+    // History Stack: [Root, Tab1, Tab2, ...]
+    const pageStack: Page[] = [page];
+    const getActivePage = () => pageStack[pageStack.length - 1];
+
+    // Handle tab closing (Pop)
+    const handleClose = (p: Page) => {
+      const idx = pageStack.indexOf(p);
+      if (idx !== -1) {
+        if (this.debug) {
+          console.log(`[HyperPage] Tab closed, removing from stack`);
+        }
+        pageStack.splice(idx, 1);
+      }
     };
+    // Listen for close on the root page
+    page.on("close", () => handleClose(page));
+
+    // Handle new tabs (Push)
+    const onPage = async (newPage: Page) => {
+      try {
+        // Check if the new page is opened by our current active scope page
+        const opener = await newPage.opener();
+        if (opener === getActivePage()) {
+          if (this.debug) {
+            console.log(
+              `[HyperPage] Auto-switching to new tab (Push): ${newPage.url()}`
+            );
+          }
+          // Update the scope to follow the new tab
+          pageStack.push(newPage);
+          // Listen for close on the new page
+          newPage.on("close", () => handleClose(newPage));
+        }
+      } catch {
+        // Ignore
+      }
+    };
+
+    // Attach a persistent listener to track page flow for the lifetime of this wrapper
+    page.context().on("page", onPage);
+    (hyperPage as any)._scopeListenerCleanup = () => {
+      page.context().off("page", onPage);
+    };
+
+    hyperPage.ai = (task: string, params?: TaskParams) =>
+      this.executeTask(task, params, getActivePage());
+
     hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
-      const activePage = await this.getCurrentPage();
-      return this.executeSingleAction(instruction, activePage, params);
+      const maxRetries = 3;
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          return await this.executeSingleAction(
+            instruction,
+            getActivePage,
+            params
+          );
+        } catch (err: any) {
+          if (
+            err.statusCode === 409 ||
+            (err.message && err.message.includes("Page context switched"))
+          ) {
+            if (this.debug) {
+              console.log(
+                "[HyperPage] Action aborted due to tab switch, retrying on new page..."
+              );
+            }
+            // Wait briefly for stability
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            continue;
+          }
+          throw err;
+        }
+      }
+      throw new HyperagentError(
+        "Failed to execute action after max retries due to page switching",
+        500
+      );
     };
-    hyperPage.aiAsync = async (task: string, params?: TaskParams) => {
-      const activePage = await this.getCurrentPage();
-      return this.executeTaskAsync(task, params, activePage);
-    };
+
+    // aiAsync tasks run in background, so we just use the current scope start point.
+    // The task itself has internal auto-following logic (from executeTaskAsync implementation).
+    hyperPage.aiAsync = (task: string, params?: TaskParams) =>
+      this.executeTaskAsync(task, params, getActivePage());
+
     hyperPage.extract = async (task, outputSchema, params) => {
       if (!task && !outputSchema) {
         throw new HyperagentError(
@@ -1111,14 +1229,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         ...params,
         outputSchema,
       };
-      
-      const activePage = await this.getCurrentPage();
-      
       if (task) {
         const res = await this.executeTask(
           `You have to perform an extraction on the current page. You have to perform the extraction according to the task: ${task}. Make sure your final response only contains the extracted content`,
           taskParams,
-          activePage
+          getActivePage()
         );
         if (outputSchema) {
           const outputText = res.output;
@@ -1140,7 +1255,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         const res = await this.executeTask(
           "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
           taskParams,
-          activePage
+          getActivePage()
         );
         if (typeof res.output !== "string" || res.output === "") {
           throw new Error(
