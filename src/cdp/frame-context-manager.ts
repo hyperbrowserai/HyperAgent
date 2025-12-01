@@ -92,6 +92,38 @@ export class FrameContextManager {
   }
 
   removeFrame(frameId: string): void {
+    // 1. Clean execution contexts
+    const contextId = this.frameExecutionContexts.get(frameId);
+    if (contextId !== undefined) {
+      this.executionContextToFrame.delete(contextId);
+      this.frameExecutionContexts.delete(frameId);
+    }
+
+    const waiters = this.executionContextWaiters.get(frameId);
+    if (waiters) {
+      for (const waiter of waiters) {
+        if (waiter.timeoutId) clearTimeout(waiter.timeoutId);
+        waiter.resolve(undefined);
+      }
+      this.executionContextWaiters.delete(frameId);
+    }
+
+    // 2. Clean session listeners
+    const session = this.sessions.get(frameId);
+    if (session) {
+      const listeners = this.sessionListeners.get(session);
+      if (listeners) {
+        for (const { event, handler } of listeners) {
+          session.off?.(event, handler);
+        }
+        this.sessionListeners.delete(session);
+      }
+    }
+
+    // 3. Clean OOPIF set
+    this.oopifFrameIds.delete(frameId);
+
+    // 4. Remove from graph and sessions
     this.graph.removeFrame(frameId);
     this.sessions.delete(frameId);
   }
@@ -388,7 +420,11 @@ export class FrameContextManager {
           this.log(
             `[FrameContext] Frame ${frame.url()} is detached, removing cached record`
           );
+          const frameId = cachedRecord.frameId;
           this.removeCachedPlaywrightFrame(frame);
+          if (frameId) {
+            this.removeFrame(frameId);
+          }
           return null;
         }
         cachedRecord.url = frame.url();
@@ -439,6 +475,7 @@ export class FrameContextManager {
         };
         const detachHandler = (): void => {
           this.removeCachedPlaywrightFrame(frame);
+          this.removeFrame(frameId);
           oopifSession?.off?.("Detached", detachHandler);
         };
         record.detachHandler = detachHandler;
