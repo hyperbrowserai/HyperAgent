@@ -474,18 +474,6 @@ async function fetchIframeAXTrees(
       if (processedCrossOriginFrames.has(frameId)) {
         continue;
       }
-      await collectCrossOriginFrameData({
-        frameIndex,
-        frameInfo,
-        session,
-        maps,
-        allNodes,
-        frameDebugInfo,
-        debug,
-        enableVisualMode,
-        frameContextManager,
-      });
-      processedCrossOriginFrames.add(frameId);
     } else {
       sameOriginFrames.push([frameIndex, frameInfo]);
     }

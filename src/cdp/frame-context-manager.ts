@@ -108,15 +108,19 @@ export class FrameContextManager {
       this.executionContextWaiters.delete(frameId);
     }
 
-    // 2. Clean session listeners
-    const session = this.sessions.get(frameId);
-    if (session) {
-      const listeners = this.sessionListeners.get(session);
-      if (listeners) {
-        for (const { event, handler } of listeners) {
-          session.off?.(event, handler);
+    // 2. Clean session listeners - only for OOPIF frames with dedicated sessions
+    // Same-origin frames share the root session, so we must not remove shared listeners
+    const isOOPIF = this.oopifFrameIds.has(frameId);
+    if (isOOPIF) {
+      const session = this.sessions.get(frameId);
+      if (session) {
+        const listeners = this.sessionListeners.get(session);
+        if (listeners) {
+          for (const { event, handler } of listeners) {
+            session.off?.(event, handler);
+          }
+          this.sessionListeners.delete(session);
         }
-        this.sessionListeners.delete(session);
       }
     }
 
