@@ -53,6 +53,10 @@ export class GeminiClient implements HyperAgentLLM {
     const response = await this.client.models.generateContent({
       model: this.model,
       contents: geminiMessages as any,
+      config: {
+        temperature: options?.temperature ?? this.temperature,
+        maxOutputTokens: options?.maxTokens ?? this.maxTokens,
+      },
     });
 
     const text = response.text;
