@@ -139,48 +139,51 @@ program
 
       let task: Task;
 
-      readline.emitKeypressEvents(process.stdin);
+      const canUseRawMode = process.stdin.isTTY;
+      if (canUseRawMode) {
+        readline.emitKeypressEvents(process.stdin);
 
-      process.stdin.on("keypress", async (ch, key) => {
-        if (key && key.ctrl && key.name == "p") {
-          if (currentSpinner.isSpinning) {
+        process.stdin.on("keypress", async (ch, key) => {
+          if (key && key.ctrl && key.name == "p") {
+            if (currentSpinner.isSpinning) {
+              currentSpinner.stopAndPersist({ symbol: "⏸" });
+            }
+            currentSpinner.start(
+              chalk.blue(
+                "Hyperagent will pause after completing this operation. Press Ctrl+r again to resume."
+              )
+            );
             currentSpinner.stopAndPersist({ symbol: "⏸" });
-          }
-          currentSpinner.start(
-            chalk.blue(
-              "Hyperagent will pause after completing this operation. Press Ctrl+r again to resume."
-            )
-          );
-          currentSpinner.stopAndPersist({ symbol: "⏸" });
-          currentSpinner = ora();
-
-          if (task.getStatus() == TaskStatus.RUNNING) {
-            task.pause();
-          }
-        } else if (key && key.ctrl && key.name == "r") {
-          if (task.getStatus() == TaskStatus.PAUSED) {
-            currentSpinner.start(chalk.blue("Hyperagent will resume"));
-            currentSpinner.stopAndPersist({ symbol: "⏵" });
             currentSpinner = ora();
 
-            task.resume();
-          }
-        } else if (key && key.ctrl && key.name == "c") {
-          if (currentSpinner.isSpinning) {
-            currentSpinner.stopAndPersist();
-          }
-          console.log("\nShutting down HyperAgent");
-          try {
-            await agent.closeAgent();
-            process.exit(0);
-          } catch (err) {
-            console.error("Error during shutdown:", err);
-            process.exit(1);
-          }
-        }
-      });
+            if (task.getStatus() == TaskStatus.RUNNING) {
+              task.pause();
+            }
+          } else if (key && key.ctrl && key.name == "r") {
+            if (task.getStatus() == TaskStatus.PAUSED) {
+              currentSpinner.start(chalk.blue("Hyperagent will resume"));
+              currentSpinner.stopAndPersist({ symbol: "⏵" });
+              currentSpinner = ora();
 
-      process.stdin.setRawMode(true);
+              task.resume();
+            }
+          } else if (key && key.ctrl && key.name == "c") {
+            if (currentSpinner.isSpinning) {
+              currentSpinner.stopAndPersist();
+            }
+            console.log("\nShutting down HyperAgent");
+            try {
+              await agent.closeAgent();
+              process.exit(0);
+            } catch (err) {
+              console.error("Error during shutdown:", err);
+              process.exit(1);
+            }
+          }
+        });
+
+        process.stdin.setRawMode(true);
+      }
 
       const onStep = (params: AgentStep) => {
         const action = params.agentOutput.action;
@@ -194,8 +197,10 @@ program
           `[${chalk.yellow("step")}]: ${params.agentOutput.thoughts}\n${actionDisplay}`
         );
         currentSpinner = ora();
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
+        if (canUseRawMode) {
+          process.stdin.setRawMode(true);
+          process.stdin.resume();
+        }
       };
 
       const debugAgentOutput = (params: AgentOutput) => {
@@ -205,8 +210,10 @@ program
         currentSpinner.start(
           `[${chalk.yellow("planning")}]: ${params.thoughts}\n${actionDisplay}`
         );
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
+        if (canUseRawMode) {
+          process.stdin.setRawMode(true);
+          process.stdin.resume();
+        }
       };
 
       const onComplete = async (params: TaskOutput) => {
@@ -233,8 +240,10 @@ program
             required: true,
           });
 
-          process.stdin.setRawMode(true);
-          process.stdin.resume();
+          if (canUseRawMode) {
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+          }
 
           task = await agent.executeTaskAsync(taskDescription, {
             onStep: onStep,
