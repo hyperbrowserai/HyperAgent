@@ -455,9 +455,6 @@ async function fetchIframeAXTrees(
   }> = [];
 
   const frameEntries = Array.from(maps.frameMap?.entries() ?? []);
-  if (frameEntries.length === 0) {
-    return { nodes: allNodes, debugInfo: frameDebugInfo };
-  }
 
   const rootSession = cdpClient.rootSession;
   const processedCrossOriginFrames = new Set<string>();
