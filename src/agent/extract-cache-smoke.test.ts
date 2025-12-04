@@ -197,3 +197,178 @@ async function waitFor(predicate: () => boolean, timeoutMs = 100): Promise<void>
     check();
   });
 }
+
+describe("action cache strategies", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCaptureDomState.mockResolvedValue(fakeDomState() as any);
+    mockComputeStructuralDomHash.mockResolvedValue({
+      structuralHash: "structural-hash-action",
+      contentHash: "content-hash-action",
+      fullHash: "full-hash-action",
+    });
+    mockRunAgentTask.mockResolvedValue({
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "action-completed",
+    });
+  });
+
+  it("'full' strategy skips execution on cache hit", async () => {
+    const agent = await createAgentWithCache();
+    const contextStub = {
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const pageStub = {
+      url: () => "https://example.com/action-full",
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => contextStub,
+    } as any;
+
+    agent.currentPage = pageStub;
+
+    // First execution writes to cache
+    await agent.executeTask("Click button", { cacheStrategy: "full" }, pageStub);
+    await (agent as any).cacheManager.flushPending?.();
+
+    // Second execution should skip (cache hit with full strategy)
+    await agent.executeTask("Click button", { cacheStrategy: "full" }, pageStub);
+
+    // runAgentTask should only be called once (second call skipped)
+    expect(mockRunAgentTask).toHaveBeenCalledTimes(1);
+
+    const metrics = agent.metrics;
+    expect(metrics.cache.hits).toBe(1);
+    expect(metrics.cache.writes).toBe(1);
+  });
+
+  it("'result-only' strategy still executes on cache hit", async () => {
+    const agent = await createAgentWithCache();
+    const contextStub = {
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const pageStub = {
+      url: () => "https://example.com/action-result-only",
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => contextStub,
+    } as any;
+
+    agent.currentPage = pageStub;
+
+    // First execution writes to cache
+    await agent.executeTask(
+      "Click checkout",
+      { cacheStrategy: "result-only" },
+      pageStub
+    );
+    await (agent as any).cacheManager.flushPending?.();
+
+    // Second execution should still run (result-only doesn't skip execution)
+    await agent.executeTask(
+      "Click checkout",
+      { cacheStrategy: "result-only" },
+      pageStub
+    );
+
+    // runAgentTask should be called twice (both executions run)
+    expect(mockRunAgentTask).toHaveBeenCalledTimes(2);
+
+    const metrics = agent.metrics;
+    // Cache hit recorded but action still executed
+    expect(metrics.cache.hits).toBe(1);
+    // Only first write (result-only doesn't re-write on hit)
+    expect(metrics.cache.writes).toBe(1);
+  });
+
+  it("'result-only' returns cached result after execution", async () => {
+    const agent = await createAgentWithCache();
+    const contextStub = {
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const pageStub = {
+      url: () => "https://example.com/action-result-only-return",
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => contextStub,
+    } as any;
+
+    agent.currentPage = pageStub;
+
+    // First execution
+    mockRunAgentTask.mockResolvedValueOnce({
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "first-execution-output",
+    });
+    const first = await agent.executeTask(
+      "Do action",
+      { cacheStrategy: "result-only" },
+      pageStub
+    );
+    await (agent as any).cacheManager.flushPending?.();
+
+    // Second execution returns different output but we use cached result
+    mockRunAgentTask.mockResolvedValueOnce({
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "second-execution-output",
+    });
+    const second = await agent.executeTask(
+      "Do action",
+      { cacheStrategy: "result-only" },
+      pageStub
+    );
+
+    // Both calls executed
+    expect(mockRunAgentTask).toHaveBeenCalledTimes(2);
+    // First returns executed result
+    expect(first.output).toBe("first-execution-output");
+    // Second returns cached result (from first execution)
+    expect(second.output).toBe("first-execution-output");
+  });
+
+  it("'result-only' calls onComplete with cached result", async () => {
+    const agent = await createAgentWithCache();
+    const contextStub = {
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const pageStub = {
+      url: () => "https://example.com/action-oncomplete",
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => contextStub,
+    } as any;
+
+    agent.currentPage = pageStub;
+
+    // First execution
+    await agent.executeTask(
+      "Submit form",
+      { cacheStrategy: "result-only" },
+      pageStub
+    );
+    await (agent as any).cacheManager.flushPending?.();
+
+    // Second execution with onComplete
+    const onComplete = jest.fn();
+    await agent.executeTask(
+      "Submit form",
+      { cacheStrategy: "result-only", onComplete },
+      pageStub
+    );
+
+    // onComplete should be called with cached result
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: TaskStatus.COMPLETED,
+      })
+    );
+  });
+});

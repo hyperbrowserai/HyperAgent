@@ -47,7 +47,11 @@ import {
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
 import { LLMUsagePayload } from "./tools/types";
-import { HyperPage, HyperVariable } from "../types/agent/types";
+import {
+  ActionCacheStrategy,
+  HyperPage,
+  HyperVariable,
+} from "../types/agent/types";
 import { z } from "zod";
 import { AgentHistory, ErrorEmitter, MetricsTracker } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
@@ -80,6 +84,8 @@ type CacheTokens = {
 
 interface CachePreparation<Result> {
   hit?: Result;
+  /** Cache strategy for action hits - callers should skip execution only if 'full' */
+  hitStrategy?: ActionCacheStrategy;
   domState?: A11yDOMState;
   domHash?: string;
   keyParts?: CacheKeyParts;
@@ -510,7 +516,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       params: mergedParams,
     })
       .then((cachePrep) => {
-        if (cachePrep?.hit) {
+        // Only short-circuit for "full" strategy; "result-only" still executes
+        if (cachePrep?.hit && cachePrep.hitStrategy === "full") {
           cleanup();
           taskState.status = TaskStatus.COMPLETED;
           taskState.output = cachePrep.hit.output;
@@ -541,6 +548,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           ).catch(() => {});
         }
 
+        // For "result-only" hits, store cached result for later use
+        const resultOnlyHit =
+          cachePrep?.hit && cachePrep.hitStrategy === "result-only"
+            ? cachePrep.hit
+            : undefined;
+
+        // Strip onComplete for result-only hits to avoid double invocation
+        // (runAgentTask calls onComplete internally, we'll call it with cached result)
+        const taskParams = resultOnlyHit
+          ? { ...mergedParams, onComplete: undefined }
+          : mergedParams;
+
         return runAgentTask(
           {
             llm: this.llm,
@@ -557,18 +576,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             recordLLMUsage: this.recordLLMUsage.bind(this),
           },
           taskState,
-          mergedParams
+          taskParams
         )
           .then((result) => {
             cleanup();
             const metricsAfter = this.metricsTracker.snapshot();
             const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
             const duration = performance.now() - opStart;
-            if (cachePrep && result.status === TaskStatus.COMPLETED) {
+            // For "result-only" hits, we executed for side effects but use cached result
+            const isResultOnlyHit = !!resultOnlyHit;
+            const finalResult = resultOnlyHit ?? result;
+            if (cachePrep && result.status === TaskStatus.COMPLETED && !isResultOnlyHit) {
               cachePrep.write(result, Math.round(duration), {
                 promptTokens: delta.promptTokens,
                 completionTokens: delta.completionTokens,
               });
+            }
+            // Update task state with final result for result-only mode
+            if (isResultOnlyHit) {
+              taskState.output = finalResult.output;
+              taskState.steps = finalResult.steps ?? [];
             }
             const warningText =
               selectorWarnings.length > 0 ? selectorWarnings.join(" | ") : undefined;
@@ -583,9 +610,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               durationMs: Math.round(duration),
               promptTokens: delta.promptTokens,
               completionTokens: delta.completionTokens,
-              cacheHit: false,
+              cacheHit: isResultOnlyHit,
               warning: warningText,
             });
+            // Call onComplete for result-only hits (full hits handled above)
+            if (isResultOnlyHit && mergedParams.onComplete) {
+              return Promise.resolve(
+                mergedParams.onComplete(finalResult)
+              ).catch(() => {});
+            }
           })
           .catch((error: Error) => {
             cleanup();
@@ -696,7 +729,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         selectorWarnings.push(cachePrep.warning);
       }
 
-      if (cachePrep?.hit) {
+      // Only short-circuit for "full" strategy; "result-only" still executes
+      if (cachePrep?.hit && cachePrep.hitStrategy === "full") {
         this.context?.off("page", onPage);
         taskState.status = TaskStatus.COMPLETED;
         taskState.output = cachePrep.hit.output;
@@ -728,6 +762,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return cachePrep.hit;
       }
 
+      // For "result-only" hits, store cached result for later use
+      const resultOnlyHit =
+        cachePrep?.hit && cachePrep.hitStrategy === "result-only"
+          ? cachePrep.hit
+          : undefined;
+
+      // Strip onComplete for result-only hits to avoid double invocation
+      // (runAgentTask calls onComplete internally, we'll call it with cached result)
+      const taskParams = resultOnlyHit
+        ? { ...mergedParams, onComplete: undefined }
+        : mergedParams;
+
       const taskStart = performance.now();
       const result = await runAgentTask(
         {
@@ -745,18 +791,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           recordLLMUsage: this.recordLLMUsage.bind(this),
         },
         taskState,
-        mergedParams
+        taskParams
       );
       this.context?.off("page", onPage);
       const duration = performance.now() - taskStart;
       const metricsAfter = this.metricsTracker.snapshot();
       const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
       const opDuration = performance.now() - opStart;
-      if (cachePrep && result.status === TaskStatus.COMPLETED) {
+      // For "result-only" hits, we executed for side effects but use cached result
+      const isResultOnlyHit = !!resultOnlyHit;
+      const finalResult = resultOnlyHit ?? result;
+      if (cachePrep && result.status === TaskStatus.COMPLETED && !isResultOnlyHit) {
         cachePrep.write(result, Math.round(duration), {
           promptTokens: delta.promptTokens,
           completionTokens: delta.completionTokens,
         });
+      }
+      // Update task state with final result for result-only mode
+      if (isResultOnlyHit) {
+        taskState.output = finalResult.output;
+        taskState.steps = finalResult.steps ?? [];
       }
       const warningText =
         selectorWarnings.length > 0 ? selectorWarnings.join(" | ") : undefined;
@@ -771,10 +825,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         durationMs: Math.round(opDuration),
         promptTokens: delta.promptTokens,
         completionTokens: delta.completionTokens,
-        cacheHit: false,
+        cacheHit: isResultOnlyHit,
         warning: warningText,
       });
-      return result;
+      // Call onComplete for result-only hits (full hits handled above)
+      if (isResultOnlyHit && mergedParams.onComplete) {
+        await mergedParams.onComplete(finalResult);
+      }
+      return finalResult;
     } catch (error) {
       this.context?.off("page", onPage);
       taskState.status = TaskStatus.FAILED;
@@ -1093,7 +1151,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       params,
     });
 
-    if (cachePrep?.hit) {
+    // Only short-circuit for "full" strategy; "result-only" still executes
+    if (cachePrep?.hit && cachePrep.hitStrategy === "full") {
       const metricsAfter = this.metricsTracker.snapshot();
       const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
       const opDuration = performance.now() - opStart;
@@ -1114,6 +1173,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       });
       return cachePrep.hit;
     }
+
+    // For "result-only" hits, store cached result for later use
+    const resultOnlyHit =
+      cachePrep?.hit && cachePrep.hitStrategy === "result-only"
+        ? cachePrep.hit
+        : undefined;
 
     let domState: A11yDOMState | null = cachePrep?.domState ?? null;
     let elementMap: Map<string, AccessibilityNode> | null = null;
@@ -1265,13 +1330,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const metricsAfter = this.metricsTracker.snapshot();
       const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
       const opDuration = performance.now() - opStart;
-      if (cachePrep) {
+      // For "result-only" hits, we executed for side effects but use cached result
+      const isResultOnlyHit = !!resultOnlyHit;
+      const executedResult: TaskOutput = {
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: `Successfully executed: ${instruction}`,
+      };
+      const finalResult = resultOnlyHit ?? executedResult;
+      if (cachePrep && !isResultOnlyHit) {
         cachePrep.write(
-          {
-            status: TaskStatus.COMPLETED,
-            steps: [],
-            output: `Successfully executed: ${instruction}`,
-          },
+          executedResult,
           Math.round(performance.now() - actionStart),
           {
             promptTokens: delta.promptTokens,
@@ -1291,16 +1360,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         durationMs: Math.round(opDuration),
         promptTokens: delta.promptTokens,
         completionTokens: delta.completionTokens,
-        cacheHit: false,
+        cacheHit: isResultOnlyHit,
         warning: warningText,
       });
 
       logPerf(this.debug, "[Perf][executeSingleAction] total", actionStart);
-      return {
-        status: TaskStatus.COMPLETED,
-        steps: [],
-        output: `Successfully executed: ${instruction}`,
-      };
+      return finalResult;
     } catch (error) {
       // If page switched during execution, prioritize that over the error
       // This catches cases where findElement failed because the old page closed/navigated
@@ -1491,8 +1556,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     // Handle action caching based on cacheStrategy
-    const cacheStrategy = options.params?.cacheStrategy ?? "none";
-    if (options.opType === "act" && cacheStrategy === "none") {
+    // For actions: use provided strategy (default "none")
+    // For extracts: always use "full" (extracts are idempotent)
+    const rawCacheStrategy = options.params?.cacheStrategy ?? "none";
+    const effectiveCacheStrategy: ActionCacheStrategy =
+      options.opType === "extract" ? "full" : rawCacheStrategy;
+    if (options.opType === "act" && rawCacheStrategy === "none") {
       // Default: do not cache mutating actions
       return null;
     }
@@ -1556,8 +1625,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       // Enable semantic matching for instructions ("Get prices" matches "Get the prices")
       useStructuralHash: true,
       useSemanticMatching: true,
-      // Include cache strategy for actions
-      ...(options.opType === "act" ? { cacheStrategy } : {}),
+      // Include cache strategy for actions (use raw strategy for key compatibility)
+      ...(options.opType === "act" ? { cacheStrategy: rawCacheStrategy } : {}),
     };
 
     const cached = await this.cacheManager.read<Result>(keyParts);
@@ -1565,7 +1634,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.metricsTracker.recordCacheHit();
       return {
         hit: cached.result,
+        // Use effective strategy for hit behavior (extracts always "full")
+        hitStrategy: effectiveCacheStrategy,
         domHash: structuralResult.structuralHash,
+        domState: workingDomState,
+        keyParts,
         warning,
         write: () => {},
       };
