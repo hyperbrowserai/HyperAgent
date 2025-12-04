@@ -27,7 +27,7 @@
 - DOM snapshots use encoded IDs (`frameIndex-backendNodeId`) and cache for ~1s when `useDomCache` is true; navigation events and actions call `markDomSnapshotDirty` to invalidate. Ensure new actions mutate the cache appropriately.
 - Default actions live in `agent/actions/index.ts`: `goToURL`, `refreshPage`, `actElement` (unified element action constrained by `AGENT_ELEMENT_ACTIONS`), `extract`, `wait`, plus `pdf` when `GEMINI_API_KEY` is present. `complete` variants are injected by the runtime and cannot be registered manually.
 - Element execution is CDP-first (`cdp/resolveElement` + `dispatchCDPAction`); it falls back to Playwright locators when `cdpActions` is false or backend maps are missing. Keep frame graph/bounding-box expectations aligned with `context-providers/a11y-dom` when tweaking extraction.
-- `page.aiAction` uses the `examine-dom/` flow for single actions: accessibility tree → LLM element ranking → `performAction`. It always runs in a11y mode (no screenshots) and shares the same allowed methods as `actElement`.
+- `page.perform` (alias: `page.aiAction`, deprecated) uses the `examine-dom/` flow for single actions: accessibility tree → LLM element ranking → `performAction`. It always runs in a11y mode (no screenshots) and shares the same allowed methods as `actElement`.
 - MCP integrations live in `agent/mcp/client.ts`; `initializeMCPClient`/`connectToMCPServer` register remote tools as actions. Guard optional dependencies and remember `complete` is reserved.
 - Debugging: pass `debug: true` or `debugOptions` to surface CDP sessions, DOM-capture profiling, and wait tracing; artifacts land under `debug/<taskId>` when enabled.
 
