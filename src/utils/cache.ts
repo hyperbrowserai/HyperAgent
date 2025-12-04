@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import path from "path";
 
 import { OperationType } from "@/types/metrics";
+import { ActionCacheStrategy } from "@/types/agent/types";
 import { sha256, stableStringify } from "./hash";
+import { normalizeInstruction } from "./instruction-similarity";
 
 export interface CacheKeyParts {
   opType: OperationType;
@@ -11,6 +13,20 @@ export interface CacheKeyParts {
   domHash: string;
   selector?: string;
   schemaHash?: string;
+  /**
+   * When true, use structural DOM hash for matching (ignores text content changes).
+   * The domHash field should contain the structural hash, not the full hash.
+   */
+  useStructuralHash?: boolean;
+  /**
+   * When true, normalize instruction before hashing for semantic matching.
+   * "Get prices" and "Get the prices" will match.
+   */
+  useSemanticMatching?: boolean;
+  /**
+   * Cache strategy for actions
+   */
+  cacheStrategy?: ActionCacheStrategy;
 }
 
 export interface CacheEntry<Result = unknown> extends CacheKeyParts {
@@ -20,6 +36,8 @@ export interface CacheEntry<Result = unknown> extends CacheKeyParts {
   model?: string;
   promptTokens?: number;
   completionTokens?: number;
+  /** Original instruction before normalization (for debugging) */
+  originalInstruction?: string;
 }
 
 export class CacheManager {
@@ -39,14 +57,23 @@ export class CacheManager {
   }
 
   private buildKey(parts: CacheKeyParts): string {
+    // Normalize instruction for semantic matching if enabled
+    const instruction = parts.useSemanticMatching
+      ? normalizeInstruction(parts.instruction)
+      : parts.instruction;
+
     // Keep ordering deterministic for stable cache keys
     const keyPayload = stableStringify({
       opType: parts.opType,
       url: parts.url,
-      instruction: parts.instruction,
+      instruction,
       selector: parts.selector ?? null,
       schemaHash: parts.schemaHash ?? null,
       domHash: parts.domHash,
+      // Include cache strategy in key for actions
+      ...(parts.opType === "act" && parts.cacheStrategy
+        ? { cacheStrategy: parts.cacheStrategy }
+        : {}),
     });
     return sha256(keyPayload);
   }
@@ -92,12 +119,22 @@ export class CacheManager {
     const key = this.buildKey(entry);
     const filePath = this.getFilePath(key);
 
+    // Store original instruction when using semantic matching for debugging
+    const entryToWrite: CacheEntry<Result> = entry.useSemanticMatching
+      ? { ...entry, originalInstruction: entry.instruction }
+      : entry;
+
     const writePromise = fs
       .mkdir(path.dirname(filePath), { recursive: true })
-      .then(() => fs.writeFile(filePath, JSON.stringify(entry, null, 2), "utf8"))
+      .then(() =>
+        fs.writeFile(filePath, JSON.stringify(entryToWrite, null, 2), "utf8")
+      )
       .catch((error) => {
         // Best-effort cache; surface details for debug visibility
-        console.debug?.("[HyperAgent][cache] Failed to write cache entry:", error);
+        console.debug?.(
+          "[HyperAgent][cache] Failed to write cache entry:",
+          error
+        );
       });
 
     this.track(writePromise);

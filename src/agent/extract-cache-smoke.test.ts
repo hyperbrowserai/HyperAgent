@@ -6,13 +6,13 @@ import { HyperAgent } from "@/agent";
 import { TaskStatus } from "@/types";
 import { scopeDomWithSelector } from "@/context-providers/dom/selector-scope";
 import { captureDOMState } from "@/agent/shared/dom-capture";
-import { computeDomHash } from "@/context-providers/dom/dom-hash";
+import { computeStructuralDomHash } from "@/context-providers/dom/structural-hash";
 import { runAgentTask } from "@/agent/tools/agent";
 import { z } from "zod";
 
 jest.mock("uuid", () => ({ v4: () => "test-uuid" }));
 jest.mock("@/agent/shared/dom-capture");
-jest.mock("@/context-providers/dom/dom-hash");
+jest.mock("@/context-providers/dom/structural-hash");
 jest.mock("@/context-providers/dom/selector-scope");
 jest.mock("@/agent/tools/agent");
 
@@ -24,9 +24,10 @@ beforeAll(async () => {
 const mockCaptureDomState = captureDOMState as jest.MockedFunction<
   typeof captureDOMState
 >;
-const mockComputeDomHash = computeDomHash as jest.MockedFunction<
-  typeof computeDomHash
->;
+const mockComputeStructuralDomHash =
+  computeStructuralDomHash as jest.MockedFunction<
+    typeof computeStructuralDomHash
+  >;
 const mockScopeDomWithSelector = scopeDomWithSelector as jest.MockedFunction<
   typeof scopeDomWithSelector
 >;
@@ -68,7 +69,11 @@ describe("page.extract cache smoke test", () => {
       domState: { ...scopedDomState(), domState: scopedDomState().domState },
       matched: true,
     }));
-    mockComputeDomHash.mockResolvedValue("dom-hash-1");
+    mockComputeStructuralDomHash.mockResolvedValue({
+      structuralHash: "structural-hash-1",
+      contentHash: "content-hash-1",
+      fullHash: "full-hash-1",
+    });
     mockRunAgentTask.mockResolvedValue({
       status: TaskStatus.COMPLETED,
       steps: [],
@@ -127,7 +132,11 @@ describe("async task cache", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCaptureDomState.mockResolvedValue(fakeDomState() as any);
-    mockComputeDomHash.mockResolvedValue("dom-hash-async");
+    mockComputeStructuralDomHash.mockResolvedValue({
+      structuralHash: "structural-hash-async",
+      contentHash: "content-hash-async",
+      fullHash: "full-hash-async",
+    });
     mockRunAgentTask.mockResolvedValue({
       status: TaskStatus.COMPLETED,
       steps: [],

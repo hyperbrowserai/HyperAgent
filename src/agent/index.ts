@@ -60,6 +60,7 @@ import { initializeRuntimeContext } from "./shared/runtime-context";
 import { performAction } from "./actions/shared/perform-action";
 import { CacheKeyParts, CacheManager } from "@/utils/cache";
 import { computeDomHash } from "@/context-providers/dom/dom-hash";
+import { computeStructuralDomHash } from "@/context-providers/dom/structural-hash";
 import { scopeDomWithSelector } from "@/context-providers/dom/selector-scope";
 import { captureDOMState } from "./shared/dom-capture";
 import { OperationType } from "@/types/metrics";
@@ -1484,8 +1485,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       params?: TaskParams;
     }
   ): Promise<CachePreparation<Result> | null> {
-    // Do not cache mutating actions; cache is only safe for extract/observe flows
-    if (!this.cacheManager.isEnabled() || options.opType === "act") {
+    // Check if caching is enabled
+    if (!this.cacheManager.isEnabled()) {
+      return null;
+    }
+
+    // Handle action caching based on cacheStrategy
+    const cacheStrategy = options.params?.cacheStrategy ?? "none";
+    if (options.opType === "act" && cacheStrategy === "none") {
+      // Default: do not cache mutating actions
       return null;
     }
 
@@ -1523,10 +1531,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       warning = scoped.warning;
     }
 
-    const domHash = await computeDomHash(page, workingDomState.domState);
-    if (!domHash) {
+    // Use structural hash for cache-stable fingerprinting (ignores text content changes)
+    const structuralResult = await computeStructuralDomHash(
+      page,
+      workingDomState.domState
+    );
+    if (!structuralResult) {
       if (this.debug) {
-        console.debug("[HyperAgent][cache] Skipping cache, domHash unavailable");
+        console.debug(
+          "[HyperAgent][cache] Skipping cache, structural hash unavailable"
+        );
       }
       return null;
     }
@@ -1537,7 +1551,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       instruction: options.instruction,
       selector: options.opType === "extract" ? options.selector : undefined,
       schemaHash: this.computeSchemaHash(options.outputSchema),
-      domHash,
+      // Use structural hash for cache key (ignores text changes like timestamps)
+      domHash: structuralResult.structuralHash,
+      // Enable semantic matching for instructions ("Get prices" matches "Get the prices")
+      useStructuralHash: true,
+      useSemanticMatching: true,
+      // Include cache strategy for actions
+      ...(options.opType === "act" ? { cacheStrategy } : {}),
     };
 
     const cached = await this.cacheManager.read<Result>(keyParts);
@@ -1545,7 +1565,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.metricsTracker.recordCacheHit();
       return {
         hit: cached.result,
-        domHash,
+        domHash: structuralResult.structuralHash,
         warning,
         write: () => {},
       };
@@ -1555,7 +1575,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     return {
       domState: workingDomState,
-      domHash,
+      domHash: structuralResult.structuralHash,
       keyParts,
       warning,
       write: (result, durationMs, tokens) => {

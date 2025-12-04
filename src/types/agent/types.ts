@@ -30,6 +30,15 @@ export interface AgentStep {
   actionOutput: ActionOutput;
 }
 
+/**
+ * Cache strategy for action caching
+ *
+ * - 'none': Never cache this action (default for actions with side effects)
+ * - 'result-only': Cache success/failure result, still execute action on hit
+ * - 'full': Cache and skip execution on hit (only for idempotent actions)
+ */
+export type ActionCacheStrategy = "none" | "result-only" | "full";
+
 export interface TaskParams {
   maxSteps?: number;
   debugDir?: string;
@@ -42,6 +51,14 @@ export interface TaskParams {
   enableDomStreaming?: boolean;
   selector?: string;
   selectorType?: "css" | "xpath";
+  /**
+   * Cache strategy for actions (only applies to opType === 'act')
+   *
+   * - 'none': Never cache (default, safe for side effects)
+   * - 'result-only': Cache result but still execute action
+   * - 'full': Cache and skip execution on hit (idempotent actions only)
+   */
+  cacheStrategy?: ActionCacheStrategy;
 }
 
 export interface TaskOutput {
