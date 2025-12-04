@@ -371,4 +371,99 @@ describe("action cache strategies", () => {
       })
     );
   });
+
+  it("'result-only' surfaces failures instead of masking them with cached result", async () => {
+    const agent = await createAgentWithCache();
+    const contextStub = {
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const pageStub = {
+      url: () => "https://example.com/action-failure",
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => contextStub,
+    } as any;
+
+    agent.currentPage = pageStub;
+
+    // First execution succeeds and writes to cache
+    mockRunAgentTask.mockResolvedValueOnce({
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "success-output",
+    });
+    await agent.executeTask(
+      "Click button",
+      { cacheStrategy: "result-only" },
+      pageStub
+    );
+    await (agent as any).cacheManager.flushPending?.();
+
+    // Second execution fails - should surface failure, not cached success
+    mockRunAgentTask.mockResolvedValueOnce({
+      status: TaskStatus.FAILED,
+      steps: [],
+      output: "failure-output",
+    });
+    const onComplete = jest.fn();
+    const result = await agent.executeTask(
+      "Click button",
+      { cacheStrategy: "result-only", onComplete },
+      pageStub
+    );
+
+    // Should return the failure, not the cached success
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toBe("failure-output");
+
+    // onComplete should NOT be called on failure
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("'result-only' does not mark failure as cache hit in history", async () => {
+    const agent = await createAgentWithCache();
+    const contextStub = {
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    const pageStub = {
+      url: () => "https://example.com/action-failure-history",
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => contextStub,
+    } as any;
+
+    agent.currentPage = pageStub;
+
+    // First execution succeeds
+    mockRunAgentTask.mockResolvedValueOnce({
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "success",
+    });
+    await agent.executeTask(
+      "Do thing",
+      { cacheStrategy: "result-only" },
+      pageStub
+    );
+    await (agent as any).cacheManager.flushPending?.();
+
+    // Second execution fails
+    mockRunAgentTask.mockResolvedValueOnce({
+      status: TaskStatus.FAILED,
+      steps: [],
+      output: "failed",
+    });
+    await agent.executeTask(
+      "Do thing",
+      { cacheStrategy: "result-only" },
+      pageStub
+    );
+
+    // Check history - failure should NOT be marked as cache hit
+    const history = agent.history;
+    const lastEntry = history[history.length - 1];
+    expect(lastEntry.cacheHit).toBe(false);
+  });
 });

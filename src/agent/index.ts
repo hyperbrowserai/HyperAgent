@@ -583,17 +583,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             const metricsAfter = this.metricsTracker.snapshot();
             const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
             const duration = performance.now() - opStart;
-            // For "result-only" hits, we executed for side effects but use cached result
-            const isResultOnlyHit = !!resultOnlyHit;
-            const finalResult = resultOnlyHit ?? result;
-            if (cachePrep && result.status === TaskStatus.COMPLETED && !isResultOnlyHit) {
+            // For "result-only" hits, only use cached result if execution succeeded
+            // If execution failed, surface the failure instead of masking it
+            const executionSucceeded = result.status === TaskStatus.COMPLETED;
+            const useResultOnlyCache = !!resultOnlyHit && executionSucceeded;
+            const finalResult = useResultOnlyCache ? resultOnlyHit : result;
+            if (cachePrep && executionSucceeded && !useResultOnlyCache) {
               cachePrep.write(result, Math.round(duration), {
                 promptTokens: delta.promptTokens,
                 completionTokens: delta.completionTokens,
               });
             }
-            // Update task state with final result for result-only mode
-            if (isResultOnlyHit) {
+            // Update task state with final result for result-only mode (only on success)
+            if (useResultOnlyCache) {
               taskState.output = finalResult.output;
               taskState.steps = finalResult.steps ?? [];
             }
@@ -610,11 +612,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               durationMs: Math.round(duration),
               promptTokens: delta.promptTokens,
               completionTokens: delta.completionTokens,
-              cacheHit: isResultOnlyHit,
+              cacheHit: useResultOnlyCache,
               warning: warningText,
             });
-            // Call onComplete for result-only hits (full hits handled above)
-            if (isResultOnlyHit && mergedParams.onComplete) {
+            // Call onComplete for result-only hits only on success (full hits handled above)
+            if (useResultOnlyCache && mergedParams.onComplete) {
               return Promise.resolve(
                 mergedParams.onComplete(finalResult)
               ).catch(() => {});
@@ -798,17 +800,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const metricsAfter = this.metricsTracker.snapshot();
       const delta = this.computeOpDelta(opType, metricsBefore, metricsAfter);
       const opDuration = performance.now() - opStart;
-      // For "result-only" hits, we executed for side effects but use cached result
-      const isResultOnlyHit = !!resultOnlyHit;
-      const finalResult = resultOnlyHit ?? result;
-      if (cachePrep && result.status === TaskStatus.COMPLETED && !isResultOnlyHit) {
+      // For "result-only" hits, only use cached result if execution succeeded
+      // If execution failed, surface the failure instead of masking it
+      const executionSucceeded = result.status === TaskStatus.COMPLETED;
+      const useResultOnlyCache = !!resultOnlyHit && executionSucceeded;
+      const finalResult = useResultOnlyCache ? resultOnlyHit : result;
+      if (cachePrep && executionSucceeded && !useResultOnlyCache) {
         cachePrep.write(result, Math.round(duration), {
           promptTokens: delta.promptTokens,
           completionTokens: delta.completionTokens,
         });
       }
-      // Update task state with final result for result-only mode
-      if (isResultOnlyHit) {
+      // Update task state with final result for result-only mode (only on success)
+      if (useResultOnlyCache) {
         taskState.output = finalResult.output;
         taskState.steps = finalResult.steps ?? [];
       }
@@ -825,11 +829,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         durationMs: Math.round(opDuration),
         promptTokens: delta.promptTokens,
         completionTokens: delta.completionTokens,
-        cacheHit: isResultOnlyHit,
+        cacheHit: useResultOnlyCache,
         warning: warningText,
       });
-      // Call onComplete for result-only hits (full hits handled above)
-      if (isResultOnlyHit && mergedParams.onComplete) {
+      // Call onComplete for result-only hits only on success (full hits handled above)
+      if (useResultOnlyCache && mergedParams.onComplete) {
         await mergedParams.onComplete(finalResult);
       }
       return finalResult;
