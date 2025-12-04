@@ -52,6 +52,12 @@ export interface TaskParams {
   selector?: string;
   selectorType?: "css" | "xpath";
   /**
+   * Explicitly specify the operation type.
+   * If not provided, defaults to "extract" when outputSchema is present, otherwise "act".
+   * Use this to ensure extract behavior (selector scoping, caching) even without a schema.
+   */
+  opType?: "extract" | "act";
+  /**
    * Cache strategy for actions (only applies to opType === 'act')
    *
    * - 'none': Never cache (default, safe for side effects)

@@ -503,7 +503,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     const mergedParams = params ?? {};
-    const opType: OperationType = mergedParams.outputSchema ? "extract" : "act";
+    // Use explicit opType if provided, otherwise infer from outputSchema
+    const opType: OperationType =
+      mergedParams.opType ?? (mergedParams.outputSchema ? "extract" : "act");
     const selectorWarnings: string[] = [];
     const metricsBefore = this.metricsTracker.snapshot();
     const opStart = performance.now();
@@ -710,7 +712,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     const mergedParams = params ?? {};
-    const opType: OperationType = mergedParams?.outputSchema ? "extract" : "act";
+    // Use explicit opType if provided, otherwise infer from outputSchema
+    const opType: OperationType =
+      mergedParams?.opType ?? (mergedParams?.outputSchema ? "extract" : "act");
     const selectorWarnings: string[] = [];
     const metricsBefore = this.metricsTracker.snapshot();
     const opStart = performance.now();
@@ -1947,6 +1951,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         maxSteps: params?.maxSteps ?? 2,
         ...params,
         outputSchema,
+        // Always treat as extract even without schema (ensures selector scoping, caching)
+        opType: "extract",
       };
       if (task) {
         const res = await this.executeTask(
