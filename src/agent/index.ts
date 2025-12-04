@@ -59,6 +59,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     MAX_DEBUG_ELEMENTS_TO_STORE: 50,
     MAX_LABEL_LENGTH: 60,
   };
+  private static aiActionDeprecationWarned = false;
 
   private llm: HyperAgentLLM;
   private tasks: Record<string, TaskState> = {};
@@ -753,7 +754,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   /**
    * Execute a single granular action using a11y mode
-   * Internal method used by page.aiAction()
+   * Internal method used by page.perform() (and deprecated page.aiAction())
    *
    * Architecture: Simple examine->act flow
    * - 1 LLM call (examineDom finds element and suggests method)
@@ -768,6 +769,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     pageOrGetter: Page | (() => Page),
     _params?: TaskParams
   ): Promise<TaskOutput> {
+    const params = _params;
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
     if (this.debug) {
@@ -809,6 +811,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         "[Perf][executeSingleAction] findElementWithRetry",
         findStart
       );
+      params?.onPerfEvent?.({
+        phase: "find",
+        durationMs: performance.now() - findStart,
+      });
 
       if (this.debug) {
         console.log(`[aiAction] Found element: ${element.elementId}`);
@@ -872,6 +878,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       };
 
       // Use shared performAction to execute
+      const actionExecStart = performance.now();
       const actionOutput = await performAction(actionContext, {
         elementId: element.elementId,
         method,
@@ -879,6 +886,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         instruction,
         confidence: 1, // Implicit confidence for single action
       });
+      const actionExecDuration = performance.now() - actionExecStart;
 
       if (
         actionOutput.debug &&
@@ -899,13 +907,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       logPerf(
         this.debug,
         "[Perf][executeSingleAction] action execution",
-        actionStart
+        actionExecStart
       );
       logPerf(
         this.debug,
         "[Perf][executeSingleAction] waitForSettledDOM",
         waitStart
       );
+      params?.onPerfEvent?.({
+        phase: "actionExecution",
+        durationMs: actionExecDuration,
+      });
+      params?.onPerfEvent?.({
+        phase: "waitForSettledDOM",
+        durationMs: performance.now() - waitStart,
+      });
 
       // Write debug data on success
       await this.writeDebugData({
@@ -924,7 +940,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         success: true,
       });
 
+      const totalDuration = performance.now() - actionStart;
       logPerf(this.debug, "[Perf][executeSingleAction] total", actionStart);
+      params?.onPerfEvent?.({
+        phase: "total",
+        durationMs: totalDuration,
+      });
       return {
         status: TaskStatus.COMPLETED,
         steps: [],
@@ -1184,10 +1205,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       page.context().off("page", onPage);
     };
 
-    hyperPage.ai = (task: string, params?: TaskParams) =>
-      this.executeTask(task, params, getActivePage());
+    const warnAiActionDeprecated = () => {
+      if (!HyperAgent.aiActionDeprecationWarned) {
+        HyperAgent.aiActionDeprecationWarned = true;
+        console.warn(
+          "[HyperAgent] page.aiAction() is deprecated. Use page.perform() instead."
+        );
+      }
+    };
 
-    hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
+    const executeSingleActionWithRetry = async (
+      instruction: string,
+      params?: TaskParams
+    ) => {
       const maxRetries = 3;
       for (let i = 0; i < maxRetries; i++) {
         try {
@@ -1217,6 +1247,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         "Failed to execute action after max retries due to page switching",
         500
       );
+    };
+
+    hyperPage.ai = (task: string, params?: TaskParams) =>
+      this.executeTask(task, params, getActivePage());
+
+    hyperPage.perform = (instruction: string, params?: TaskParams) =>
+      executeSingleActionWithRetry(instruction, params);
+
+    hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
+      warnAiActionDeprecated();
+      return executeSingleActionWithRetry(instruction, params);
     };
 
     // aiAsync tasks run in background, so we just use the current scope start point.

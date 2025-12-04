@@ -45,6 +45,7 @@ export const AGENT_ELEMENT_ACTIONS = [
 /**
  * Actions allowed for aiAction (executeSingleAction)
  * Mirrors AGENT_ELEMENT_ACTIONS because both flows support the same action set.
+ * perform() uses this list via aiAction compatibility.
  */
 export const AIACTION_ALLOWED_ACTIONS = AGENT_ELEMENT_ACTIONS;
 

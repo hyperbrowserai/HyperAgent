@@ -1,5 +1,5 @@
 /**
- * Debug writer utility for aiAction debugging
+ * Debug writer utility for perform()/aiAction debugging
  * Creates a debug folder structure similar to the agent task debugging
  */
 
@@ -72,7 +72,7 @@ function getSessionId(): string {
 }
 
 /**
- * Write debug data for an aiAction call
+ * Write debug data for a perform()/aiAction call
  */
 export async function writeAiActionDebug(
   debugData: DebugData,

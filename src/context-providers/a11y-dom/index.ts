@@ -730,6 +730,16 @@ async function collectCrossOriginFrameData({
   // Any legitimate nested OOPIFs will be discovered via their own CDP sessions
   const subMaps = await buildBackendIdMaps(session, frameIndex, debug, false);
 
+  if (debug) {
+    const tagCount = Object.keys(subMaps.tagNameMap || {}).length;
+    const xpathCount = Object.keys(subMaps.xpathMap || {}).length;
+    const backendCount = Object.keys(subMaps.backendNodeMap || {}).length;
+    const frameMapSize = subMaps.frameMap?.size ?? 0;
+    console.log(
+      `[A11y][OOPIF] frame ${frameIndex} buildBackendIdMaps: tag=${tagCount}, xpath=${xpathCount}, backend=${backendCount}, frameMap=${frameMapSize}`
+    );
+  }
+
   Object.assign(maps.tagNameMap, subMaps.tagNameMap);
   Object.assign(maps.xpathMap, subMaps.xpathMap);
   Object.assign(maps.accessibleNameMap, subMaps.accessibleNameMap);
@@ -777,6 +787,19 @@ async function collectCrossOriginFrameData({
       maps.frameMap || new Map(),
       maps.accessibleNameMap
     );
+    if (debug) {
+      console.log(
+        `[A11y][OOPIF] frame ${frameIndex} DOM fallback nodes=${domFallbackNodes.length} (tag keys for frame: ${
+          Object.keys(maps.tagNameMap || {}).filter((k) =>
+            k.startsWith(`${frameIndex}-`)
+          ).length
+        }, xpath keys: ${
+          Object.keys(maps.xpathMap || {}).filter((k) =>
+            k.startsWith(`${frameIndex}-`)
+          ).length
+        })`
+      );
+    }
     if (domFallbackNodes.length > 0) {
       nodes = domFallbackNodes;
     }

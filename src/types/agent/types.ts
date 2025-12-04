@@ -40,6 +40,13 @@ export interface TaskParams {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
+  /**
+   * Optional performance hook (primarily for perform/aiAction benchmarking)
+   */
+  onPerfEvent?: (event: {
+    phase: "find" | "actionExecution" | "waitForSettledDOM" | "total";
+    durationMs: number;
+  }) => void;
 }
 
 export interface TaskOutput {
@@ -99,6 +106,12 @@ export interface HyperPage extends Page {
    * Execute a single granular action using a11y mode
    * Best for: Single actions like "click login", "fill email with test@example.com"
    * Mode: Always a11y (accessibility tree, faster and more reliable)
+   */
+  perform: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
+
+  /**
+   * Deprecated: use perform() instead.
+   * Execute a single granular action using a11y mode
    */
   aiAction: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
 
