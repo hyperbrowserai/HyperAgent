@@ -4,9 +4,7 @@ import { Page } from "playwright-core";
 import { ErrorEmitter } from "@/utils";
 
 export const AgentOutputFn = (
-  actionsSchema: z.ZodUnion<
-    readonly [z.ZodType<any>, ...z.ZodType<any>[]]
-  >
+  actionsSchema: z.ZodUnion<readonly [z.ZodType<any>, ...z.ZodType<any>[]]>
 ) =>
   z.object({
     thoughts: z
@@ -99,6 +97,12 @@ export interface HyperPage extends Page {
    * Execute a single granular action using a11y mode
    * Best for: Single actions like "click login", "fill email with test@example.com"
    * Mode: Always a11y (accessibility tree, faster and more reliable)
+   */
+  perform: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
+
+  /**
+   * @deprecated: use perform() instead.
+   * Execute a single granular action using a11y mode
    */
   aiAction: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
 

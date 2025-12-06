@@ -84,10 +84,11 @@ const result = await agent.executeTask(
 );
 console.log(result.output);
 
-// Use page.ai and page.extract
+// Use page.ai, page.perform, and page.extract
 const page = await agent.newPage();
 await page.goto("https://flights.google.com", { waitUntil: "load" });
 await page.ai("search for flights from Rio to LAX from July 16 to July 22");
+await page.perform("click the search button");
 const res = await page.extract(
   "give me the flight options",
   z.object({
@@ -110,7 +111,9 @@ await agent.closeAgent();
 
 HyperAgent provides two complementary APIs optimized for different use cases:
 
-### 🎯 `page.aiAction()` - Single Granular Actions
+### 🎯 `page.perform()` - Single Granular Actions
+
+> `page.aiAction()` is deprecated and remains available as an alias; prefer `page.perform()` going forward.
 
 **Best for**: Single, specific actions like "click login", "fill email with test@example.com"
 
@@ -126,9 +129,9 @@ const page = await agent.newPage();
 await page.goto("https://example.com/login");
 
 // Fast, reliable single actions
-await page.aiAction("fill email with user@example.com");
-await page.aiAction("fill password with mypassword");
-await page.aiAction("click the login button");
+await page.perform("fill email with user@example.com");
+await page.perform("fill password with mypassword");
+await page.perform("click the login button");
 ```
 
 ### 🧠 `page.ai()` - Complex Multi-Step Tasks
@@ -164,9 +167,9 @@ await page.ai("search for flights from Miami to New Orleans on July 16", {
 Combine both APIs for optimal performance:
 
 ```typescript
-// Use aiAction for fast, reliable individual actions
-await page.aiAction("click the search button");
-await page.aiAction("type laptop into search");
+// Use perform for fast, reliable individual actions
+await page.perform("click the search button");
+await page.perform("type laptop into search");
 
 // Use ai() for complex, multi-step workflows
 await page.ai("filter results by price under $1000 and sort by rating");

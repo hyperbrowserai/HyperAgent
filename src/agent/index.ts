@@ -323,11 +323,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const lastPage = pages[pages.length - 1];
       // If the last page is different and not closed, switch to it
       // We prefer the newest page as it's likely the result of the user's last action
-      if (
-        lastPage &&
-        !lastPage.isClosed() &&
-        lastPage !== this._currentPage
-      ) {
+      if (lastPage && !lastPage.isClosed() && lastPage !== this._currentPage) {
         if (this.debug) {
           console.log(
             `[HyperAgent] Polling detected new page, switching focus: ${lastPage.url()}`
@@ -441,16 +437,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         cleanup();
         // Retrieve the correct state to update
         const failedTaskState = this.tasks[taskId];
-      if (failedTaskState) {
-        failedTaskState.status = TaskStatus.FAILED;
-        failedTaskState.error = error.message;
-        // Emit error on the central emitter, including the taskId
-        this.errorEmitter.emit("error", error);
-      } else {
-        // Fallback if task state somehow doesn't exist
-        console.error(`Task state ${taskId} not found during error handling.`);
-      }
-    });
+        if (failedTaskState) {
+          failedTaskState.status = TaskStatus.FAILED;
+          failedTaskState.error = error.message;
+          // Emit error on the central emitter, including the taskId
+          this.errorEmitter.emit("error", error);
+        } else {
+          // Fallback if task state somehow doesn't exist
+          console.error(
+            `Task state ${taskId} not found during error handling.`
+          );
+        }
+      });
     return this.getTaskControl(taskId);
   }
 
@@ -753,7 +751,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   /**
    * Execute a single granular action using a11y mode
-   * Internal method used by page.aiAction()
+   * Internal method used by page.perform() (and deprecated page.aiAction())
    *
    * Architecture: Simple examine->act flow
    * - 1 LLM call (examineDom finds element and suggests method)
@@ -763,7 +761,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @param page The page to execute the action on
    * @returns A promise that resolves to the task output
    */
-  private async executeSingleAction(
+  public async executeSingleAction(
     instruction: string,
     pageOrGetter: Page | (() => Page),
     _params?: TaskParams
@@ -799,7 +797,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       // Check if page context switched during findElement (e.g. new tab opened by previous action)
       if (getPage() !== initialPage) {
-        throw new HyperagentError("Page context switched during execution", 409);
+        throw new HyperagentError(
+          "Page context switched during execution",
+          409
+        );
       }
 
       domState = foundDomState;
@@ -840,7 +841,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       // Check context switch again before action
       if (getPage() !== initialPage) {
-        throw new HyperagentError("Page context switched during execution", 409);
+        throw new HyperagentError(
+          "Page context switched during execution",
+          409
+        );
       }
 
       // Create a context object compatible with performAction
@@ -934,7 +938,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       // If page switched during execution, prioritize that over the error
       // This catches cases where findElement failed because the old page closed/navigated
       if (getPage() !== initialPage) {
-        throw new HyperagentError("Page context switched during execution", 409);
+        throw new HyperagentError(
+          "Page context switched during execution",
+          409
+        );
       }
 
       // Write debug data on error
@@ -1184,10 +1191,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       page.context().off("page", onPage);
     };
 
-    hyperPage.ai = (task: string, params?: TaskParams) =>
-      this.executeTask(task, params, getActivePage());
-
-    hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
+    const executeSingleActionWithRetry = async (
+      instruction: string,
+      params?: TaskParams
+    ) => {
       const maxRetries = 3;
       for (let i = 0; i < maxRetries; i++) {
         try {
@@ -1217,6 +1224,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         "Failed to execute action after max retries due to page switching",
         500
       );
+    };
+
+    hyperPage.ai = (task: string, params?: TaskParams) =>
+      this.executeTask(task, params, getActivePage());
+
+    hyperPage.perform = (instruction: string, params?: TaskParams) =>
+      executeSingleActionWithRetry(instruction, params);
+
+    hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
+      return executeSingleActionWithRetry(instruction, params);
     };
 
     // aiAsync tasks run in background, so we just use the current scope start point.
