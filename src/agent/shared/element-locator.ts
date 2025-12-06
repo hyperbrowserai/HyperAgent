@@ -4,7 +4,11 @@
  */
 
 import type { Page } from "playwright-core";
-import { toEncodedId, type IframeInfo, resolveFrameByXPath } from "../../context-providers/a11y-dom";
+import {
+  toEncodedId,
+  type IframeInfo,
+  resolveFrameByXPath,
+} from "../../context-providers/a11y-dom";
 import { HyperagentError } from "../error";
 
 /**
@@ -122,4 +126,55 @@ export async function getElementLocator(
   }
 
   return { locator: targetFrame.locator(`xpath=${xpath}`), xpath };
+}
+
+export async function getLocatorFromXPath(
+  xpath: string,
+  page: Page,
+  frameIndex?: number | null,
+  frameMap?: Map<number, IframeInfo>,
+  debug = false
+): Promise<ReturnType<Page["locator"]>> {
+  const targetFrameIndex = frameIndex ?? 0;
+
+  if (targetFrameIndex === 0) {
+    return page.locator(`xpath=${xpath}`);
+  }
+
+  if (!frameMap || !frameMap.has(targetFrameIndex)) {
+    const errorMsg = `Frame metadata not found for frame ${targetFrameIndex}`;
+    if (debug) {
+      console.error(`[getLocatorFromXPath] ${errorMsg}`);
+    }
+    throw new HyperagentError(errorMsg, 404);
+  }
+
+  const targetFrame =
+    (await resolveFrameByXPath(page, frameMap, targetFrameIndex)) ?? undefined;
+
+  if (!targetFrame) {
+    const errorMsg = `Could not resolve frame for xpath ${xpath} (frameIndex: ${targetFrameIndex})`;
+    if (debug) {
+      console.error(`[getLocatorFromXPath] ${errorMsg}`);
+    }
+    throw new HyperagentError(errorMsg, 404);
+  }
+
+  if (debug) {
+    console.log(
+      `[getLocatorFromXPath] Using frame ${targetFrameIndex}: ${targetFrame.url()}`
+    );
+  }
+
+  try {
+    await targetFrame.waitForLoadState("domcontentloaded", { timeout: 5000 });
+  } catch {
+    if (debug) {
+      console.warn(
+        `[getLocatorFromXPath] Timeout waiting for iframe to load (frame ${targetFrameIndex}), proceeding anyway`
+      );
+    }
+  }
+
+  return targetFrame.locator(`xpath=${xpath}`);
 }

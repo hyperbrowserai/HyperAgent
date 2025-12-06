@@ -107,6 +107,7 @@ export const buildActionCacheEntry = ({
     elementId,
     method,
     arguments: args,
+    actionParams: (action.params as Record<string, unknown>) || undefined,
     frameIndex,
     xpath,
     actionType: action.type,

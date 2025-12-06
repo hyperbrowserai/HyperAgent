@@ -34,6 +34,7 @@ export interface ActionCacheEntry {
   elementId: string | null;
   method: string | null;
   arguments: string[];
+  actionParams?: Record<string, unknown>;
   frameIndex: number | null;
   xpath: string | null;
   actionType: string;
@@ -46,6 +47,28 @@ export interface ActionCacheOutput {
   createdAt: string;
   status?: TaskStatus;
   steps: ActionCacheEntry[];
+}
+
+export interface ActionCacheReplayStepResult {
+  stepIndex: number;
+  actionType: string;
+  usedXPath: boolean;
+  fallbackUsed: boolean;
+  retries: number;
+  success: boolean;
+  message: string;
+}
+
+export interface ActionCacheReplayResult {
+  replayId: string;
+  sourceTaskId: string;
+  steps: ActionCacheReplayStepResult[];
+  status: TaskStatus.COMPLETED | TaskStatus.FAILED;
+}
+
+export interface RunFromActionCacheParams {
+  maxXPathRetries?: number;
+  debug?: boolean;
 }
 
 export interface TaskParams {
@@ -136,4 +159,8 @@ export interface HyperPage extends Page {
     params?: Omit<TaskParams, "outputSchema">
   ): Promise<T extends z.ZodType<any> ? z.infer<T> : string>;
   getActionCache: (taskId: string) => ActionCacheOutput | null;
+  runFromActionCache: (
+    cache: ActionCacheOutput,
+    params?: RunFromActionCacheParams
+  ) => Promise<ActionCacheReplayResult>;
 }

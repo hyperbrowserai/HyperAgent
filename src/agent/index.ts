@@ -13,6 +13,8 @@ import {
   ActionType,
   AgentActionDefinition,
   ActionCacheOutput,
+  ActionCacheReplayResult,
+  RunFromActionCacheParams,
   endTaskStatuses,
   Task,
   TaskOutput,
@@ -20,6 +22,7 @@ import {
   TaskState,
   TaskStatus,
 } from "@/types";
+import fs from "fs";
 import {
   CompleteActionDefinition,
   DEFAULT_ACTIONS,
@@ -49,6 +52,9 @@ import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import { setDebugOptions } from "@/debug/options";
 import { initializeRuntimeContext } from "./shared/runtime-context";
 import { performAction } from "./actions/shared/perform-action";
+import { captureDOMState } from "./shared/dom-capture";
+import { getLocatorFromXPath } from "./shared/element-locator";
+import { executePlaywrightMethod } from "./shared/execute-playwright-method";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -536,6 +542,164 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       taskState.status = TaskStatus.FAILED;
       throw error;
     }
+  }
+
+  public async runFromActionCache(
+    cache: ActionCacheOutput,
+    pageOrGetter: Page | (() => Page),
+    params?: RunFromActionCacheParams
+  ): Promise<ActionCacheReplayResult> {
+    const replayId = uuidv4();
+    const maxXPathRetries = params?.maxXPathRetries ?? 3;
+    const debug = params?.debug ?? this.debug;
+    const getPage = () =>
+      typeof pageOrGetter === "function" ? pageOrGetter() : pageOrGetter;
+
+    const stepsResult: ActionCacheReplayResult["steps"] = [];
+    let replayStatus: TaskStatus.COMPLETED | TaskStatus.FAILED =
+      TaskStatus.COMPLETED;
+
+    for (const step of [...cache.steps].sort(
+      (a, b) => a.stepIndex - b.stepIndex
+    )) {
+      const page = getPage();
+
+      await waitForSettledDOM(page);
+      const domState = await captureDOMState(page, {
+        useCache: false,
+        debug,
+        enableVisualMode: false,
+      });
+
+      const stepResult = {
+        stepIndex: step.stepIndex,
+        actionType: step.actionType,
+        usedXPath: false,
+        fallbackUsed: false,
+        retries: 0,
+        success: false,
+        message: "",
+      };
+
+      if (step.actionType === "goToUrl") {
+        const urlFromArgs =
+          (step.arguments && step.arguments[0]) || undefined;
+        const urlFromMessage =
+          typeof step.message === "string"
+            ? (step.message.match(/https?:\/\/\S+/)?.[0] as string | undefined)
+            : undefined;
+        const url =
+          (step.actionParams?.url as string | undefined) ||
+          urlFromArgs ||
+          urlFromMessage;
+        if (typeof url === "string" && url.length > 0) {
+          try {
+            await page.goto(url);
+            await waitForSettledDOM(page);
+            stepResult.success = true;
+            stepResult.message = `Navigated to ${url}`;
+            stepsResult.push(stepResult);
+            markDomSnapshotDirty(page);
+            continue;
+          } catch (error) {
+            stepResult.success = false;
+            stepResult.message =
+              error instanceof Error ? error.message : String(error);
+            replayStatus = TaskStatus.FAILED;
+            stepsResult.push(stepResult);
+            break;
+          }
+        } else {
+          stepResult.success = false;
+          stepResult.message = "No URL found in action cache for goToUrl";
+          replayStatus = TaskStatus.FAILED;
+          stepsResult.push(stepResult);
+          break;
+        }
+      }
+
+      if (step.xpath && step.method) {
+        for (let attempt = 0; attempt < maxXPathRetries; attempt++) {
+          stepResult.retries = attempt + 1;
+          try {
+            const locator = await getLocatorFromXPath(
+              step.xpath,
+              page,
+              step.frameIndex ?? undefined,
+              domState.frameMap,
+              debug
+            );
+            await executePlaywrightMethod(
+              step.method,
+              step.arguments ?? [],
+              locator,
+              {
+                clickTimeout: 3500,
+                debug,
+              }
+            );
+            stepResult.usedXPath = true;
+            stepResult.success = true;
+            stepResult.message = "Executed via cached xpath";
+            break;
+          } catch (error) {
+            stepResult.message =
+              error instanceof Error ? error.message : String(error);
+            await waitForSettledDOM(page);
+            if (attempt >= maxXPathRetries - 1) {
+              stepResult.success = false;
+            }
+          }
+        }
+      }
+
+      if (!stepResult.success) {
+        stepResult.fallbackUsed = true;
+        try {
+          const fallbackResult = await this.executeSingleAction(
+            step.instruction,
+            page,
+            { maxSteps: 1 }
+          );
+          stepResult.success = fallbackResult.status === TaskStatus.COMPLETED;
+          stepResult.message =
+            fallbackResult.output ||
+            (fallbackResult.status ?? "").toString() ||
+            "Fallback completed";
+        } catch (error) {
+          stepResult.success = false;
+          stepResult.message =
+            error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      await waitForSettledDOM(page);
+      markDomSnapshotDirty(page);
+      stepsResult.push(stepResult);
+
+      if (!stepResult.success) {
+        replayStatus = TaskStatus.FAILED;
+        break;
+      }
+    }
+
+    const replayResult: ActionCacheReplayResult = {
+      replayId,
+      sourceTaskId: cache.taskId,
+      steps: stepsResult,
+      status: replayStatus,
+    };
+
+    if (debug) {
+      const debugDir = "debug/action-cache";
+      fs.mkdirSync(debugDir, { recursive: true });
+      fs.writeFileSync(
+        `${debugDir}/replay-${replayId}.json`,
+        JSON.stringify(replayResult, null, 2)
+      );
+    }
+
+    return replayResult;
   }
 
   /**
@@ -1259,6 +1423,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
 
     hyperPage.getActionCache = (taskId: string) => this.getActionCache(taskId);
+
+    hyperPage.runFromActionCache = (cache, params) =>
+      this.runFromActionCache(cache, getActivePage, params);
 
     // aiAsync tasks run in background, so we just use the current scope start point.
     // The task itself has internal auto-following logic (from executeTaskAsync implementation).
