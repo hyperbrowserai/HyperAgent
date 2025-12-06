@@ -28,6 +28,26 @@ export interface AgentStep {
   actionOutput: ActionOutput;
 }
 
+export interface ActionCacheEntry {
+  stepIndex: number;
+  instruction: string;
+  elementId: string | null;
+  method: string | null;
+  arguments: string[];
+  frameIndex: number | null;
+  xpath: string | null;
+  actionType: string;
+  success: boolean;
+  message: string;
+}
+
+export interface ActionCacheOutput {
+  taskId: string;
+  createdAt: string;
+  status?: TaskStatus;
+  steps: ActionCacheEntry[];
+}
+
 export interface TaskParams {
   maxSteps?: number;
   debugDir?: string;
@@ -41,12 +61,15 @@ export interface TaskParams {
 }
 
 export interface TaskOutput {
+  taskId: string;
   status?: TaskStatus;
   steps: AgentStep[];
   output?: string;
+  actionCache?: ActionCacheOutput;
 }
 
 export interface Task {
+  id: string;
   getStatus: () => TaskStatus;
   pause: () => TaskStatus;
   resume: () => TaskStatus;
@@ -112,4 +135,5 @@ export interface HyperPage extends Page {
     outputSchema?: T,
     params?: Omit<TaskParams, "outputSchema">
   ): Promise<T extends z.ZodType<any> ? z.infer<T> : string>;
+  getActionCache: (taskId: string) => ActionCacheOutput | null;
 }

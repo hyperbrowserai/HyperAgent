@@ -1,4 +1,4 @@
-import { AgentStep } from "@/types/agent/types";
+import { ActionCacheOutput, AgentStep } from "@/types/agent/types";
 import fs from "fs";
 
 import { performance } from "perf_hooks";
@@ -39,6 +39,7 @@ import { ActionNotFoundError } from "../actions";
 import { AgentCtx } from "./types";
 import { HyperAgentMessage } from "@/llm/types";
 import { Jimp } from "jimp";
+import { buildActionCacheEntry } from "../shared/action-cache";
 
 // DomChunkAggregator logic moved to shared/dom-capture.ts
 
@@ -267,6 +268,7 @@ export const runAgentTask = async (
   const MAX_CONSECUTIVE_FAILURES_OR_WAITS = 5;
   let lastOverlayKey: string | null = null;
   let lastScreenshotBase64: string | undefined;
+  const actionCacheSteps: ActionCacheOutput["steps"] = [];
 
   try {
     // Initialize context at the start of the task
@@ -560,6 +562,14 @@ export const runAgentTask = async (
         markDomSnapshotDirty(page);
       }
 
+      const actionCacheEntry = buildActionCacheEntry({
+        stepIndex: currStep,
+        action,
+        actionOutput,
+        domState,
+      });
+      actionCacheSteps.push(actionCacheEntry);
+
       // Check action result and handle retry logic
       if (action.type === "wait") {
         // Wait action - increment counter
@@ -659,10 +669,24 @@ export const runAgentTask = async (
     cleanupDomListeners(page);
   }
 
+  const actionCache: ActionCacheOutput = {
+    taskId,
+    createdAt: new Date().toISOString(),
+    status: taskState.status,
+    steps: actionCacheSteps,
+  };
+  fs.mkdirSync(debugDir, { recursive: true });
+  fs.writeFileSync(
+    `${debugDir}/action-cache.json`,
+    JSON.stringify(actionCache, null, 2)
+  );
+
   const taskOutput: TaskOutput = {
+    taskId,
     status: taskState.status,
     steps: taskState.steps,
     output,
+    actionCache,
   };
   if (ctx.debug) {
     fs.writeFileSync(

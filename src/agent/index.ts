@@ -12,6 +12,7 @@ import {
   ActionContext,
   ActionType,
   AgentActionDefinition,
+  ActionCacheOutput,
   endTaskStatuses,
   Task,
   TaskOutput,
@@ -71,6 +72,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private cdpActionsEnabled: boolean;
+  private actionCacheByTaskId: Record<string, ActionCacheOutput> = {};
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -248,6 +250,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     delete this._variables[key];
   }
 
+  public getActionCache(taskId: string): ActionCacheOutput | null {
+    const cache = this.actionCacheByTaskId[taskId];
+    if (!cache) return null;
+    return {
+      ...cache,
+      steps: [...cache.steps],
+    };
+  }
+
   /**
    * Get all pages in the context
    * @returns Array of HyperPage objects
@@ -352,6 +363,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw new HyperagentError(`Task ${taskId} not found`);
     }
     return {
+      id: taskId,
       getStatus: () => taskState.status,
       pause: () => {
         if (taskState.status === TaskStatus.RUNNING) {
@@ -432,7 +444,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       taskState,
       mergedParams
     )
-      .then(() => cleanup())
+      .then((result) => {
+        if (result.actionCache) {
+          this.actionCacheByTaskId[taskId] = result.actionCache;
+        }
+        cleanup();
+      })
       .catch((error: Error) => {
         cleanup();
         // Retrieve the correct state to update
@@ -510,6 +527,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mergedParams
       );
       this.context?.off("page", onPage);
+      if (result.actionCache) {
+        this.actionCacheByTaskId[taskId] = result.actionCache;
+      }
       return result;
     } catch (error) {
       this.context?.off("page", onPage);
@@ -766,6 +786,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     pageOrGetter: Page | (() => Page),
     _params?: TaskParams
   ): Promise<TaskOutput> {
+    const taskId = uuidv4();
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
     if (this.debug) {
@@ -930,6 +951,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       logPerf(this.debug, "[Perf][executeSingleAction] total", actionStart);
       return {
+        taskId,
         status: TaskStatus.COMPLETED,
         steps: [],
         output: `Successfully executed: ${instruction}`,
@@ -1235,6 +1257,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
       return executeSingleActionWithRetry(instruction, params);
     };
+
+    hyperPage.getActionCache = (taskId: string) => this.getActionCache(taskId);
 
     // aiAsync tasks run in background, so we just use the current scope start point.
     // The task itself has internal auto-following logic (from executeTaskAsync implementation).
