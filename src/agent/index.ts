@@ -53,8 +53,9 @@ import { setDebugOptions } from "@/debug/options";
 import { initializeRuntimeContext } from "./shared/runtime-context";
 import { performAction } from "./actions/shared/perform-action";
 import { captureDOMState } from "./shared/dom-capture";
-import { getLocatorFromXPath } from "./shared/element-locator";
 import { executePlaywrightMethod } from "./shared/execute-playwright-method";
+import { resolveXPathWithCDP } from "./shared/xpath-cdp-resolver";
+import { ReplayStepMeta } from "@/types/agent/types";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -563,121 +564,31 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       (a, b) => a.stepIndex - b.stepIndex
     )) {
       const page = getPage();
-
-      await waitForSettledDOM(page);
-      const domState = await captureDOMState(page, {
-        useCache: false,
-        debug,
-        enableVisualMode: false,
+      const hyperPage = page as HyperPage;
+      const result = await hyperPage.perform(step.instruction, {
+        cachedAction: step,
+        maxSteps: maxXPathRetries,
       });
 
-      const stepResult = {
+      const meta = result.replayStepMeta;
+      const success = result.status === TaskStatus.COMPLETED;
+
+      stepsResult.push({
         stepIndex: step.stepIndex,
         actionType: step.actionType,
-        usedXPath: false,
-        fallbackUsed: false,
-        retries: 0,
-        success: false,
-        message: "",
-      };
+        usedXPath: meta?.usedCachedAction ?? false,
+        fallbackUsed: meta?.fallbackUsed ?? false,
+        cachedXPath: meta?.cachedXPath ?? null,
+        fallbackXPath: meta?.fallbackXPath ?? null,
+        fallbackElementId: meta?.fallbackElementId ?? null,
+        retries: meta?.retries ?? 0,
+        success,
+        message:
+          result.output ||
+          (success ? "Completed" : "Failed to execute cached action"),
+      });
 
-      if (step.actionType === "goToUrl") {
-        const urlFromArgs =
-          (step.arguments && step.arguments[0]) || undefined;
-        const urlFromMessage =
-          typeof step.message === "string"
-            ? (step.message.match(/https?:\/\/\S+/)?.[0] as string | undefined)
-            : undefined;
-        const url =
-          (step.actionParams?.url as string | undefined) ||
-          urlFromArgs ||
-          urlFromMessage;
-        if (typeof url === "string" && url.length > 0) {
-          try {
-            await page.goto(url);
-            await waitForSettledDOM(page);
-            stepResult.success = true;
-            stepResult.message = `Navigated to ${url}`;
-            stepsResult.push(stepResult);
-            markDomSnapshotDirty(page);
-            continue;
-          } catch (error) {
-            stepResult.success = false;
-            stepResult.message =
-              error instanceof Error ? error.message : String(error);
-            replayStatus = TaskStatus.FAILED;
-            stepsResult.push(stepResult);
-            break;
-          }
-        } else {
-          stepResult.success = false;
-          stepResult.message = "No URL found in action cache for goToUrl";
-          replayStatus = TaskStatus.FAILED;
-          stepsResult.push(stepResult);
-          break;
-        }
-      }
-
-      if (step.xpath && step.method) {
-        for (let attempt = 0; attempt < maxXPathRetries; attempt++) {
-          stepResult.retries = attempt + 1;
-          try {
-            const locator = await getLocatorFromXPath(
-              step.xpath,
-              page,
-              step.frameIndex ?? undefined,
-              domState.frameMap,
-              debug
-            );
-            await executePlaywrightMethod(
-              step.method,
-              step.arguments ?? [],
-              locator,
-              {
-                clickTimeout: 3500,
-                debug,
-              }
-            );
-            stepResult.usedXPath = true;
-            stepResult.success = true;
-            stepResult.message = "Executed via cached xpath";
-            break;
-          } catch (error) {
-            stepResult.message =
-              error instanceof Error ? error.message : String(error);
-            await waitForSettledDOM(page);
-            if (attempt >= maxXPathRetries - 1) {
-              stepResult.success = false;
-            }
-          }
-        }
-      }
-
-      if (!stepResult.success) {
-        stepResult.fallbackUsed = true;
-        try {
-          const fallbackResult = await this.executeSingleAction(
-            step.instruction,
-            page,
-            { maxSteps: 1 }
-          );
-          stepResult.success = fallbackResult.status === TaskStatus.COMPLETED;
-          stepResult.message =
-            fallbackResult.output ||
-            (fallbackResult.status ?? "").toString() ||
-            "Fallback completed";
-        } catch (error) {
-          stepResult.success = false;
-          stepResult.message =
-            error instanceof Error ? error.message : String(error);
-        }
-      }
-
-      await waitForSettledDOM(page);
-      markDomSnapshotDirty(page);
-      stepsResult.push(stepResult);
-
-      if (!stepResult.success) {
+      if (!success) {
         replayStatus = TaskStatus.FAILED;
         break;
       }
@@ -963,8 +874,154 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     let domState: A11yDOMState | null = null;
     let elementMap: Map<string, AccessibilityNode> | null = null;
+    const replayStepMeta: ReplayStepMeta | undefined = _params?.cachedAction
+      ? {
+          usedCachedAction: false,
+          fallbackUsed: false,
+          retries: 0,
+          cachedXPath: _params.cachedAction.xpath ?? null,
+          fallbackXPath: null,
+          fallbackElementId: null,
+        }
+      : undefined;
 
     try {
+      const cachedAction = _params?.cachedAction;
+
+      // Handle cached goToUrl directly
+      if (cachedAction && cachedAction.actionType === "goToUrl") {
+        const url =
+          (cachedAction.actionParams?.url as string | undefined) ||
+          (cachedAction.arguments && cachedAction.arguments[0]);
+        if (!url || typeof url !== "string") {
+          throw new HyperagentError(
+            "Cached goToUrl action missing URL parameter",
+            400
+          );
+        }
+        await initialPage.goto(url);
+        await waitForSettledDOM(initialPage);
+        markDomSnapshotDirty(initialPage);
+        if (replayStepMeta) {
+          replayStepMeta.usedCachedAction = true;
+        }
+        return {
+          taskId,
+          status: TaskStatus.COMPLETED,
+          steps: [],
+          output: `Navigated to ${url}`,
+          replayStepMeta,
+        };
+      }
+      // Handle cached complete directly without LLM or navigation
+      if (cachedAction && cachedAction.actionType === "complete") {
+        if (replayStepMeta) {
+          replayStepMeta.usedCachedAction = true;
+        }
+        return {
+          taskId,
+          status: TaskStatus.COMPLETED,
+          steps: [],
+          output: "Task Complete",
+          replayStepMeta,
+        };
+      }
+
+      // Handle cached XPath-first execution if available
+      if (
+        cachedAction &&
+        cachedAction.xpath &&
+        cachedAction.method &&
+        cachedAction.actionType === "actElement"
+      ) {
+        await waitForSettledDOM(initialPage);
+        const cachedDomState = await captureDOMState(initialPage, {
+          useCache: false,
+          debug: this.debug,
+          enableVisualMode: false,
+        });
+        const maxCachedRetries = _params?.maxSteps ?? 3;
+        for (let attempt = 0; attempt < maxCachedRetries; attempt++) {
+          if (replayStepMeta) {
+            replayStepMeta.retries = attempt + 1;
+          }
+          try {
+            const { cdpClient, frameContextManager } =
+              await initializeRuntimeContext(initialPage, this.debug);
+            const resolved = await resolveXPathWithCDP({
+              xpath: cachedAction.xpath,
+              frameIndex: cachedAction.frameIndex ?? 0,
+              cdpClient,
+              frameContextManager,
+              debug: this.debug,
+            });
+
+            const actionContext: ActionContext = {
+              domState: cachedDomState,
+              page: initialPage,
+              tokenLimit: this.tokenLimit,
+              llm: this.llm,
+              debug: this.debug,
+              cdpActions: true,
+              cdp: {
+                client: cdpClient,
+                frameContextManager,
+                resolveElement,
+                dispatchCDPAction,
+                preferScriptBoundingBox: this.debug,
+                debug: this.debug,
+              },
+              debugDir: undefined,
+              mcpClient: this.mcpClient,
+              variables: Object.values(this._variables),
+              invalidateDomCache: () => markDomSnapshotDirty(initialPage),
+            };
+
+            const encodedId = `${cachedAction.frameIndex ?? 0}-${resolved.backendNodeId}`;
+            cachedDomState.backendNodeMap = {
+              ...(cachedDomState.backendNodeMap || {}),
+              [encodedId]: resolved.backendNodeId,
+            };
+            cachedDomState.xpathMap = {
+              ...(cachedDomState.xpathMap || {}),
+              [encodedId]: cachedAction.xpath,
+            };
+
+            const actionOutput = await performAction(actionContext, {
+              elementId: encodedId,
+              method: cachedAction.method,
+              arguments: cachedAction.arguments ?? [],
+              instruction,
+              confidence: 1,
+            });
+            if (!actionOutput.success) {
+              throw new Error(actionOutput.message);
+            }
+            await waitForSettledDOM(initialPage);
+            markDomSnapshotDirty(initialPage);
+            if (replayStepMeta) {
+              replayStepMeta.usedCachedAction = true;
+            }
+            return {
+              taskId,
+              status: TaskStatus.COMPLETED,
+              steps: [],
+              output: `Executed cached action: ${instruction}`,
+              replayStepMeta,
+            };
+          } catch (error) {
+            if (attempt >= maxCachedRetries - 1) {
+              if (this.debug) {
+                console.warn(
+                  `[executeSingleAction][cachedAction] XPath execution failed after ${maxCachedRetries} attempts:`,
+                  error
+                );
+              }
+            }
+          }
+        }
+      }
+
       // Find element with retry logic
       const findStart = performance.now();
       const {
@@ -1077,6 +1134,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         actionXPath = (actionOutput.debug as any).elementMetadata?.xpath;
       }
 
+      if (replayStepMeta) {
+        replayStepMeta.fallbackUsed = true;
+        replayStepMeta.fallbackElementId = element.elementId;
+        replayStepMeta.fallbackXPath =
+          domState?.xpathMap?.[element.elementId] ?? null;
+      }
+
       if (!actionOutput.success) {
         throw new Error(actionOutput.message);
       }
@@ -1119,6 +1183,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         status: TaskStatus.COMPLETED,
         steps: [],
         output: `Successfully executed: ${instruction}`,
+        replayStepMeta,
       };
     } catch (error) {
       // If page switched during execution, prioritize that over the error

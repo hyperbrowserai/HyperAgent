@@ -42,6 +42,15 @@ export interface ActionCacheEntry {
   message: string;
 }
 
+export interface ReplayStepMeta {
+  usedCachedAction: boolean;
+  fallbackUsed: boolean;
+  retries?: number;
+  cachedXPath?: string | null;
+  fallbackXPath?: string | null;
+  fallbackElementId?: string | null;
+}
+
 export interface ActionCacheOutput {
   taskId: string;
   createdAt: string;
@@ -54,6 +63,9 @@ export interface ActionCacheReplayStepResult {
   actionType: string;
   usedXPath: boolean;
   fallbackUsed: boolean;
+  cachedXPath?: string | null;
+  fallbackXPath?: string | null;
+  fallbackElementId?: string | null;
   retries: number;
   success: boolean;
   message: string;
@@ -81,6 +93,7 @@ export interface TaskParams {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
+  cachedAction?: ActionCacheEntry;
 }
 
 export interface TaskOutput {
@@ -89,6 +102,7 @@ export interface TaskOutput {
   steps: AgentStep[];
   output?: string;
   actionCache?: ActionCacheOutput;
+  replayStepMeta?: ReplayStepMeta;
 }
 
 export interface Task {

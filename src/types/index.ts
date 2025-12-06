@@ -16,6 +16,7 @@ import {
   ActionCacheOutput,
   ActionCacheReplayResult,
   ActionCacheReplayStepResult,
+  ReplayStepMeta,
   RunFromActionCacheParams,
   TaskParams,
   TaskOutput,
