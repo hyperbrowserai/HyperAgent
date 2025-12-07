@@ -41,7 +41,12 @@ import {
 } from "../context-providers/a11y-dom/types";
 import { MCPClient } from "./mcp/client";
 import { runAgentTask } from "./tools/agent";
-import { HyperPage, HyperVariable } from "../types/agent/types";
+import {
+  HyperPage,
+  HyperVariable,
+  ActionCacheEntry,
+  CachedActionHint,
+} from "../types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
@@ -55,6 +60,7 @@ import { performAction } from "./actions/shared/perform-action";
 import { captureDOMState } from "./shared/dom-capture";
 import { executePlaywrightMethod } from "./shared/execute-playwright-method";
 import { resolveXPathWithCDP } from "./shared/xpath-cdp-resolver";
+import { createScriptFromActionCache } from "./shared/action-cache-script";
 import { ReplayStepMeta } from "@/types/agent/types";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
@@ -891,8 +897,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       // Handle cached goToUrl directly
       if (cachedAction && cachedAction.actionType === "goToUrl") {
         const url =
-          (cachedAction.actionParams?.url as string | undefined) ||
-          (cachedAction.arguments && cachedAction.arguments[0]);
+          (cachedAction.arguments && cachedAction.arguments[0]) ||
+          (cachedAction.actionParams?.url as string | undefined);
         if (!url || typeof url !== "string") {
           throw new HyperagentError(
             "Cached goToUrl action missing URL parameter",
@@ -1388,6 +1394,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return null;
     }
     return session;
+  }
+
+  public createScriptFromActionCache(
+    steps: ActionCacheEntry[],
+    taskId?: string
+  ): string {
+    return createScriptFromActionCache({ steps, taskId });
   }
 
   private setupHyperPage(page: Page): HyperPage {

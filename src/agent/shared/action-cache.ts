@@ -96,6 +96,17 @@ export const buildActionCacheEntry = ({
   const encodedId = elementId ? asEncodedId(elementId) : undefined;
   const frameIndex = extractFrameIndex(elementId);
 
+  // Normalize goToUrl to use arguments[0] for URL to simplify replay paths
+  let normalizedArgs = args;
+  if (
+    action.type === "goToUrl" &&
+    (!args || args.length === 0) &&
+    action.params &&
+    typeof (action.params as any).url === "string"
+  ) {
+    normalizedArgs = [(action.params as any).url as string];
+  }
+
   const xpathFromDom = encodedId ? domState.xpathMap?.[encodedId] || null : null;
   const xpath = normalizeXPath(
     xpathFromDom || extractXPathFromDebug(actionOutput)
@@ -106,7 +117,7 @@ export const buildActionCacheEntry = ({
     instruction,
     elementId,
     method,
-    arguments: args,
+    arguments: normalizedArgs,
     actionParams: (action.params as Record<string, unknown>) || undefined,
     frameIndex,
     xpath,

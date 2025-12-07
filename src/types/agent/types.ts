@@ -42,6 +42,16 @@ export interface ActionCacheEntry {
   message: string;
 }
 
+export interface CachedActionHint {
+  actionType: string;
+  xpath?: string | null;
+  frameIndex?: number | null;
+  method?: string | null;
+  arguments?: string[];
+  elementId?: string | null;
+  actionParams?: Record<string, unknown>;
+}
+
 export interface ReplayStepMeta {
   usedCachedAction: boolean;
   fallbackUsed: boolean;
@@ -93,7 +103,7 @@ export interface TaskParams {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
-  cachedAction?: ActionCacheEntry;
+  cachedAction?: CachedActionHint;
 }
 
 export interface TaskOutput {
