@@ -1,8 +1,9 @@
 import TurndownService from "turndown";
-// TODO: Add gfm plugin
-// import { gfm } from "joplin-turndown-plugin-gfm";
+import { gfm } from "joplin-turndown-plugin-gfm";
 
 export const turndownService = new TurndownService();
+// Enable GitHub-flavored Markdown extras (tables, strikethrough, task lists, fenced code blocks).
+turndownService.use(gfm);
 
 turndownService.addRule("removeUnwantedTags", {
   filter: ["head", "script", "style"],
