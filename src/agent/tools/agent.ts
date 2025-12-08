@@ -1,4 +1,8 @@
-import { ActionCacheOutput, AgentStep } from "@/types/agent/types";
+import {
+  ActionCacheOutput,
+  AgentStep,
+  AgentTaskOutput,
+} from "@/types/agent/types";
 import fs from "fs";
 
 import { performance } from "perf_hooks";
@@ -22,12 +26,7 @@ import { captureDOMState } from "../shared/dom-capture";
 import { initializeRuntimeContext } from "../shared/runtime-context";
 
 import { AgentOutputFn, endTaskStatuses } from "@hyperbrowser/agent/types";
-import {
-  TaskParams,
-  TaskOutput,
-  TaskState,
-  TaskStatus,
-} from "@hyperbrowser/agent/types";
+import { TaskParams, TaskState, TaskStatus } from "@hyperbrowser/agent/types";
 
 import { HyperagentError } from "../error";
 import { buildAgentStepMessages } from "../messages/builder";
@@ -210,7 +209,7 @@ export const runAgentTask = async (
   ctx: AgentCtx,
   taskState: TaskState,
   params?: TaskParams
-): Promise<TaskOutput> => {
+): Promise<AgentTaskOutput> => {
   const taskStart = performance.now();
   const taskId = taskState.id;
   const debugDir = params?.debugDir || `debug/${taskId}`;
@@ -280,7 +279,9 @@ export const runAgentTask = async (
         const newPage = await ctx.activePage();
         if (newPage && newPage !== page) {
           if (ctx.debug) {
-            console.log(`[Agent] Switching active page context to ${newPage.url()}`);
+            console.log(
+              `[Agent] Switching active page context to ${newPage.url()}`
+            );
           }
           cleanupDomListeners(page);
           page = newPage;
@@ -681,7 +682,7 @@ export const runAgentTask = async (
     JSON.stringify(actionCache, null, 2)
   );
 
-  const taskOutput: TaskOutput = {
+  const taskOutput: AgentTaskOutput = {
     taskId,
     status: taskState.status,
     steps: taskState.steps,

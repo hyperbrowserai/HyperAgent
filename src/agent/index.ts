@@ -45,6 +45,7 @@ import type {
   HyperPage,
   HyperVariable,
   ActionCacheEntry,
+  AgentTaskOutput,
 } from "../types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "../utils";
@@ -455,9 +456,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       mergedParams
     )
       .then((result) => {
-        if (result.actionCache) {
-          this.actionCacheByTaskId[taskId] = result.actionCache;
-        }
+        this.actionCacheByTaskId[taskId] = result.actionCache;
         cleanup();
       })
       .catch((error: Error) => {
@@ -490,7 +489,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     task: string,
     params?: TaskParams,
     initPage?: Page
-  ): Promise<TaskOutput> {
+  ): Promise<AgentTaskOutput> {
     const taskId = uuidv4();
     let activeTaskPage = initPage || (await this.getCurrentPage());
 
@@ -537,9 +536,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mergedParams
       );
       this.context?.off("page", onPage);
-      if (result.actionCache) {
-        this.actionCacheByTaskId[taskId] = result.actionCache;
-      }
+      this.actionCacheByTaskId[taskId] = result.actionCache;
       return result;
     } catch (error) {
       this.context?.off("page", onPage);
@@ -1124,6 +1121,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         status: TaskStatus.COMPLETED,
         steps: [],
         output: `Successfully executed: ${instruction}`,
+        actionCache: {
+          taskId,
+          createdAt: startTime,
+          status: TaskStatus.COMPLETED,
+          steps: [],
+        },
         replayStepMeta: {
           usedCachedAction: false,
           fallbackUsed: false,

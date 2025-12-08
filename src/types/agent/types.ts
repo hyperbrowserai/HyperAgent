@@ -114,6 +114,9 @@ export interface TaskOutput {
   replayStepMeta?: ReplayStepMeta;
 }
 
+// Returned by full agent runs (e.g., page.ai()) where actionCache is always populated.
+export type AgentTaskOutput = TaskOutput & { actionCache: ActionCacheOutput };
+
 export interface Task {
   id: string;
   getStatus: () => TaskStatus;
@@ -269,7 +272,7 @@ export interface HyperPage extends Page {
    * Best for: Complex workflows, multi-step tasks, exploratory automation
    * Mode: Always visual (screenshots with overlays)
    */
-  ai: (task: string, params?: TaskParams) => Promise<TaskOutput>;
+  ai: (task: string, params?: TaskParams) => Promise<AgentTaskOutput>;
 
   /**
    * Execute a single granular action using a11y mode
