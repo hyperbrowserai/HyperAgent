@@ -49,6 +49,17 @@ import { setDebugOptions } from "@/debug/options";
 import { initializeRuntimeContext } from "./shared/runtime-context";
 import { performAction } from "./actions/shared/perform-action";
 
+type ActionDebugMetadata = {
+  elementMetadata?: {
+    xpath?: string;
+  };
+};
+
+const hasElementMetadata = (debugData: unknown): debugData is ActionDebugMetadata =>
+  typeof debugData === "object" &&
+  debugData !== null &&
+  "elementMetadata" in debugData;
+
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
   private static readonly AIACTION_CONFIG = {
@@ -202,7 +213,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns
    */
   private getActions(
-    outputSchema?: z.ZodType<any>
+    outputSchema?: z.ZodType<unknown>
   ): Array<AgentActionDefinition> {
     if (outputSchema) {
       return [
@@ -764,7 +775,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async executeSingleAction(
     instruction: string,
     pageOrGetter: Page | (() => Page),
-    _params?: TaskParams
+    params?: TaskParams
   ): Promise<TaskOutput> {
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
@@ -869,7 +880,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             }
           : undefined,
         // These are required by ActionContext but not used by performAction
-        debugDir: undefined,
+        debugDir: params?.debugDir,
         mcpClient: this.mcpClient,
         variables: Object.values(this._variables),
         invalidateDomCache: () => markDomSnapshotDirty(initialPage),
@@ -887,9 +898,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (
         actionOutput.debug &&
         typeof actionOutput.debug === "object" &&
-        "requestedAction" in actionOutput.debug
+        "requestedAction" in actionOutput.debug &&
+        hasElementMetadata(actionOutput.debug)
       ) {
-        actionXPath = (actionOutput.debug as any).elementMetadata?.xpath;
+        actionXPath = actionOutput.debug.elementMetadata?.xpath;
       }
 
       if (!actionOutput.success) {
@@ -1140,11 +1152,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   private setupHyperPage(page: Page): HyperPage {
-    const hyperPage = page as HyperPage;
+    type ScopedHyperPage = HyperPage & {
+      _scopeListenerCleanup?: () => void;
+    };
+
+    const hyperPage = page as ScopedHyperPage;
 
     // Clean up existing listener if this page was already setup
-    if ((hyperPage as any)._scopeListenerCleanup) {
-      (hyperPage as any)._scopeListenerCleanup();
+    if (hyperPage._scopeListenerCleanup) {
+      hyperPage._scopeListenerCleanup();
     }
 
     // History Stack: [Root, Tab1, Tab2, ...]
@@ -1187,27 +1203,32 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     // Attach a persistent listener to track page flow for the lifetime of this wrapper
     page.context().on("page", onPage);
-    (hyperPage as any)._scopeListenerCleanup = () => {
+    hyperPage._scopeListenerCleanup = () => {
       page.context().off("page", onPage);
     };
 
-    const executeSingleActionWithRetry = async (
-      instruction: string,
-      params?: TaskParams
-    ) => {
-      const maxRetries = 3;
-      for (let i = 0; i < maxRetries; i++) {
-        try {
-          return await this.executeSingleAction(
-            instruction,
-            getActivePage,
-            params
-          );
-        } catch (err: any) {
-          if (
-            err.statusCode === 409 ||
-            (err.message && err.message.includes("Page context switched"))
-          ) {
+      const executeSingleActionWithRetry = async (
+        instruction: string,
+        params?: TaskParams
+      ) => {
+        const maxRetries = 3;
+        for (let i = 0; i < maxRetries; i++) {
+          try {
+            return await this.executeSingleAction(
+              instruction,
+              getActivePage,
+              params
+            );
+          } catch (err: unknown) {
+            const maybeError = err as {
+              statusCode?: number;
+              message?: string;
+            };
+            if (
+              maybeError?.statusCode === 409 ||
+              (maybeError?.message &&
+                maybeError.message.includes("Page context switched"))
+            ) {
             if (this.debug) {
               console.log(
                 "[HyperPage] Action aborted due to tab switch, retrying on new page..."

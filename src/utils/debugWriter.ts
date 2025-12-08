@@ -16,7 +16,7 @@ export interface DebugData {
   foundElement?: {
     elementId: string;
     method: string;
-    arguments: any[];
+    arguments: unknown[];
     xpath?: string;
   };
   availableElements?: Array<{

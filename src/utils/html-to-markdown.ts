@@ -13,16 +13,16 @@ turndownService.addRule("removeUnwantedTags", {
 });
 
 turndownService.addRule("inlineLink", {
-  filter: function (node: any, options: any) {
+  filter: function (node: HTMLElement, options: TurndownService.Options) {
     return (
       options.linkStyle === "inlined" &&
       node.nodeName === "A" &&
       node.getAttribute("href")
     );
   },
-  replacement: function (content: string, node: any) {
-    var href = node.getAttribute("href").trim();
-    var title = node.title ? ' "' + node.title + '"' : "";
+  replacement: function (content: string, node: HTMLElement) {
+    const href = (node.getAttribute("href") ?? "").trim();
+    const title = node.title ? ' "' + node.title + '"' : "";
     return "[" + content.trim() + "](" + href + title + ")\n";
   },
 });
@@ -54,7 +54,7 @@ const processMultiLineLinks = (markdownContent: string): string => {
 const removeSkipToContentLinks = (markdownContent: string): string => {
   // Remove [Skip to Content](#page) and [Skip to content](#skip)
   const newMarkdownContent = markdownContent.replace(
-    /\[Skip to Content\]\(#[^\)]*\)/gi,
+    /\[Skip to Content\]\(#[^)]*\)/gi,
     ""
   );
   return newMarkdownContent;
