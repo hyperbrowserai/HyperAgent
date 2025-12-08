@@ -26,7 +26,6 @@ turndownService.addRule("inlineLink", {
     return "[" + content.trim() + "](" + href + title + ")\n";
   },
 });
-// turndownService.use(gfm);
 
 const processMultiLineLinks = (markdownContent: string): string => {
   let insideLinkContent = false;
