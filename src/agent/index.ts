@@ -61,6 +61,7 @@ import { captureDOMState } from "./shared/dom-capture";
 import { executePlaywrightMethod } from "./shared/execute-playwright-method";
 import { resolveXPathWithCDP } from "./shared/xpath-cdp-resolver";
 import { createScriptFromActionCache } from "./shared/action-cache-script";
+import { attachCachedActionHelpers } from "./shared/action-cache-exec";
 import { ReplayStepMeta } from "@/types/agent/types";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
@@ -1504,6 +1505,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     hyperPage.runFromActionCache = (cache, params) =>
       this.runFromActionCache(cache, getActivePage, params);
+
+    attachCachedActionHelpers(hyperPage);
 
     // aiAsync tasks run in background, so we just use the current scope start point.
     // The task itself has internal auto-following logic (from executeTaskAsync implementation).

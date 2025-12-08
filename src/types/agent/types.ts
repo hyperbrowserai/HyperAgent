@@ -156,6 +156,107 @@ export interface HyperVariable {
 }
 
 export interface HyperPage extends Page {
+  performClick: (
+    xpath: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performHover: (
+    xpath: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performType: (
+    xpath: string,
+    text: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performFill: (
+    xpath: string,
+    text: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performPress: (
+    xpath: string,
+    key: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performSelectOption: (
+    xpath: string,
+    option: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performCheck: (
+    xpath: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performUncheck: (
+    xpath: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performScrollToElement: (
+    xpath: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performScrollToPercentage: (
+    xpath: string,
+    position: string | number,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performNextChunk: (
+    xpath: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
+  performPrevChunk: (
+    xpath: string,
+    options?: {
+      frameIndex?: number | null;
+      performInstruction?: string | null;
+      maxSteps?: number;
+    }
+  ) => Promise<TaskOutput>;
   /**
    * Execute a complex multi-step task using visual mode
    * Best for: Complex workflows, multi-step tasks, exploratory automation
