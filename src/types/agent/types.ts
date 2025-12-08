@@ -103,7 +103,6 @@ export interface TaskParams {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
-  cachedAction?: CachedActionHint;
 }
 
 export interface TaskOutput {
@@ -149,6 +148,14 @@ export interface TaskState {
   error?: string;
 }
 
+export interface HyperAgentInstance {
+  debug?: boolean;
+  tokenLimit: number;
+  llm: any;
+  mcpClient: any;
+  variables: Array<{ key: string; value: string; description: string }>;
+  cdpActionsEnabled?: boolean;
+}
 export interface HyperVariable {
   key: string;
   value: string;

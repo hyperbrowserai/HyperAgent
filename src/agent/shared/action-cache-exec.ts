@@ -1,6 +1,5 @@
-import { HyperPage, TaskOutput } from "@/types/agent/types";
-import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
-import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
+import { HyperAgentInstance, HyperPage, TaskOutput } from "@/types/agent/types";
+import * as cachedRunner from "./run-cached-action";
 
 const DEFAULT_MAX_STEPS = 3;
 
@@ -24,50 +23,57 @@ interface PerformOptions {
   maxSteps?: number;
 }
 
-interface PerformValueOptions extends PerformOptions {
-  value: string;
-}
-
-interface PerformPositionOptions extends PerformOptions {
-  position: string | number;
-}
-
-export async function performGoTo(
+export async function performGoToHelper(
   page: HyperPage,
   url: string,
   waitUntil: "domcontentloaded" | "load" | "networkidle" = "domcontentloaded"
 ): Promise<void> {
-  await page.goto(url, { waitUntil });
-  await waitForSettledDOM(page);
-  markDomSnapshotDirty(page);
+  return cachedRunner.performGoTo(page, url, waitUntil);
 }
 
 function runCachedAction(
+  agent: HyperAgentInstance,
   page: HyperPage,
   instruction: string,
   method: PageAction,
   xpath: string,
-  args: unknown[],
+  args: Array<string | number>,
   options?: PerformOptions
 ): Promise<TaskOutput> {
-  return page.perform(instruction, {
-    cachedAction: {
-      actionType: "actElement",
-      method,
-      arguments: args as string[],
-      frameIndex: options?.frameIndex ?? 0,
-      xpath,
-    },
+  const runInstruction =
+    options?.performInstruction && options.performInstruction.length > 0
+      ? options.performInstruction
+      : instruction;
+  const cachedAction = {
+    actionType: "actElement",
+    method,
+    arguments: args,
+    frameIndex: options?.frameIndex ?? 0,
+    xpath,
+  };
+
+  return cachedRunner.runCachedStep({
+    page,
+    instruction: runInstruction,
+    cachedAction,
     maxSteps: options?.maxSteps ?? DEFAULT_MAX_STEPS,
+    debug: agent.debug,
+    tokenLimit: agent.tokenLimit,
+    llm: agent.llm,
+    mcpClient: agent.mcpClient,
+    variables: agent.variables ?? [],
+    preferScriptBoundingBox: agent.debug,
+    cdpActionsEnabled: agent.cdpActionsEnabled,
   });
 }
 
-export function attachCachedActionHelpers(page: HyperPage): void {
-  page.performClick = (
-    xpath: string,
-    options?: PerformOptions
-  ) =>
+export function attachCachedActionHelpers(
+  agent: HyperAgentInstance,
+  page: HyperPage
+): void {
+  page.performClick = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Click element",
       "click",
@@ -76,11 +82,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performHover = (
-    xpath: string,
-    options?: PerformOptions
-  ) =>
+  page.performHover = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Hover element",
       "hover",
@@ -89,12 +93,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performType = (
-    xpath: string,
-    text: string,
-    options?: PerformOptions
-  ) =>
+  page.performType = (xpath: string, text: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Type text",
       "type",
@@ -103,12 +104,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performFill = (
-    xpath: string,
-    text: string,
-    options?: PerformOptions
-  ) =>
+  page.performFill = (xpath: string, text: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Fill input",
       "fill",
@@ -117,12 +115,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performPress = (
-    xpath: string,
-    key: string,
-    options?: PerformOptions
-  ) =>
+  page.performPress = (xpath: string, key: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Press key",
       "press",
@@ -137,6 +132,7 @@ export function attachCachedActionHelpers(page: HyperPage): void {
     options?: PerformOptions
   ) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Select option",
       "selectOptionFromDropdown",
@@ -145,11 +141,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performCheck = (
-    xpath: string,
-    options?: PerformOptions
-  ) =>
+  page.performCheck = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Check element",
       "check",
@@ -158,11 +152,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performUncheck = (
-    xpath: string,
-    options?: PerformOptions
-  ) =>
+  page.performUncheck = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Uncheck element",
       "uncheck",
@@ -171,11 +163,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performScrollToElement = (
-    xpath: string,
-    options?: PerformOptions
-  ) =>
+  page.performScrollToElement = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Scroll to element",
       "scrollToElement",
@@ -190,6 +180,7 @@ export function attachCachedActionHelpers(page: HyperPage): void {
     options?: PerformOptions
   ) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Scroll to percentage",
       "scrollToPercentage",
@@ -198,11 +189,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performNextChunk = (
-    xpath: string,
-    options?: PerformOptions
-  ) =>
+  page.performNextChunk = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Scroll next chunk",
       "nextChunk",
@@ -211,11 +200,9 @@ export function attachCachedActionHelpers(page: HyperPage): void {
       options
     );
 
-  page.performPrevChunk = (
-    xpath: string,
-    options?: PerformOptions
-  ) =>
+  page.performPrevChunk = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
+      agent,
       page,
       options?.performInstruction || "Scroll previous chunk",
       "prevChunk",
