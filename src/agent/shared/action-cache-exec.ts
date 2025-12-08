@@ -62,7 +62,10 @@ function runCachedAction(
   });
 }
 
-export function attachCachedActionHelpers(agent: AgentDeps, page: HyperPage): void {
+export function attachCachedActionHelpers(
+  agent: AgentDeps,
+  page: HyperPage
+): void {
   page.performClick = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
       agent,

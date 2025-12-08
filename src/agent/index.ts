@@ -56,12 +56,9 @@ import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import { setDebugOptions } from "@/debug/options";
 import { initializeRuntimeContext } from "./shared/runtime-context";
 import { performAction } from "./actions/shared/perform-action";
-import { captureDOMState } from "./shared/dom-capture";
-import { executePlaywrightMethod } from "./shared/execute-playwright-method";
-import { resolveXPathWithCDP } from "./shared/xpath-cdp-resolver";
 import { createScriptFromActionCache } from "./shared/action-cache-script";
 import { attachCachedActionHelpers } from "./shared/action-cache-exec";
-import { AgentDeps, ReplayStepMeta } from "@/types/agent/types";
+import { AgentDeps } from "@/types/agent/types";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
