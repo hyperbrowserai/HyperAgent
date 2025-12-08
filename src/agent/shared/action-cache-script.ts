@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import { ActionCacheEntry } from "@/types";
 
 interface CreateScriptFromActionCacheParams {
@@ -10,13 +8,7 @@ interface CreateScriptFromActionCacheParams {
 export function createScriptFromActionCache(
   params: CreateScriptFromActionCacheParams
 ): string {
-  const { taskId, steps } = params;
-  const id =
-    taskId && taskId.length > 0
-      ? taskId
-      : new Date().toISOString().replace(/[:.]/g, "-");
-  const dir = path.join(process.cwd(), "action-cache-scripts", id);
-  fs.mkdirSync(dir, { recursive: true });
+  const { steps } = params;
 
   const METHOD_TO_CALL: Record<
     string,
@@ -130,7 +122,5 @@ main().catch((err) => {
 });
 `;
 
-  const outPath = path.join(dir, "run-cached-actions.ts");
-  fs.writeFileSync(outPath, script);
-  return outPath;
+  return script;
 }

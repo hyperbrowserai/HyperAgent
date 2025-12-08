@@ -169,6 +169,17 @@ export async function runCachedStep(
   // All cached attempts failed; optionally fall back to LLM perform
   if (params.performFallback) {
     const fb = await params.performFallback(instruction);
+    const cachedXPath = cachedAction.xpath || "N/A";
+    const resolvedXPath = fb.replayStepMeta?.fallbackXPath || "N/A";
+    // eslint-disable-next-line no-console
+    console.log(
+      `
+⚠️ [runCachedStep] Cached action failed. Falling back to LLM...
+   Instruction: "${instruction}"
+   ❌ Cached XPath Failed: "${cachedXPath}"
+   ✅ LLM Resolved New XPath: "${resolvedXPath}"
+`
+    );
     return {
       ...fb,
       replayStepMeta: {

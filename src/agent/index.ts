@@ -1028,7 +1028,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           400
         );
       }
-      let actionXPath: string | undefined;
+      let actionXPath: string | null =
+        domState?.xpathMap?.[element.elementId] ?? null;
 
       // Use shared runtime context
       const { cdpClient, frameContextManager } = await initializeRuntimeContext(
@@ -1081,14 +1082,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         confidence: 1, // Implicit confidence for single action
       });
 
-      if (
-        actionOutput.debug &&
-        typeof actionOutput.debug === "object" &&
-        "requestedAction" in actionOutput.debug
-      ) {
-        actionXPath = (actionOutput.debug as any).elementMetadata?.xpath;
-      }
-
       if (!actionOutput.success) {
         throw new Error(actionOutput.message);
       }
@@ -1131,6 +1124,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         status: TaskStatus.COMPLETED,
         steps: [],
         output: `Successfully executed: ${instruction}`,
+        replayStepMeta: {
+          usedCachedAction: false,
+          fallbackUsed: false,
+          retries: 1,
+          cachedXPath: null,
+          fallbackXPath: actionXPath ?? null,
+          fallbackElementId: element.elementId ?? null,
+        },
       };
     } catch (error) {
       // If page switched during execution, prioritize that over the error
