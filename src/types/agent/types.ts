@@ -148,7 +148,7 @@ export interface TaskState {
   error?: string;
 }
 
-export interface HyperAgentInstance {
+export interface AgentDeps {
   debug?: boolean;
   tokenLimit: number;
   llm: any;

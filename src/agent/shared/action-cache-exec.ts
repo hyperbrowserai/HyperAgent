@@ -1,4 +1,4 @@
-import { HyperAgentInstance, HyperPage, TaskOutput } from "@/types/agent/types";
+import { AgentDeps, HyperPage, TaskOutput } from "@/types/agent/types";
 import * as cachedRunner from "./run-cached-action";
 
 const DEFAULT_MAX_STEPS = 3;
@@ -23,16 +23,8 @@ interface PerformOptions {
   maxSteps?: number;
 }
 
-export async function performGoToHelper(
-  page: HyperPage,
-  url: string,
-  waitUntil: "domcontentloaded" | "load" | "networkidle" = "domcontentloaded"
-): Promise<void> {
-  return cachedRunner.performGoTo(page, url, waitUntil);
-}
-
 function runCachedAction(
-  agent: HyperAgentInstance,
+  agent: AgentDeps,
   page: HyperPage,
   instruction: string,
   method: PageAction,
@@ -64,13 +56,13 @@ function runCachedAction(
     variables: agent.variables ?? [],
     preferScriptBoundingBox: agent.debug,
     cdpActionsEnabled: agent.cdpActionsEnabled,
+    performFallback: options?.performInstruction
+      ? (instr) => page.perform(instr)
+      : undefined,
   });
 }
 
-export function attachCachedActionHelpers(
-  agent: HyperAgentInstance,
-  page: HyperPage
-): void {
+export function attachCachedActionHelpers(agent: AgentDeps, page: HyperPage): void {
   page.performClick = (xpath: string, options?: PerformOptions) =>
     runCachedAction(
       agent,

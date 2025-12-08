@@ -61,7 +61,7 @@ import { executePlaywrightMethod } from "./shared/execute-playwright-method";
 import { resolveXPathWithCDP } from "./shared/xpath-cdp-resolver";
 import { createScriptFromActionCache } from "./shared/action-cache-script";
 import { attachCachedActionHelpers } from "./shared/action-cache-exec";
-import { ReplayStepMeta } from "@/types/agent/types";
+import { AgentDeps, ReplayStepMeta } from "@/types/agent/types";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -672,42 +672,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         } else {
           result = await hyperPage.perform(step.instruction);
         }
-      }
-
-      const meta = result.replayStepMeta;
-      const success = result.status === TaskStatus.COMPLETED;
-
-      // If cached/helper execution failed but we had a cached attempt, fall back to LLM perform
-      if (
-        !success &&
-        step.instruction &&
-        typeof step.instruction === "string" &&
-        (meta?.usedCachedAction ?? false)
-      ) {
-        const fallbackResult = await hyperPage.perform(step.instruction);
-        const existingMeta: ReplayStepMeta = meta || {
-          usedCachedAction: true,
-          fallbackUsed: false,
-          retries: 0,
-          cachedXPath: step.xpath ?? null,
-          fallbackXPath: null,
-          fallbackElementId: null,
-        };
-        result = {
-          ...fallbackResult,
-          replayStepMeta: {
-            usedCachedAction: existingMeta.usedCachedAction,
-            fallbackUsed: true,
-            retries: existingMeta.retries,
-            cachedXPath: existingMeta.cachedXPath,
-            fallbackXPath:
-              fallbackResult.replayStepMeta?.fallbackXPath ??
-              existingMeta.fallbackXPath,
-            fallbackElementId:
-              fallbackResult.replayStepMeta?.fallbackElementId ??
-              existingMeta.fallbackElementId,
-          },
-        };
       }
 
       const finalMeta = result.replayStepMeta;
@@ -1485,17 +1449,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     hyperPage.runFromActionCache = (cache, params) =>
       this.runFromActionCache(cache, getActivePage, params);
 
-    attachCachedActionHelpers(
-      {
-        debug: this.debug,
-        tokenLimit: this.tokenLimit,
-        llm: this.llm,
-        mcpClient: this.mcpClient,
-        variables: Object.values(this._variables),
-        cdpActionsEnabled: this.cdpActionsEnabled,
-      },
-      hyperPage
-    );
+    const deps: AgentDeps = {
+      debug: this.debug,
+      tokenLimit: this.tokenLimit,
+      llm: this.llm,
+      mcpClient: this.mcpClient,
+      variables: Object.values(this._variables),
+      cdpActionsEnabled: this.cdpActionsEnabled,
+    };
+    attachCachedActionHelpers(deps, hyperPage);
 
     // aiAsync tasks run in background, so we just use the current scope start point.
     // The task itself has internal auto-following logic (from executeTaskAsync implementation).

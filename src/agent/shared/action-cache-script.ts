@@ -65,6 +65,7 @@ const formatCall = (step: ActionCacheEntry): string => {
     }
     const options: Record<string, unknown> = {
       performInstruction: step.instruction,
+      maxSteps: 3,
     };
     if (step.frameIndex !== null && step.frameIndex !== undefined && step.frameIndex !== 0) {
       options.frameIndex = step.frameIndex;
@@ -76,7 +77,7 @@ const formatCall = (step: ActionCacheEntry): string => {
       args.push(JSON.stringify(options));
     }
 
-    return `  // Step ${step.stepIndex}
+  return `  // Step ${step.stepIndex}
   await page.${call.fn}(${args.join(", ")});`;
   }
 
