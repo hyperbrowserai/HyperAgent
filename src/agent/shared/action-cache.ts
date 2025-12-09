@@ -23,12 +23,23 @@ const normalizeXPath = (raw?: string | null): string | null => {
   return raw.replace(TEXT_NODE_SUFFIX, "");
 };
 
-const extractInstruction = (action: ActionType): string => {
+const extractInstruction = (action: ActionType): string | undefined => {
   const params = action.params as Record<string, unknown>;
-  if (isString(params.instruction)) {
-    return params.instruction;
+  switch (action.type) {
+    case "extract":
+      if (isString(params.objective)) {
+        return params.objective;
+      }
+      throw new Error(`Missing objective for extract action`);
+    case "actElement":
+      if (isString(params.instruction)) {
+        return params.instruction;
+      }
+      throw new Error(`Missing instruction for actElement action`);
+    default:
+      // Actions like goToUrl, refreshPage, wait, analyzePdf do not require an instruction
+      return isString(params.instruction) ? params.instruction : undefined;
   }
-  return action.type;
 };
 
 const extractElementId = (action: ActionType): string | null => {

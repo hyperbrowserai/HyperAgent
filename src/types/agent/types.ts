@@ -30,7 +30,7 @@ export interface AgentStep {
 
 export interface ActionCacheEntry {
   stepIndex: number;
-  instruction: string;
+  instruction: string | undefined;
   elementId: string | null;
   method: string | null;
   arguments: string[];

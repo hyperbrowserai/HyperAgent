@@ -730,6 +730,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         };
       } else if (step.actionType === "extract") {
         try {
+          if (!step.instruction) {
+            throw new Error("Missing objective/instruction for extract action");
+          }
           const extractResult = await hyperPage.extract(step.instruction);
           result = {
             taskId: cache.taskId,
@@ -783,7 +786,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         const method = step.method;
         if (method && validHelperMethods.has(method)) {
           const options: PerformOptions = {
-            performInstruction: step.instruction,
+            performInstruction: step.instruction ?? null,
             maxSteps: maxXPathRetries,
           };
           if (step.frameIndex !== null && step.frameIndex !== undefined) {
@@ -797,8 +800,23 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             valueArg,
             options
           );
-        } else {
+        } else if (step.instruction) {
           result = await hyperPage.perform(step.instruction);
+        } else {
+          result = {
+            taskId: cache.taskId,
+            status: TaskStatus.FAILED,
+            steps: [],
+            output: `Cannot replay action type "${step.actionType}" without instruction`,
+            replayStepMeta: {
+              usedCachedAction: false,
+              fallbackUsed: false,
+              retries: 0,
+              cachedXPath: null,
+              fallbackXPath: null,
+              fallbackElementId: null,
+            },
+          };
         }
       }
 
