@@ -26,6 +26,8 @@
 Hyperagent is Playwright supercharged with AI. No more brittle scripts, just powerful natural language commands.
 Just looking for scalable headless browsers or scraping infra? Go to [Hyperbrowser](https://app.hyperbrowser.ai/) to get started for free!
 
+View HyperAgent docs here: https://www.hyperbrowser.ai/docs/hyperagent/introduction
+
 ### Features
 
 - 🤖 **AI Commands**: Simple APIs like `page.ai()`, `page.extract()` and `executeTask()` for any AI automation
@@ -33,6 +35,7 @@ Just looking for scalable headless browsers or scraping infra? Go to [Hyperbrows
 - 🥷 **Stealth Mode** – Avoid detection with built-in anti-bot patches
 - ☁️ **Cloud Ready** – Instantly scale to hundreds of sessions via [Hyperbrowser](https://app.hyperbrowser.ai/)
 - 🔌 **MCP Client** – Connect to tools like Composio for full workflows (e.g. writing web data to Google Sheets)
+- 📼 **Action Caching** – Record and replay workflows deterministically without LLM calls
 
 ## Quick Start
 
@@ -277,25 +280,25 @@ const agent = new HyperAgent({
 const agent = new HyperAgent({
   llm: {
     provider: "anthropic",
-    model: "claude-3-7-sonnet-latest",
+    model: "claude-sonnet-4-0",
   },
 });
 
-    // Using Google Gemini
-    const agent = new HyperAgent({
-      llm: {
-        provider: "gemini",
-        model: "gemini-2.5-pro-preview-03-25",
-      },
-    });
+// Using Google Gemini
+const agent = new HyperAgent({
+  llm: {
+    provider: "gemini",
+    model: "gemini-2.5-flash",
+  },
+});
 
-    // Using DeepSeek
-    const agent = new HyperAgent({
-      llm: {
-        provider: "deepseek",
-        model: "deepseek-chat",
-      },
-    });
+// Using DeepSeek
+const agent = new HyperAgent({
+  llm: {
+    provider: "deepseek",
+    model: "deepseek-chat",
+  },
+});
 ```
 
 ### MCP Support
@@ -357,10 +360,10 @@ export const RunSearchActionDefinition: AgentActionDefinition = {
       .describe(
         "The search query for something you want to search about. Keep the search query concise and to-the-point."
       ),
-  }).describe("Search and return the results for a given query.");,
+  }).describe("Search and return the results for a given query."),
   run: async function (
     ctx: ActionContext,
-    params: z.infer<typeof searchSchema>
+    params: { search: string }
   ): Promise<ActionOutput> {
     const results = (await exaInstance.search(params.search, {})).results
       .map(
@@ -371,16 +374,113 @@ export const RunSearchActionDefinition: AgentActionDefinition = {
 
     return {
       success: true,
-      message: `Succesfully performed search for query ${params.search}. Got results: \n${results}`,
+      message: `Successfully performed search for query ${params.search}. Got results: \n${results}`,
     };
   },
 };
 
 const agent = new HyperAgent({
-  "Search about the news for today in New York",
   customActions: [RunSearchActionDefinition],
 });
+
+const result = await agent.executeTask(
+  "Search about the news for today in New York"
+);
 ```
+
+## 📼 Action Caching
+
+HyperAgent automatically records every action during `page.ai()` runs, capturing XPaths, frame indices, and execution details. This enables deterministic replay without LLM calls—perfect for regression testing, CI pipelines, and cost optimization.
+
+### How It Works
+
+Every `page.ai()` run produces an `actionCache` containing the exact sequence of actions performed:
+
+```typescript
+const page = await agent.newPage();
+const { actionCache } = await page.ai(
+  "Go to flights.google.com and search for flights from Rio to LAX"
+);
+
+// actionCache contains the recorded steps
+console.log(actionCache);
+```
+
+Example cache entry:
+```json
+{
+  "taskId": "86d13abe-b9f3-4ca3-a9bb-bdeddf234cd1",
+  "createdAt": "2025-12-06T05:44:52.257Z",
+  "status": "completed",
+  "steps": [
+    {
+      "stepIndex": 0,
+      "instruction": "Click on the departure field",
+      "elementId": "0-138",
+      "method": "click",
+      "arguments": [],
+      "frameIndex": 0,
+      "xpath": "/html[1]/body[1]/div[1]/input[1]",
+      "actionType": "actElement",
+      "success": true
+    }
+  ]
+}
+```
+
+### Replaying Cached Actions
+
+Replay a recorded session using `runFromActionCache()`. It attempts XPath-based execution first (no LLM calls), falling back to LLM only if the page structure has changed:
+
+```typescript
+import { ActionCacheOutput } from "@hyperbrowser/agent";
+import fs from "fs";
+
+// Load a previously saved action cache
+const cache: ActionCacheOutput = JSON.parse(
+  fs.readFileSync("action-cache.json", "utf-8")
+);
+
+const agent = new HyperAgent();
+const page = await agent.newPage();
+
+// Replay the cached actions
+const replay = await page.runFromActionCache(cache, {
+  maxXPathRetries: 3,  // Retry XPath resolution up to 3 times before LLM fallback
+  debug: true,
+});
+
+console.log(replay);
+// {
+//   replayId: "...",
+//   sourceTaskId: "86d13abe-...",
+//   status: "completed",
+//   steps: [{ stepIndex: 0, usedXPath: true, fallbackUsed: false, success: true }]
+// }
+
+await agent.closeAgent();
+```
+
+### Generating Replay Scripts
+
+Generate a standalone TypeScript script from an action cache for easy integration into your test suite:
+
+```typescript
+const { actionCache } = await page.ai("search for flights from Miami to NYC");
+
+// Generate a replay script
+const script = agent.createScriptFromActionCache(actionCache.steps);
+console.log(script);
+```
+
+This produces a script using typed helper methods like `performClick()`, `performType()`, etc., that can be run independently.
+
+### Use Cases
+
+- **Regression Testing**: Record a workflow once, replay it in CI without LLM costs
+- **Flaky Test Debugging**: Compare XPath-based replay vs LLM-driven execution
+- **Cost Optimization**: Cache expensive multi-step workflows and replay deterministically
+- **Workflow Templates**: Save common flows (login, checkout) and replay across environments
 
 ## CDP First
 
@@ -394,7 +494,7 @@ HyperAgent integrates seamlessly with Playwright, so you can still use familiar 
 - **Deep Iframe Support**: Tracking across nested and cross-origin iframes (OOPIFs)
 - **Exact Coordinates**: Actions use precise CDP coordinates for reliability
 
-Keep in mind that CDP is still experimental, and stability is not guaranteed. If you’d like the agent to use Playwright’s native locators/actions instead, set `cdpActions: false` when you create the agent and it will fall back automatically.
+Keep in mind that CDP is still experimental, and stability is not guaranteed. If you'd like the agent to use Playwright's native locators/actions instead, set `cdpActions: false` when you create the agent and it will fall back automatically.
 
 The CDP layer is still evolving—expect rapid polish (and the occasional sharp edge). If you hit something quirky you can toggle CDP off for that workflow and drop us a bug report.
 
@@ -410,7 +510,7 @@ We welcome contributions to Hyperagent! Here's how you can help:
 
 ## Support
 
-- 📚 [Documentation](https://docs.hyperbrowser.ai/hyperagent/about-hyperagent)
+- 📚 [Documentation](https://docs.hyperbrowser.ai/hyperagent/introduction)
 - 💬 [Discord Community](https://discord.gg/zsYzsgVRjh)
 - 🐛 [Issue Tracker](https://github.com/hyperbrowserai/HyperAgent/issues)
 - 📧 [Email Support](mailto:info@hyperbrowser.ai)
