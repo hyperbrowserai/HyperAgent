@@ -16,8 +16,6 @@ import {
   ActionCacheOutput,
   ActionCacheReplayResult,
   ActionCacheReplayStepResult,
-  ReplayStepMeta,
-  CachedActionHint,
   RunFromActionCacheParams,
   TaskParams,
   TaskOutput,
@@ -25,6 +23,7 @@ import {
   TaskStatus,
   TaskState,
   endTaskStatuses,
+  PerformOptions,
 } from "./agent/types";
 
 // Config Types
@@ -56,6 +55,7 @@ export {
   Task,
   TaskStatus,
   TaskState,
+  PerformOptions,
 
   // Config Types
   MCPServerConfig,

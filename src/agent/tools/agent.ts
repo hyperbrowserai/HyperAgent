@@ -676,11 +676,13 @@ export const runAgentTask = async (
     status: taskState.status,
     steps: actionCacheSteps,
   };
-  fs.mkdirSync(debugDir, { recursive: true });
-  fs.writeFileSync(
-    `${debugDir}/action-cache.json`,
-    JSON.stringify(actionCache, null, 2)
-  );
+  if (ctx.debug) {
+    fs.mkdirSync(debugDir, { recursive: true });
+    fs.writeFileSync(
+      `${debugDir}/action-cache.json`,
+      JSON.stringify(actionCache, null, 2)
+    );
+  }
 
   const taskOutput: AgentTaskOutput = {
     taskId,

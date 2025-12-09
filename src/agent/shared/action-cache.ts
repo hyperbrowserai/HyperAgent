@@ -10,8 +10,11 @@ const TEXT_NODE_SUFFIX = /\/text\(\)(\[\d+\])?$/iu;
 const isString = (value: unknown): value is string =>
   typeof value === "string";
 
-const isStringArray = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every((item) => typeof item === "string");
+const isStringOrNumberArray = (
+  value: unknown
+): value is Array<string | number> =>
+  Array.isArray(value) &&
+  value.every((item) => typeof item === "string" || typeof item === "number");
 
 const normalizeXPath = (raw?: string | null): string | null => {
   if (!raw) {
@@ -46,8 +49,8 @@ const extractMethod = (action: ActionType): string | null => {
 
 const extractArguments = (action: ActionType): string[] => {
   const params = action.params as Record<string, unknown>;
-  if (isStringArray(params.arguments)) {
-    return params.arguments;
+  if (isStringOrNumberArray(params.arguments)) {
+    return params.arguments.map((item) => item.toString());
   }
   return [];
 };

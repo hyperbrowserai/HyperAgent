@@ -54,6 +54,25 @@ ${argIndent}{ waitUntil: "domcontentloaded" }
 ${indent});`;
     }
 
+    if (step.actionType === "refreshPage") {
+      return `${indent}// Step ${step.stepIndex}
+${indent}await page.reload({ waitUntil: "domcontentloaded" });`;
+    }
+
+    if (step.actionType === "wait") {
+      const waitMs =
+        (step.arguments && Number(step.arguments[0])) ||
+        (step.actionParams as any)?.duration ||
+        1000;
+      return `${indent}// Step ${step.stepIndex}
+${indent}await page.waitForTimeout(${waitMs});`;
+    }
+
+    if (step.actionType === "extract") {
+      return `${indent}// Step ${step.stepIndex}
+${indent}await page.extract("${step.instruction}");`;
+    }
+
     const call = step.method ? METHOD_TO_CALL[step.method] : undefined;
     if (call) {
       const args: string[] = [];
@@ -98,7 +117,7 @@ ${callArgs}
 ${indent});`;
     }
 
-    throw new Error(`Unknown method: ${step.method}`);
+    return `${indent}// Step ${step.stepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"})`;
   };
 
   const stepSnippets = steps.map((step) => formatCall(step)).join("\n\n");

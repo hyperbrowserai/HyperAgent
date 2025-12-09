@@ -46,6 +46,7 @@ import type {
   HyperVariable,
   ActionCacheEntry,
   AgentTaskOutput,
+  PerformOptions,
 } from "../types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "../utils";
@@ -560,20 +561,65 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     let replayStatus: TaskStatus.COMPLETED | TaskStatus.FAILED =
       TaskStatus.COMPLETED;
 
-    const helperMap: Record<string, string> = {
-      click: "performClick",
-      fill: "performFill",
-      type: "performType",
-      press: "performPress",
-      selectOptionFromDropdown: "performSelectOption",
-      check: "performCheck",
-      uncheck: "performUncheck",
-      hover: "performHover",
-      scrollToElement: "performScrollToElement",
-      scrollToPercentage: "performScrollToPercentage",
-      nextChunk: "performNextChunk",
-      prevChunk: "performPrevChunk",
+    /**
+     * Type-safe dispatch for HyperPage perform* methods.
+     * Explicitly routes to the correct method with proper typing.
+     *
+     * Methods that require a value argument (second param): type, fill, press, selectOptionFromDropdown, scrollToPercentage
+     * Methods with only xpath and options: click, hover, check, uncheck, scrollToElement, nextChunk, prevChunk
+     */
+    const dispatchPerformHelper = (
+      hp: HyperPage,
+      method: string,
+      xpath: string,
+      value: string | undefined,
+      options: PerformOptions
+    ): Promise<TaskOutput> => {
+      switch (method) {
+        case "click":
+          return hp.performClick(xpath, options);
+        case "hover":
+          return hp.performHover(xpath, options);
+        case "type":
+          return hp.performType(xpath, value ?? "", options);
+        case "fill":
+          return hp.performFill(xpath, value ?? "", options);
+        case "press":
+          return hp.performPress(xpath, value ?? "", options);
+        case "selectOptionFromDropdown":
+          return hp.performSelectOption(xpath, value ?? "", options);
+        case "check":
+          return hp.performCheck(xpath, options);
+        case "uncheck":
+          return hp.performUncheck(xpath, options);
+        case "scrollToElement":
+          return hp.performScrollToElement(xpath, options);
+        case "scrollToPercentage":
+          return hp.performScrollToPercentage(xpath, value ?? "", options);
+        case "nextChunk":
+          return hp.performNextChunk(xpath, options);
+        case "prevChunk":
+          return hp.performPrevChunk(xpath, options);
+        default:
+          throw new Error(`Unknown perform helper method: ${method}`);
+      }
     };
+
+    /** Set of valid method names that can be dispatched */
+    const validHelperMethods = new Set([
+      "click",
+      "fill",
+      "type",
+      "press",
+      "selectOptionFromDropdown",
+      "check",
+      "uncheck",
+      "hover",
+      "scrollToElement",
+      "scrollToPercentage",
+      "nextChunk",
+      "prevChunk",
+    ]);
 
     for (const step of [...cache.steps].sort(
       (a, b) => a.stepIndex - b.stepIndex
@@ -628,14 +674,115 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             fallbackElementId: null,
           },
         };
+      } else if (step.actionType === "refreshPage") {
+        await hyperPage.reload({ waitUntil: "domcontentloaded" });
+        await waitForSettledDOM(hyperPage);
+        markDomSnapshotDirty(hyperPage);
+        result = {
+          taskId: cache.taskId,
+          status: TaskStatus.COMPLETED,
+          steps: [],
+          output: "Page refreshed",
+          actionCache: {
+            taskId: cache.taskId,
+            createdAt: cache.createdAt,
+            status: TaskStatus.COMPLETED,
+            steps: [],
+          },
+          replayStepMeta: {
+            usedCachedAction: true,
+            fallbackUsed: false,
+            retries: 0,
+            cachedXPath: null,
+            fallbackXPath: null,
+            fallbackElementId: null,
+          },
+        };
+      } else if (step.actionType === "wait") {
+        const durationRaw =
+          (step.arguments && step.arguments[0]) ||
+          (step.actionParams as any)?.duration;
+        const durationMs =
+          typeof durationRaw === "number"
+            ? durationRaw
+            : Number.parseInt(String(durationRaw ?? ""), 10);
+        const waitMs = Number.isFinite(durationMs) ? durationMs : 1000;
+        await hyperPage.waitForTimeout(waitMs);
+        result = {
+          taskId: cache.taskId,
+          status: TaskStatus.COMPLETED,
+          steps: [],
+          output: `Waited ${waitMs}ms`,
+          actionCache: {
+            taskId: cache.taskId,
+            createdAt: cache.createdAt,
+            status: TaskStatus.COMPLETED,
+            steps: [],
+          },
+          replayStepMeta: {
+            usedCachedAction: true,
+            fallbackUsed: false,
+            retries: 0,
+            cachedXPath: null,
+            fallbackXPath: null,
+            fallbackElementId: null,
+          },
+        };
+      } else if (step.actionType === "extract") {
+        try {
+          const extractResult = await hyperPage.extract(step.instruction);
+          result = {
+            taskId: cache.taskId,
+            status: TaskStatus.COMPLETED,
+            steps: [],
+            output:
+              typeof extractResult === "string"
+                ? extractResult
+                : JSON.stringify(extractResult),
+            replayStepMeta: {
+              usedCachedAction: true,
+              fallbackUsed: false,
+              retries: 0,
+              cachedXPath: null,
+              fallbackXPath: null,
+              fallbackElementId: null,
+            },
+          };
+        } catch (err: any) {
+          result = {
+            taskId: cache.taskId,
+            status: TaskStatus.FAILED,
+            steps: [],
+            output: `Extract failed: ${err?.message || String(err)}`,
+            replayStepMeta: {
+              usedCachedAction: true,
+              fallbackUsed: false,
+              retries: 0,
+              cachedXPath: null,
+              fallbackXPath: null,
+              fallbackElementId: null,
+            },
+          };
+        }
+      } else if (step.actionType === "analyzePdf") {
+        result = {
+          taskId: cache.taskId,
+          status: TaskStatus.FAILED,
+          steps: [],
+          output: "analyzePdf replay is not supported in runFromActionCache.",
+          replayStepMeta: {
+            usedCachedAction: true,
+            fallbackUsed: false,
+            retries: 0,
+            cachedXPath: null,
+            fallbackXPath: null,
+            fallbackElementId: null,
+          },
+        };
       } else {
-        const helperName =
-          step.method && helperMap[step.method] ? helperMap[step.method] : null;
-        if (
-          helperName &&
-          typeof (hyperPage as any)[helperName] === "function"
-        ) {
-          const options: any = {
+        const method = step.method;
+        if (method && validHelperMethods.has(method)) {
+          const options: PerformOptions = {
             performInstruction: step.instruction,
             maxSteps: maxXPathRetries,
           };
@@ -643,26 +790,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             options.frameIndex = step.frameIndex;
           }
           const valueArg = step.arguments?.[0];
-          if (
-            [
-              "type",
-              "fill",
-              "press",
-              "selectOptionFromDropdown",
-              "scrollToPercentage",
-            ].includes(step.method ?? "")
-          ) {
-            result = await (hyperPage as any)[helperName](
-              step.xpath ?? "",
-              valueArg,
-              options
-            );
-          } else {
-            result = await (hyperPage as any)[helperName](
-              step.xpath ?? "",
-              options
-            );
-          }
+          result = await dispatchPerformHelper(
+            hyperPage,
+            method,
+            step.xpath ?? "",
+            valueArg,
+            options
+          );
         } else {
           result = await hyperPage.perform(step.instruction);
         }
