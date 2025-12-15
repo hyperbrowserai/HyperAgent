@@ -50,6 +50,7 @@
     "dotenv": "^16.4.5",
     "jimp": "^1.6.0",
     "joplin-turndown-plugin-gfm": "^1.0.12",
+    "js-tiktoken": "^1.0.21",
     "lodash": "^4.17.21",
     "minimatch": "^9.0.3",
     "openai": "^6.7.0",

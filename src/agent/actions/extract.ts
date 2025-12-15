@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { parseMarkdown } from "@/utils/html-to-markdown";
+import { truncateToTokenLimit } from "@/utils";
 import fs from "fs";
 import { getCDPClient } from "@/cdp";
 
@@ -42,13 +43,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       }
 
       // Trim markdown to stay within token limit
-      // TODO: this is a hack, we should use a better token counting method
-      const avgTokensPerChar = 0.75; // Conservative estimate of tokens per character
-      const maxChars = Math.floor(ctx.tokenLimit / avgTokensPerChar);
-      const trimmedMarkdown =
-        markdown.length > maxChars
-          ? markdown.slice(0, maxChars) + "\n[Content truncated due to length]"
-          : markdown;
+      const trimmedMarkdown = truncateToTokenLimit(markdown, ctx.tokenLimit);
       if (ctx.debugDir) {
         fs.writeFileSync(
           `${ctx.debugDir}/extract-markdown-content.md`,
