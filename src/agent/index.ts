@@ -1477,7 +1477,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public pprintAction(action: ActionType): string {
     const foundAction = this.actions.find(
-      (actions) => actions.type === action.type
+      (definedAction) => definedAction.type === action.type
     );
     if (foundAction && foundAction.pprintAction) {
       return foundAction.pprintAction(action.params);
