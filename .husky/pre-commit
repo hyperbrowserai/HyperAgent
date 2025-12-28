@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run lint-staged for incremental linting/formatting
+npx lint-staged
+
+# Quick type check (no emit)
+echo "Running type check..."
+yarn typecheck

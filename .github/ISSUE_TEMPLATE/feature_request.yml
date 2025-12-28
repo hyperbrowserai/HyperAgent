@@ -1,0 +1,70 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please provide as much context as possible.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve?
+      placeholder: I want to be able to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should this work?
+      placeholder: |
+        The API could look like:
+        ```typescript
+        await page.newMethod({...});
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What alternatives have you considered?
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which part of HyperAgent would this affect?
+      options:
+        - Agent Runtime (src/agent/)
+        - DOM Extraction (src/context-providers/)
+        - CDP/Browser (src/cdp/, src/browser-providers/)
+        - LLM Integration (src/llm/)
+        - CLI (src/cli/)
+        - New Component
+        - Multiple Components
+    validations:
+      required: true
+
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Breaking Change?
+      options:
+        - "No - Backwards compatible"
+        - "Yes - Requires migration"
+        - "Unknown"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context, mockups, or references

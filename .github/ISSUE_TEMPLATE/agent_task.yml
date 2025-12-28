@@ -1,0 +1,78 @@
+name: AI Agent Task
+description: Task for AI agents (Claude, Codex, etc.) to implement
+title: "[Agent]: "
+labels: ["ai-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is optimized for AI coding agents. Provide clear, actionable requirements.
+
+        **Tip:** Reference specific files, functions, or line numbers when possible.
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What should the agent accomplish?
+      placeholder: |
+        Implement a new action that...
+
+        The result should:
+        - [ ] Support feature X
+        - [ ] Include tests
+        - [ ] Update documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context & References
+      description: Files, functions, or patterns the agent should reference
+      placeholder: |
+        - Start from `src/agent/actions/navigate.ts` as a reference
+        - Follow patterns in `src/types/actions.ts`
+        - See similar implementation in PR #123
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints & Requirements
+      description: Technical requirements, style guides, or limitations
+      placeholder: |
+        - Must use Zod for input validation
+        - Must include unit tests
+        - Must not break existing API
+        - Follow patterns in AGENTS.md
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation Steps
+      description: How to verify the implementation is correct
+      placeholder: |
+        1. Run `yarn test` - all tests pass
+        2. Run `yarn lint` - no errors
+        3. Run `yarn example scripts/test-new-feature.ts` - works as expected
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Small (1-2 files, < 100 lines)
+        - Medium (3-5 files, < 500 lines)
+        - Large (> 5 files or significant changes)
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Notes
+      description: Any other information for the agent

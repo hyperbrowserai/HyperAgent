@@ -1,0 +1,43 @@
+# Cursor AI Rules for HyperAgent
+
+## Project Context
+This is HyperAgent, an LLM-powered browser automation library built on Playwright.
+Read CLAUDE.md and AGENTS.md for full context before making changes.
+
+## Quick Commands
+- Build: `yarn build`
+- Test: `yarn test`
+- Lint: `yarn lint`
+- Format: `yarn format`
+- Validate all: `yarn validate`
+
+## Code Style
+- TypeScript strict mode, no `any` types
+- Use `@/*` path aliases for imports
+- Prettier formatting (run `yarn format`)
+- Zod schemas for LLM output validation
+- Interfaces defined in `src/types/`
+
+## Architecture Rules
+1. Agent loop lives in `src/agent/tools/agent.ts`
+2. DOM extraction via accessibility tree in `src/context-providers/a11y-dom/`
+3. CDP-first action execution, Playwright fallback
+4. Element IDs are encoded as `{frameIndex}-{backendNodeId}`
+
+## Anti-Patterns
+- Don't bypass CDP helpers for browser actions
+- Don't hardcode frame indices
+- Don't edit dist/ or evals/ directly
+- Don't suppress ESLint rules
+- Don't use relative imports (use @/* aliases)
+
+## Testing
+- Unit tests go alongside code or in `src/__tests__/`
+- Integration probes in `scripts/`
+- Run `yarn test` before committing
+
+## Before Committing
+1. Run `yarn validate`
+2. No new `any` types
+3. Tests for new behavior
+4. Update AGENTS.md for architectural changes

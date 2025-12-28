@@ -1,0 +1,81 @@
+name: Bug Report
+description: Report a bug in HyperAgent
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! This template is optimized for both human and AI agent processing.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps to reproduce the behavior
+      placeholder: |
+        1. Initialize HyperAgent with config...
+        2. Call page.ai('...')
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code Sample
+      description: Minimal code that reproduces the issue
+      render: typescript
+      placeholder: |
+        const agent = new HyperAgent({...});
+        const page = await agent.newPage();
+        // This line causes the bug:
+        await page.ai('...');
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error Output
+      description: Full error message and stack trace
+      render: shell
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of HyperAgent is affected?
+      options:
+        - Agent Runtime (src/agent/)
+        - DOM Extraction (src/context-providers/)
+        - CDP/Browser (src/cdp/, src/browser-providers/)
+        - LLM Integration (src/llm/)
+        - CLI (src/cli/)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, browser, etc.
+      placeholder: |
+        - OS: macOS 14.0
+        - Node: v20.10.0
+        - Browser: Chromium 120
+        - HyperAgent: 1.1.1
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context (screenshots, logs, related issues)

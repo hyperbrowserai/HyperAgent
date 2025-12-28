@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Validate commit message format
+# Expected: Short imperative subject, optionally with (#issue) reference
+# Examples: "Fix DOM capture retry", "Add CDP frame graph (#123)"
+
+commit_msg=$(cat "$1")
+first_line=$(echo "$commit_msg" | head -n1)
+
+# Check length (max 72 chars for subject)
+if [ ${#first_line} -gt 72 ]; then
+  echo "❌ Commit message subject too long (${#first_line} > 72 chars)"
+  echo "   Subject: $first_line"
+  exit 1
+fi
+
+# Check for imperative mood (starts with capital letter)
+if ! echo "$first_line" | grep -qE "^[A-Z]"; then
+  echo "❌ Commit message should start with a capital letter"
+  echo "   Got: $first_line"
+  exit 1
+fi
+
+echo "✅ Commit message format OK"
