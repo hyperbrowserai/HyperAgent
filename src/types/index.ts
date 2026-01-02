@@ -18,12 +18,18 @@ import {
   ActionCacheReplayStepResult,
   RunFromActionCacheParams,
   TaskParams,
+  PerformParams,
   TaskOutput,
+  StructuredTaskOutput,
+  AgentTaskOutput,
   Task,
+  TaskHandle,
   TaskStatus,
   TaskState,
   endTaskStatuses,
   PerformOptions,
+  HyperVariable,
+  HyperPage,
 } from "./agent/types";
 
 // Config Types
@@ -51,11 +57,17 @@ export {
   ActionCacheReplayStepResult,
   RunFromActionCacheParams,
   TaskParams,
+  PerformParams,
   TaskOutput,
+  StructuredTaskOutput,
+  AgentTaskOutput,
   Task,
+  TaskHandle,
   TaskStatus,
   TaskState,
   PerformOptions,
+  HyperVariable,
+  HyperPage,
 
   // Config Types
   MCPServerConfig,

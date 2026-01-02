@@ -58,10 +58,11 @@ const extractMethod = (action: ActionType): string | null => {
   return null;
 };
 
-const extractArguments = (action: ActionType): string[] => {
+const extractArguments = (action: ActionType): Array<string | number> => {
   const params = action.params as Record<string, unknown>;
   if (isStringOrNumberArray(params.arguments)) {
-    return params.arguments.map((item) => item.toString());
+    // P1.4: Preserve numeric values instead of converting to strings
+    return params.arguments;
   }
   return [];
 };

@@ -33,7 +33,7 @@ export interface ActionCacheEntry {
   instruction: string | undefined;
   elementId: string | null;
   method: string | null;
-  arguments: string[];
+  arguments: Array<string | number>;
   actionParams?: Record<string, unknown>;
   frameIndex: number | null;
   xpath: string | null;
@@ -47,7 +47,7 @@ export interface CachedActionHint {
   xpath?: string | null;
   frameIndex?: number | null;
   method?: string | null;
-  arguments?: string[];
+  arguments?: Array<string | number>;
   elementId?: string | null;
   actionParams?: Record<string, unknown>;
 }
@@ -105,6 +105,12 @@ export interface TaskParams {
   enableDomStreaming?: boolean;
 }
 
+export interface PerformParams extends TaskParams {
+  maxRetries?: number;      // default: 10 (from AIACTION_CONFIG.MAX_RETRIES)
+  retryDelayMs?: number;    // default: 1000 (from AIACTION_CONFIG.RETRY_DELAY_MS)
+  timeout?: number;         // default: 3500 (from AIACTION_CONFIG.CLICK_TIMEOUT)
+}
+
 export interface TaskOutput {
   taskId: string;
   status?: TaskStatus;
@@ -112,6 +118,13 @@ export interface TaskOutput {
   output?: string;
   actionCache?: ActionCacheOutput;
   replayStepMeta?: ReplayStepMeta;
+}
+
+/**
+ * Extended TaskOutput with parsed output for structured extraction.
+ */
+export interface StructuredTaskOutput<T> extends TaskOutput {
+  outputParsed: T;
 }
 
 // Returned by full agent runs (e.g., page.ai()) where actionCache is always populated.
@@ -124,6 +137,14 @@ export interface Task {
   resume: () => TaskStatus;
   cancel: () => TaskStatus;
   emitter: ErrorEmitter;
+}
+
+/**
+ * Extended Task handle with a result() method for awaiting completion.
+ */
+export interface TaskHandle<T = TaskOutput> extends Task {
+  /** Resolves when task completes, rejects on failure */
+  result(): Promise<T>;
 }
 
 export enum TaskStatus {
@@ -211,9 +232,9 @@ export interface HyperPage extends Page {
   performNextChunk: (xpath: string, options?: PerformOptions) => Promise<TaskOutput>;
   performPrevChunk: (xpath: string, options?: PerformOptions) => Promise<TaskOutput>;
   /**
-   * Execute a complex multi-step task using visual mode
+   * Execute a complex multi-step task
    * Best for: Complex workflows, multi-step tasks, exploratory automation
-   * Mode: Always visual (screenshots with overlays)
+   * Visual mode is disabled by default. Enable with `enableVisualMode: true` in params.
    */
   ai: (task: string, params?: TaskParams) => Promise<AgentTaskOutput>;
 
@@ -222,15 +243,30 @@ export interface HyperPage extends Page {
    * Best for: Single actions like "click login", "fill email with test@example.com"
    * Mode: Always a11y (accessibility tree, faster and more reliable)
    */
-  perform: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
+  perform: (instruction: string, params?: PerformParams) => Promise<TaskOutput>;
 
   /**
    * @deprecated: use perform() instead.
    * Execute a single granular action using a11y mode
    */
-  aiAction: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
+  aiAction: (instruction: string, params?: PerformParams) => Promise<TaskOutput>;
 
-  aiAsync: (task: string, params?: TaskParams) => Promise<Task>;
+  aiAsync: (task: string, params?: TaskParams) => Promise<TaskHandle>;
+  /**
+   * Extract data from the current page.
+   *
+   * Overload 1 (schema-first): Pass a Zod schema directly as the first argument.
+   * The result will be validated against the schema and typed accordingly.
+   */
+  extract<T extends z.ZodType<any>>(
+    schema: T,
+    params?: Omit<TaskParams, "outputSchema">
+  ): Promise<z.infer<T>>;
+  /**
+   * Extract data from the current page.
+   *
+   * Overload 2 (task-first): Pass a task description with optional schema.
+   */
   extract<T extends z.ZodType<any> | undefined = undefined>(
     task?: string,
     outputSchema?: T,

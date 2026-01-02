@@ -42,7 +42,7 @@
  */
 
 import "dotenv/config";
-import HyperAgent from "@hyperbrowser/agent";
+import { HyperAgent } from "@hyperbrowser/agent";
 import {
   AgentActionDefinition,
   ActionContext,

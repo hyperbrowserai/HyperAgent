@@ -55,7 +55,7 @@
 import dotenv from "dotenv";
 import chalk from "chalk";
 // Removed LangChain import - using native SDK configuration
-import HyperbrowserAgent from "@hyperbrowser/agent";
+import { HyperAgent } from "@hyperbrowser/agent";
 
 dotenv.config();
 
@@ -85,7 +85,7 @@ async function run(mcpUrl: string) {
   console.log(chalk.yellow("Creating Hyperbrowser Agent..."));
 
   try {
-    const agent = new HyperbrowserAgent({
+    const agent = new HyperAgent({
       llm: {
       provider: "openai",
       model: "gpt-4o",

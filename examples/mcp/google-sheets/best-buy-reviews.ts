@@ -62,7 +62,7 @@
 import dotenv from "dotenv";
 import chalk from "chalk";
 // Removed LangChain import - using native SDK configuration
-import HyperAgent from "@hyperbrowser/agent";
+import { HyperAgent } from "@hyperbrowser/agent";
 
 dotenv.config();
 

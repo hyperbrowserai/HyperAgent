@@ -2,9 +2,9 @@ import { chromium, Browser, LaunchOptions } from "playwright-core";
 import BrowserProvider from "@/types/browser-providers/types";
 
 export class LocalBrowserProvider extends BrowserProvider<Browser> {
-  options: Omit<Omit<LaunchOptions, "headless">, "channel"> | undefined;
+  options: LaunchOptions | undefined;
   session: Browser | undefined;
-  constructor(options?: Omit<Omit<LaunchOptions, "headless">, "channel">) {
+  constructor(options?: LaunchOptions) {
     super();
     this.options = options;
   }
@@ -12,8 +12,8 @@ export class LocalBrowserProvider extends BrowserProvider<Browser> {
     const launchArgs = this.options?.args ?? [];
     const browser = await chromium.launch({
       ...(this.options ?? {}),
-      channel: "chrome",
-      headless: false,
+      channel: this.options?.channel ?? "chrome",
+      headless: this.options?.headless ?? false,
       args: ["--disable-blink-features=AutomationControlled", ...launchArgs],
     });
     this.session = browser;

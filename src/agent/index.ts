@@ -17,8 +17,10 @@ import {
   RunFromActionCacheParams,
   endTaskStatuses,
   Task,
+  TaskHandle,
   TaskOutput,
   TaskParams,
+  PerformParams,
   TaskState,
   TaskStatus,
 } from "@/types";
@@ -47,6 +49,7 @@ import type {
   ActionCacheEntry,
   AgentTaskOutput,
   PerformOptions,
+  StructuredTaskOutput,
 } from "../types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "../utils";
@@ -104,15 +107,45 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   constructor(params: HyperAgentConfig<T> = {}) {
+    // P1.5: Runtime guard for connectorConfig (reserved for Phase 4)
+    if ((params as any).connectorConfig && params.browserProvider) {
+      throw new HyperagentError(
+        "connectorConfig and browserProvider are mutually exclusive.",
+        400
+      );
+    }
+    if ((params as any).connectorConfig) {
+      throw new HyperagentError(
+        "connectorConfig is reserved for Phase 4; use browserProvider instead.",
+        400
+      );
+    }
+
     if (!params.llm) {
+      // P2.2: Check common env vars in order (first match wins)
       if (process.env.OPENAI_API_KEY) {
         this.llm = createLLMClient({
           provider: "openai",
           model: "gpt-4o",
           temperature: 0,
         });
+      } else if (process.env.ANTHROPIC_API_KEY) {
+        this.llm = createLLMClient({
+          provider: "anthropic",
+          model: "claude-opus-4-5",
+          temperature: 0,
+        });
+      } else if (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) {
+        this.llm = createLLMClient({
+          provider: "gemini",
+          model: "gemini-2.0-flash",
+          temperature: 0,
+        });
       } else {
-        throw new HyperagentError("No LLM provider provided", 400);
+        throw new HyperagentError(
+          "No LLM provider configured. Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, or pass 'llm' explicitly to the constructor.",
+          400
+        );
       }
     } else if (typeof params.llm === "object" && "provider" in params.llm) {
       // It's an LLMConfig
@@ -123,6 +156,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
 
+    // Set debug flag early so setDebugOptions receives the correct value
+    // P2.3: If debugDir is set and debug is not explicitly false, implicitly enable debug
+    if (params.debugOptions?.debugDir && params.debug !== false) {
+      this.debug = true;
+    } else {
+      this.debug = params.debug ?? false;
+    }
+
     setDebugOptions(params.debugOptions, this.debug);
 
     // TODO(Phase4): This legacy provider branch will be replaced by connector configs.
@@ -130,16 +171,27 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.browserProviderType === "Hyperbrowser"
         ? new HyperbrowserProvider({
             ...(params.hyperbrowserConfig ?? {}),
-            debug: params.debug,
+            debug: this.debug,
           })
         : new LocalBrowserProvider(params.localConfig)
     ) as T extends "Hyperbrowser" ? HyperbrowserProvider : LocalBrowserProvider;
+
+    // P1.10: Warn when both configs are provided but only one is used
+    if (this.browserProviderType === "Local" && params.hyperbrowserConfig) {
+      console.warn(
+        "[HyperAgent] hyperbrowserConfig is ignored when browserProvider is 'Local'"
+      );
+    }
+    if (this.browserProviderType === "Hyperbrowser" && params.localConfig) {
+      console.warn(
+        "[HyperAgent] localConfig is ignored when browserProvider is 'Hyperbrowser'"
+      );
+    }
 
     if (params.customActions) {
       params.customActions.forEach(this.registerAction, this);
     }
 
-    this.debug = params.debug ?? false;
     this.cdpActionsEnabled = params.cdpActions ?? true;
     this.errorEmitter = new ErrorEmitter();
   }
@@ -330,7 +382,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Get the current page or create a new one if none exists
    * @returns The current page
    */
-  public async getCurrentPage(): Promise<Page> {
+  public async getCurrentPage(): Promise<HyperPage> {
     if (!this.browser) {
       await this.initBrowser();
     }
@@ -400,17 +452,36 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   /**
-   * Execute a task asynchronously and return a Task control object
+   * Get the task result for a completed task
+   * @param taskId ID of the task
+   * @returns TaskOutput for the completed task
+   */
+  private getTaskResult(taskId: string): TaskOutput {
+    const taskState = this.tasks[taskId];
+    if (!taskState) {
+      throw new HyperagentError(`Task ${taskId} not found`, 404);
+    }
+    return {
+      taskId,
+      status: taskState.status,
+      steps: taskState.steps,
+      output: taskState.output,
+      actionCache: this.actionCacheByTaskId[taskId],
+    };
+  }
+
+  /**
+   * Execute a task asynchronously and return a TaskHandle control object
    * @param task The task to execute
    * @param params Optional parameters for the task
    * @param initPage Optional page to use for the task
-   * @returns A promise that resolves to a Task control object for managing the running task
+   * @returns A promise that resolves to a TaskHandle control object for managing the running task
    */
   public async executeTaskAsync(
     task: string,
     params?: TaskParams,
     initPage?: Page
-  ): Promise<Task> {
+  ): Promise<TaskHandle> {
     const taskId = uuidv4();
     let activeTaskPage = initPage || (await this.getCurrentPage());
 
@@ -442,6 +513,41 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     const mergedParams = params ?? {};
+
+    // Create result promise that resolves on task completion
+    // Define listeners outside Promise to enable cleanup
+    let onComplete: ((completedTaskId: string) => void) | undefined;
+    let onError: ((err: Error & { taskId?: string }) => void) | undefined;
+
+    const resultPromise = new Promise<TaskOutput>((resolve, reject) => {
+      const cleanupListeners = () => {
+        if (onComplete) this.errorEmitter.off("complete", onComplete);
+        if (onError) this.errorEmitter.off("error", onError);
+      };
+
+      onComplete = (completedTaskId: string) => {
+        if (completedTaskId === taskId) {
+          cleanupListeners();
+          resolve(this.getTaskResult(taskId));
+        }
+      };
+
+      onError = (err: Error & { taskId?: string }) => {
+        // Only reject if the error is explicitly for this specific task
+        // Avoid cross-task interference by requiring exact taskId match
+        if (err.taskId === taskId) {
+          const status = this.tasks[taskId]?.status;
+          if (status === TaskStatus.FAILED || status === TaskStatus.CANCELLED) {
+            cleanupListeners();
+            reject(err);
+          }
+        }
+      };
+
+      this.errorEmitter.on("complete", onComplete);
+      this.errorEmitter.on("error", onError);
+    });
+
     runAgentTask(
       {
         llm: this.llm,
@@ -459,6 +565,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       .then((result) => {
         this.actionCacheByTaskId[taskId] = result.actionCache;
         cleanup();
+        // Emit complete event for this task
+        this.errorEmitter.emit("complete", taskId);
       })
       .catch((error: Error) => {
         cleanup();
@@ -468,7 +576,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           failedTaskState.status = TaskStatus.FAILED;
           failedTaskState.error = error.message;
           // Emit error on the central emitter, including the taskId
-          this.errorEmitter.emit("error", error);
+          const errorWithTaskId = error as Error & { taskId?: string };
+          errorWithTaskId.taskId = taskId;
+          this.errorEmitter.emit("error", errorWithTaskId);
         } else {
           // Fallback if task state somehow doesn't exist
           console.error(
@@ -476,7 +586,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           );
         }
       });
-    return this.getTaskControl(taskId);
+
+    const taskControl = this.getTaskControl(taskId);
+    return {
+      ...taskControl,
+      result: () => resultPromise,
+    };
   }
 
   /**
@@ -546,6 +661,38 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  /**
+   * Execute a task and return structured output with parsed schema validation.
+   * This is a convenience wrapper around executeTask that parses and validates the output.
+   *
+   * @param task The task description
+   * @param outputSchema Zod schema for output validation
+   * @param params Additional task parameters
+   * @returns Promise with task output and parsed data
+   */
+  public async executeTaskStructured<T extends z.ZodType<any>>(
+    task: string,
+    outputSchema: T,
+    params?: Omit<TaskParams, "outputSchema">
+  ): Promise<StructuredTaskOutput<z.infer<T>>> {
+    const result = await this.executeTask(task, { ...params, outputSchema });
+
+    if (!result.output || typeof result.output !== "string") {
+      throw new HyperagentError(
+        `Task did not produce output. Status: ${result.status}`,
+        500
+      );
+    }
+
+    const parsed = JSON.parse(result.output);
+    const validated = outputSchema.parse(parsed);
+
+    return {
+      ...result,
+      outputParsed: validated,
+    };
+  }
+
   public async runFromActionCache(
     cache: ActionCacheOutput,
     pageOrGetter: Page | (() => Page),
@@ -572,22 +719,24 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       hp: HyperPage,
       method: string,
       xpath: string,
-      value: string | undefined,
+      value: string | number | undefined,
       options: PerformOptions
     ): Promise<TaskOutput> => {
+      // Convert value to string for methods that require it, preserving undefined
+      const strValue = value !== undefined ? String(value) : undefined;
       switch (method) {
         case "click":
           return hp.performClick(xpath, options);
         case "hover":
           return hp.performHover(xpath, options);
         case "type":
-          return hp.performType(xpath, value ?? "", options);
+          return hp.performType(xpath, strValue ?? "", options);
         case "fill":
-          return hp.performFill(xpath, value ?? "", options);
+          return hp.performFill(xpath, strValue ?? "", options);
         case "press":
-          return hp.performPress(xpath, value ?? "", options);
+          return hp.performPress(xpath, strValue ?? "", options);
         case "selectOptionFromDropdown":
-          return hp.performSelectOption(xpath, value ?? "", options);
+          return hp.performSelectOption(xpath, strValue ?? "", options);
         case "check":
           return hp.performCheck(xpath, options);
         case "uncheck":
@@ -595,7 +744,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         case "scrollToElement":
           return hp.performScrollToElement(xpath, options);
         case "scrollToPercentage":
-          return hp.performScrollToPercentage(xpath, value ?? "", options);
+          // scrollToPercentage requires a valid position (string | number)
+          if (value === undefined) {
+            throw new Error("scrollToPercentage requires a position value");
+          }
+          return hp.performScrollToPercentage(xpath, value, options);
         case "nextChunk":
           return hp.performNextChunk(xpath, options);
         case "prevChunk":
@@ -801,7 +954,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             options
           );
         } else if (step.instruction) {
+          // P1.9: Falling back to instruction-based execution
           result = await hyperPage.perform(step.instruction);
+          // Mark fallbackUsed as true since we're using instruction-based fallback
+          if (result.replayStepMeta) {
+            result.replayStepMeta.fallbackUsed = true;
+          } else {
+            result.replayStepMeta = {
+              usedCachedAction: false,
+              fallbackUsed: true,
+              retries: 0,
+              cachedXPath: null,
+              fallbackXPath: null,
+              fallbackElementId: null,
+            };
+          }
         } else {
           result = {
             taskId: cache.taskId,
@@ -936,7 +1103,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     throw new HyperagentError(
-      `No elements found for instruction: "${instruction}" after ${maxRetries} retry attempts. The instruction may be too vague, the element may not exist, or the page may not have fully loaded.`,
+      `No elements found for instruction: "${instruction}" after ${maxRetries} retry attempts.\n` +
+        `URL: ${page.url()}\n` +
+        `Available elements: ${result.domState?.elements?.size ?? "unknown"}\n` +
+        `Suggestions: Try a more specific instruction, wait for page to load, or check if the element exists.`,
       404
     );
   }
@@ -1321,9 +1491,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   /**
    * Register a new action with the agent
+   * Allows dynamically adding actions after MCP servers connect
    * @param action The action to register
+   * @throws HyperagentError if action type is 'complete' (reserved)
+   * @throws Error if action with same type is already registered
    */
-  private async registerAction(action: AgentActionDefinition) {
+  public registerAction(action: AgentActionDefinition): void {
     if (action.type === "complete") {
       throw new HyperagentError(
         "Could not add an action with the name 'complete'. Complete is a reserved action.",
@@ -1386,10 +1559,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Connect to an MCP server at runtime
    * @param serverConfig Configuration for the MCP server
    * @returns Server ID if connection was successful
+   * @throws HyperagentError if connection fails
    */
   public async connectToMCPServer(
     serverConfig: MCPServerConfig
-  ): Promise<string | null> {
+  ): Promise<string> {
     if (!this.mcpClient) {
       this.mcpClient = new MCPClient(this.debug);
     }
@@ -1408,8 +1582,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       return serverId;
     } catch (error) {
-      console.error(`Failed to connect to MCP server:`, error);
-      return null;
+      throw new HyperagentError(
+        `Failed to connect to MCP server: ${error instanceof Error ? error.message : String(error)}`,
+        500
+      );
     }
   }
 
@@ -1554,9 +1730,42 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const executeSingleActionWithRetry = async (
       instruction: string,
-      params?: TaskParams
+      params?: PerformParams
     ) => {
-      const maxRetries = 3;
+      // P1.7: Warn if params contain unsupported properties for page.perform/aiAction
+      if (params && typeof params === "object") {
+        const supportedKeys = new Set([
+          "maxSteps",
+          "debugDir",
+          "outputSchema",
+          "onStep",
+          "onComplete",
+          "debugOnAgentOutput",
+          "enableVisualMode",
+          "useDomCache",
+          "enableDomStreaming",
+          "maxRetries",
+          "retryDelayMs",
+          "timeout",
+        ]);
+        const unsupportedKeys = Object.keys(params).filter(
+          (key) => !supportedKeys.has(key)
+        );
+        if (unsupportedKeys.length > 0) {
+          console.warn(
+            `[HyperAgent] Warning: Some PerformParams (${unsupportedKeys.join(", ")}) are not yet supported for page.perform and are currently ignored.`
+          );
+        }
+      }
+
+      // Use params values if provided, otherwise fall back to AIACTION_CONFIG defaults
+      const maxRetries =
+        params?.maxRetries ?? HyperAgent.AIACTION_CONFIG.MAX_RETRIES;
+      const retryDelayMs =
+        params?.retryDelayMs ?? HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS;
+      const timeout =
+        params?.timeout ?? HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT;
+
       for (let i = 0; i < maxRetries; i++) {
         try {
           return await this.executeSingleAction(
@@ -1574,8 +1783,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
                 "[HyperPage] Action aborted due to tab switch, retrying on new page..."
               );
             }
-            // Wait briefly for stability
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Wait briefly for stability using the configured retry delay
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
             continue;
           }
           throw err;
@@ -1590,10 +1799,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     hyperPage.ai = (task: string, params?: TaskParams) =>
       this.executeTask(task, params, getActivePage());
 
-    hyperPage.perform = (instruction: string, params?: TaskParams) =>
+    hyperPage.perform = (instruction: string, params?: PerformParams) =>
       executeSingleActionWithRetry(instruction, params);
 
-    hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
+    hyperPage.aiAction = async (
+      instruction: string,
+      params?: PerformParams
+    ) => {
       return executeSingleActionWithRetry(instruction, params);
     };
 
@@ -1617,22 +1829,53 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     hyperPage.aiAsync = (task: string, params?: TaskParams) =>
       this.executeTaskAsync(task, params, getActivePage());
 
-    hyperPage.extract = async (task, outputSchema, params) => {
+    // Helper to check if first arg is a ZodType (schema-first overload)
+    const isZodSchema = (arg: any): arg is z.ZodType<any> => {
+      return (
+        arg &&
+        typeof arg === "object" &&
+        typeof arg.parse === "function" &&
+        typeof arg._def === "object"
+      );
+    };
+
+    hyperPage.extract = async (
+      taskOrSchema: any,
+      outputSchemaOrParams?: any,
+      params?: any
+    ) => {
+      let task: string | undefined;
+      let outputSchema: z.ZodType<any> | undefined;
+      let taskParams: Omit<TaskParams, "outputSchema"> | undefined;
+
+      // Detect which overload is being used
+      if (isZodSchema(taskOrSchema)) {
+        // Schema-first overload: extract(schema, params?)
+        outputSchema = taskOrSchema;
+        taskParams = outputSchemaOrParams;
+        task = undefined;
+      } else {
+        // Task-first overload: extract(task?, outputSchema?, params?)
+        task = taskOrSchema;
+        outputSchema = outputSchemaOrParams;
+        taskParams = params;
+      }
+
       if (!task && !outputSchema) {
         throw new HyperagentError(
           "No task description or output schema specified",
           400
         );
       }
-      const taskParams: TaskParams = {
-        maxSteps: params?.maxSteps ?? 2,
-        ...params,
+      const mergedTaskParams: TaskParams = {
+        maxSteps: taskParams?.maxSteps ?? 2,
+        ...taskParams,
         outputSchema,
       };
       if (task) {
         const res = await this.executeTask(
           `You have to perform an extraction on the current page. You have to perform the extraction according to the task: ${task}. Make sure your final response only contains the extracted content`,
-          taskParams,
+          mergedTaskParams,
           getActivePage()
         );
         if (outputSchema) {
@@ -1642,7 +1885,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
             );
           }
-          return JSON.parse(outputText);
+          const parsed = JSON.parse(outputText);
+          // Validate with Zod schema - throws ZodError on mismatch
+          return outputSchema.parse(parsed);
         }
         const outputText = res.output;
         if (typeof outputText !== "string" || outputText === "") {
@@ -1652,9 +1897,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
         return outputText;
       } else {
+        // Schema-first overload (no task provided)
         const res = await this.executeTask(
           "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
-          taskParams,
+          mergedTaskParams,
           getActivePage()
         );
         if (typeof res.output !== "string" || res.output === "") {
@@ -1662,7 +1908,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
           );
         }
-        return JSON.parse(res.output);
+        const parsed = JSON.parse(res.output);
+        // Validate with Zod schema - throws ZodError on mismatch
+        return outputSchema!.parse(parsed);
       }
     };
     return hyperPage;

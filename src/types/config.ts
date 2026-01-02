@@ -99,5 +99,7 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
     traceWait?: boolean;
     profileDomCapture?: boolean;
     structuredSchema?: boolean;
+    /** Directory for debug artifacts. If set, implicitly enables debug mode (P2.3). */
+    debugDir?: string;
   };
 }

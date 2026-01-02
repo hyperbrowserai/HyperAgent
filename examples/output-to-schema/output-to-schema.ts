@@ -42,7 +42,7 @@ async function runEval() {
     },
     // llm: {
     //   provider: "anthropic",
-    //   model: "claude-sonnet-4-0",
+    //   model: "claude-opus-4-5",
     // },
     // debug: true,
     browserProvider: "Hyperbrowser",

@@ -7,7 +7,7 @@
  * ## What This Example Does
  *
  * The agent performs a web scraping task that:
- * 1. Configures HyperAgent with Anthropic's Claude 3 Sonnet model
+ * 1. Configures HyperAgent with Anthropic's Claude Opus 4.5 model
  * 2. Navigates to Hacker News
  * 3. Searches for and extracts information about "Show HN" posts
  *
@@ -24,7 +24,7 @@
  */
 
 import "dotenv/config";
-import HyperAgent from "@hyperbrowser/agent";
+import { HyperAgent } from "@hyperbrowser/agent";
 
 import chalk from "chalk";
 
@@ -35,11 +35,11 @@ async function runEval() {
   const agent = new HyperAgent({
     llm: {
       provider: "anthropic",
-      model: "claude-3-7-sonnet-latest",
+      model: "claude-opus-4-5",
     },
   });
 
-  console.log(`\n${chalk.green("Running agent with Claude Sonnet 3.7")}\n`);
+  console.log(`\n${chalk.green("Running agent with Claude Opus 4.5")}\n`);
 
   const result = await agent.executeTask(TASK, {
     debugOnAgentOutput: (agentOutput) => {

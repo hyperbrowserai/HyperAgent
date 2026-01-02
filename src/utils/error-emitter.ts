@@ -2,6 +2,7 @@ import EventEmitter from "events";
 
 type ErrorEvents = {
   error: (error: Error) => void;
+  complete: (taskId: string) => void;
 };
 
 export class ErrorEmitter extends EventEmitter {

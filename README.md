@@ -152,6 +152,7 @@ await page.perform("click the login button");
 
 - `useDomCache` (boolean): Reuse DOM snapshots for speed
 - `enableVisualMode` (boolean): Enable screenshots and overlays (default: false)
+- `debugDir` (string): Directory for debug artifacts (only used when `debug: true` is set on agent)
 
 **Example**:
 
@@ -185,6 +186,21 @@ const products = await page.extract(
   })
 );
 ```
+
+## Runtime API
+
+| Method | Description |
+|--------|-------------|
+| `page.ai(task, params?)` | Execute multi-step task with optional visual mode |
+| `page.perform(instruction, params?)` | Execute single action with a11y mode |
+| `page.extract(task?, schema?, params?)` | Extract structured data from page |
+| `page.aiAsync(task, params?)` | Start async task, returns `Task` handle |
+| `agent.executeTask(task, params?)` | Execute task on new or current page |
+| `agent.executeTaskAsync(task, params?)` | Start async task on agent |
+| `agent.getSession()` | Get current browser session |
+| `page.getActionCache(taskId)` | Retrieve action cache for replay |
+| `page.runFromActionCache(cache, params?)` | Replay cached actions |
+| `page.perform*(xpath, ...)` | Granular helpers: `performClick`, `performFill`, `performType`, etc. |
 
 ## ☁️ Cloud
 
@@ -280,7 +296,7 @@ const agent = new HyperAgent({
 const agent = new HyperAgent({
   llm: {
     provider: "anthropic",
-    model: "claude-sonnet-4-0",
+    model: "claude-opus-4-5",
   },
 });
 
