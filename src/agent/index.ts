@@ -444,6 +444,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       cancel: () => {
         if (taskState.status !== TaskStatus.COMPLETED) {
           taskState.status = TaskStatus.CANCELLED;
+          // Emit cancelled event so resultPromise can reject
+          this.errorEmitter.emit("cancelled", taskId);
         }
         return taskState.status;
       },
@@ -516,13 +518,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     // Create result promise that resolves on task completion
     // Define listeners outside Promise to enable cleanup
+    // Note: If runAgentTask never resolves/rejects, listeners will remain attached.
+    // This is an edge case that would require a timeout mechanism to fix properly.
     let onComplete: ((completedTaskId: string) => void) | undefined;
     let onError: ((err: Error & { taskId?: string }) => void) | undefined;
+    let onCancelled: ((cancelledTaskId: string) => void) | undefined;
 
     const resultPromise = new Promise<TaskOutput>((resolve, reject) => {
       const cleanupListeners = () => {
         if (onComplete) this.errorEmitter.off("complete", onComplete);
         if (onError) this.errorEmitter.off("error", onError);
+        if (onCancelled) this.errorEmitter.off("cancelled", onCancelled);
       };
 
       onComplete = (completedTaskId: string) => {
@@ -536,16 +542,23 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         // Only reject if the error is explicitly for this specific task
         // Avoid cross-task interference by requiring exact taskId match
         if (err.taskId === taskId) {
-          const status = this.tasks[taskId]?.status;
-          if (status === TaskStatus.FAILED || status === TaskStatus.CANCELLED) {
-            cleanupListeners();
-            reject(err);
-          }
+          cleanupListeners();
+          reject(err);
+        }
+      };
+
+      onCancelled = (cancelledTaskId: string) => {
+        if (cancelledTaskId === taskId) {
+          cleanupListeners();
+          const cancelError = new HyperagentError(`Task ${taskId} was cancelled`, 499);
+          (cancelError as Error & { taskId?: string }).taskId = taskId;
+          reject(cancelError);
         }
       };
 
       this.errorEmitter.on("complete", onComplete);
       this.errorEmitter.on("error", onError);
+      this.errorEmitter.on("cancelled", onCancelled);
     });
 
     runAgentTask(
@@ -565,25 +578,76 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       .then((result) => {
         this.actionCacheByTaskId[taskId] = result.actionCache;
         cleanup();
-        // Emit complete event for this task
-        this.errorEmitter.emit("complete", taskId);
+        
+        // Check result.status first (not currentStatus) to handle internal cancellation
+        const currentStatus = this.tasks[taskId]?.status;
+        if (result.status === TaskStatus.CANCELLED) {
+          // Only emit if not already cancelled externally (cancel() already emitted)
+          if (currentStatus !== TaskStatus.CANCELLED) {
+            taskState.status = TaskStatus.CANCELLED;
+            this.errorEmitter.emit("cancelled", taskId);
+          }
+        } else if (result.status === TaskStatus.COMPLETED) {
+          // Check if externally cancelled before emitting complete
+          if (currentStatus !== TaskStatus.CANCELLED) {
+            this.errorEmitter.emit("complete", taskId);
+          }
+        } else if (result.status === TaskStatus.FAILED) {
+          // Only emit error if not already cancelled externally
+          if (currentStatus !== TaskStatus.CANCELLED) {
+            const failedTaskState = this.tasks[taskId];
+            const errorMessage = failedTaskState?.error || "Task failed";
+            const errorWithTaskId = new HyperagentError(
+              `Task ${taskId} failed: ${errorMessage}`,
+              500
+            ) as Error & { taskId?: string };
+            errorWithTaskId.taskId = taskId;
+            this.errorEmitter.emit("error", errorWithTaskId);
+          }
+        } else {
+          // Unexpected status (RUNNING, PAUSED, PENDING) - log warning and emit error
+          if (this.debug) {
+            console.warn(
+              `Task ${taskId} ended with unexpected status: ${result.status}`
+            );
+          }
+          const errorWithTaskId = new HyperagentError(
+            `Task ended with unexpected status: ${result.status}`,
+            500
+          ) as Error & { taskId?: string };
+          errorWithTaskId.taskId = taskId;
+          this.errorEmitter.emit("error", errorWithTaskId);
+        }
       })
       .catch((error: Error) => {
         cleanup();
         // Retrieve the correct state to update
         const failedTaskState = this.tasks[taskId];
         if (failedTaskState) {
-          failedTaskState.status = TaskStatus.FAILED;
-          failedTaskState.error = error.message;
-          // Emit error on the central emitter, including the taskId
-          const errorWithTaskId = error as Error & { taskId?: string };
-          errorWithTaskId.taskId = taskId;
-          this.errorEmitter.emit("error", errorWithTaskId);
+          // Only update status if not already in terminal state
+          if (!endTaskStatuses.has(failedTaskState.status)) {
+            failedTaskState.status = TaskStatus.FAILED;
+            failedTaskState.error = error.message;
+            const errorWithTaskId = error as Error & { taskId?: string };
+            errorWithTaskId.taskId = taskId;
+            this.errorEmitter.emit("error", errorWithTaskId);
+          } else {
+            // Status already terminal, log but don't overwrite
+            if (this.debug) {
+              console.warn(
+                `Task ${taskId} error occurred but status already ${failedTaskState.status}`
+              );
+            }
+          }
         } else {
           // Fallback if task state somehow doesn't exist
           console.error(
             `Task state ${taskId} not found during error handling.`
           );
+          // Still emit error event so promise rejects even if task state is missing
+          const errorWithTaskId = error as Error & { taskId?: string };
+          errorWithTaskId.taskId = taskId;
+          this.errorEmitter.emit("error", errorWithTaskId);
         }
       });
 
@@ -1766,12 +1830,39 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const timeout =
         params?.timeout ?? HyperAgent.AIACTION_CONFIG.CLICK_TIMEOUT;
 
+      // Helper to wrap action execution with a timeout
+      const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
+        let timeoutId: NodeJS.Timeout | undefined;
+        const timeoutPromise = new Promise<T>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(
+              new HyperagentError(`Action timed out after ${ms}ms`, 408)
+            );
+          }, ms);
+        });
+
+        const cleanupTimeout = () => {
+          if (timeoutId !== undefined) {
+            try {
+              clearTimeout(timeoutId);
+            } catch (err) {
+              // Log in debug mode but don't throw - cleanup errors shouldn't affect promise chain
+              if (this.debug) {
+                console.warn("[HyperAgent] Failed to clear timeout:", err);
+              }
+            }
+            timeoutId = undefined;
+          }
+        };
+
+        return Promise.race([promise, timeoutPromise]).finally(cleanupTimeout);
+      };
+
       for (let i = 0; i < maxRetries; i++) {
         try {
-          return await this.executeSingleAction(
-            instruction,
-            getActivePage,
-            params
+          return await withTimeout(
+            this.executeSingleAction(instruction, getActivePage, params),
+            timeout
           );
         } catch (err: any) {
           if (
@@ -1780,12 +1871,24 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           ) {
             if (this.debug) {
               console.log(
-                "[HyperPage] Action aborted due to tab switch, retrying on new page..."
+                "[HyperAgent] Action aborted due to tab switch, retrying on new page..."
               );
             }
             // Wait briefly for stability using the configured retry delay
             await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
             continue;
+          }
+          // On timeout, retry instead of throwing immediately (unless last attempt)
+          if (err.statusCode === 408) {
+            if (this.debug) {
+              console.log(
+                `[HyperAgent] Action timed out (attempt ${i + 1}/${maxRetries}), retrying...`
+              );
+            }
+            if (i < maxRetries - 1) {
+              await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+              continue;
+            }
           }
           throw err;
         }
