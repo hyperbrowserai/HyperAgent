@@ -162,36 +162,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         });
       }
 
-      // Inject script to track event listeners
-      await this.context.addInitScript(() => {
-        // TODO: Check this list of events
-        const interactiveEvents = new Set([
-          "click",
-          "mousedown",
-          "mouseup",
-          "keydown",
-          "keyup",
-          "keypress",
-          "submit",
-          "change",
-          "input",
-          "focus",
-          "blur",
-        ]); // Add more events as needed
-
-        const originalAddEventListener = Element.prototype.addEventListener;
-        Element.prototype.addEventListener = function (
-          type: string,
-          listener: EventListenerOrEventListenerObject,
-          options?: boolean | AddEventListenerOptions
-        ) {
-          if (interactiveEvents.has(type.toLowerCase())) {
-            this.setAttribute("data-has-interactive-listener", "true");
-          }
-          originalAddEventListener.call(this, type, listener, options);
-        };
-      });
-
       // Listen for new pages (tabs/popups)
       this.context.on("page", () => {
         if (this.debug) {
