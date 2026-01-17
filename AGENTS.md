@@ -4,7 +4,7 @@
 - `src/` is the source of truth. `agent/` orchestrates the runtime loop (`tools/agent.ts`), with `shared/` housing DOM capture/runtime utilities and element finding, `examine-dom/` powering `page.perform` (and deprecated `page.aiAction`), `messages/` building prompts, `mcp/` hosting the MCP client, and `error.ts` centralizing agent errors; `debug/options.ts` controls low-level tracing.
 - `cdp/` wraps Chrome DevTools (client lifecycle, frame graph/context tracking, element resolution, bounding boxes, and action dispatch). `performAction` prefers these CDP paths and falls back to Playwright helpers when disabled.
 - `context-providers/a11y-dom/` is the single DOM provider (accessibility tree + encoded IDs, optional bounding boxes/visual overlays, DOM snapshot cache, streaming). Keep overlay generation (`visual-overlay.ts`) and ID maps (`build-maps.ts`, `dom-cache.ts`) aligned when changing extraction logic. Shared overlay/screenshot helpers live in `context-providers/shared/`.
-- `browser-providers/` implement `LocalBrowserProvider` (Playwright `chromium` channel "chrome" with stealth flags) and `HyperbrowserProvider`; extend these instead of launching browsers directly. Base class is in `types/browser-providers/types.ts`.
+- `browser-providers/` implement `LocalBrowserProvider` (Playwright `chromium` channel "chrome" with stealth flags), `HyperbrowserProvider`, and `RemoteChromeProvider`; extend these instead of launching browsers directly. Base class is in `types/browser-providers/types.ts`.
 - `llm/` houses native adapters (`openai`, `anthropic`, `gemini`, `deepseek`) plus schema/message converters—use `createLLMClient` and update `providers/index.ts` for new backends.
 - `types/` centralizes config, browser provider, agent state/action definitions (including `cdpActions`, visual/streaming/cache flags). Add interfaces here before wiring features elsewhere.
 - `utils/` collects shared helpers (`ErrorEmitter`, retry/sleep, markdown conversion, DOM settle logic); prefer reuse over reimplementation.
@@ -18,7 +18,7 @@
 - `yarn build` wipes `dist/`, runs `tsc` + `tsc-alias`, and restores executable bits on `dist/cli/index.js` and `cli.sh`; run before publishing or cutting releases.
 - `yarn lint` / `yarn format` use the flat ESLint config (`eslint.config.mjs`) and Prettier over `src/**/*.ts`; fix warnings instead of suppressing rules.
 - `yarn test` launches Jest; set `CI=true` for coverage and deterministic snapshots.
-- `yarn cli -c "..." [--debug --hyperbrowser --mcp <path>]` runs the agent; `--hyperbrowser` switches to the remote provider and `--debug` drops artifacts into `debug/`.
+- `yarn cli -c "..." [--debug --hyperbrowser --remote-chrome <wsEndpoint> --mcp <path>]` runs the agent; `--hyperbrowser` switches to the Hyperbrowser provider, `--remote-chrome <wsEndpoint>` connects to a remote Chrome instance, and `--debug` drops artifacts into `debug/`.
 - `yarn example <path>` (backed by `ts-node -r tsconfig-paths/register`) is the quickest way to execute flows in `examples/` or `scripts/`.
 - DOM metadata builds at runtime via the a11y provider; the legacy `build-dom-tree-script` entry points at a removed file—avoid relying on it until refreshed.
 

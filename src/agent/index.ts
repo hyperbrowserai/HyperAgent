@@ -32,6 +32,7 @@ import {
   HyperbrowserProvider,
   LocalBrowserProvider,
 } from "../browser-providers";
+import { RemoteChromeProvider } from "../browser-providers/remote-chrome";
 import { HyperagentError } from "./error";
 import { findElementWithInstruction } from "./shared/find-element";
 import {
@@ -80,7 +81,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private mcpClient: MCPClient | undefined;
   private browserProvider: T extends "Hyperbrowser"
     ? HyperbrowserProvider
-    : LocalBrowserProvider;
+    : T extends "RemoteChrome"
+      ? RemoteChromeProvider
+      : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private cdpActionsEnabled: boolean;
@@ -132,8 +135,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             ...(params.hyperbrowserConfig ?? {}),
             debug: params.debug,
           })
-        : new LocalBrowserProvider(params.localConfig)
-    ) as T extends "Hyperbrowser" ? HyperbrowserProvider : LocalBrowserProvider;
+        : this.browserProviderType === "RemoteChrome"
+          ? new RemoteChromeProvider(
+              params.remoteChromeConfig ?? { wsEndpoint: "" },
+              params.debug ?? false
+            )
+          : new LocalBrowserProvider(params.localConfig)
+    ) as T extends "Hyperbrowser"
+      ? HyperbrowserProvider
+      : T extends "RemoteChrome"
+        ? RemoteChromeProvider
+        : LocalBrowserProvider;
 
     if (params.customActions) {
       params.customActions.forEach(this.registerAction, this);
@@ -152,7 +164,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.browser) {
       this.browser = await this.browserProvider.start();
       if (
-        this.browserProviderType === "Hyperbrowser" &&
+        (this.browserProviderType === "Hyperbrowser" ||
+         this.browserProviderType === "RemoteChrome") &&
         this.browser.contexts().length > 0
       ) {
         this.context = this.browser.contexts()[0];

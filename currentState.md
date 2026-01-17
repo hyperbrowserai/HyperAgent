@@ -374,12 +374,17 @@ text = text.replace(`<<${variable.key}>>`, variable.value);
    - Cloud-based browser service
    - Remote CDP connection
 
+3. **RemoteChromeProvider**
+   - Connects to a remote Chrome instance via WebSocket endpoint
+   - Allows connection to existing Chrome instances with custom CDP endpoints
+
 **Selection:** ([index.ts:85-94](src/agent/index.ts#L85-L94))
 ```typescript
 new HyperAgent({
-  browserProvider: "Local" | "Hyperbrowser",
+  browserProvider: "Local" | "Hyperbrowser" | "RemoteChrome",
   localConfig: { ... },
-  hyperbrowserConfig: { ... }
+  hyperbrowserConfig: { ... },
+  remoteChromeConfig: { ... }
 })
 ```
 
