@@ -201,6 +201,32 @@ describe("dispatchCDPAction press key normalization", () => {
     expect(keyDownCalls[1]?.params?.text).toBe(" ");
     expect(keyDownCalls[1]?.params?.windowsVirtualKeyCode).toBe(32);
   });
+
+  it("bounds oversized custom key strings before dispatch", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+    const oversizedKey = "k".repeat(500);
+
+    await dispatchCDPAction("press", [oversizedKey], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const keyDown = calls.find(
+      (call) =>
+        call.method === "Input.dispatchKeyEvent" &&
+        call.params?.type === "keyDown"
+    );
+    expect(typeof keyDown?.params?.key).toBe("string");
+    expect((keyDown?.params?.key as string).length).toBeLessThanOrEqual(64);
+  });
 });
 
 describe("dispatchCDPAction argument coercion", () => {

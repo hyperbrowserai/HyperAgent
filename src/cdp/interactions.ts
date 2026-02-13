@@ -1268,10 +1268,12 @@ interface KeyEventData {
   windowsVirtualKeyCode: number;
   nativeVirtualKeyCode: number;
 }
+const MAX_KEY_EVENT_INPUT_CHARS = 64;
 
 function getKeyEventData(inputKey: string): KeyEventData {
   const sanitizedKey = stripControlChars((inputKey ?? "").toString()).trim();
-  const key = sanitizedKey.length === 0 ? "Enter" : sanitizedKey;
+  const normalizedKey = sanitizedKey.length === 0 ? "Enter" : sanitizedKey;
+  const key = normalizedKey.slice(0, MAX_KEY_EVENT_INPUT_CHARS);
   const lower = key.toLowerCase();
   const lookupKey = lower.replace(/[\s_-]+/g, "");
   const mapping: Record<
