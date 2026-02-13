@@ -557,6 +557,61 @@ describe("MCPClient.executeTool server selection", () => {
     expect(notesCallTool).not.toHaveBeenCalled();
   });
 
+  it("throws clear error when multiple servers expose same tool and serverId is omitted", async () => {
+    const mcpClient = new MCPClient(false);
+    const firstCallTool = jest.fn().mockResolvedValue({ content: [] });
+    const secondCallTool = jest.fn().mockResolvedValue({ content: [] });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool: firstCallTool },
+          },
+        ],
+        [
+          "server-b",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool: secondCallTool },
+          },
+        ],
+      ])
+    );
+
+    await expect(mcpClient.executeTool("search", { query: "coffee" })).rejects
+      .toThrow(
+        'Tool "search" is registered on multiple servers (server-a, server-b). Provide serverId explicitly.'
+      );
+    expect(firstCallTool).not.toHaveBeenCalled();
+    expect(secondCallTool).not.toHaveBeenCalled();
+  });
+
+  it("truncates ambiguous-server diagnostics when many servers match", async () => {
+    const mcpClient = new MCPClient(false);
+    const servers = new Map<
+      string,
+      {
+        tools: Map<string, unknown>;
+        client: { callTool: jest.Mock };
+      }
+    >();
+    for (let index = 0; index < 7; index += 1) {
+      servers.set(`server-${index}`, {
+        tools: new Map([["search", {}]]),
+        client: { callTool: jest.fn().mockResolvedValue({ content: [] }) },
+      });
+    }
+    setServers(mcpClient, servers);
+
+    await expect(mcpClient.executeTool("search", { query: "coffee" })).rejects
+      .toThrow(
+        'Tool "search" is registered on multiple servers (server-0, server-1, server-2, server-3, server-4, ... (+2 more)). Provide serverId explicitly.'
+      );
+  });
+
   it("throws when provided serverId does not exist", async () => {
     const mcpClient = new MCPClient(false);
     setServers(

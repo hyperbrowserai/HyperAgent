@@ -27,6 +27,7 @@ const MAX_MCP_PARAM_COLLECTION_SIZE = 500;
 const MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS = 128;
 const MAX_MCP_TOOL_NAME_CHARS = 256;
 const MAX_MCP_SERVER_ID_CHARS = 256;
+const MAX_MCP_AMBIGUOUS_SERVER_IDS = 5;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -113,6 +114,17 @@ function normalizeMCPExecutionServerId(
     );
   }
   return normalized;
+}
+
+function summarizeMCPServerIds(serverIds: string[]): string {
+  const preview = serverIds
+    .slice(0, MAX_MCP_AMBIGUOUS_SERVER_IDS)
+    .map((id) => formatMCPIdentifier(id, "unknown-server"));
+  const omitted = serverIds.length - preview.length;
+  if (omitted > 0) {
+    return `${preview.join(", ")}, ... (+${omitted} more)`;
+  }
+  return preview.join(", ");
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -544,11 +556,21 @@ class MCPClient {
 
     // If no server ID provided and multiple servers exist, try to find one with the tool
     if (!normalizedServerId && this.servers.size > 1) {
+      const matchingServerIds: string[] = [];
       for (const [id, server] of this.servers.entries()) {
         if (server.tools.has(normalizedToolName)) {
-          serverId = id;
-          break;
+          matchingServerIds.push(id);
         }
+      }
+      if (matchingServerIds.length === 1) {
+        serverId = matchingServerIds[0];
+      }
+      if (matchingServerIds.length > 1) {
+        throw new Error(
+          `Tool "${safeToolName}" is registered on multiple servers (${summarizeMCPServerIds(
+            matchingServerIds
+          )}). Provide serverId explicitly.`
+        );
       }
     } else if (normalizedServerId) {
       serverId = normalizedServerId;
