@@ -72,6 +72,19 @@ function normalizeToolName(toolName: string): string {
   return normalized.length > 0 ? normalized : "unknown-tool";
 }
 
+function normalizeOpenAIToolName(toolName: string): string {
+  const normalized = normalizeToolName(toolName)
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  if (normalized.length === 0) {
+    return "unknown_tool";
+  }
+
+  return normalized.slice(0, 64);
+}
+
 function normalizeToolNameForLabel(toolName: string): string {
   return normalizeToolName(toolName).replace(/[\[\]\r\n]/g, " ");
 }
@@ -84,7 +97,7 @@ function normalizeToolCallId(
   if (normalizedId && normalizedId.length > 0) {
     return normalizedId;
   }
-  return normalizeToolName(toolName);
+  return normalizeOpenAIToolName(toolName);
 }
 
 function buildToolMessageLabel(toolName: string): string {
@@ -123,7 +136,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
             image_url: { url: part.url },
           };
         } else if (part.type === "tool_call") {
-          const normalizedToolName = normalizeToolName(part.toolName);
+          const normalizedToolName = normalizeOpenAIToolName(part.toolName);
           return {
             type: "tool_call",
             id: normalizedToolName,
@@ -143,7 +156,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
           id: tc.id || "",
           type: "function",
           function: {
-            name: normalizeToolName(tc.name),
+            name: normalizeOpenAIToolName(tc.name),
             arguments: stringifyToolArguments(tc.arguments),
           },
         })

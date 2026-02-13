@@ -149,8 +149,32 @@ describe("convertToOpenAIMessages", () => {
       content: "tool result payload",
     });
     expect((result[1] as { tool_calls?: Array<{ function: { name: string } }> }).tool_calls?.[0]?.function.name).toBe(
-      "bad name"
+      "bad_name"
     );
+  });
+
+  it("sanitizes OpenAI tool names to supported charset and length", () => {
+    const longName = "tool " + "x".repeat(80) + " !@#$";
+    const result = convertToOpenAIMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_call",
+            toolName: longName,
+            arguments: {},
+          },
+        ],
+      },
+    ]);
+
+    const toolPart = (result[0]?.content as Array<{
+      id: string;
+      function: { name: string };
+    }>)[0];
+    expect(toolPart.id.length).toBeLessThanOrEqual(64);
+    expect(toolPart.function.name.length).toBeLessThanOrEqual(64);
+    expect(toolPart.function.name).toMatch(/^[a-zA-Z0-9_-]+$/);
   });
 });
 
