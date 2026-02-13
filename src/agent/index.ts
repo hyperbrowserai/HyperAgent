@@ -85,6 +85,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private static readonly MAX_REPLAY_OUTPUT_CHARS = 4_000;
   private static readonly MAX_REPLAY_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_REPLAY_IDENTIFIER_CHARS = 128;
+  private static readonly MAX_MCP_SERVER_ITEMS = 500;
+  private static readonly MAX_MCP_SERVER_TOOL_ITEMS = 500;
+  private static readonly MAX_MCP_SERVER_IDENTIFIER_CHARS = 128;
   private static readonly MAX_LIFECYCLE_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_HELPER_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_REPLAY_STEPS = 1_000;
@@ -936,12 +939,77 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return [];
     }
     try {
-      return Array.from(this.mcpClient.getServerIds()).filter(
-        (id): id is string => typeof id === "string" && id.trim().length > 0
-      );
+      const serverIds: string[] = [];
+      const seenServerIds = new Set<string>();
+      for (const rawServerId of this.mcpClient.getServerIds()) {
+        const normalizedServerId = this.normalizeMCPServerIdentifier(rawServerId);
+        if (!normalizedServerId || seenServerIds.has(normalizedServerId)) {
+          continue;
+        }
+        seenServerIds.add(normalizedServerId);
+        serverIds.push(normalizedServerId);
+        if (serverIds.length >= HyperAgent.MAX_MCP_SERVER_ITEMS) {
+          break;
+        }
+      }
+      return serverIds;
     } catch {
       return [];
     }
+  }
+
+  private normalizeMCPServerIdentifier(value: unknown): string | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const withoutControlChars = Array.from(value, (char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    }).join("");
+    const normalized = withoutControlChars.replace(/\s+/g, " ").trim();
+    if (normalized.length === 0) {
+      return null;
+    }
+    if (normalized.length <= HyperAgent.MAX_MCP_SERVER_IDENTIFIER_CHARS) {
+      return normalized;
+    }
+    const omitted =
+      normalized.length - HyperAgent.MAX_MCP_SERVER_IDENTIFIER_CHARS;
+    return `${normalized.slice(
+      0,
+      HyperAgent.MAX_MCP_SERVER_IDENTIFIER_CHARS
+    )}... [truncated ${omitted} chars]`;
+  }
+
+  private normalizeMCPServerInfoToolNames(value: unknown): string[] {
+    if (!value || typeof value !== "object") {
+      return [];
+    }
+    const iterable = value as Iterable<unknown>;
+    if (typeof iterable[Symbol.iterator] !== "function") {
+      return [];
+    }
+
+    const normalizedToolNames: string[] = [];
+    const seenToolNames = new Set<string>();
+    try {
+      for (const toolName of iterable) {
+        const normalizedToolName = this.normalizeMCPServerIdentifier(toolName);
+        if (!normalizedToolName || seenToolNames.has(normalizedToolName)) {
+          continue;
+        }
+        seenToolNames.add(normalizedToolName);
+        normalizedToolNames.push(normalizedToolName);
+        if (
+          normalizedToolNames.length >= HyperAgent.MAX_MCP_SERVER_TOOL_ITEMS
+        ) {
+          break;
+        }
+      }
+    } catch {
+      return [];
+    }
+    return normalizedToolNames;
   }
 
   private getSafeMCPServerInfo(): Array<{
@@ -954,7 +1022,41 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     try {
       const info = this.mcpClient.getServerInfo();
-      return Array.isArray(info) ? info : [];
+      if (!Array.isArray(info)) {
+        return [];
+      }
+      const normalizedInfo: Array<{
+        id: string;
+        toolCount: number;
+        toolNames: string[];
+      }> = [];
+      for (const rawEntry of info) {
+        if (!rawEntry || typeof rawEntry !== "object") {
+          continue;
+        }
+        const normalizedId =
+          this.normalizeMCPServerIdentifier(this.safeReadField(rawEntry, "id")) ??
+          "unknown-server";
+        const normalizedToolNames = this.normalizeMCPServerInfoToolNames(
+          this.safeReadField(rawEntry, "toolNames")
+        );
+        const rawToolCount = this.safeReadField(rawEntry, "toolCount");
+        const normalizedToolCount =
+          typeof rawToolCount === "number" &&
+          Number.isFinite(rawToolCount) &&
+          rawToolCount >= 0
+            ? Math.trunc(rawToolCount)
+            : normalizedToolNames.length;
+        normalizedInfo.push({
+          id: normalizedId,
+          toolCount: Math.max(normalizedToolCount, normalizedToolNames.length),
+          toolNames: normalizedToolNames,
+        });
+        if (normalizedInfo.length >= HyperAgent.MAX_MCP_SERVER_ITEMS) {
+          break;
+        }
+      }
+      return normalizedInfo;
     } catch {
       return [];
     }

@@ -1951,6 +1951,86 @@ describe("HyperAgent constructor and task controls", () => {
     expect(agent.getMCPServerInfo()).toEqual([]);
   });
 
+  it("sanitizes and bounds MCP server ids from client accessors", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const oversizedServerId = `server-${"x".repeat(300)}\nunsafe`;
+    const internalAgent = agent as unknown as {
+      mcpClient:
+        | {
+            getServerIds: () => unknown[];
+            getServerInfo: () => unknown[];
+          }
+        | null;
+    };
+    internalAgent.mcpClient = {
+      getServerIds: () => [" server-a ", "server-b\nunsafe", oversizedServerId, 42],
+      getServerInfo: () => [],
+    };
+
+    const serverIds = agent.getMCPServerIds();
+    expect(serverIds).toContain("server-a");
+    expect(serverIds).toContain("server-b unsafe");
+    const truncatedId = serverIds.find((id) => id.includes("[truncated")) ?? "";
+    expect(truncatedId).toContain("[truncated");
+    expect(truncatedId).not.toContain("\n");
+  });
+
+  it("sanitizes malformed MCP server info entries from client accessors", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const trapEntry = {};
+    Object.defineProperty(trapEntry, "id", {
+      get(): never {
+        throw new Error("id trap");
+      },
+    });
+    Object.defineProperty(trapEntry, "toolCount", {
+      get(): never {
+        throw new Error("count trap");
+      },
+    });
+    Object.defineProperty(trapEntry, "toolNames", {
+      get(): never {
+        throw new Error("toolNames trap");
+      },
+    });
+    const internalAgent = agent as unknown as {
+      mcpClient:
+        | {
+            getServerIds: () => string[];
+            getServerInfo: () => unknown[];
+          }
+        | null;
+    };
+    internalAgent.mcpClient = {
+      getServerIds: () => [],
+      getServerInfo: () => [
+        {
+          id: " server-a\nunsafe ",
+          toolCount: -1,
+          toolNames: [" search ", "search", "notes\nunsafe", 42],
+        },
+        trapEntry,
+      ],
+    };
+
+    expect(agent.getMCPServerInfo()).toEqual([
+      {
+        id: "server-a unsafe",
+        toolCount: 2,
+        toolNames: ["search", "notes unsafe"],
+      },
+      {
+        id: "unknown-server",
+        toolCount: 0,
+        toolNames: [],
+      },
+    ]);
+  });
+
   it("disconnectFromMCPServer handles invalid IDs and server list traps", () => {
     const disconnectServer = jest.fn(async () => undefined);
     const agent = new HyperAgent({
