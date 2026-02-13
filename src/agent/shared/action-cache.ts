@@ -26,8 +26,11 @@ const normalizeXPath = (raw?: string | null): string | null => {
   return raw.replace(TEXT_NODE_SUFFIX, "");
 };
 
+const getActionParamsRecord = (action: ActionType): Record<string, unknown> =>
+  isRecord(action.params) ? action.params : {};
+
 const extractInstruction = (action: ActionType): string | undefined => {
-  const params = action.params as Record<string, unknown>;
+  const params = getActionParamsRecord(action);
   switch (action.type) {
     case "extract":
       return isString(params.objective) ? params.objective : undefined;
@@ -40,7 +43,7 @@ const extractInstruction = (action: ActionType): string | undefined => {
 };
 
 const extractElementId = (action: ActionType): string | null => {
-  const params = action.params as Record<string, unknown>;
+  const params = getActionParamsRecord(action);
   if (isString(params.elementId)) {
     return params.elementId;
   }
@@ -48,7 +51,7 @@ const extractElementId = (action: ActionType): string | null => {
 };
 
 const extractMethod = (action: ActionType): string | null => {
-  const params = action.params as Record<string, unknown>;
+  const params = getActionParamsRecord(action);
   if (isString(params.method)) {
     return params.method;
   }
@@ -56,7 +59,7 @@ const extractMethod = (action: ActionType): string | null => {
 };
 
 const extractArguments = (action: ActionType): string[] => {
-  const params = action.params as Record<string, unknown>;
+  const params = getActionParamsRecord(action);
   if (isStringOrNumberArray(params.arguments)) {
     return params.arguments.map((item) => item.toString());
   }

@@ -74,6 +74,31 @@ describe("action cache helpers", () => {
     expect(actEntry.method).toBe("click");
   });
 
+  it("does not throw when action params are nullish", () => {
+    const domState: A11yDOMState = {
+      elements: new Map(),
+      domState: "",
+      xpathMap: {},
+      backendNodeMap: {},
+    };
+    const actionOutput: ActionOutput = {
+      success: true,
+      message: "ok",
+    };
+
+    expect(() =>
+      buildActionCacheEntry({
+        stepIndex: 2,
+        action: {
+          type: "actElement",
+          params: null,
+        } as unknown as ActionType,
+        actionOutput,
+        domState,
+      })
+    ).not.toThrow();
+  });
+
   it("uses actionParams url when goToUrl argument is whitespace", () => {
     const goToEntry: ActionCacheEntry = {
       stepIndex: 1,
