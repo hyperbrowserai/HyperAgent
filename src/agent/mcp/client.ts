@@ -21,6 +21,7 @@ type MCPToolResult = Awaited<ReturnType<Client["callTool"]>>;
 const MAX_MCP_PAYLOAD_CHARS = 4000;
 const MAX_MCP_TOOL_PARAMS_JSON_CHARS = 100_000;
 const MAX_MCP_PARAM_DEPTH = 25;
+const MAX_MCP_PARAM_STRING_CHARS = 20_000;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -108,6 +109,14 @@ export function normalizeMCPToolParams(
     if (typeof value === "string" && hasUnsupportedControlChars(value)) {
       throw new Error(
         "MCP tool params cannot include unsupported control characters in string values"
+      );
+    }
+    if (
+      typeof value === "string" &&
+      value.length > MAX_MCP_PARAM_STRING_CHARS
+    ) {
+      throw new Error(
+        `MCP tool params cannot include string values longer than ${MAX_MCP_PARAM_STRING_CHARS} characters`
       );
     }
     if (value instanceof Date) {

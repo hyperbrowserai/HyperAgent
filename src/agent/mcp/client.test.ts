@@ -109,6 +109,24 @@ describe("normalizeMCPToolParams", () => {
     );
   });
 
+  it("rejects oversized string values in direct object params", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        query: "x".repeat(20_001),
+      })
+    ).toThrow(
+      "MCP tool params cannot include string values longer than 20000 characters"
+    );
+  });
+
+  it("rejects oversized string values after JSON parsing", () => {
+    expect(() =>
+      normalizeMCPToolParams(`{"query":"${"x".repeat(20_001)}"}`)
+    ).toThrow(
+      "MCP tool params cannot include string values longer than 20000 characters"
+    );
+  });
+
   it("normalizes non-JSON primitive values in object params", () => {
     const token = Symbol("token");
     const sampleFunction = function sampleFunction(): void {
