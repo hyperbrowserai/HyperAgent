@@ -193,6 +193,43 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return normalized.length > 0 ? normalized : null;
   }
 
+  private normalizeServerId(value: unknown): string | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private getSafeMCPServerIds(): string[] {
+    if (!this.mcpClient) {
+      return [];
+    }
+    try {
+      return Array.from(this.mcpClient.getServerIds()).filter(
+        (id): id is string => typeof id === "string" && id.trim().length > 0
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  private getSafeMCPServerInfo(): Array<{
+    id: string;
+    toolCount: number;
+    toolNames: string[];
+  }> {
+    if (!this.mcpClient) {
+      return [];
+    }
+    try {
+      const info = this.mcpClient.getServerInfo();
+      return Array.isArray(info) ? info : [];
+    } catch {
+      return [];
+    }
+  }
+
   public get currentPage(): HyperPage | null {
     if (this._currentPage) {
       return this.setupHyperPage(this._currentPage);
@@ -1487,13 +1524,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @param config The MCP configuration
    */
   public async initializeMCPClient(config: MCPConfig): Promise<void> {
-    if (!config || config.servers.length === 0) {
+    const servers = Array.isArray((config as { servers?: unknown })?.servers)
+      ? ((config as { servers: MCPServerConfig[] }).servers ?? [])
+      : [];
+    if (servers.length === 0) {
       return;
     }
     await this.resetMCPClient();
     this.mcpClient = new MCPClient(this.debug);
     try {
-      for (const serverConfig of config.servers) {
+      for (const serverConfig of servers) {
         try {
           const { serverId, actions } =
             await this.mcpClient.connectToServer(serverConfig);
@@ -1507,13 +1547,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             console.log(`MCP server ${serverId} initialized successfully`);
           }
         } catch (error) {
+          const serverLabel = this.normalizeServerId(
+            (serverConfig as { id?: unknown })?.id
+          );
           console.error(
-            `Failed to initialize MCP server ${serverConfig.id || "unknown"}: ${formatUnknownError(error)}`
+            `Failed to initialize MCP server ${serverLabel ?? "unknown"}: ${formatUnknownError(error)}`
           );
         }
       }
 
-      const serverIds = this.mcpClient.getServerIds();
+      const serverIds = this.getSafeMCPServerIds();
       if (this.debug) {
         console.log(
           `Successfully connected to ${serverIds.length} MCP servers`
@@ -1535,6 +1578,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async connectToMCPServer(
     serverConfig: MCPServerConfig
   ): Promise<string | null> {
+    if (!serverConfig || typeof serverConfig !== "object") {
+      return null;
+    }
     if (!this.mcpClient) {
       this.mcpClient = new MCPClient(this.debug);
     }
@@ -1565,27 +1611,31 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Boolean indicating if the disconnection was successful
    */
   public disconnectFromMCPServer(serverId: string): boolean {
+    const normalizedServerId = this.normalizeServerId(serverId);
+    if (!normalizedServerId) {
+      return false;
+    }
     if (!this.mcpClient) {
       return false;
     }
 
-    const isConnected = this.mcpClient.getServerIds().includes(serverId);
+    const isConnected = this.getSafeMCPServerIds().includes(normalizedServerId);
     if (!isConnected) {
-      this.unregisterMCPActionsForServer(serverId);
+      this.unregisterMCPActionsForServer(normalizedServerId);
       return false;
     }
 
     try {
-      this.unregisterMCPActionsForServer(serverId);
-      void this.mcpClient.disconnectServer(serverId).catch((error) => {
+      this.unregisterMCPActionsForServer(normalizedServerId);
+      void this.mcpClient.disconnectServer(normalizedServerId).catch((error) => {
         console.error(
-          `Failed to disconnect from MCP server ${serverId}: ${formatUnknownError(error)}`
+          `Failed to disconnect from MCP server ${normalizedServerId}: ${formatUnknownError(error)}`
         );
       });
       return true;
     } catch (error) {
       console.error(
-        `Failed to disconnect from MCP server ${serverId}: ${formatUnknownError(error)}`
+        `Failed to disconnect from MCP server ${normalizedServerId}: ${formatUnknownError(error)}`
       );
       return false;
     }
@@ -1597,22 +1647,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Boolean indicating if disconnection was successful
    */
   public async disconnectFromMCPServerAsync(serverId: string): Promise<boolean> {
+    const normalizedServerId = this.normalizeServerId(serverId);
+    if (!normalizedServerId) {
+      return false;
+    }
     if (!this.mcpClient) {
       return false;
     }
-    const isConnected = this.mcpClient.getServerIds().includes(serverId);
+    const isConnected = this.getSafeMCPServerIds().includes(normalizedServerId);
     if (!isConnected) {
-      this.unregisterMCPActionsForServer(serverId);
+      this.unregisterMCPActionsForServer(normalizedServerId);
       return false;
     }
 
-    this.unregisterMCPActionsForServer(serverId);
+    this.unregisterMCPActionsForServer(normalizedServerId);
     try {
-      await this.mcpClient.disconnectServer(serverId);
+      await this.mcpClient.disconnectServer(normalizedServerId);
       return true;
     } catch (error) {
       console.error(
-        `Failed to disconnect from MCP server ${serverId}: ${formatUnknownError(error)}`
+        `Failed to disconnect from MCP server ${normalizedServerId}: ${formatUnknownError(error)}`
       );
       return false;
     }
@@ -1624,10 +1678,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Boolean indicating if the server is connected
    */
   public isMCPServerConnected(serverId: string): boolean {
+    const normalizedServerId = this.normalizeServerId(serverId);
+    if (!normalizedServerId) {
+      return false;
+    }
     if (!this.mcpClient) {
       return false;
     }
-    return this.mcpClient.getServerIds().includes(serverId);
+    return this.getSafeMCPServerIds().includes(normalizedServerId);
   }
 
   /**
@@ -1635,10 +1693,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Array of server IDs
    */
   public getMCPServerIds(): string[] {
-    if (!this.mcpClient) {
-      return [];
-    }
-    return this.mcpClient.getServerIds();
+    return this.getSafeMCPServerIds();
   }
 
   /**
@@ -1653,7 +1708,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.mcpClient) {
       return null;
     }
-    return this.mcpClient.getServerInfo();
+    return this.getSafeMCPServerInfo();
   }
 
   /**

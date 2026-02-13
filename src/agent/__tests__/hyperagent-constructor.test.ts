@@ -366,6 +366,115 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("normalizes MCP server ids and handles invalid values", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      mcpClient: {
+        getServerIds: () => string[];
+      } | null;
+    };
+    internalAgent.mcpClient = {
+      getServerIds: () => ["server-a"],
+    };
+
+    expect(agent.isMCPServerConnected("  server-a  ")).toBe(true);
+    expect(agent.isMCPServerConnected("   ")).toBe(false);
+  });
+
+  it("returns safe MCP server ids/info when MCP client access throws", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      mcpClient:
+        | {
+            getServerIds: () => string[];
+            getServerInfo: () => Array<{
+              id: string;
+              toolCount: number;
+              toolNames: string[];
+            }>;
+          }
+        | null;
+    };
+    internalAgent.mcpClient = {
+      getServerIds: () => {
+        throw new Error("serverIds trap");
+      },
+      getServerInfo: () => {
+        throw new Error("serverInfo trap");
+      },
+    };
+
+    expect(agent.getMCPServerIds()).toEqual([]);
+    expect(agent.getMCPServerInfo()).toEqual([]);
+  });
+
+  it("disconnectFromMCPServer handles invalid IDs and server list traps", () => {
+    const disconnectServer = jest.fn(async () => undefined);
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      mcpClient:
+        | {
+            getServerIds: () => string[];
+            disconnectServer: typeof disconnectServer;
+          }
+        | null;
+    };
+    internalAgent.mcpClient = {
+      getServerIds: () => {
+        throw new Error("disconnect ids trap");
+      },
+      disconnectServer,
+    };
+
+    expect(agent.disconnectFromMCPServer("   ")).toBe(false);
+    expect(agent.disconnectFromMCPServer("server-a")).toBe(false);
+    expect(disconnectServer).not.toHaveBeenCalled();
+  });
+
+  it("disconnectFromMCPServerAsync handles invalid IDs and missing connections", async () => {
+    const disconnectServer = jest.fn(async () => undefined);
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      mcpClient:
+        | {
+            getServerIds: () => string[];
+            disconnectServer: typeof disconnectServer;
+          }
+        | null;
+    };
+    internalAgent.mcpClient = {
+      getServerIds: () => ["server-a"],
+      disconnectServer,
+    };
+
+    await expect(agent.disconnectFromMCPServerAsync("  ")).resolves.toBe(false);
+    await expect(agent.disconnectFromMCPServerAsync("server-b")).resolves.toBe(
+      false
+    );
+    await expect(agent.disconnectFromMCPServerAsync(" server-a ")).resolves.toBe(
+      true
+    );
+    expect(disconnectServer).toHaveBeenCalledWith("server-a");
+  });
+
+  it("connectToMCPServer rejects non-object server configs", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+
+    await expect(
+      agent.connectToMCPServer(null as unknown as never)
+    ).resolves.toBeNull();
+  });
+
   it("executeTaskAsync tolerates context listener attachment failures", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({
