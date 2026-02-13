@@ -33,6 +33,8 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
 - `POST /v1/workbooks/{id}/agent/presets/{preset}`
+- `GET /v1/workbooks/{id}/agent/scenarios`
+- `POST /v1/workbooks/{id}/agent/scenarios/{scenario}`
 - `POST /v1/workbooks/{id}/cells/get`
 - `POST /v1/workbooks/{id}/formulas/recalculate`
 - `POST /v1/workbooks/{id}/charts/upsert`
@@ -68,6 +70,14 @@ Supported `op_type` values:
 Supported `preset` values:
 - `seed_sales_demo` — fills demo regional sales, recalculates formulas, syncs chart metadata.
 - `export_snapshot` — recalculates and exports workbook (can include base64 file payload).
+
+### AI Agent scenario endpoint
+
+`POST /v1/workbooks/{id}/agent/scenarios/{scenario}` runs a higher-level built-in workflow composed from presets.
+
+Supported `scenario` values:
+- `seed_then_export` — executes `seed_sales_demo`, then `export_snapshot`.
+- `refresh_and_export` — executes `export_snapshot`.
 
 ### Example: run an agent operation batch
 

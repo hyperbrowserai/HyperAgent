@@ -2,7 +2,7 @@ use crate::{
   error::ApiError,
   models::{
     AgentOperation, AgentOperationResult, AgentOpsRequest, AgentOpsResponse,
-    AgentPresetRunRequest,
+    AgentPresetRunRequest, AgentScenarioRunRequest,
     CellMutation, CreateSheetRequest, CreateSheetResponse, CreateWorkbookRequest,
     CreateWorkbookResponse, ExportResponse, GetCellsRequest,
     GetCellsResponse, QueryRequest, RecalculateResponse, SetCellsRequest,
@@ -43,9 +43,14 @@ pub fn create_router(state: AppState) -> Router {
     .route("/v1/workbooks/{id}/agent/ops", post(agent_ops))
     .route("/v1/workbooks/{id}/agent/schema", get(get_agent_schema))
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
+    .route("/v1/workbooks/{id}/agent/scenarios", get(list_agent_scenarios))
     .route(
       "/v1/workbooks/{id}/agent/presets/{preset}",
       post(run_agent_preset),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/scenarios/{scenario}",
+      post(run_agent_scenario),
     )
     .route("/v1/workbooks/{id}/cells/get", post(get_cells_range))
     .route(
@@ -460,6 +465,44 @@ fn build_preset_operations(
   }
 }
 
+fn scenario_catalog() -> Vec<serde_json::Value> {
+  vec![
+    json!({
+      "scenario": "seed_then_export",
+      "description": "Run seed_sales_demo preset and then export_snapshot in a single request.",
+      "presets": ["seed_sales_demo", "export_snapshot"]
+    }),
+    json!({
+      "scenario": "refresh_and_export",
+      "description": "Recalculate workbook and export snapshot without seeding data.",
+      "presets": ["export_snapshot"]
+    }),
+  ]
+}
+
+fn build_scenario_operations(
+  scenario: &str,
+  include_file_base64: Option<bool>,
+) -> Result<Vec<AgentOperation>, ApiError> {
+  match scenario {
+    "seed_then_export" => {
+      let mut operations = build_preset_operations("seed_sales_demo", None)?;
+      operations.extend(build_preset_operations(
+        "export_snapshot",
+        include_file_base64,
+      )?);
+      Ok(operations)
+    }
+    "refresh_and_export" => build_preset_operations(
+      "export_snapshot",
+      include_file_base64,
+    ),
+    _ => Err(ApiError::BadRequest(format!(
+      "Unknown scenario '{scenario}'. Supported scenarios: seed_then_export, refresh_and_export."
+    ))),
+  }
+}
+
 async fn list_agent_presets(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
@@ -467,6 +510,16 @@ async fn list_agent_presets(
   state.get_workbook(workbook_id).await?;
   Ok(Json(json!({
     "presets": preset_catalog()
+  })))
+}
+
+async fn list_agent_scenarios(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  Ok(Json(json!({
+    "scenarios": scenario_catalog()
   })))
 }
 
@@ -513,7 +566,9 @@ async fn get_agent_schema(
       }
     },
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
-    "presets": preset_catalog()
+    "presets": preset_catalog(),
+    "scenario_endpoint": "/v1/workbooks/{id}/agent/scenarios/{scenario}",
+    "scenarios": scenario_catalog()
   })))
 }
 
@@ -733,6 +788,36 @@ async fn run_agent_preset(
   })))
 }
 
+async fn run_agent_scenario(
+  State(state): State<AppState>,
+  Path((workbook_id, scenario)): Path<(Uuid, String)>,
+  Json(payload): Json<AgentScenarioRunRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let operations =
+    build_scenario_operations(scenario.as_str(), payload.include_file_base64)?;
+  let request_id = payload.request_id.clone();
+  let actor = payload
+    .actor
+    .unwrap_or_else(|| format!("scenario:{scenario}"));
+  let stop_on_error = payload.stop_on_error.unwrap_or(true);
+
+  let results = execute_agent_operations(
+    &state,
+    workbook_id,
+    actor.as_str(),
+    stop_on_error,
+    operations,
+  )
+  .await;
+
+  Ok(Json(json!({
+    "scenario": scenario,
+    "request_id": request_id,
+    "results": results
+  })))
+}
+
 async fn duckdb_query(
   State(_state): State<AppState>,
   Path(_workbook_id): Path<Uuid>,
@@ -821,6 +906,8 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}": {"post": {"summary": "Run built-in AI operation preset (seed_sales_demo/export_snapshot)"}},
+      "/v1/workbooks/{id}/agent/scenarios": {"get": {"summary": "List available built-in agent scenarios"}},
+      "/v1/workbooks/{id}/agent/scenarios/{scenario}": {"post": {"summary": "Run built-in AI scenario (seed_then_export/refresh_and_export)"}},
       "/v1/workbooks/{id}/cells/get": {"post": {"summary": "Get range cells"}},
       "/v1/workbooks/{id}/formulas/recalculate": {"post": {"summary": "Recalculate formulas"}},
       "/v1/workbooks/{id}/charts/upsert": {"post": {"summary": "Upsert chart metadata"}},
@@ -833,7 +920,7 @@ async fn openapi() -> Json<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
-  use super::{build_preset_operations, normalize_sheet_name};
+  use super::{build_preset_operations, build_scenario_operations, normalize_sheet_name};
 
   #[test]
   fn should_validate_sheet_name_rules() {
@@ -853,5 +940,16 @@ mod tests {
     assert!(!demo.is_empty());
     assert!(!export.is_empty());
     assert!(build_preset_operations("missing_preset", None).is_err());
+  }
+
+  #[test]
+  fn should_build_known_scenarios() {
+    let seed_then_export = build_scenario_operations("seed_then_export", Some(false))
+      .expect("seed_then_export should be supported");
+    let refresh_then_export = build_scenario_operations("refresh_and_export", Some(false))
+      .expect("refresh_and_export should be supported");
+    assert!(seed_then_export.len() > refresh_then_export.len());
+    assert!(!refresh_then_export.is_empty());
+    assert!(build_scenario_operations("unknown_scenario", None).is_err());
   }
 }
