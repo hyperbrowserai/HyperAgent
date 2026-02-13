@@ -158,6 +158,7 @@ describe("executeReplaySpecialAction", () => {
     expect(page.waitForLoadState).toHaveBeenCalledWith("networkidle", {
       timeout: 2500,
     });
+    expect(waitForSettledDOM).toHaveBeenCalledWith(page);
     expect(markDomSnapshotDirty).toHaveBeenCalledWith(page);
     expect(result?.status).toBe("completed");
     expect(result?.output).toBe("Waited for load state: networkidle");

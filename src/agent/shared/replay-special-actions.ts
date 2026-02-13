@@ -262,6 +262,7 @@ export async function executeReplaySpecialAction(
       waitUntil,
       options
     );
+    await waitForSettledDOM(page);
     markDomSnapshotDirty(page);
     return {
       taskId,
