@@ -37,6 +37,7 @@ const MAX_MCP_TOOL_NAME_CHARS = 256;
 const MAX_MCP_SERVER_ID_CHARS = 256;
 const MAX_MCP_AMBIGUOUS_SERVER_IDS = 5;
 const MAX_MCP_TOOL_DIAGNOSTIC_ITEMS = 10;
+const MAX_MCP_CONFIG_SERVER_ID_CHARS = 128;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -123,6 +124,45 @@ function normalizeMCPExecutionServerId(
     );
   }
   return normalized;
+}
+
+function normalizeMCPConnectionServerId(serverId?: string): string | undefined {
+  if (typeof serverId === "undefined") {
+    return undefined;
+  }
+  const normalized = serverId.trim();
+  if (normalized.length === 0) {
+    throw new Error("MCP server id must be a non-empty string when provided");
+  }
+  if (hasAnyControlChars(normalized)) {
+    throw new Error("MCP server id contains unsupported control characters");
+  }
+  if (normalized.length > MAX_MCP_CONFIG_SERVER_ID_CHARS) {
+    throw new Error(
+      `MCP server id exceeds ${MAX_MCP_CONFIG_SERVER_ID_CHARS} characters`
+    );
+  }
+  return normalized;
+}
+
+function normalizeMCPConnectionType(
+  value?: MCPServerConfig["connectionType"]
+): "stdio" | "sse" {
+  if (typeof value === "undefined") {
+    return "stdio";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized.length === 0 || hasAnyControlChars(normalized)) {
+    throw new Error(
+      'MCP connectionType must be either "stdio" or "sse" when provided'
+    );
+  }
+  if (normalized === "stdio" || normalized === "sse") {
+    return normalized;
+  }
+  throw new Error(
+    'MCP connectionType must be either "stdio" or "sse" when provided'
+  );
 }
 
 function summarizeMCPServerIds(serverIds: string[]): string {
@@ -245,6 +285,22 @@ export function normalizeDiscoveredMCPTools(
   }
 
   return normalizedTools;
+}
+
+function findConnectedServerId(
+  servers: Map<string, ServerConnection>,
+  requestedId: string
+): string | undefined {
+  if (servers.has(requestedId)) {
+    return requestedId;
+  }
+  const requestedLookup = requestedId.toLowerCase();
+  for (const existingId of servers.keys()) {
+    if (existingId.toLowerCase() === requestedLookup) {
+      return existingId;
+    }
+  }
+  return undefined;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -513,14 +569,25 @@ class MCPClient {
   ): Promise<{ serverId: string; actions: AgentActionDefinition[] }> {
     try {
       // Generate or use provided server ID
-      const serverId = serverConfig.id || uuidv4();
-      if (this.servers.has(serverId)) {
-        throw new Error(`MCP server with ID "${serverId}" is already connected`);
+      const normalizedConfigServerId = normalizeMCPConnectionServerId(
+        serverConfig.id
+      );
+      const serverId = normalizedConfigServerId || uuidv4();
+      const existingServerId = findConnectedServerId(this.servers, serverId);
+      if (existingServerId) {
+        throw new Error(
+          `MCP server with ID "${formatMCPIdentifier(
+            serverId,
+            "unknown-server"
+          )}" is already connected`
+        );
       }
 
       // Create transport for this server
       let transport;
-      const connectionType = serverConfig?.connectionType || "stdio";
+      const connectionType = normalizeMCPConnectionType(
+        serverConfig?.connectionType
+      );
 
       if (connectionType === "sse") {
         if (!serverConfig.sseUrl) {
@@ -683,7 +750,7 @@ class MCPClient {
         );
       }
     } else if (normalizedServerId) {
-      serverId = normalizedServerId;
+      serverId = findConnectedServerId(this.servers, normalizedServerId);
     }
 
     if (!serverId || !this.servers.has(serverId)) {

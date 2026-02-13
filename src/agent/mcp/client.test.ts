@@ -521,6 +521,109 @@ describe("MCPClient.connectToServer validation", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("rejects duplicate server id matches case-insensitively", async () => {
+    const mcpClient = new MCPClient(false);
+    setServersForClient(
+      mcpClient,
+      new Map([
+        [
+          "Server-1",
+          {
+            tools: new Map(),
+          },
+        ],
+      ])
+    );
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          id: " server-1 ",
+          command: "echo",
+        })
+      ).rejects.toThrow('MCP server with ID "server-1" is already connected');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects blank server ids when provided programmatically", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          id: "   ",
+          command: "echo",
+        })
+      ).rejects.toThrow("MCP server id must be a non-empty string when provided");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects server ids with control characters", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          id: "server\n1",
+          command: "echo",
+        })
+      ).rejects.toThrow("MCP server id contains unsupported control characters");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects oversized server ids", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          id: `server-${"x".repeat(130)}`,
+          command: "echo",
+        })
+      ).rejects.toThrow("MCP server id exceeds 128 characters");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects invalid connectionType values", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "echo",
+          connectionType: " websocket " as unknown as "stdio",
+        })
+      ).rejects.toThrow(
+        'MCP connectionType must be either "stdio" or "sse" when provided'
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("normalizes connectionType casing and spacing before validation", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "  SsE  " as unknown as "sse",
+        })
+      ).rejects.toThrow("SSE URL is required for SSE connection type");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
 
 describe("MCPClient.executeTool server selection", () => {
@@ -649,6 +752,30 @@ describe("MCPClient.executeTool server selection", () => {
     );
 
     await mcpClient.executeTool("search", { query: "weather" }, "  server-1  ");
+
+    expect(callTool).toHaveBeenCalledWith({
+      name: "search",
+      arguments: { query: "weather" },
+    });
+  });
+
+  it("matches provided serverId case-insensitively", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn().mockResolvedValue({ content: [] });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "Server-1",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.executeTool("search", { query: "weather" }, "server-1");
 
     expect(callTool).toHaveBeenCalledWith({
       name: "search",
