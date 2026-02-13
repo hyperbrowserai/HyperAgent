@@ -15,6 +15,7 @@ const MAX_MCP_RECORD_ENTRIES = 200;
 const MAX_MCP_RECORD_KEY_CHARS = 256;
 const MAX_MCP_RECORD_VALUE_CHARS = 4_000;
 const UNSAFE_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
 
 function hasUnsupportedControlChars(value: string): boolean {
   return Array.from(value).some((char) => {
@@ -106,6 +107,14 @@ function normalizeOptionalStringRecord(
       isUnsafeKey ||
       hasAnyControlChars(key) ||
       hasAnyControlChars(rawValue)
+    ) {
+      throw new Error(
+        `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
+      );
+    }
+    if (
+      field === "sseHeaders" &&
+      !HTTP_HEADER_NAME_PATTERN.test(key)
     ) {
       throw new Error(
         `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`

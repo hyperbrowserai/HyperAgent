@@ -480,6 +480,20 @@ describe("parseMCPServersConfig", () => {
     );
     expect(() =>
       parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Bad Header":"a"}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Bad:Header":"a"}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
         '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Authorization":"a","authorization":"b"}}]'
       )
     ).toThrow(
