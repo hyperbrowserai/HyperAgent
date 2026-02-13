@@ -19,7 +19,8 @@ use crate::{
     parse_or_formula, parse_rept_formula, parse_right_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_find_formula,
-    parse_value_formula, parse_char_formula, parse_code_formula,
+    parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
+    parse_code_formula,
     parse_single_ref_formula,
     parse_xor_formula,
     parse_sign_formula,
@@ -489,6 +490,35 @@ fn evaluate_formula(
       return Ok(None);
     };
     return Ok(Some(parsed.to_string()));
+  }
+
+  if let Some(n_arg) = parse_n_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &n_arg)?;
+    let trimmed = value.trim();
+    let normalized = trimmed.to_uppercase();
+    if normalized == "TRUE" {
+      return Ok(Some("1".to_string()));
+    }
+    if normalized == "FALSE" || trimmed.is_empty() {
+      return Ok(Some("0".to_string()));
+    }
+    if let Ok(parsed) = trimmed.parse::<f64>() {
+      return Ok(Some(parsed.to_string()));
+    }
+    return Ok(Some("0".to_string()));
+  }
+
+  if let Some(t_arg) = parse_t_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &t_arg)?;
+    let trimmed = value.trim();
+    let normalized = trimmed.to_uppercase();
+    if trimmed.parse::<f64>().is_ok()
+      || normalized == "TRUE"
+      || normalized == "FALSE"
+    {
+      return Ok(Some(String::new()));
+    }
+    return Ok(Some(value));
   }
 
   if let Some(char_arg) = parse_char_formula(formula) {
@@ -2642,12 +2672,36 @@ mod tests {
         value: None,
         formula: Some("=FALSE()".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 88,
+        value: None,
+        formula: Some("=N(A1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 89,
+        value: None,
+        formula: Some("=T(E1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 90,
+        value: None,
+        formula: Some("=N(E1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 91,
+        value: None,
+        formula: Some("=T(A1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 85);
+    assert_eq!(updated_cells, 89);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2661,7 +2715,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 87,
+        end_col: 91,
       },
     )
     .expect("cells should be fetched");
@@ -2790,6 +2844,10 @@ mod tests {
     assert_eq!(by_position(1, 85).evaluated_value.as_deref(), Some("65"));
     assert_eq!(by_position(1, 86).evaluated_value.as_deref(), Some("true"));
     assert_eq!(by_position(1, 87).evaluated_value.as_deref(), Some("false"));
+    assert_eq!(by_position(1, 88).evaluated_value.as_deref(), Some("120"));
+    assert_eq!(by_position(1, 89).evaluated_value.as_deref(), Some("north"));
+    assert_eq!(by_position(1, 90).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 91).evaluated_value.as_deref(), Some(""));
   }
 
   #[test]
