@@ -180,6 +180,21 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
     );
+
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"command":"npx","env":{" KEY ":"a","KEY":"b"}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 has duplicate "env" key "KEY" after trimming.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{" Authorization ":"a","Authorization":"b"}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 has duplicate "sseHeaders" key "Authorization" after trimming.'
+    );
   });
 
   it("validates sseUrl formatting and protocol", () => {

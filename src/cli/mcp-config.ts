@@ -47,6 +47,11 @@ function normalizeOptionalStringRecord(
         `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
       );
     }
+    if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+      throw new Error(
+        `MCP server entry at index ${index} has duplicate "${field}" key "${key}" after trimming.`
+      );
+    }
     normalized[key] = rawValue;
   }
   return normalized;
