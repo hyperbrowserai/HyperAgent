@@ -412,4 +412,41 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("[truncated for prompt budget]");
     expect(joined.length).toBeLessThan(9000);
   });
+
+  it("truncates oversized task goal and variable descriptions", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "g".repeat(5000),
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      [
+        {
+          key: "token",
+          value: "abc",
+          description: "d".repeat(5000),
+        },
+      ]
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[truncated for prompt budget]");
+    expect(joined).not.toContain("g".repeat(3000));
+    expect(joined).not.toContain("d".repeat(3000));
+  });
 });

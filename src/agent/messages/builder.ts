@@ -101,7 +101,7 @@ export const buildAgentStepMessages = async (
   // Add the final goal section
   messages.push({
     role: "user",
-    content: `=== Final Goal ===\n${task}\n`,
+    content: `=== Final Goal ===\n${truncatePromptText(task)}\n`,
   });
 
   // Add current URL section
@@ -122,7 +122,7 @@ export const buildAgentStepMessages = async (
       ? variables
           .map(
             (v) =>
-              `<<${v.key}>> - ${v.description} | current value: ${safeSerializeForPrompt(v.value)}`
+              `<<${v.key}>> - ${truncatePromptText(v.description)} | current value: ${safeSerializeForPrompt(v.value)}`
           )
           .join("\n")
       : "No variables set";
