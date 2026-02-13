@@ -233,7 +233,7 @@ Map {
 
 ### The Data Flow: From LLM Instruction to CDP Command
 
-Here's the complete flow when the agent executes `page.aiAction("click the button in the iframe")`:
+Here's the complete flow when the agent executes `page.perform("click the button in the iframe")`:
 
 ```
 1. [LLM Input] "click the button in the iframe"
