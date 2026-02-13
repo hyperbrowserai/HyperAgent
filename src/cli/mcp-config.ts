@@ -247,12 +247,13 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 
     const normalizedId = isNonEmptyString(entry.id) ? entry.id.trim() : "";
     if (normalizedId.length > 0) {
-      if (seenIds.has(normalizedId)) {
+      const normalizedIdLookup = normalizedId.toLowerCase();
+      if (seenIds.has(normalizedIdLookup)) {
         throw new Error(
           `MCP server entry at index ${i} reuses duplicate id "${normalizedId}".`
         );
       }
-      seenIds.add(normalizedId);
+      seenIds.add(normalizedIdLookup);
       normalizedEntry.id = normalizedId;
     } else {
       delete normalizedEntry.id;

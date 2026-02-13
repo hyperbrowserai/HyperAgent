@@ -110,6 +110,14 @@ describe("parseMCPServersConfig", () => {
     ).toThrow('MCP server entry at index 1 reuses duplicate id "shared".');
   });
 
+  it("rejects duplicate server IDs case-insensitively", () => {
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"id":"Server-A","command":"npx"},{"id":"server-a","command":"node"}]'
+      )
+    ).toThrow('MCP server entry at index 1 reuses duplicate id "server-a".');
+  });
+
   it("throws when id or connectionType types are invalid", () => {
     expect(() =>
       parseMCPServersConfig('[{"id":123,"command":"npx"}]')
