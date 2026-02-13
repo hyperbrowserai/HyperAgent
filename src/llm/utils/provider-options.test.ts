@@ -38,4 +38,20 @@ describe("sanitizeProviderOptions", () => {
       )
     ).toBeUndefined();
   });
+
+  it("drops unsafe prototype-like keys", () => {
+    expect(
+      sanitizeProviderOptions(
+        {
+          __proto__: { polluted: true },
+          constructor: "bad",
+          prototype: "bad",
+          top_p: 0.95,
+        },
+        reserved
+      )
+    ).toEqual({
+      top_p: 0.95,
+    });
+  });
 });
