@@ -32,6 +32,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Top-level preset/scenario run buttons also prefetch signatures before execution
 - Selected preset/scenario controls and wizard runs also fetch fresh signatures before execution
 - Formula-bar apply and agent demo flow also execute through signed `agent/ops` plans
+- Formula and demo signed runs participate in signature-mismatch recovery refresh flow
 - Preview panels show signature sync status (`in-sync` / `stale`) against latest execution
 - Agent details panel can copy the most recent executed plan as a re-signed `agent/ops` payload
 - API client error handling preserves backend error codes in thrown messages (e.g. `OPERATION_SIGNATURE_MISMATCH: ...`)

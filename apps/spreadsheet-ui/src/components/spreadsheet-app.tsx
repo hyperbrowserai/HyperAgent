@@ -470,6 +470,12 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error))
+      ) {
+        return;
+      }
       applyUiError(error, "Failed to apply cell update.");
     } finally {
       setIsSaving(false);
@@ -567,6 +573,12 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error))
+      ) {
+        return;
+      }
       applyUiError(error, "Failed to run agent demo flow.");
     } finally {
       setIsRunningAgentFlow(false);
