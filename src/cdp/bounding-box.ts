@@ -4,6 +4,34 @@ import { formatUnknownError } from "@/utils";
 
 // Track which domains have been enabled per session
 const enabledDomains = new WeakMap<object, Set<string>>();
+const MAX_BOUNDING_BOX_DIAGNOSTIC_CHARS = 400;
+
+function sanitizeBoundingBoxDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateBoundingBoxDiagnostic(value: string): string {
+  if (value.length <= MAX_BOUNDING_BOX_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  const omitted = value.length - MAX_BOUNDING_BOX_DIAGNOSTIC_CHARS;
+  return `${value.slice(0, MAX_BOUNDING_BOX_DIAGNOSTIC_CHARS)}... [truncated ${omitted} chars]`;
+}
+
+function formatBoundingBoxDiagnostic(value: unknown): string {
+  const normalized = sanitizeBoundingBoxDiagnostic(formatUnknownError(value));
+  if (normalized.length === 0) {
+    return "unknown error";
+  }
+  return truncateBoundingBoxDiagnostic(normalized);
+}
 
 async function ensureDomainEnabled(
   session: CDPSession,
@@ -21,7 +49,9 @@ async function ensureDomainEnabled(
     enabled.add(domain);
   } catch (error) {
     console.warn(
-      `[CDP][BoundingBox] Failed to enable ${domain} domain: ${formatUnknownError(error)}`
+      `[CDP][BoundingBox] Failed to enable ${domain} domain: ${formatBoundingBoxDiagnostic(
+        error
+      )}`
     );
   }
 }
@@ -134,7 +164,9 @@ async function getBoundingBoxFromQuads(
     };
   } catch (error) {
     console.warn(
-      `[CDP][BoundingBox] Failed to get content quads: ${formatUnknownError(error)}`
+      `[CDP][BoundingBox] Failed to get content quads: ${formatBoundingBoxDiagnostic(
+        error
+      )}`
     );
     return null;
   }
