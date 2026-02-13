@@ -18,7 +18,8 @@ const VARIABLE_TOKEN_PATTERN = /<<([^>]+)>>/g;
 
 function interpolateVariables(value: string, ctx: ActionContext): string {
   return value.replace(VARIABLE_TOKEN_PATTERN, (match, key) => {
-    const variable = ctx.variables.find((entry) => entry.key === key);
+    const normalizedKey = key.trim();
+    const variable = ctx.variables.find((entry) => entry.key === normalizedKey);
     return variable ? variable.value : match;
   });
 }
