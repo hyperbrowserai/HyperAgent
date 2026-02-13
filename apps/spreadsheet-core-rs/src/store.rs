@@ -5,13 +5,13 @@ use crate::{
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_left_formula,
-    parse_len_formula, parse_lower_formula, parse_month_formula,
-    parse_not_formula, parse_or_formula, parse_right_formula,
-    parse_single_ref_formula, parse_trim_formula,
-    parse_sumif_formula, parse_sumifs_formula, parse_today_formula,
-    parse_upper_formula, parse_vlookup_formula, parse_xlookup_formula,
-    parse_year_formula,
-    ConditionalAggregateFormula, MultiCriteriaAggregateFormula, VLookupFormula,
+    parse_index_formula, parse_len_formula, parse_lower_formula,
+    parse_match_formula, parse_month_formula, parse_not_formula,
+    parse_or_formula, parse_right_formula, parse_single_ref_formula,
+    parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
+    parse_today_formula, parse_upper_formula, parse_vlookup_formula,
+    parse_xlookup_formula, parse_year_formula, ConditionalAggregateFormula,
+    IndexFormula, MatchFormula, MultiCriteriaAggregateFormula, VLookupFormula,
     XLookupFormula,
   },
   models::{CellMutation, CellRange, CellSnapshot},
@@ -318,6 +318,14 @@ fn evaluate_formula(
 
   if let Some(xlookup_formula) = parse_xlookup_formula(formula) {
     return evaluate_xlookup_formula(connection, sheet, &xlookup_formula);
+  }
+
+  if let Some(match_formula) = parse_match_formula(formula) {
+    return evaluate_match_formula(connection, sheet, &match_formula);
+  }
+
+  if let Some(index_formula) = parse_index_formula(formula) {
+    return evaluate_index_formula(connection, sheet, &index_formula);
   }
 
   if let Some(and_args) = parse_and_formula(formula) {
@@ -1248,6 +1256,86 @@ fn evaluate_xlookup_formula(
   Ok(Some(String::new()))
 }
 
+fn evaluate_match_formula(
+  connection: &Connection,
+  sheet: &str,
+  formula: &MatchFormula,
+) -> Result<Option<String>, ApiError> {
+  let match_type = parse_lookup_mode_operand(
+    connection,
+    sheet,
+    formula.match_type.as_deref(),
+    0,
+  )?;
+  if match_type != 0 {
+    return Ok(None);
+  }
+
+  let array_bounds = normalized_range_bounds(formula.array_start, formula.array_end);
+  if array_bounds.width != 1 && array_bounds.height != 1 {
+    return Ok(None);
+  }
+
+  let lookup_value = resolve_scalar_operand(connection, sheet, &formula.lookup_value)?;
+  let lookup_numeric = lookup_value.parse::<f64>().ok();
+
+  if array_bounds.width == 1 {
+    for offset in 0..array_bounds.height {
+      let candidate = load_cell_scalar(
+        connection,
+        sheet,
+        array_bounds.start_row + offset,
+        array_bounds.start_col,
+      )?;
+      if matches_lookup_value(&candidate, &lookup_value, lookup_numeric) {
+        return Ok(Some((offset + 1).to_string()));
+      }
+    }
+  } else {
+    for offset in 0..array_bounds.width {
+      let candidate = load_cell_scalar(
+        connection,
+        sheet,
+        array_bounds.start_row,
+        array_bounds.start_col + offset,
+      )?;
+      if matches_lookup_value(&candidate, &lookup_value, lookup_numeric) {
+        return Ok(Some((offset + 1).to_string()));
+      }
+    }
+  }
+
+  Ok(Some("0".to_string()))
+}
+
+fn evaluate_index_formula(
+  connection: &Connection,
+  sheet: &str,
+  formula: &IndexFormula,
+) -> Result<Option<String>, ApiError> {
+  let array_bounds = normalized_range_bounds(formula.array_start, formula.array_end);
+  let row_num = parse_required_unsigned(connection, sheet, &formula.row_num)?;
+  if row_num == 0 {
+    return Ok(Some(String::new()));
+  }
+  let col_num = match formula.col_num.as_deref() {
+    Some(value) => parse_required_unsigned(connection, sheet, value)?,
+    None => 1,
+  };
+  if col_num == 0 {
+    return Ok(Some(String::new()));
+  }
+
+  if row_num > array_bounds.height || col_num > array_bounds.width {
+    return Ok(Some(String::new()));
+  }
+
+  let target_row = array_bounds.start_row + row_num - 1;
+  let target_col = array_bounds.start_col + col_num - 1;
+  let resolved = load_cell_scalar(connection, sheet, target_row, target_col)?;
+  Ok(Some(resolved))
+}
+
 fn parse_lookup_mode_operand(
   connection: &Connection,
   sheet: &str,
@@ -1566,12 +1654,42 @@ mod tests {
         value: None,
         formula: Some(r#"=TRIM("  north   region  ")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 35,
+        value: None,
+        formula: Some(r#"=MATCH("south",E1:E2,0)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 36,
+        value: None,
+        formula: Some(r#"=MATCH("Northeast",F1:F2,0)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 37,
+        value: None,
+        formula: Some("=INDEX(E1:F2,2,2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 38,
+        value: None,
+        formula: Some("=INDEX(A1:A2,1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 39,
+        value: None,
+        formula: Some("=INDEX(E1:F2,3,1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 32);
+    assert_eq!(updated_cells, 37);
     assert!(unsupported_formulas.is_empty());
 
     let snapshots = get_cells(
@@ -1581,7 +1699,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 34,
+        end_col: 39,
       },
     )
     .expect("cells should be fetched");
@@ -1644,6 +1762,11 @@ mod tests {
     assert_eq!(by_position(1, 32).evaluated_value.as_deref(), Some("MIXED CASE"));
     assert_eq!(by_position(1, 33).evaluated_value.as_deref(), Some("mixed case"));
     assert_eq!(by_position(1, 34).evaluated_value.as_deref(), Some("north region"));
+    assert_eq!(by_position(1, 35).evaluated_value.as_deref(), Some("2"));
+    assert_eq!(by_position(1, 36).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 37).evaluated_value.as_deref(), Some("Southeast"));
+    assert_eq!(by_position(1, 38).evaluated_value.as_deref(), Some("120"));
+    assert_eq!(by_position(1, 39).evaluated_value.as_deref(), Some(""));
   }
 
   #[test]
@@ -1709,6 +1832,39 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=XLOOKUP("north",A1:A1,B1:B1,"missing",1,1)"#.to_string()]
+    );
+  }
+
+  #[test]
+  fn should_leave_non_exact_match_modes_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!("north")),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!("south")),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(r#"=MATCH("south",A1:A2,1)"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=MATCH("south",A1:A2,1)"#.to_string()]
     );
   }
 

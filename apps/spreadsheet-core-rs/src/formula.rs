@@ -22,6 +22,22 @@ pub struct XLookupFormula {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchFormula {
+  pub lookup_value: String,
+  pub array_start: (u32, u32),
+  pub array_end: (u32, u32),
+  pub match_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexFormula {
+  pub array_start: (u32, u32),
+  pub array_end: (u32, u32),
+  pub row_num: String,
+  pub col_num: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConditionalAggregateFormula {
   pub criteria_range_start: (u32, u32),
   pub criteria_range_end: (u32, u32),
@@ -158,6 +174,34 @@ pub fn parse_xlookup_formula(formula: &str) -> Option<XLookupFormula> {
     if_not_found: args.get(3).cloned(),
     match_mode: args.get(4).cloned(),
     search_mode: args.get(5).cloned(),
+  })
+}
+
+pub fn parse_match_formula(formula: &str) -> Option<MatchFormula> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "MATCH" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  let (array_start, array_end) = parse_range_reference(&args[1])?;
+  Some(MatchFormula {
+    lookup_value: args[0].clone(),
+    array_start,
+    array_end,
+    match_type: args.get(2).cloned(),
+  })
+}
+
+pub fn parse_index_formula(formula: &str) -> Option<IndexFormula> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "INDEX" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  let (array_start, array_end) = parse_range_reference(&args[0])?;
+  Some(IndexFormula {
+    array_start,
+    array_end,
+    row_num: args[1].clone(),
+    col_num: args.get(2).cloned(),
   })
 }
 
@@ -473,7 +517,9 @@ mod tests {
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
     parse_concat_formula, parse_date_formula, parse_day_formula,
+    parse_index_formula,
     parse_left_formula, parse_len_formula, parse_lower_formula,
+    parse_match_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
@@ -537,6 +583,20 @@ mod tests {
     assert_eq!(xlookup.if_not_found.as_deref(), Some(r#""missing""#));
     assert_eq!(xlookup.match_mode.as_deref(), Some("0"));
     assert_eq!(xlookup.search_mode.as_deref(), Some("1"));
+
+    let match_formula = parse_match_formula(r#"=MATCH("south",E1:E4,0)"#)
+      .expect("match formula should parse");
+    assert_eq!(match_formula.lookup_value, r#""south""#);
+    assert_eq!(match_formula.array_start, (1, 5));
+    assert_eq!(match_formula.array_end, (4, 5));
+    assert_eq!(match_formula.match_type.as_deref(), Some("0"));
+
+    let index_formula = parse_index_formula("=INDEX(E1:F4,2,2)")
+      .expect("index formula should parse");
+    assert_eq!(index_formula.array_start, (1, 5));
+    assert_eq!(index_formula.array_end, (4, 6));
+    assert_eq!(index_formula.row_num, "2");
+    assert_eq!(index_formula.col_num.as_deref(), Some("2"));
   }
 
   #[test]
