@@ -169,6 +169,50 @@ describe("action cache helpers", () => {
     expect(script).toContain("waitForTimeout(1000)");
   });
 
+  it("renders waitForLoadState script with timeout when provided", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 12,
+      instruction: "wait for network idle",
+      elementId: null,
+      method: null,
+      arguments: ["networkidle", "2500"],
+      actionType: "waitForLoadState",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain(
+      'await page.waitForLoadState("networkidle", { timeout: 2500 });'
+    );
+  });
+
+  it("renders waitForLoadState script defaulting to domcontentloaded", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 13,
+      instruction: "wait default",
+      elementId: null,
+      method: null,
+      arguments: [],
+      actionType: "waitForLoadState",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain('await page.waitForLoadState("domcontentloaded");');
+  });
+
   it("skips helper generation when xpath is missing", () => {
     const actElementEntry: ActionCacheEntry = {
       stepIndex: 3,

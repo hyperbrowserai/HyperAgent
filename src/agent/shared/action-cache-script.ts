@@ -107,6 +107,21 @@ ${indent}await page.reload({ waitUntil: "domcontentloaded" });`;
 ${indent}await page.waitForTimeout(${waitMs});`;
     }
 
+    if (step.actionType === "waitForLoadState") {
+      const actionParams = isRecord(step.actionParams)
+        ? step.actionParams
+        : undefined;
+      const waitUntil =
+        asNonEmptyTrimmedString(step.arguments?.[0]) ?? "domcontentloaded";
+      const timeoutMs = asNumber(step.arguments?.[1] ?? actionParams?.timeout);
+      if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs)) {
+        return `${indent}// Step ${step.stepIndex}
+${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)}, { timeout: ${timeoutMs} });`;
+      }
+      return `${indent}// Step ${step.stepIndex}
+${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)});`;
+    }
+
     if (step.actionType === "extract") {
       const extractInstruction = asNonEmptyTrimmedString(step.instruction);
       if (!extractInstruction) {
