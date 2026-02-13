@@ -37,6 +37,9 @@ export interface RunCachedStepParams {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const normalizeMaxSteps = (value: number): number =>
+  Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+
 export async function runCachedStep(
   params: RunCachedStepParams
 ): Promise<TaskOutput> {
@@ -55,6 +58,7 @@ export async function runCachedStep(
   } = params;
 
   const taskId = uuidv4();
+  const attempts = normalizeMaxSteps(maxSteps);
 
   const specialActionResult = await executeReplaySpecialAction({
     taskId,
@@ -102,7 +106,7 @@ export async function runCachedStep(
 
   let lastError: unknown = null;
 
-  for (let attempt = 0; attempt < maxSteps; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const attemptIndex = attempt + 1;
     const attemptResult = await runCachedAttempt({
       page,
@@ -121,13 +125,13 @@ export async function runCachedStep(
     });
 
     if (!attemptResult) {
-      if (attempt < maxSteps - 1) {
+      if (attempt < attempts - 1) {
         continue;
       }
       // will fall through to fallback/final failure below
     } else if (!attemptResult.success) {
       lastError = new Error(attemptResult.message);
-      if (attempt < maxSteps - 1) {
+      if (attempt < attempts - 1) {
         continue;
       }
       // will fall through to fallback/final failure below
@@ -164,7 +168,7 @@ export async function runCachedStep(
         replayStepMeta: {
           usedCachedAction: true,
           fallbackUsed: true,
-          retries: maxSteps,
+          retries: attempts,
           cachedXPath: cachedAction.xpath ?? null,
           fallbackXPath: null,
           fallbackElementId: null,
@@ -189,7 +193,7 @@ export async function runCachedStep(
       replayStepMeta: {
         usedCachedAction: true,
         fallbackUsed: true,
-        retries: maxSteps,
+        retries: attempts,
         cachedXPath: cachedAction.xpath ?? null,
         fallbackXPath: fb.replayStepMeta?.fallbackXPath ?? null,
         fallbackElementId: fb.replayStepMeta?.fallbackElementId ?? null,
@@ -206,7 +210,7 @@ export async function runCachedStep(
     replayStepMeta: {
       usedCachedAction: true,
       fallbackUsed: false,
-      retries: maxSteps,
+      retries: attempts,
       cachedXPath: cachedAction.xpath ?? null,
       fallbackXPath: null,
       fallbackElementId: null,

@@ -348,4 +348,29 @@ describe("runCachedStep", () => {
       })
     );
   });
+
+  it("normalizes invalid maxSteps values to a single attempt", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: 0,
+        arguments: [],
+      },
+      maxSteps: 0,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.replayStepMeta?.retries).toBe(1);
+  });
 });
