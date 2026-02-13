@@ -1233,6 +1233,15 @@ function formatScrollNumber(value: number): string {
   return value.toFixed(2);
 }
 
+function stripControlChars(value: string): string {
+  return Array.from(value)
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code > 31 && code !== 127;
+    })
+    .join("");
+}
+
 function normalizeScrollPercent(target: unknown): number {
   if (typeof target === "number") {
     return clamp(target, 0, 100);
@@ -1240,7 +1249,10 @@ function normalizeScrollPercent(target: unknown): number {
   if (typeof target !== "string") {
     return 50;
   }
-  const text = target.trim();
+  const text = stripControlChars(target).trim();
+  if (text.length === 0) {
+    return 50;
+  }
   if (text.endsWith("%")) {
     const parsed = Number.parseFloat(text.slice(0, -1));
     return clamp(Number.isNaN(parsed) ? 50 : parsed, 0, 100);
@@ -1258,14 +1270,6 @@ interface KeyEventData {
 }
 
 function getKeyEventData(inputKey: string): KeyEventData {
-  const stripControlChars = (value: string): string =>
-    Array.from(value)
-      .filter((char) => {
-        const code = char.charCodeAt(0);
-        return code > 31 && code !== 127;
-      })
-      .join("");
-
   const sanitizedKey = stripControlChars((inputKey ?? "").toString()).trim();
   const key = sanitizedKey.length === 0 ? "Enter" : sanitizedKey;
   const lower = key.toLowerCase();
