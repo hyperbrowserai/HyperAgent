@@ -3689,6 +3689,22 @@ export function SpreadsheetApp() {
                             Use prefix
                           </button>
                           <button
+                            onClick={() => {
+                              if (!selectedCacheEntryPrefix) {
+                                return;
+                              }
+                              clearUiError();
+                              setCacheRequestIdPrefix(selectedCacheEntryPrefix);
+                              void handlePreviewRemoveCacheEntriesByPrefix(
+                                selectedCacheEntryPrefix,
+                              );
+                            }}
+                            disabled={!selectedCacheEntryPrefix}
+                            className="rounded border border-amber-700/70 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-900/40 disabled:opacity-50"
+                          >
+                            Use + preview
+                          </button>
+                          <button
                             onClick={handleCopySelectedCacheOperations}
                             disabled={isCopyingCacheDetailOperations}
                             className="rounded border border-indigo-700/70 px-1.5 py-0.5 text-[10px] text-indigo-200 hover:bg-indigo-900/40 disabled:opacity-50"

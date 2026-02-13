@@ -81,6 +81,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Prefix suggestion row now includes inline shortcut hints (`Shift+click inspect`, `Alt+click preview`)
 - Cache detail inspector supports copy actions for full detail JSON and operations-only payload
 - Cache detail inspector includes a one-click `Use prefix` action to apply the selected request-id prefix as the active cache filter
+- Cache detail inspector also includes `Use + preview` to immediately open scoped prefix-removal preview from the selected request id
 - Prefix-filtered cache view supports one-click bulk removal of matching cached request IDs
 - Prefix-filtered cache view includes a preview action that shows matched counts/sample IDs before bulk removal
 - Prefix preview/removal actions now inherit active age filter scope for stale-only cleanup
