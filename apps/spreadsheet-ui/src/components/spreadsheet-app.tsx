@@ -1752,7 +1752,7 @@ export function SpreadsheetApp() {
     }
   }
 
-  async function handlePreviewRemoveCacheEntriesByPrefix() {
+  async function handlePreviewRemoveCacheEntriesByPrefix(prefixOverride?: string) {
     if (!workbook) {
       return;
     }
@@ -1766,7 +1766,7 @@ export function SpreadsheetApp() {
       setUiErrorCode("INVALID_MAX_AGE_SECONDS");
       return;
     }
-    const normalizedPrefix = cacheRequestIdPrefix.trim();
+    const normalizedPrefix = (prefixOverride ?? cacheRequestIdPrefix).trim();
     if (!normalizedPrefix) {
       return;
     }
@@ -2943,7 +2943,9 @@ export function SpreadsheetApp() {
                       Reset prefix scope
                     </button>
                     <button
-                      onClick={handlePreviewRemoveCacheEntriesByPrefix}
+                      onClick={() => {
+                        void handlePreviewRemoveCacheEntriesByPrefix();
+                      }}
                       disabled={
                         isPreviewingCacheByPrefix
                         || !cacheRequestIdPrefix.trim()
@@ -3280,12 +3282,17 @@ export function SpreadsheetApp() {
                                 suggestion.newest_request_id,
                               );
                             }
+                            if (event.altKey) {
+                              void handlePreviewRemoveCacheEntriesByPrefix(
+                                suggestion.prefix,
+                              );
+                            }
                           }}
                           title={`latest: ${suggestion.newest_request_id}${
                             suggestion.newest_cached_at
                               ? ` @ ${formatIsoTimestamp(suggestion.newest_cached_at)} (${formatRelativeAge(suggestion.newest_cached_at)})`
                               : ""
-                          } (Shift+click to inspect)`}
+                          } (Shift+click inspect, Alt+click preview remove)`}
                           className={`rounded border px-1.5 py-0.5 text-[10px] ${
                             cacheRequestIdPrefix.trim() === suggestion.prefix
                               ? "border-indigo-500/80 bg-indigo-500/20 text-indigo-200"
