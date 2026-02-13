@@ -611,6 +611,21 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("rejects non-string server ids when provided programmatically", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          id: 42 as unknown as string,
+          command: "echo",
+        })
+      ).rejects.toThrow("MCP server id must be a string when provided");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("rejects server ids with control characters", async () => {
     const mcpClient = new MCPClient(false);
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
@@ -649,6 +664,23 @@ describe("MCPClient.connectToServer validation", () => {
         mcpClient.connectToServer({
           command: "echo",
           connectionType: " websocket " as unknown as "stdio",
+        })
+      ).rejects.toThrow(
+        'MCP connectionType must be either "stdio" or "sse" when provided'
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects non-string connectionType values", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "echo",
+          connectionType: 1 as unknown as "stdio",
         })
       ).rejects.toThrow(
         'MCP connectionType must be either "stdio" or "sse" when provided'

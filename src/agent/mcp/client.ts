@@ -143,6 +143,9 @@ function normalizeMCPConnectionServerId(serverId?: string): string | undefined {
   if (typeof serverId === "undefined") {
     return undefined;
   }
+  if (typeof serverId !== "string") {
+    throw new Error("MCP server id must be a string when provided");
+  }
   const normalized = serverId.trim();
   if (normalized.length === 0) {
     throw new Error("MCP server id must be a non-empty string when provided");
@@ -163,6 +166,11 @@ function normalizeMCPConnectionType(
 ): "stdio" | "sse" {
   if (typeof value === "undefined") {
     return "stdio";
+  }
+  if (typeof value !== "string") {
+    throw new Error(
+      'MCP connectionType must be either "stdio" or "sse" when provided'
+    );
   }
   const normalized = value.trim().toLowerCase();
   if (normalized.length === 0 || hasAnyControlChars(normalized)) {
