@@ -5,6 +5,7 @@ use crate::{
     AgentOpsCacheEntry, AgentOpsCacheStatsResponse, AgentOpsRequest,
     AgentOpsResponse, AgentOpsPreviewRequest, AgentOpsPreviewResponse,
     AgentPresetRunRequest, AgentScenarioRunRequest,
+    RemoveAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntryResponse,
     AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
     ClearAgentOpsCacheResponse,
     CellMutation, CreateSheetRequest, CreateSheetResponse, CreateWorkbookRequest,
@@ -71,6 +72,10 @@ pub fn create_router(state: AppState) -> Router {
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/clear",
       post(clear_agent_ops_cache),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache/remove",
+      post(remove_agent_ops_cache_entry),
     )
     .route("/v1/workbooks/{id}/agent/schema", get(get_agent_schema))
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
@@ -1011,6 +1016,7 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?limit=20",
     "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
+    "agent_ops_cache_remove_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove",
     "agent_ops_preview_request_shape": {
       "operations": "non-empty array of operation objects"
     },
@@ -1033,6 +1039,17 @@ async fn get_agent_schema(
     "agent_ops_cache_clear_response_shape": {
       "cleared_entries": "number of removed cache entries"
     },
+    "agent_ops_cache_remove_request_shape": {
+      "request_id": "string (required)"
+    },
+    "agent_ops_cache_remove_response_shape": {
+      "request_id": "string",
+      "removed": "boolean",
+      "remaining_entries": "entries left in cache after removal"
+    },
+    "cache_validation_error_codes": [
+      "INVALID_REQUEST_ID"
+    ],
     "agent_ops_idempotency_cache_max_entries": AGENT_OPS_CACHE_MAX_ENTRIES,
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
     "preset_run_request_shape": {
@@ -1373,6 +1390,29 @@ async fn clear_agent_ops_cache(
   Ok(Json(ClearAgentOpsCacheResponse { cleared_entries }))
 }
 
+async fn remove_agent_ops_cache_entry(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<RemoveAgentOpsCacheEntryRequest>,
+) -> Result<Json<RemoveAgentOpsCacheEntryResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let request_id = payload.request_id.trim();
+  if request_id.is_empty() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID",
+      "request_id is required to remove a cache entry.",
+    ));
+  }
+  let (removed, remaining_entries) = state
+    .remove_agent_ops_cache_entry(workbook_id, request_id)
+    .await?;
+  Ok(Json(RemoveAgentOpsCacheEntryResponse {
+    request_id: request_id.to_string(),
+    removed,
+    remaining_entries,
+  }))
+}
+
 async fn run_agent_preset(
   State(state): State<AppState>,
   Path((workbook_id, preset)): Path<(Uuid, String)>,
@@ -1541,6 +1581,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/ops/cache": {"get": {"summary": "Inspect request-id idempotency cache status for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/entries": {"get": {"summary": "List recent request-id idempotency cache entries for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/clear": {"post": {"summary": "Clear request-id idempotency cache for agent ops"}},
+      "/v1/workbooks/{id}/agent/ops/cache/remove": {"post": {"summary": "Remove a single request-id idempotency cache entry for agent ops"}},
       "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}/operations": {"get": {"summary": "Preview generated operations for a built-in preset"}},
@@ -1565,7 +1606,7 @@ mod tests {
 
   use super::{
     agent_ops, agent_ops_cache_entries, agent_ops_cache_stats,
-    clear_agent_ops_cache, get_agent_schema,
+    clear_agent_ops_cache, get_agent_schema, remove_agent_ops_cache_entry,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
@@ -1573,7 +1614,9 @@ mod tests {
     MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
   };
   use crate::{
-    models::{AgentOperation, AgentOpsRequest},
+    models::{
+      AgentOperation, AgentOpsRequest, RemoveAgentOpsCacheEntryRequest,
+    },
     state::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES},
   };
 
@@ -1928,6 +1971,85 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn should_remove_single_cache_entry_via_handler() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-remove".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["remove-me", "keep-me"] {
+      let _ = agent_ops(
+        State(state.clone()),
+        Path(workbook.id),
+        Json(AgentOpsRequest {
+          request_id: Some(request_id.to_string()),
+          actor: Some("test".to_string()),
+          stop_on_error: Some(true),
+          expected_operations_signature: None,
+          operations: vec![AgentOperation::Recalculate],
+        }),
+      )
+      .await
+      .expect("agent ops should succeed");
+    }
+
+    let remove_response = remove_agent_ops_cache_entry(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(RemoveAgentOpsCacheEntryRequest {
+        request_id: "remove-me".to_string(),
+      }),
+    )
+    .await
+    .expect("remove should succeed")
+    .0;
+    assert!(remove_response.removed);
+    assert_eq!(remove_response.remaining_entries, 1);
+
+    let remaining_entries = agent_ops_cache_entries(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCacheEntriesQuery { limit: Some(10) }),
+    )
+    .await
+    .expect("entries should load")
+    .0;
+    assert_eq!(remaining_entries.total_entries, 1);
+    assert_eq!(remaining_entries.entries[0].request_id, "keep-me");
+  }
+
+  #[tokio::test]
+  async fn should_reject_blank_request_id_when_removing_cache_entry() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-remove-invalid".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let error = remove_agent_ops_cache_entry(
+      State(state),
+      Path(workbook.id),
+      Json(RemoveAgentOpsCacheEntryRequest {
+        request_id: "   ".to_string(),
+      }),
+    )
+    .await
+    .expect_err("blank request id should fail");
+
+    match error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_REQUEST_ID");
+      }
+      _ => panic!("expected bad request with custom invalid request id code"),
+    }
+  }
+
+  #[tokio::test]
   async fn should_return_request_id_conflict_from_agent_ops_handler() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =
@@ -2000,6 +2122,12 @@ mod tests {
         .get("agent_ops_cache_clear_endpoint")
         .and_then(serde_json::Value::as_str),
       Some("/v1/workbooks/{id}/agent/ops/cache/clear"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_remove_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache/remove"),
     );
     assert_eq!(
       schema

@@ -280,6 +280,22 @@ impl AppState {
     record.agent_ops_cache.clear();
     Ok(cleared_entries)
   }
+
+  pub async fn remove_agent_ops_cache_entry(
+    &self,
+    workbook_id: Uuid,
+    request_id: &str,
+  ) -> Result<(bool, usize), ApiError> {
+    let mut guard = self.workbooks.write().await;
+    let record = guard
+      .get_mut(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+    let removed = record.agent_ops_cache.remove(request_id).is_some();
+    if removed {
+      record.agent_ops_cache_order.retain(|entry| entry != request_id);
+    }
+    Ok((removed, record.agent_ops_cache_order.len()))
+  }
 }
 
 fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
@@ -466,5 +482,51 @@ mod tests {
     assert_eq!(entries[0].0, "req-3");
     assert_eq!(entries[1].0, "req-2");
     assert_eq!(entries[0].1.as_deref(), Some("sig-3"));
+  }
+
+  #[tokio::test]
+  async fn should_remove_single_agent_ops_cache_entry() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-remove-entry".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for index in 1..=2 {
+      let request_id = format!("req-{index}");
+      state
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id.clone(),
+          AgentOpsResponse {
+            request_id: Some(request_id),
+            operations_signature: Some(format!("sig-{index}")),
+            served_from_cache: false,
+            results: Vec::new(),
+          },
+        )
+        .await
+        .expect("cache update should succeed");
+    }
+
+    let (removed, remaining_entries) = state
+      .remove_agent_ops_cache_entry(workbook.id, "req-1")
+      .await
+      .expect("cache removal should succeed");
+    assert!(removed);
+    assert_eq!(remaining_entries, 1);
+
+    let removed_entry = state
+      .get_cached_agent_ops_response(workbook.id, "req-1")
+      .await
+      .expect("cache lookup should succeed");
+    assert!(removed_entry.is_none());
+    let kept_entry = state
+      .get_cached_agent_ops_response(workbook.id, "req-2")
+      .await
+      .expect("cache lookup should succeed");
+    assert!(kept_entry.is_some());
   }
 }

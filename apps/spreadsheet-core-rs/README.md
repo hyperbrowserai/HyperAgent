@@ -41,6 +41,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/agent/ops/cache`
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries`
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove`
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
 - `GET /v1/workbooks/{id}/agent/presets/{preset}/operations`
@@ -87,6 +88,7 @@ Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache`
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries?limit=20` (newest-first request-id summaries, max `limit=200`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
 
 Supported `op_type` values:
 - `get_workbook`

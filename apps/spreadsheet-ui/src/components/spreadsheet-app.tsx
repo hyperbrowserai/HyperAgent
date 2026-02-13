@@ -28,6 +28,7 @@ import {
   getWorkbook,
   importWorkbook,
   previewAgentOps,
+  removeAgentOpsCacheEntry,
   runAgentOps,
   runAgentPreset,
   runAgentScenario,
@@ -104,6 +105,7 @@ export function SpreadsheetApp() {
   const [isReplayingLastRequest, setIsReplayingLastRequest] = useState(false);
   const [isClearingOpsCache, setIsClearingOpsCache] = useState(false);
   const [copyingCacheRequestId, setCopyingCacheRequestId] = useState<string | null>(null);
+  const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -1205,6 +1207,38 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleRemoveCacheRequestId(requestId: string) {
+    if (!workbook) {
+      return;
+    }
+    setRemovingCacheRequestId(requestId);
+    try {
+      clearUiError();
+      const response = await removeAgentOpsCacheEntry(workbook.id, requestId);
+      setNotice(
+        response.removed
+          ? `Removed cache entry ${response.request_id}.`
+          : `No cache entry found for ${response.request_id}.`,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [
+            "agent-ops-cache-entries",
+            workbook.id,
+            CACHE_ENTRIES_PREVIEW_LIMIT,
+          ],
+        }),
+      ]);
+    } catch (error) {
+      applyUiError(error, "Failed to remove cache request id.");
+    } finally {
+      setRemovingCacheRequestId(null);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -1936,6 +1970,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_remove_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache remove endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_remove_endpoint}
+                </span>
+              </p>
+            ) : null}
             {typeof agentSchemaQuery.data?.agent_ops_idempotency_cache_max_entries === "number" ? (
               <p className="mb-2 text-xs text-slate-400">
                 idempotency cache entries/workbook:{" "}
@@ -1997,15 +2039,32 @@ export function SpreadsheetApp() {
                               </span>
                             </span>
                           </div>
-                          <button
-                            onClick={() => handleCopyCacheRequestId(entry.request_id)}
-                            disabled={copyingCacheRequestId === entry.request_id}
-                            className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                          >
-                            {copyingCacheRequestId === entry.request_id
-                              ? "Copying..."
-                              : "Copy"}
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleCopyCacheRequestId(entry.request_id)}
+                              disabled={
+                                copyingCacheRequestId === entry.request_id
+                                || removingCacheRequestId === entry.request_id
+                              }
+                              className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                            >
+                              {copyingCacheRequestId === entry.request_id
+                                ? "Copying..."
+                                : "Copy"}
+                            </button>
+                            <button
+                              onClick={() => handleRemoveCacheRequestId(entry.request_id)}
+                              disabled={
+                                removingCacheRequestId === entry.request_id
+                                || copyingCacheRequestId === entry.request_id
+                              }
+                              className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
+                            >
+                              {removingCacheRequestId === entry.request_id
+                                ? "Removing..."
+                                : "Remove"}
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>

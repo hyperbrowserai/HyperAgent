@@ -72,6 +72,12 @@ export interface AgentOpsCacheEntriesResponse {
   entries: AgentOpsCacheEntry[];
 }
 
+export interface RemoveAgentOpsCacheEntryResponse {
+  request_id: string;
+  removed: boolean;
+  remaining_entries: number;
+}
+
 export interface ClearAgentOpsCacheResponse {
   cleared_entries: number;
 }
@@ -95,6 +101,7 @@ export interface AgentSchemaInfo {
   agent_ops_cache_stats_endpoint?: string;
   agent_ops_cache_entries_endpoint?: string;
   agent_ops_cache_clear_endpoint?: string;
+  agent_ops_cache_remove_endpoint?: string;
   agent_ops_idempotency_cache_max_entries?: number;
   agent_ops_preview_request_shape?: Record<string, string>;
   agent_ops_preview_response_shape?: Record<string, string>;

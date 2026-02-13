@@ -3,6 +3,7 @@ import {
   AgentOpsPreviewResponse,
   AgentOpsCacheStatsResponse,
   ClearAgentOpsCacheResponse,
+  RemoveAgentOpsCacheEntryResponse,
   AgentOpsResponse,
   AgentOperationPlanPreview,
   AgentOperationPreview,
@@ -218,6 +219,21 @@ export async function clearAgentOpsCache(
     },
   );
   return parseJsonResponse<ClearAgentOpsCacheResponse>(response);
+}
+
+export async function removeAgentOpsCacheEntry(
+  workbookId: string,
+  requestId: string,
+): Promise<RemoveAgentOpsCacheEntryResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request_id: requestId }),
+    },
+  );
+  return parseJsonResponse<RemoveAgentOpsCacheEntryResponse>(response);
 }
 
 interface AgentPresetRequest {
