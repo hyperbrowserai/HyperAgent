@@ -149,6 +149,8 @@ pub struct AgentOpsCacheStatsResponse {
   pub max_entries: usize,
   pub oldest_request_id: Option<String>,
   pub newest_request_id: Option<String>,
+  pub oldest_cached_at: Option<DateTime<Utc>>,
+  pub newest_cached_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

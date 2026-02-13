@@ -1079,7 +1079,9 @@ async fn get_agent_schema(
       "entries": "current cache entries",
       "max_entries": "maximum cache size",
       "oldest_request_id": "optional oldest cached request id",
-      "newest_request_id": "optional newest cached request id"
+      "newest_request_id": "optional newest cached request id",
+      "oldest_cached_at": "optional iso timestamp of oldest cached entry",
+      "newest_cached_at": "optional iso timestamp of newest cached entry"
     },
     "agent_ops_cache_entries_response_shape": {
       "total_entries": "total cache entries available",
@@ -1493,7 +1495,13 @@ async fn agent_ops_cache_stats(
   Path(workbook_id): Path<Uuid>,
 ) -> Result<Json<AgentOpsCacheStatsResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  let (entries, oldest_request_id, newest_request_id) = state
+  let (
+    entries,
+    oldest_request_id,
+    newest_request_id,
+    oldest_cached_at,
+    newest_cached_at,
+  ) = state
     .agent_ops_cache_stats(workbook_id)
     .await?;
   Ok(Json(AgentOpsCacheStatsResponse {
@@ -1501,6 +1509,8 @@ async fn agent_ops_cache_stats(
     max_entries: AGENT_OPS_CACHE_MAX_ENTRIES,
     oldest_request_id,
     newest_request_id,
+    oldest_cached_at,
+    newest_cached_at,
   }))
 }
 
@@ -2384,6 +2394,8 @@ mod tests {
     assert_eq!(stats.entries, 1);
     assert_eq!(stats.oldest_request_id.as_deref(), Some("handler-req-1"));
     assert_eq!(stats.newest_request_id.as_deref(), Some("handler-req-1"));
+    assert!(stats.oldest_cached_at.is_some());
+    assert!(stats.newest_cached_at.is_some());
 
     let cleared = clear_agent_ops_cache(
       State(state.clone()),
@@ -2401,6 +2413,8 @@ mod tests {
     assert_eq!(stats_after_clear.entries, 0);
     assert!(stats_after_clear.oldest_request_id.is_none());
     assert!(stats_after_clear.newest_request_id.is_none());
+    assert!(stats_after_clear.oldest_cached_at.is_none());
+    assert!(stats_after_clear.newest_cached_at.is_none());
   }
 
   #[tokio::test]

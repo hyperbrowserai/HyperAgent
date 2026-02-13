@@ -2561,6 +2561,20 @@ export function SpreadsheetApp() {
                     {agentOpsCacheQuery.data.newest_request_id ?? "-"}
                   </span>
                 </p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  oldest cached_at:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentOpsCacheQuery.data.oldest_cached_at
+                      ? `${formatIsoTimestamp(agentOpsCacheQuery.data.oldest_cached_at)} (${formatRelativeAge(agentOpsCacheQuery.data.oldest_cached_at)})`
+                      : "-"}
+                  </span>{" "}
+                  · newest cached_at:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentOpsCacheQuery.data.newest_cached_at
+                      ? `${formatIsoTimestamp(agentOpsCacheQuery.data.newest_cached_at)} (${formatRelativeAge(agentOpsCacheQuery.data.newest_cached_at)})`
+                      : "-"}
+                  </span>
+                </p>
                 <div className="mt-2 rounded border border-slate-800/80 bg-slate-900/40 p-2">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <label className="text-[10px] text-slate-500">

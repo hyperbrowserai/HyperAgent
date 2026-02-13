@@ -58,6 +58,8 @@ export interface AgentOpsCacheStatsResponse {
   max_entries: number;
   oldest_request_id: string | null;
   newest_request_id: string | null;
+  oldest_cached_at: string | null;
+  newest_cached_at: string | null;
 }
 
 export interface AgentOpsCacheEntry {

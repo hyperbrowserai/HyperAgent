@@ -266,15 +266,34 @@ impl AppState {
   pub async fn agent_ops_cache_stats(
     &self,
     workbook_id: Uuid,
-  ) -> Result<(usize, Option<String>, Option<String>), ApiError> {
+  ) -> Result<
+    (
+      usize,
+      Option<String>,
+      Option<String>,
+      Option<DateTime<Utc>>,
+      Option<DateTime<Utc>>,
+    ),
+    ApiError,
+  > {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
       .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+    let oldest_request_id = record.agent_ops_cache_order.front().cloned();
+    let newest_request_id = record.agent_ops_cache_order.back().cloned();
+    let oldest_cached_at = oldest_request_id
+      .as_ref()
+      .and_then(|request_id| record.agent_ops_cache_timestamps.get(request_id).cloned());
+    let newest_cached_at = newest_request_id
+      .as_ref()
+      .and_then(|request_id| record.agent_ops_cache_timestamps.get(request_id).cloned());
     Ok((
       record.agent_ops_cache_order.len(),
-      record.agent_ops_cache_order.front().cloned(),
-      record.agent_ops_cache_order.back().cloned(),
+      oldest_request_id,
+      newest_request_id,
+      oldest_cached_at,
+      newest_cached_at,
     ))
   }
 
@@ -643,13 +662,15 @@ mod tests {
       .await
       .expect("cache update should succeed");
 
-    let (entries, oldest, newest) = state
+    let (entries, oldest, newest, oldest_cached_at, newest_cached_at) = state
       .agent_ops_cache_stats(workbook.id)
       .await
       .expect("cache stats should load");
     assert_eq!(entries, 1);
     assert_eq!(oldest.as_deref(), Some("req-1"));
     assert_eq!(newest.as_deref(), Some("req-1"));
+    assert!(oldest_cached_at.is_some());
+    assert!(newest_cached_at.is_some());
 
     let cleared = state
       .clear_agent_ops_cache(workbook.id)
@@ -657,13 +678,21 @@ mod tests {
       .expect("cache clear should succeed");
     assert_eq!(cleared, 1);
 
-    let (entries_after, oldest_after, newest_after) = state
+    let (
+      entries_after,
+      oldest_after,
+      newest_after,
+      oldest_cached_at_after,
+      newest_cached_at_after,
+    ) = state
       .agent_ops_cache_stats(workbook.id)
       .await
       .expect("cache stats should load");
     assert_eq!(entries_after, 0);
     assert!(oldest_after.is_none());
     assert!(newest_after.is_none());
+    assert!(oldest_cached_at_after.is_none());
+    assert!(newest_cached_at_after.is_none());
   }
 
   #[tokio::test]
