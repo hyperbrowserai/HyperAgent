@@ -1564,6 +1564,58 @@ describe("HyperAgent constructor and task controls", () => {
     expect(newPageOff).toHaveBeenCalledWith("close", expect.any(Function));
   });
 
+  it("does not duplicate child close listeners for repeated page events", async () => {
+    let contextPageListener: ((newPage: Page) => Promise<void>) | undefined;
+    const contextOn = jest.fn(
+      (event: "page", listener: (newPage: Page) => Promise<void>) => {
+        if (event === "page") {
+          contextPageListener = listener;
+        }
+      }
+    );
+    const contextOff = jest.fn();
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: contextOn,
+        off: contextOff,
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const newPageOn = jest.fn();
+    const newPageOff = jest.fn();
+    const newPage = {
+      on: newPageOn,
+      off: newPageOff,
+      opener: async () => page,
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+    expect(contextPageListener).toBeDefined();
+    await contextPageListener?.(newPage);
+    await contextPageListener?.(newPage);
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+
+    expect(newPageOn).toHaveBeenCalledTimes(1);
+    expect(newPageOff).toHaveBeenCalledTimes(1);
+    expect(newPageOn).toHaveBeenCalledWith("close", expect.any(Function));
+    expect(newPageOff).toHaveBeenCalledWith("close", expect.any(Function));
+  });
+
   it("returns null session when browser provider getSession throws", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

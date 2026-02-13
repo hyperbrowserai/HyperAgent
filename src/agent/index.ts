@@ -3134,6 +3134,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     // History Stack: [Root, Tab1, Tab2, ...]
     const pageStack: Page[] = [page];
+    const trackedCloseListenerPages = new WeakSet<object>();
     const getActivePage = (): Page => {
       for (let i = pageStack.length - 1; i >= 0; i--) {
         const candidate = pageStack[i];
@@ -3168,16 +3169,24 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     // Handle tab closing (Pop)
     const handleClose = (p: Page) => {
-      const idx = pageStack.indexOf(p);
-      if (idx !== -1) {
+      let removed = 0;
+      for (let i = pageStack.length - 1; i >= 0; i--) {
+        if (pageStack[i] === p) {
+          pageStack.splice(i, 1);
+          removed += 1;
+        }
+      }
+      if (removed > 0) {
         if (this.debug) {
           console.log(`[HyperPage] Tab closed, removing from stack`);
         }
-        pageStack.splice(idx, 1);
       }
     };
     const closeListenerCleanups: Array<() => void> = [];
     const attachCloseListener = (targetPage: Page, targetLabel: string): void => {
+      if (trackedCloseListenerPages.has(targetPage)) {
+        return;
+      }
       const onClose = () => handleClose(targetPage);
       const pageOn = this.safeReadField(targetPage, "on");
       if (typeof pageOn !== "function") {
@@ -3201,6 +3210,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
         return;
       }
+      trackedCloseListenerPages.add(targetPage);
       closeListenerCleanups.push(() => {
         const pageOff = this.safeReadField(targetPage, "off");
         if (typeof pageOff !== "function") {
@@ -3235,7 +3245,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             );
           }
           // Update the scope to follow the new tab
-          pageStack.push(newPage);
+          if (!pageStack.includes(newPage)) {
+            pageStack.push(newPage);
+          }
           // Listen for close on the new page
           attachCloseListener(newPage, "new tab");
         }
