@@ -2497,12 +2497,21 @@ export function SpreadsheetApp() {
                         ).
                       </p>
                       {cachePrefixRemovalPreview.sampleRequestIds.length > 0 ? (
-                        <p className="mt-1 text-amber-200/90">
-                          sample:{" "}
-                          <span className="font-mono">
-                            {cachePrefixRemovalPreview.sampleRequestIds.join(", ")}
-                          </span>
-                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1 text-amber-200/90">
+                          <span>sample:</span>
+                          {cachePrefixRemovalPreview.sampleRequestIds.map((requestId) => (
+                            <button
+                              key={requestId}
+                              onClick={() => handleInspectCacheRequestId(requestId)}
+                              disabled={inspectingCacheRequestId === requestId}
+                              className="rounded border border-amber-700/70 px-1.5 py-0.5 font-mono text-[10px] hover:bg-amber-900/30 disabled:opacity-50"
+                            >
+                              {inspectingCacheRequestId === requestId
+                                ? "Inspecting..."
+                                : requestId}
+                            </button>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
                   ) : null}
