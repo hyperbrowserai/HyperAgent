@@ -261,6 +261,30 @@ pub fn parse_trim_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_isblank_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ISBLANK" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_isnumber_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ISNUMBER" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_istext_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ISTEXT" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_left_formula(formula: &str) -> Option<(String, Option<String>)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "LEFT" || !(args.len() == 1 || args.len() == 2) {
@@ -517,9 +541,9 @@ mod tests {
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
     parse_concat_formula, parse_date_formula, parse_day_formula,
-    parse_index_formula,
-    parse_left_formula, parse_len_formula, parse_lower_formula,
-    parse_match_formula,
+    parse_index_formula, parse_isblank_formula, parse_isnumber_formula,
+    parse_istext_formula, parse_left_formula, parse_len_formula,
+    parse_lower_formula, parse_match_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
@@ -621,6 +645,18 @@ mod tests {
     let trim_arg =
       parse_trim_formula(r#"=TRIM("  spaced text   ")"#).expect("trim should parse");
     assert_eq!(trim_arg, r#""  spaced text   ""#);
+    assert_eq!(
+      parse_isblank_formula("=ISBLANK(A1)").as_deref(),
+      Some("A1"),
+    );
+    assert_eq!(
+      parse_isnumber_formula("=ISNUMBER(A1)").as_deref(),
+      Some("A1"),
+    );
+    assert_eq!(
+      parse_istext_formula("=ISTEXT(A1)").as_deref(),
+      Some("A1"),
+    );
 
     let left_args =
       parse_left_formula(r#"=LEFT("spreadsheet", 6)"#).expect("left should parse");

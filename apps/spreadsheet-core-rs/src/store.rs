@@ -5,7 +5,8 @@ use crate::{
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_left_formula,
-    parse_index_formula, parse_len_formula, parse_lower_formula,
+    parse_index_formula, parse_isblank_formula, parse_isnumber_formula,
+    parse_istext_formula, parse_len_formula, parse_lower_formula,
     parse_match_formula, parse_month_formula, parse_not_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
@@ -371,6 +372,22 @@ fn evaluate_formula(
     let text = resolve_scalar_operand(connection, sheet, &trim_arg)?;
     let trimmed = text.split_whitespace().collect::<Vec<&str>>().join(" ");
     return Ok(Some(trimmed));
+  }
+
+  if let Some(is_blank_arg) = parse_isblank_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &is_blank_arg)?;
+    return Ok(Some(value.is_empty().to_string()));
+  }
+
+  if let Some(is_number_arg) = parse_isnumber_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &is_number_arg)?;
+    return Ok(Some(value.trim().parse::<f64>().is_ok().to_string()));
+  }
+
+  if let Some(is_text_arg) = parse_istext_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &is_text_arg)?;
+    let is_text = !value.is_empty() && value.trim().parse::<f64>().is_err();
+    return Ok(Some(is_text.to_string()));
   }
 
   if let Some((text_arg, count_arg)) = parse_left_formula(formula) {
@@ -1021,15 +1038,16 @@ fn load_cell_scalar(
   connection
     .query_row(
       r#"
-      SELECT COALESCE(evaluated_value, raw_value)
-      FROM cells
-      WHERE sheet = ?1 AND row_index = ?2 AND col_index = ?3
+      SELECT COALESCE((
+        SELECT COALESCE(evaluated_value, raw_value)
+        FROM cells
+        WHERE sheet = ?1 AND row_index = ?2 AND col_index = ?3
+      ), '')
       "#,
       params![sheet, i64::from(row_index), i64::from(col_index)],
-      |row| row.get::<_, Option<String>>(0),
+      |row| row.get::<_, String>(0),
     )
     .map_err(ApiError::internal)
-    .map(|value| value.unwrap_or_default())
 }
 
 fn matches_lookup_value(
@@ -1684,13 +1702,35 @@ mod tests {
         value: None,
         formula: Some("=INDEX(E1:F2,3,1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 40,
+        value: None,
+        formula: Some("=ISBLANK(Z99)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 41,
+        value: None,
+        formula: Some("=ISNUMBER(A1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 42,
+        value: None,
+        formula: Some("=ISTEXT(E1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 37);
-    assert!(unsupported_formulas.is_empty());
+    assert_eq!(updated_cells, 40);
+    assert!(
+      unsupported_formulas.is_empty(),
+      "unexpected unsupported formulas: {:?}",
+      unsupported_formulas,
+    );
 
     let snapshots = get_cells(
       &db_path,
@@ -1699,7 +1739,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 39,
+        end_col: 42,
       },
     )
     .expect("cells should be fetched");
@@ -1767,6 +1807,9 @@ mod tests {
     assert_eq!(by_position(1, 37).evaluated_value.as_deref(), Some("Southeast"));
     assert_eq!(by_position(1, 38).evaluated_value.as_deref(), Some("120"));
     assert_eq!(by_position(1, 39).evaluated_value.as_deref(), Some(""));
+    assert_eq!(by_position(1, 40).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 41).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 42).evaluated_value.as_deref(), Some("true"));
   }
 
   #[test]
