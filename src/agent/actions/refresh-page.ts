@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { ActionContext, AgentActionDefinition } from "@/types";
+import {
+  buildActionFailureMessage,
+  getPageMethod,
+  invalidateDomCacheSafely,
+} from "./shared/action-runtime";
 
 export const RefreshPageAction = z
   .object({})
@@ -13,8 +18,23 @@ export const RefreshPageActionDefinition: AgentActionDefinition = {
   type: "refreshPage" as const,
   actionParams: RefreshPageAction,
   run: async (ctx: ActionContext) => {
-    await ctx.page.reload();
-    return { success: true, message: "Succesfully refreshed a page." };
+    const reload = getPageMethod(ctx, "reload");
+    if (!reload) {
+      return {
+        success: false,
+        message: "Failed to refresh page: page.reload is unavailable.",
+      };
+    }
+    try {
+      await reload();
+      invalidateDomCacheSafely(ctx);
+      return { success: true, message: "Successfully refreshed the page." };
+    } catch (error) {
+      return {
+        success: false,
+        message: buildActionFailureMessage("refresh page", error),
+      };
+    }
   },
   pprintAction: function(): string {
     return "Refresh current page";

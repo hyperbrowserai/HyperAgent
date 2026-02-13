@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
+import {
+  buildActionFailureMessage,
+  invalidateDomCacheSafely,
+  normalizeActionText,
+} from "./shared/action-runtime";
 
 const WaitAction = z
   .object({
@@ -13,6 +18,7 @@ const WaitAction = z
   .describe("Use this action when you are not confident enough to take a meaningful action. The page may still be loading, elements may not be visible yet, or the page state may be unclear. The system will wait for the DOM to settle and give you a fresh view.");
 
 type WaitActionType = z.infer<typeof WaitAction>;
+const WAIT_POST_SETTLE_DELAY_MS = 1_000;
 
 export const WaitActionDefinition: AgentActionDefinition = {
   type: "wait" as const,
@@ -21,18 +27,25 @@ export const WaitActionDefinition: AgentActionDefinition = {
     ctx: ActionContext,
     action: WaitActionType
   ): Promise<ActionOutput> {
-    const { reason } = action;
+    const reason = normalizeActionText(action?.reason, "waiting for page stability");
+    try {
+      // Wait for DOM to settle (page to finish loading/transitioning)
+      await waitForSettledDOM(ctx.page);
 
-    // Wait for DOM to settle (page to finish loading/transitioning)
-    await waitForSettledDOM(ctx.page);
+      // Additional brief wait to allow any animations/transitions to complete
+      await new Promise((resolve) => setTimeout(resolve, WAIT_POST_SETTLE_DELAY_MS));
+      invalidateDomCacheSafely(ctx);
 
-    // Additional brief wait to allow any animations/transitions to complete
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    return {
-      success: true,
-      message: `Waiting for page to stabilize: ${reason}`,
-    };
+      return {
+        success: true,
+        message: `Waiting for page to stabilize: ${reason}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: buildActionFailureMessage("wait for page stabilization", error),
+      };
+    }
   },
   pprintAction: function (params: WaitActionType): string {
     return `Wait: ${params.reason}`;
