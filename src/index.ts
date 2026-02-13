@@ -3,6 +3,24 @@ import { TaskStatus } from "./types/agent/types";
 import { HyperagentError, HyperagentTaskError } from "./agent/error";
 
 export { TaskStatus, HyperAgent, HyperagentError, HyperagentTaskError };
+export type {
+  ActionCacheOutput,
+  ActionCacheReplayResult,
+  ActionCacheReplayStepResult,
+  AgentActionDefinition,
+  AgentTaskOutput,
+  HyperAgentConfig,
+  HyperPage,
+  HyperVariable,
+  MCPConfig,
+  MCPServerConfig,
+  PerformOptions,
+  PerformTaskParams,
+  RunFromActionCacheParams,
+  Task,
+  TaskOutput,
+  TaskParams,
+} from "./types";
 export default HyperAgent;
 
 // For CommonJS compatibility

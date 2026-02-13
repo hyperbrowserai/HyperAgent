@@ -20,11 +20,14 @@ import {
   PerformTaskParams,
   TaskParams,
   TaskOutput,
+  AgentTaskOutput,
   Task,
   TaskStatus,
   TaskState,
   endTaskStatuses,
   PerformOptions,
+  HyperPage,
+  HyperVariable,
 } from "./agent/types";
 
 // Config Types
@@ -54,10 +57,13 @@ export {
   PerformTaskParams,
   TaskParams,
   TaskOutput,
+  AgentTaskOutput,
   Task,
   TaskStatus,
   TaskState,
   PerformOptions,
+  HyperPage,
+  HyperVariable,
 
   // Config Types
   MCPServerConfig,
