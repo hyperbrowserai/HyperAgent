@@ -6,6 +6,7 @@ import type { AgentActionDefinition } from "@/types";
 import type { HyperAgentLLM } from "@/llm/types";
 import { runAgentTask } from "@/agent/tools/agent";
 import { TaskStatus } from "@/types/agent/types";
+import { HyperagentTaskError } from "@/agent/error";
 
 jest.mock("@/agent/tools/agent", () => ({
   runAgentTask: jest.fn(),
@@ -107,5 +108,26 @@ describe("HyperAgent constructor and task controls", () => {
       status: TaskStatus.COMPLETED,
       output: "done",
     });
+  });
+
+  it("emits and surfaces task-scoped errors from async execution", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockRejectedValue(new Error("boom"));
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+    const emittedErrorPromise = new Promise<Error>((resolve) => {
+      task.emitter.once("error", resolve);
+    });
+
+    await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+    const emittedError = await emittedErrorPromise;
+
+    expect(emittedError).toBeInstanceOf(HyperagentTaskError);
+    expect((emittedError as HyperagentTaskError).taskId).toBe(task.id);
+    expect((emittedError as HyperagentTaskError).cause.message).toBe("boom");
   });
 });

@@ -32,7 +32,7 @@ import {
   HyperbrowserProvider,
   LocalBrowserProvider,
 } from "../browser-providers";
-import { HyperagentError } from "./error";
+import { HyperagentError, HyperagentTaskError } from "./error";
 import { findElementWithInstruction } from "./shared/find-element";
 import {
   A11yDOMState,
@@ -438,22 +438,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         cleanup();
         return result;
       })
-      .catch((error: Error) => {
+      .catch((error: unknown) => {
         cleanup();
         // Retrieve the correct state to update
         const failedTaskState = this.tasks[taskId];
+        const taskFailureError =
+          error instanceof Error
+            ? new HyperagentTaskError(taskId, error)
+            : new HyperagentTaskError(taskId, new Error(String(error)));
         if (failedTaskState) {
           failedTaskState.status = TaskStatus.FAILED;
-          failedTaskState.error = error.message;
+          failedTaskState.error = taskFailureError.cause.message;
           // Emit error on the central emitter, including the taskId
-          this.errorEmitter.emit("error", error);
+          this.errorEmitter.emit("error", taskFailureError);
         } else {
           // Fallback if task state somehow doesn't exist
           console.error(
             `Task state ${taskId} not found during error handling.`
           );
         }
-        throw error;
+        throw taskFailureError;
       })
       .finally(() => {
         delete this.taskResults[taskId];
