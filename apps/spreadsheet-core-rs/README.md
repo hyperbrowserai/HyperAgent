@@ -40,6 +40,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/agent/presets`
 - `POST /v1/workbooks/{id}/agent/presets/{preset}`
 - `GET /v1/workbooks/{id}/agent/scenarios`
+- `GET /v1/workbooks/{id}/agent/scenarios/{scenario}/operations`
 - `POST /v1/workbooks/{id}/agent/scenarios/{scenario}`
 - `POST /v1/workbooks/{id}/cells/get`
 - `POST /v1/workbooks/{id}/formulas/recalculate`
@@ -84,6 +85,9 @@ Supported `preset` values:
 Supported `scenario` values:
 - `seed_then_export` — executes `seed_sales_demo`, then `export_snapshot`.
 - `refresh_and_export` — executes `export_snapshot`.
+
+Preview helper:
+- `GET /v1/workbooks/{id}/agent/scenarios/{scenario}/operations` (optional query: `include_file_base64=true|false`)
 
 ### AI Agent wizard endpoint
 

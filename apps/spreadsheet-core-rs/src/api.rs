@@ -55,6 +55,10 @@ pub fn create_router(state: AppState) -> Router {
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
     .route("/v1/workbooks/{id}/agent/scenarios", get(list_agent_scenarios))
     .route(
+      "/v1/workbooks/{id}/agent/scenarios/{scenario}/operations",
+      get(get_agent_scenario_operations),
+    )
+    .route(
       "/v1/workbooks/{id}/agent/presets/{preset}",
       post(run_agent_preset),
     )
@@ -381,19 +385,36 @@ async fn list_wizard_scenarios() -> Json<serde_json::Value> {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-struct WizardScenarioOperationsQuery {
+struct ScenarioOperationsQuery {
   include_file_base64: Option<bool>,
 }
 
 async fn get_wizard_scenario_operations(
   Path(scenario): Path<String>,
-  Query(query): Query<WizardScenarioOperationsQuery>,
+  Query(query): Query<ScenarioOperationsQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
   let operations = build_scenario_operations(
     scenario.as_str(),
     query.include_file_base64,
   )?;
   Ok(Json(json!({
+    "scenario": scenario,
+    "operations": operations
+  })))
+}
+
+async fn get_agent_scenario_operations(
+  State(state): State<AppState>,
+  Path((workbook_id, scenario)): Path<(Uuid, String)>,
+  Query(query): Query<ScenarioOperationsQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let operations = build_scenario_operations(
+    scenario.as_str(),
+    query.include_file_base64,
+  )?;
+  Ok(Json(json!({
+    "workbook_id": workbook_id,
     "scenario": scenario,
     "operations": operations
   })))
@@ -826,6 +847,7 @@ async fn get_agent_schema(
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
     "presets": preset_catalog(),
     "scenario_endpoint": "/v1/workbooks/{id}/agent/scenarios/{scenario}",
+    "scenario_operations_endpoint": "/v1/workbooks/{id}/agent/scenarios/{scenario}/operations?include_file_base64=false",
     "scenarios": scenario_catalog(),
     "wizard_endpoint": "/v1/agent/wizard/run",
     "wizard_json_endpoint": "/v1/agent/wizard/run-json",
@@ -1182,6 +1204,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}": {"post": {"summary": "Run built-in AI operation preset (seed_sales_demo/export_snapshot)"}},
       "/v1/workbooks/{id}/agent/scenarios": {"get": {"summary": "List available built-in agent scenarios"}},
+      "/v1/workbooks/{id}/agent/scenarios/{scenario}/operations": {"get": {"summary": "Preview generated operations for a built-in scenario"}},
       "/v1/workbooks/{id}/agent/scenarios/{scenario}": {"post": {"summary": "Run built-in AI scenario (seed_then_export/refresh_and_export)"}},
       "/v1/workbooks/{id}/cells/get": {"post": {"summary": "Get range cells"}},
       "/v1/workbooks/{id}/formulas/recalculate": {"post": {"summary": "Recalculate formulas"}},
