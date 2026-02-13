@@ -186,6 +186,68 @@ describe("action cache helpers", () => {
     expect(entry.xpath).toBe("//button[1]");
   });
 
+  it("truncates oversized cached action output diagnostics", () => {
+    const action = {
+      type: "actElement",
+      params: {
+        elementId: "0-123",
+        method: "click",
+        arguments: [],
+      },
+    } as unknown as ActionType;
+    const actionOutput: ActionOutput = {
+      success: false,
+      message: `boom\u0000${"x".repeat(5_000)}`,
+    };
+    const domState: A11yDOMState = {
+      elements: new Map(),
+      domState: "",
+      xpathMap: {},
+      backendNodeMap: {},
+    };
+
+    const entry = buildActionCacheEntry({
+      stepIndex: 101,
+      action,
+      actionOutput,
+      domState,
+    });
+
+    expect(entry.message).toContain("[truncated");
+    expect(entry.message).not.toContain("\u0000");
+  });
+
+  it("bounds cached action arguments for replay safety", () => {
+    const action = {
+      type: "actElement",
+      params: {
+        elementId: "0-321",
+        method: "type",
+        arguments: Array.from({ length: 30 }, () => "x".repeat(3_000)),
+      },
+    } as unknown as ActionType;
+    const actionOutput: ActionOutput = {
+      success: true,
+      message: "ok",
+    };
+    const domState: A11yDOMState = {
+      elements: new Map(),
+      domState: "",
+      xpathMap: {},
+      backendNodeMap: {},
+    };
+
+    const entry = buildActionCacheEntry({
+      stepIndex: 102,
+      action,
+      actionOutput,
+      domState,
+    });
+
+    expect(entry.arguments).toHaveLength(20);
+    expect(entry.arguments[0]).toContain("[truncated");
+  });
+
   it("uses actionParams url when goToUrl argument is whitespace", () => {
     const goToEntry: ActionCacheEntry = {
       stepIndex: 1,
@@ -544,6 +606,7 @@ describe("action cache helpers", () => {
 
   it("escapes extract instruction content in generated script", () => {
     const instruction = 'extract "quoted" title\nand subtitle';
+    const normalizedInstruction = 'extract "quoted" title and subtitle';
     const extractEntry: ActionCacheEntry = {
       stepIndex: 7,
       instruction,
@@ -561,7 +624,9 @@ describe("action cache helpers", () => {
       steps: [extractEntry],
     });
 
-    expect(script).toContain(`await page.extract(${JSON.stringify(instruction)});`);
+    expect(script).toContain(
+      `await page.extract(${JSON.stringify(normalizedInstruction)});`
+    );
   });
 
   it("trims extract instruction before script generation", () => {

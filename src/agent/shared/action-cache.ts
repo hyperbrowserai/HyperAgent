@@ -7,6 +7,12 @@ import {
 import { formatUnknownError } from "@/utils";
 
 const TEXT_NODE_SUFFIX = /\/text\(\)(\[\d+\])?$/iu;
+const MAX_ACTION_CACHE_IDENTIFIER_CHARS = 128;
+const MAX_ACTION_CACHE_INSTRUCTION_CHARS = 2_000;
+const MAX_ACTION_CACHE_XPATH_CHARS = 4_000;
+const MAX_ACTION_CACHE_MESSAGE_CHARS = 4_000;
+const MAX_ACTION_CACHE_ARGUMENTS = 20;
+const MAX_ACTION_CACHE_ARGUMENT_CHARS = 2_000;
 
 const isString = (value: unknown): value is string =>
   typeof value === "string";
@@ -47,11 +53,60 @@ const safeReadActionOutputField = (
   }
 };
 
-const isStringOrNumberArray = (
-  value: unknown
-): value is Array<string | number> =>
-  Array.isArray(value) &&
-  value.every((item) => typeof item === "string" || typeof item === "number");
+const sanitizeActionCacheIdentifier = (value: string): string => {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+};
+
+const truncateActionCacheText = (value: string, maxChars: number): string => {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omitted = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omitted} chars]`;
+};
+
+const normalizeActionCacheIdentifier = (
+  value: unknown,
+  fallback: string | null = null
+): string | null => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = sanitizeActionCacheIdentifier(value);
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncateActionCacheText(normalized, MAX_ACTION_CACHE_IDENTIFIER_CHARS);
+};
+
+const normalizeOptionalActionCacheText = (
+  value: unknown,
+  maxChars: number
+): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  if (value.length === 0) {
+    return undefined;
+  }
+  return truncateActionCacheText(value, maxChars);
+};
+
+const formatActionCacheMessage = (value: unknown): string => {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = sanitizeActionCacheIdentifier(raw);
+  if (normalized.length === 0) {
+    return "unknown error";
+  }
+  return truncateActionCacheText(normalized, MAX_ACTION_CACHE_MESSAGE_CHARS);
+};
 
 const normalizeXPath = (raw?: string | null): string | null => {
   if (!raw) {
@@ -97,10 +152,20 @@ const extractMethod = (action: ActionType): string | null => {
 
 const extractArguments = (action: ActionType): string[] => {
   const params = getActionParamsRecord(action);
-  if (isStringOrNumberArray(params.arguments)) {
-    return params.arguments.map((item) => item.toString());
+  if (!Array.isArray(params.arguments)) {
+    return [];
   }
-  return [];
+  const normalizedArgs: string[] = [];
+  for (const entry of params.arguments.slice(0, MAX_ACTION_CACHE_ARGUMENTS)) {
+    if (typeof entry !== "string" && typeof entry !== "number") {
+      return [];
+    }
+    const normalizedEntry = String(entry);
+    normalizedArgs.push(
+      truncateActionCacheText(normalizedEntry, MAX_ACTION_CACHE_ARGUMENT_CHARS)
+    );
+  }
+  return normalizedArgs;
 };
 
 const extractFrameIndex = (elementId: string | null): number | null => {
@@ -171,12 +236,13 @@ export const buildActionCacheEntry = ({
 }): ActionCacheEntry => {
   const actionTypeValue = safeReadActionField(action, "type");
   const actionType =
-    isString(actionTypeValue) && actionTypeValue.length > 0
-      ? actionTypeValue
-      : "unknown";
-  const instruction = extractInstruction(action);
-  const elementId = extractElementId(action);
-  const method = extractMethod(action);
+    normalizeActionCacheIdentifier(actionTypeValue, "unknown") ?? "unknown";
+  const instruction = normalizeOptionalActionCacheText(
+    extractInstruction(action),
+    MAX_ACTION_CACHE_INSTRUCTION_CHARS
+  );
+  const elementId = normalizeActionCacheIdentifier(extractElementId(action));
+  const method = normalizeActionCacheIdentifier(extractMethod(action));
   const args = extractArguments(action);
   const encodedId = elementId ? asEncodedId(elementId) : undefined;
   const frameIndex = extractFrameIndex(elementId);
@@ -197,7 +263,10 @@ export const buildActionCacheEntry = ({
 
   const xpathFromDom = extractXPathFromDomState(domState, encodedId);
   const xpath = normalizeXPath(
-    xpathFromDom || extractXPathFromDebug(actionOutput)
+    normalizeOptionalActionCacheText(
+      xpathFromDom || extractXPathFromDebug(actionOutput),
+      MAX_ACTION_CACHE_XPATH_CHARS
+    ) ?? null
   );
   const successValue = safeReadActionOutputField(actionOutput, "success");
   const messageValue = safeReadActionOutputField(actionOutput, "message");
@@ -213,9 +282,6 @@ export const buildActionCacheEntry = ({
     xpath,
     actionType,
     success: typeof successValue === "boolean" ? successValue : false,
-    message:
-      typeof messageValue === "string"
-        ? messageValue
-        : formatUnknownError(messageValue),
+    message: formatActionCacheMessage(messageValue),
   };
 };
