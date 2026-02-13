@@ -83,6 +83,32 @@ describe("normalizeMCPToolParams", () => {
     ).toThrow('MCP tool params cannot include reserved key "__proto__"');
   });
 
+  it("rejects keys with control characters", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        "bad\u0007key": "value",
+      })
+    ).toThrow("MCP tool params cannot include keys with control characters");
+  });
+
+  it("rejects string values with control characters", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        query: "a\u0007b",
+      })
+    ).toThrow(
+      "MCP tool params cannot include unsupported control characters in string values"
+    );
+  });
+
+  it("rejects escaped control characters after JSON parsing", () => {
+    expect(() =>
+      normalizeMCPToolParams('{"query":"a\\u0007b"}')
+    ).toThrow(
+      "MCP tool params cannot include unsupported control characters in string values"
+    );
+  });
+
   it("rejects circular references in direct object params", () => {
     const circular: { self?: unknown } = {};
     circular.self = circular;

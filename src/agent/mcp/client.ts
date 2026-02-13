@@ -88,6 +88,11 @@ export function normalizeMCPToolParams(
         seen.delete(value);
       }
     }
+    if (typeof value === "string" && hasUnsupportedControlChars(value)) {
+      throw new Error(
+        "MCP tool params cannot include unsupported control characters in string values"
+      );
+    }
     if (typeof value === "object" && value !== null) {
       if (seen.has(value)) {
         throw new Error("MCP tool params cannot include circular references");
@@ -100,6 +105,11 @@ export function normalizeMCPToolParams(
           const trimmedKey = key.trim();
           if (trimmedKey.length === 0) {
             throw new Error("MCP tool params cannot include empty keys");
+          }
+          if (hasUnsupportedControlChars(trimmedKey)) {
+            throw new Error(
+              "MCP tool params cannot include keys with control characters"
+            );
           }
           const normalizedKey = normalizeParamKey(key);
           if (UNSAFE_OBJECT_KEYS.has(normalizedKey)) {
