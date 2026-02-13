@@ -45,6 +45,21 @@ function normalizeScrollInfo(value: unknown): [number, number] {
   return [0, 0];
 }
 
+function getOpenTabsSummary(page: Page): string {
+  try {
+    return page
+      .context()
+      .pages()
+      .map((openPage, index) => {
+        const currentMarker = openPage === page ? " (current)" : "";
+        return `[${index}] ${openPage.url() || "about:blank"}${currentMarker}`;
+      })
+      .join("\n");
+  } catch {
+    return "Open tabs unavailable";
+  }
+}
+
 export const buildAgentStepMessages = async (
   baseMessages: HyperAgentMessage[],
   steps: AgentStep[],
@@ -68,14 +83,7 @@ export const buildAgentStepMessages = async (
     content: `=== Current URL ===\n${page.url()}\n`,
   });
 
-  const openTabs = page
-    .context()
-    .pages()
-    .map((openPage, index) => {
-      const currentMarker = openPage === page ? " (current)" : "";
-      return `[${index}] ${openPage.url() || "about:blank"}${currentMarker}`;
-    })
-    .join("\n");
+  const openTabs = getOpenTabsSummary(page);
   messages.push({
     role: "user",
     content: `=== Open Tabs ===\n${openTabs || "No open tabs"}\n`,

@@ -198,4 +198,37 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("[truncated for prompt budget]");
     expect(joined.length).toBeLessThan(6000);
   });
+
+  it("falls back to placeholder text when open tabs cannot be listed", async () => {
+    const page = {
+      url: () => "https://example.com/current",
+      context: () => {
+        throw new Error("context unavailable");
+      },
+    } as unknown as Page;
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("=== Open Tabs ===");
+    expect(joined).toContain("Open tabs unavailable");
+  });
 });
