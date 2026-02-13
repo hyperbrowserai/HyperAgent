@@ -12,6 +12,51 @@ import {
 import { HyperagentError } from "../error";
 import { formatUnknownError } from "@/utils";
 
+const MAX_ELEMENT_LOCATOR_DIAGNOSTIC_CHARS = 400;
+const MAX_ELEMENT_LOCATOR_IDENTIFIER_CHARS = 128;
+
+function sanitizeElementLocatorText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateElementLocatorText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omitted = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omitted} chars]`;
+}
+
+function formatElementLocatorDiagnostic(value: unknown): string {
+  const normalized = sanitizeElementLocatorText(formatUnknownError(value));
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  return truncateElementLocatorText(
+    fallback,
+    MAX_ELEMENT_LOCATOR_DIAGNOSTIC_CHARS
+  );
+}
+
+function formatElementLocatorIdentifier(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = sanitizeElementLocatorText(value);
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncateElementLocatorText(
+    normalized,
+    MAX_ELEMENT_LOCATOR_IDENTIFIER_CHARS
+  );
+}
+
 /**
  * Get a Playwright locator for an element by its encoded ID
  *
@@ -37,6 +82,10 @@ export async function getElementLocator(
   if (normalizedElementId.length === 0) {
     throw new HyperagentError("Element ID must be a non-empty string", 400);
   }
+  const safeElementId = formatElementLocatorIdentifier(
+    normalizedElementId,
+    "unknown-element"
+  );
 
   // Convert elementId to EncodedId format for xpath lookup
   let encodedId: string;
@@ -44,7 +93,7 @@ export async function getElementLocator(
     encodedId = toEncodedId(normalizedElementId);
   } catch (error) {
     throw new HyperagentError(
-      `Failed to normalize element ID "${normalizedElementId}": ${formatUnknownError(
+      `Failed to normalize element ID "${safeElementId}": ${formatElementLocatorDiagnostic(
         error
       )}`,
       400
@@ -55,13 +104,15 @@ export async function getElementLocator(
     rawXpath = xpathMap[encodedId];
   } catch (error) {
     throw new HyperagentError(
-      `Element lookup failed for ${normalizedElementId}: ${formatUnknownError(error)}`,
+      `Element lookup failed for ${safeElementId}: ${formatElementLocatorDiagnostic(
+        error
+      )}`,
       500
     );
   }
 
   if (typeof rawXpath !== "string" || rawXpath.trim().length === 0) {
-    const errorMsg = `Element ${normalizedElementId} not found in xpath map`;
+    const errorMsg = `Element ${safeElementId} not found in xpath map`;
     if (debug) {
       console.error(`[getElementLocator] ${errorMsg}`);
       console.error(
@@ -85,8 +136,12 @@ export async function getElementLocator(
   const [frameIndexStr] = encodedId.split("-");
   const frameIndex = parseInt(frameIndexStr!, 10);
   if (!Number.isFinite(frameIndex) || frameIndex < 0) {
+    const safeEncodedId = formatElementLocatorIdentifier(
+      encodedId,
+      "unknown-encoded-id"
+    );
     throw new HyperagentError(
-      `Invalid frame index in encoded element ID "${encodedId}"`,
+      `Invalid frame index in encoded element ID "${safeEncodedId}"`,
       400
     );
   }
@@ -101,7 +156,7 @@ export async function getElementLocator(
     hasFrameMetadata = Boolean(frameMap?.has(frameIndex));
   } catch (error) {
     throw new HyperagentError(
-      `Frame metadata lookup failed for frame ${frameIndex}: ${formatUnknownError(
+      `Frame metadata lookup failed for frame ${frameIndex}: ${formatElementLocatorDiagnostic(
         error
       )}`,
       500
@@ -121,7 +176,7 @@ export async function getElementLocator(
     iframeInfo = frameMap.get(frameIndex) ?? undefined;
   } catch (error) {
     throw new HyperagentError(
-      `Frame metadata retrieval failed for frame ${frameIndex}: ${formatUnknownError(
+      `Frame metadata retrieval failed for frame ${frameIndex}: ${formatElementLocatorDiagnostic(
         error
       )}`,
       500
@@ -146,7 +201,7 @@ export async function getElementLocator(
     targetFrame = (await resolveFrameByXPath(page, frameMap, frameIndex)) ?? undefined;
   } catch (error) {
     throw new HyperagentError(
-      `Could not resolve frame for element ${normalizedElementId} (frameIndex: ${frameIndex}): ${formatUnknownError(
+      `Could not resolve frame for element ${safeElementId} (frameIndex: ${frameIndex}): ${formatElementLocatorDiagnostic(
         error
       )}`,
       500
@@ -154,7 +209,7 @@ export async function getElementLocator(
   }
 
   if (!targetFrame) {
-    const errorMsg = `Could not resolve frame for element ${normalizedElementId} (frameIndex: ${frameIndex})`;
+    const errorMsg = `Could not resolve frame for element ${safeElementId} (frameIndex: ${frameIndex})`;
     if (debug) {
       console.error(`[getElementLocator] ${errorMsg}`);
       console.error(`[getElementLocator] Frame info:`, {

@@ -81,6 +81,40 @@ describe("getElementLocator", () => {
     ).rejects.toThrow("Element lookup failed for 0-10: xpath map trap");
   });
 
+  it("truncates oversized xpath-map trap diagnostics", async () => {
+    const page = createPage();
+    toEncodedId.mockReturnValue("0-10");
+    const xpathMap = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "0-10") {
+            throw new Error(`x${"y".repeat(2_000)}\nxpath trap`);
+          }
+          return undefined;
+        },
+      }
+    );
+
+    await expect(
+      getElementLocator(
+        "0-10",
+        xpathMap as unknown as Record<string, string>,
+        page
+      )
+    ).rejects.toThrow(/\[truncated/);
+  });
+
+  it("sanitizes oversized element identifiers in lookup failures", async () => {
+    const page = createPage();
+    const oversizedElementId = `id-${"x".repeat(300)}\nunsafe`;
+    toEncodedId.mockReturnValue("0-10");
+
+    await expect(
+      getElementLocator(oversizedElementId, {}, page)
+    ).rejects.toThrow(/\[truncated/);
+  });
+
   it("throws readable error when frame-map lookup traps throw", async () => {
     const page = createPage();
     toEncodedId.mockReturnValue("1-10");
