@@ -17,6 +17,36 @@ interface FoundElementDebugData {
 const MAX_DEBUG_TEXT_CHARS = 200_000;
 const MAX_DEBUG_ELEMENTS = 500;
 const MAX_DEBUG_FRAME_ITEMS = 100;
+const MAX_DEBUG_WRITER_DIAGNOSTIC_CHARS = 500;
+
+function sanitizeDebugWriterDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  return Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    if (code === 9 || code === 10) {
+      return char;
+    }
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatDebugWriterDiagnostic(value: unknown): string {
+  const normalized = sanitizeDebugWriterDiagnostic(formatUnknownError(value));
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_DEBUG_WRITER_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_DEBUG_WRITER_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_DEBUG_WRITER_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
 
 function safeReadRecordField(value: unknown, key: string): unknown {
   if (!value || (typeof value !== "object" && typeof value !== "function")) {
@@ -278,7 +308,7 @@ function stringifyDebugJson(value: unknown): string {
   }
   return JSON.stringify(
     {
-      __nonSerializable: formatUnknownError(value),
+      __nonSerializable: formatDebugWriterDiagnostic(value),
     },
     null,
     2
@@ -290,7 +320,9 @@ function writeDebugFileSafe(filePath: string, content: string | Buffer): void {
     fs.writeFileSync(filePath, content);
   } catch (error) {
     console.warn(
-      `[debugWriter] Failed to write "${filePath}": ${formatUnknownError(error)}`
+      `[debugWriter] Failed to write "${filePath}": ${formatDebugWriterDiagnostic(
+        error
+      )}`
     );
   }
 }
@@ -331,7 +363,9 @@ export async function writeAiActionDebug(
     fs.mkdirSync(debugDir, { recursive: true });
   } catch (error) {
     throw new Error(
-      `[debugWriter] Failed to create debug directory "${debugDir}": ${formatUnknownError(error)}`
+      `[debugWriter] Failed to create debug directory "${debugDir}": ${formatDebugWriterDiagnostic(
+        error
+      )}`
     );
   }
   actionCounter += 1;

@@ -141,6 +141,40 @@ describe("writeAiActionDebug", () => {
     }
   });
 
+  it("sanitizes and truncates oversized directory creation diagnostics", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-debug-writer-")
+    );
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw new Error(`mkdir\u0000\n${"x".repeat(10_000)}`);
+    });
+    const debugData: DebugData = {
+      instruction: "click login",
+      url: "https://example.com",
+      timestamp: new Date().toISOString(),
+      domElementCount: 5,
+      domTree: "dom tree",
+      success: true,
+    };
+
+    try {
+      await writeAiActionDebug(debugData, tempDir)
+        .then(() => {
+          throw new Error("expected writeAiActionDebug to reject");
+        })
+        .catch((error) => {
+          const message = String(error instanceof Error ? error.message : error);
+          expect(message).toContain("[truncated");
+          expect(message).not.toContain("\u0000");
+          expect(message).not.toContain("\n");
+          expect(message.length).toBeLessThan(800);
+        });
+    } finally {
+      mkdirSpy.mockRestore();
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("does not consume action counter when directory creation fails", async () => {
     const tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "hyperagent-debug-writer-")
@@ -252,6 +286,44 @@ describe("writeAiActionDebug", () => {
 
       expect(domTree).toContain("[truncated");
       await expect(fs.promises.stat(screenshotPath)).rejects.toThrow();
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bounds non-serializable debug payload diagnostics", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-debug-writer-")
+    );
+    const trapParsed = {
+      toJSON: () => {
+        throw new Error(`serialize\u0000\n${"x".repeat(10_000)}`);
+      },
+    };
+    const debugData: DebugData = {
+      instruction: "click login",
+      url: "https://example.com",
+      timestamp: new Date().toISOString(),
+      domElementCount: 5,
+      domTree: "dom tree",
+      llmResponse: {
+        rawText: "{}",
+        parsed: trapParsed,
+      },
+      success: true,
+    };
+
+    try {
+      const debugDir = await writeAiActionDebug(debugData, tempDir);
+      const llmResponseJson = await fs.promises.readFile(
+        path.join(debugDir, "llm-response.json"),
+        "utf-8"
+      );
+
+      expect(llmResponseJson).toContain("__nonSerializable");
+      expect(llmResponseJson).not.toContain("\u0000");
+      expect(llmResponseJson).not.toContain("serialize\u0000");
+      expect(llmResponseJson.length).toBeLessThan(900);
     } finally {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
