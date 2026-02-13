@@ -283,12 +283,3 @@ async function runCachedAttempt(args: {
   return { success: actionOutput.success, message: actionOutput.message };
 }
 
-export async function performGoTo(
-  page: import("playwright-core").Page,
-  url: string,
-  waitUntil: "domcontentloaded" | "load" | "networkidle" = "domcontentloaded"
-): Promise<void> {
-  await page.goto(url, { waitUntil });
-  await waitForSettledDOM(page);
-  markDomSnapshotDirty(page);
-}
