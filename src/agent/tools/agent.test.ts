@@ -104,6 +104,58 @@ function createAgentCtx(
   };
 }
 
+function createThrowingCompleteCtx(errorMessage: string): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "unused",
+      },
+    },
+  };
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured: async () => ({
+      rawText: "{}",
+      parsed: parsedAction,
+    }),
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [
+      {
+        type: "complete",
+        actionParams: z.object({
+          success: z.boolean(),
+          text: z.string().optional(),
+        }),
+        run: async () => {
+          throw new Error(errorMessage);
+        },
+      },
+    ],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
 function createTaskState(page: Page): TaskState {
   return {
     id: "task-1",
@@ -163,5 +215,16 @@ describe("runAgentTask completion behavior", () => {
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.output).toBe("task failed by model decision");
     expect(result.steps).toHaveLength(1);
+  });
+
+  it("surfaces thrown action errors with readable messages", async () => {
+    const page = createMockPage();
+    const result = await runAgentTask(
+      createThrowingCompleteCtx("intentional failure"),
+      createTaskState(page)
+    );
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("Action complete failed: intentional failure");
   });
 });

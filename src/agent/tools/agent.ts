@@ -63,6 +63,9 @@ const writeFrameGraphSnapshot = async (
   }
 };
 
+const formatUnknownError = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 const compositeScreenshot = async (page: Page, overlay: string) => {
   // Use CDP screenshot - faster, doesn't wait for fonts
   const cdpClient = await getCDPClient(page);
@@ -191,7 +194,7 @@ const runAction = async (
     );
     return {
       success: false,
-      message: `Action ${action.type} failed: ${error}`,
+      message: `Action ${action.type} failed: ${formatUnknownError(error)}`,
     };
   }
 };
