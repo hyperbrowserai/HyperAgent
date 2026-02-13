@@ -3218,7 +3218,9 @@ export function SpreadsheetApp() {
                       {cachePrefixSuggestionsData ? (
                         <span className="text-[10px] text-slate-500">
                           (entries {cachePrefixSuggestionsData.returned_entry_count}/
-                          {cachePrefixSuggestionsData.scoped_total_entries} page/scoped)
+                          {cachePrefixSuggestionsData.scoped_total_entries}/
+                          {cachePrefixSuggestionsData.unscoped_total_entries}
+                          {" "}page/scoped/global)
                         </span>
                       ) : null}
                       {cachePrefixSuggestionsData?.request_id_prefix ? (
@@ -3333,6 +3335,10 @@ export function SpreadsheetApp() {
                         /
                         <span className="font-mono text-slate-300">
                           {cachePrefixSuggestionsData.scoped_total_entries}
+                        </span>
+                        /
+                        <span className="font-mono text-slate-300">
+                          {cachePrefixSuggestionsData.unscoped_total_entries}
                         </span>
                       </p>
                       <div className="flex items-center gap-1">

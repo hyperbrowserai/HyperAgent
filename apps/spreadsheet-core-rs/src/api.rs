@@ -1121,6 +1121,7 @@ async fn get_agent_schema(
     "agent_ops_cache_prefixes_response_shape": {
       "total_prefixes": "total distinct prefix suggestions available",
       "unscoped_total_prefixes": "total distinct prefixes without prefix/age filters",
+      "unscoped_total_entries": "total cache entries without prefix/age filters",
       "scoped_total_entries": "total cache entries represented by scoped prefixes before pagination",
       "returned_prefixes": "number of prefixes returned",
       "returned_entry_count": "total cache entries represented by returned prefixes in this page",
@@ -1719,6 +1720,7 @@ async fn agent_ops_cache_prefixes(
   let (
     total_prefixes,
     unscoped_total_prefixes,
+    unscoped_total_entries,
     scoped_total_entries,
     prefixes,
   ) = state
@@ -1751,6 +1753,7 @@ async fn agent_ops_cache_prefixes(
   Ok(Json(AgentOpsCachePrefixesResponse {
     total_prefixes,
     unscoped_total_prefixes,
+    unscoped_total_entries,
     scoped_total_entries,
     returned_prefixes: mapped_prefixes.len(),
     returned_entry_count,
@@ -2990,6 +2993,7 @@ mod tests {
 
     assert_eq!(prefixes.total_prefixes, 2);
     assert_eq!(prefixes.unscoped_total_prefixes, 2);
+    assert_eq!(prefixes.unscoped_total_entries, 3);
     assert_eq!(prefixes.scoped_total_entries, 3);
     assert_eq!(prefixes.returned_prefixes, 2);
     assert_eq!(prefixes.returned_entry_count, 3);
@@ -3027,6 +3031,7 @@ mod tests {
     assert_eq!(paged_prefixes.offset, 1);
     assert_eq!(paged_prefixes.limit, 1);
     assert!(!paged_prefixes.has_more);
+    assert_eq!(paged_prefixes.unscoped_total_entries, 3);
     assert_eq!(paged_prefixes.scoped_total_entries, 3);
     assert_eq!(paged_prefixes.returned_prefixes, 1);
     assert_eq!(paged_prefixes.returned_entry_count, 1);
@@ -3072,6 +3077,7 @@ mod tests {
     assert!(age_filtered.cutoff_timestamp.is_some());
     assert_eq!(age_filtered.total_prefixes, 0);
     assert_eq!(age_filtered.unscoped_total_prefixes, 2);
+    assert_eq!(age_filtered.unscoped_total_entries, 3);
     assert_eq!(age_filtered.scoped_total_entries, 0);
     assert_eq!(age_filtered.request_id_prefix, None);
     assert_eq!(age_filtered.offset, 0);
@@ -3095,6 +3101,7 @@ mod tests {
     .0;
     assert_eq!(prefix_filtered.total_prefixes, 1);
     assert_eq!(prefix_filtered.unscoped_total_prefixes, 2);
+    assert_eq!(prefix_filtered.unscoped_total_entries, 3);
     assert_eq!(prefix_filtered.scoped_total_entries, 2);
     assert_eq!(
       prefix_filtered.request_id_prefix.as_deref(),
@@ -3129,6 +3136,7 @@ mod tests {
     assert_eq!(min_filtered.sort_by, "count");
     assert_eq!(min_filtered.total_prefixes, 1);
     assert_eq!(min_filtered.unscoped_total_prefixes, 2);
+    assert_eq!(min_filtered.unscoped_total_entries, 3);
     assert_eq!(min_filtered.scoped_total_entries, 2);
     assert_eq!(min_filtered.returned_prefixes, 1);
     assert_eq!(min_filtered.returned_entry_count, 2);
@@ -4149,6 +4157,13 @@ mod tests {
         .and_then(|value| value.get("cutoff_timestamp"))
         .and_then(serde_json::Value::as_str),
       Some("optional iso timestamp used for max_age_seconds filtering"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("unscoped_total_entries"))
+        .and_then(serde_json::Value::as_str),
+      Some("total cache entries without prefix/age filters"),
     );
     assert_eq!(
       schema

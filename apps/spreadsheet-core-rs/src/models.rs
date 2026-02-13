@@ -306,6 +306,7 @@ pub struct AgentOpsCachePrefix {
 pub struct AgentOpsCachePrefixesResponse {
   pub total_prefixes: usize,
   pub unscoped_total_prefixes: usize,
+  pub unscoped_total_entries: usize,
   pub scoped_total_entries: usize,
   pub returned_prefixes: usize,
   pub returned_entry_count: usize,

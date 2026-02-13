@@ -84,6 +84,7 @@ export interface AgentOpsCachePrefix {
 export interface AgentOpsCachePrefixesResponse {
   total_prefixes: number;
   unscoped_total_prefixes: number;
+  unscoped_total_entries: number;
   scoped_total_entries: number;
   returned_prefixes: number;
   returned_entry_count: number;
