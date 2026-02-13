@@ -4,6 +4,17 @@ import { formatUnknownError } from "@/utils";
 const MAX_EXTRACT_DIAGNOSTIC_CHARS = 400;
 const MAX_EXTRACT_PARSE_CHARS = 100_000;
 
+function sanitizeExtractDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
 function truncateExtractDiagnostic(value: string): string {
   if (value.length <= MAX_EXTRACT_DIAGNOSTIC_CHARS) {
     return value;
@@ -11,11 +22,19 @@ function truncateExtractDiagnostic(value: string): string {
   return `${value.slice(0, MAX_EXTRACT_DIAGNOSTIC_CHARS)}... [truncated]`;
 }
 
+function formatExtractDiagnostic(value: unknown): string {
+  return (
+    truncateExtractDiagnostic(
+      sanitizeExtractDiagnostic(formatUnknownError(value))
+    ) || "unknown error"
+  );
+}
+
 function ensureStringOutput(output: unknown, taskStatus: unknown): string {
   if (typeof output !== "string" || output.trim().length === 0) {
     throw new Error(
-      `Extract failed: Agent did not complete with output. Task status: ${truncateExtractDiagnostic(
-        formatUnknownError(taskStatus)
+      `Extract failed: Agent did not complete with output. Task status: ${formatExtractDiagnostic(
+        taskStatus
       )}. Check debug output for details.`
     );
   }
@@ -23,7 +42,7 @@ function ensureStringOutput(output: unknown, taskStatus: unknown): string {
 }
 
 function safeStringify(value: unknown): string {
-  return truncateExtractDiagnostic(formatUnknownError(value));
+  return formatExtractDiagnostic(value);
 }
 
 function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
@@ -42,10 +61,10 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
   try {
     parsed = JSON.parse(normalizedOutput);
   } catch (error) {
-    const message = formatUnknownError(error);
+    const message = formatExtractDiagnostic(error);
     throw new Error(
       `Extract failed: output is not valid JSON (${message}). Raw output: ${truncateExtractDiagnostic(
-        rawOutput
+        sanitizeExtractDiagnostic(rawOutput)
       )}`
     );
   }
@@ -55,8 +74,8 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
     safeParseResult = outputSchema.safeParse(parsed);
   } catch (error) {
     throw new Error(
-      `Extract failed: schema validation threw (${truncateExtractDiagnostic(
-        formatUnknownError(error)
+      `Extract failed: schema validation threw (${formatExtractDiagnostic(
+        error
       )}). Parsed output: ${safeStringify(parsed)}`
     );
   }
@@ -90,16 +109,19 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
                       ? String(segment)
                       : typeof segment === "symbol"
                         ? segment.toString()
-                        : formatUnknownError(segment)
+                        : formatExtractDiagnostic(segment)
                   )
                   .join(".")
               : "<root>";
-            return `${path || "<root>"}: ${issue.message}`;
+            const normalizedIssueMessage = truncateExtractDiagnostic(
+              sanitizeExtractDiagnostic(issue.message)
+            );
+            return `${path || "<root>"}: ${normalizedIssueMessage}`;
           })
           .join("; ")
       );
     } catch (error) {
-      issues = truncateExtractDiagnostic(formatUnknownError(error));
+      issues = formatExtractDiagnostic(error);
     }
     throw new Error(
       `Extract failed: output does not match schema (${issues}). Parsed output: ${safeStringify(

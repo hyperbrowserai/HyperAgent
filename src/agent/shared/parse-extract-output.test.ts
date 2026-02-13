@@ -21,6 +21,12 @@ describe("parseExtractOutput", () => {
     ).toThrow('Task status: {"reason":"agent failed","code":500}');
   });
 
+  it("sanitizes control characters in task status diagnostics", () => {
+    expect(() => parseExtractOutput(undefined, "failed\u0000\nstatus")).toThrow(
+      "Task status: failed status"
+    );
+  });
+
   it("parses and validates structured output with schema", () => {
     const schema = z.object({
       total: z.number(),
@@ -113,6 +119,18 @@ describe("parseExtractOutput", () => {
     expect(() =>
       parseExtractOutput("{\"total\":1}", "completed", schema)
     ).toThrow("schema validation threw (schema crash)");
+  });
+
+  it("truncates oversized schema-throw diagnostics", () => {
+    const schema = {
+      safeParse: () => {
+        throw new Error("x".repeat(1_000));
+      },
+    } as unknown as z.ZodType<unknown>;
+
+    expect(() =>
+      parseExtractOutput("{\"total\":1}", "completed", schema)
+    ).toThrow("[truncated]");
   });
 
   it("falls back safely when schema issue enumeration throws", () => {
