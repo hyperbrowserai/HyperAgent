@@ -553,6 +553,25 @@ describe("MCPClient.executeTool server selection", () => {
     ).rejects.toThrow("No valid server found for tool search");
   });
 
+  it("sanitizes tool identifiers in missing-server errors", async () => {
+    const mcpClient = new MCPClient(false);
+    const noisyToolName = `bad\n${"x".repeat(200)}`;
+    expect.assertions(3);
+    try {
+      await mcpClient.executeTool(
+        noisyToolName,
+        { query: "missing" },
+        "unknown-server"
+      );
+      throw new Error("Expected executeTool to throw");
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("No valid server found for tool");
+      expect(message).not.toContain("\n");
+      expect(message).toContain("[truncated]");
+    }
+  });
+
   it("throws when target server is connected but missing the tool", async () => {
     const mcpClient = new MCPClient(false);
     const callTool = jest.fn();
@@ -572,6 +591,30 @@ describe("MCPClient.executeTool server selection", () => {
     await expect(
       mcpClient.executeTool("search", { query: "missing" }, "server-a")
     ).rejects.toThrow('Tool "search" is not registered on server "server-a"');
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes tool names in missing-tool diagnostics", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn();
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["notes", {}]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await expect(
+      mcpClient.executeTool("search\ntool", { query: "missing" }, "server-a")
+    ).rejects.toThrow(
+      'Tool "search tool" is not registered on server "server-a"'
+    );
     expect(callTool).not.toHaveBeenCalled();
   });
 

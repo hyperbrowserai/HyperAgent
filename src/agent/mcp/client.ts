@@ -24,6 +24,7 @@ const MAX_MCP_PARAM_DEPTH = 25;
 const MAX_MCP_PARAM_STRING_CHARS = 20_000;
 const MAX_MCP_PARAM_KEY_CHARS = 256;
 const MAX_MCP_PARAM_COLLECTION_SIZE = 500;
+const MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS = 128;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -55,6 +56,24 @@ function validateParamStringValue(value: string): string {
     );
   }
   return value;
+}
+
+function formatMCPIdentifier(value: unknown, fallback: string): string {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = raw
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  if (normalized.length <= MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(
+    0,
+    MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS
+  )}... [truncated]`;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -473,6 +492,10 @@ class MCPClient {
     parameters: Record<string, unknown>,
     serverId?: string
   ): Promise<MCPToolResult> {
+    const safeToolName = formatMCPIdentifier(toolName, "unknown-tool");
+    const safeServerId = (): string =>
+      formatMCPIdentifier(serverId, "unknown-server");
+
     // If no server ID provided and only one server exists, use that one
     if (!serverId && this.servers.size === 1) {
       serverId = [...this.servers.keys()][0];
@@ -489,16 +512,16 @@ class MCPClient {
     }
 
     if (!serverId || !this.servers.has(serverId)) {
-      throw new Error(`No valid server found for tool ${toolName}`);
+      throw new Error(`No valid server found for tool ${safeToolName}`);
     }
 
     const server = this.servers.get(serverId);
     if (!server) {
-      throw new Error(`Server with ID ${serverId} not found`);
+      throw new Error(`Server with ID ${safeServerId()} not found`);
     }
     if (!server.tools.has(toolName)) {
       throw new Error(
-        `Tool "${toolName}" is not registered on server "${serverId}"`
+        `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
       );
     }
 
@@ -512,10 +535,10 @@ class MCPClient {
     } catch (error) {
       const message = formatUnknownError(error);
       console.error(
-        `Error executing tool ${toolName} on server ${serverId}: ${message}`
+        `Error executing tool ${safeToolName} on server ${safeServerId()}: ${message}`
       );
       throw new Error(
-        `Error executing tool ${toolName} on server ${serverId}: ${message}`
+        `Error executing tool ${safeToolName} on server ${safeServerId()}: ${message}`
       );
     }
   }
