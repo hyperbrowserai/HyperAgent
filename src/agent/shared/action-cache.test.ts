@@ -33,6 +33,30 @@ describe("action cache helpers", () => {
     expect(entry.arguments).toEqual(["https://example.com"]);
   });
 
+  it("uses actionParams url when goToUrl argument is whitespace", () => {
+    const goToEntry: ActionCacheEntry = {
+      stepIndex: 1,
+      instruction: "navigate",
+      elementId: null,
+      method: null,
+      arguments: ["   "],
+      actionType: "goToUrl",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+      actionParams: {
+        url: "https://example.org",
+      },
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [goToEntry],
+    });
+
+    expect(script).toContain('"https://example.org"');
+  });
+
   it("renders wait script timeout from numeric actionParams duration", () => {
     const waitEntry: ActionCacheEntry = {
       stepIndex: 2,

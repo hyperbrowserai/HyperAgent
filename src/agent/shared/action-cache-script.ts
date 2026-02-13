@@ -73,8 +73,11 @@ export function createScriptFromActionCache(
       const actionParams = isRecord(step.actionParams)
         ? step.actionParams
         : undefined;
+      const argumentUrl = isNonEmptyString(step.arguments?.[0])
+        ? step.arguments[0]
+        : "";
       const urlArg =
-        (step.arguments && step.arguments[0]) ||
+        argumentUrl ||
         (isNonEmptyString(actionParams?.url) ? actionParams.url : "") ||
         "https://example.com";
       return `${indent}// Step ${step.stepIndex}
