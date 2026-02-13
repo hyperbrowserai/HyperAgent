@@ -78,6 +78,36 @@ describe("loadTaskDescriptionFromFile", () => {
     );
   });
 
+  it("throws when file path is not a regular file", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-task-input-")
+    );
+
+    try {
+      await expect(loadTaskDescriptionFromFile(tempDir)).rejects.toThrow(
+        `Task description file "${tempDir}" must be a regular text file.`
+      );
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("throws when file exceeds maximum byte size", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-task-input-")
+    );
+    const filePath = path.join(tempDir, "task.txt");
+    await fs.promises.writeFile(filePath, "x".repeat(1_000_001), "utf-8");
+
+    try {
+      await expect(loadTaskDescriptionFromFile(filePath)).rejects.toThrow(
+        `Task description file "${filePath}" exceeds 1000000 bytes. Please provide a smaller text file.`
+      );
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("throws when file content is empty after trimming", async () => {
     const tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "hyperagent-task-input-")
