@@ -51,6 +51,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Cache prefix filter offers one-click backend-derived suggestions with entry counts
 - Cache detail inspector supports copy actions for full detail JSON and operations-only payload
 - Prefix-filtered cache view supports one-click bulk removal of matching cached request IDs
+- Cache controls include optional rerun `request_id` override used by per-entry rerun action
 - Success/info notice banner surfaces non-error outcomes (workbook import/create, cache clear, replay cache hit/miss)
 - Event stream viewer with per-event-type filtering
 

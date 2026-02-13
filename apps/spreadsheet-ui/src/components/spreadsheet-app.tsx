@@ -129,6 +129,7 @@ export function SpreadsheetApp() {
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
+  const [cacheRerunRequestId, setCacheRerunRequestId] = useState("");
   const [selectedCacheEntryDetail, setSelectedCacheEntryDetail] = useState<
     AgentOpsCacheEntryDetailResponse | null
   >(null);
@@ -302,6 +303,7 @@ export function SpreadsheetApp() {
   useEffect(() => {
     setCacheEntriesOffset(0);
     setSelectedCacheEntryDetail(null);
+    setCacheRerunRequestId("");
   }, [workbook?.id]);
 
   useEffect(() => {
@@ -1399,8 +1401,10 @@ export function SpreadsheetApp() {
     setReexecutingCacheRequestId(requestId);
     try {
       clearUiError();
+      const normalizedNewRequestId = cacheRerunRequestId.trim();
       const reexecute = await reexecuteAgentOpsCacheEntry(workbook.id, {
         request_id: requestId,
+        new_request_id: normalizedNewRequestId || undefined,
         actor: "ui-cache-reexecute",
         stop_on_error: true,
       });
@@ -1410,8 +1414,8 @@ export function SpreadsheetApp() {
       setLastServedFromCache(reexecute.response.served_from_cache ?? null);
       setLastAgentOps(reexecute.response.results);
       setNotice(
-        `Reexecuted ${requestId} as ${
-          reexecute.response.request_id ?? "new request"
+        `Reexecuted ${requestId} as ${reexecute.response.request_id ?? "new request"}${
+          reexecute.generated_request_id ? " (auto-generated)" : ""
         }.`,
       );
       await Promise.all([
@@ -2373,6 +2377,24 @@ export function SpreadsheetApp() {
                       className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
                     >
                       {isRemovingCacheByPrefix ? "Removing..." : "Remove filtered"}
+                    </button>
+                    <label className="ml-2 text-[10px] text-slate-500">
+                      rerun request_id
+                    </label>
+                    <input
+                      value={cacheRerunRequestId}
+                      onChange={(event) =>
+                        setCacheRerunRequestId(event.target.value)
+                      }
+                      placeholder="optional fixed id"
+                      className="h-6 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 focus:border-amber-500"
+                    />
+                    <button
+                      onClick={() => setCacheRerunRequestId("")}
+                      disabled={!cacheRerunRequestId}
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Clear rerun id
                     </button>
                   </div>
                   {cachePrefixSuggestions.length > 0 ? (
