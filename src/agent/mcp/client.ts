@@ -19,6 +19,7 @@ interface ServerConnection {
 
 type MCPToolResult = Awaited<ReturnType<Client["callTool"]>>;
 const MAX_MCP_PAYLOAD_CHARS = 4000;
+const MAX_MCP_PARAM_DEPTH = 25;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 const MCPToolActionParams = z.object({
@@ -56,15 +57,22 @@ export function normalizeMCPToolParams(
 
   const sanitizeParamValue = (
     value: unknown,
-    seen: WeakSet<object>
+    seen: WeakSet<object>,
+    depth: number
   ): unknown => {
+    if (depth > MAX_MCP_PARAM_DEPTH) {
+      throw new Error(
+        `MCP tool params exceed maximum nesting depth of ${MAX_MCP_PARAM_DEPTH}`
+      );
+    }
+
     if (Array.isArray(value)) {
       if (seen.has(value)) {
         throw new Error("MCP tool params cannot include circular references");
       }
       seen.add(value);
       try {
-        return value.map((entry) => sanitizeParamValue(entry, seen));
+        return value.map((entry) => sanitizeParamValue(entry, seen, depth + 1));
       } finally {
         seen.delete(value);
       }
@@ -80,7 +88,7 @@ export function normalizeMCPToolParams(
           if (UNSAFE_OBJECT_KEYS.has(normalizeParamKey(key))) {
             throw new Error(`MCP tool params cannot include reserved key "${key}"`);
           }
-          sanitized[key] = sanitizeParamValue(paramValue, seen);
+          sanitized[key] = sanitizeParamValue(paramValue, seen, depth + 1);
         }
         return sanitized;
       } finally {
@@ -93,7 +101,7 @@ export function normalizeMCPToolParams(
   const sanitizeParamObject = (
     value: Record<string, unknown>
   ): Record<string, unknown> =>
-    sanitizeParamValue(value, new WeakSet<object>()) as Record<string, unknown>;
+    sanitizeParamValue(value, new WeakSet<object>(), 0) as Record<string, unknown>;
 
   if (typeof input === "string") {
     if (input.trim().length === 0) {

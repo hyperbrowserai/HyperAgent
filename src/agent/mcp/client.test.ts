@@ -86,6 +86,21 @@ describe("normalizeMCPToolParams", () => {
     ).toThrow('MCP tool params cannot include reserved key "  Constructor  "');
   });
 
+  it("rejects params that exceed maximum nesting depth", () => {
+    const root: Record<string, unknown> = {};
+    let cursor = root;
+    for (let depth = 0; depth < 35; depth += 1) {
+      cursor.child = {};
+      cursor = cursor.child as Record<string, unknown>;
+    }
+
+    expect(() =>
+      normalizeMCPToolParams({
+        payload: root,
+      })
+    ).toThrow("MCP tool params exceed maximum nesting depth of 25");
+  });
+
   it("allows repeated shared object references across sibling fields", () => {
     const shared = { query: "weather" };
     expect(
