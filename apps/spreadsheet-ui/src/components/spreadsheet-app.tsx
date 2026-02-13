@@ -48,6 +48,7 @@ import { buildAddress, indexToColumn, TOTAL_COLS, TOTAL_ROWS } from "@/lib/cell-
 import { useWorkbookStore } from "@/store/workbook-store";
 import {
   AgentOpsCacheEntryDetailResponse,
+  ExportCompatibilityReport,
   AgentOperationPreview,
   AgentOperationResult,
 } from "@/types/spreadsheet";
@@ -203,6 +204,11 @@ export function SpreadsheetApp() {
     formulaCellsWithCachedValues: number;
     formulaCellsWithoutCachedValues: number;
     warnings: string[];
+  } | null>(null);
+  const [lastExportSummary, setLastExportSummary] = useState<{
+    fileName: string;
+    exportedAt: string;
+    compatibilityReport: ExportCompatibilityReport | null;
   } | null>(null);
   const normalizedCacheEntriesMaxAgeSeconds = parsePositiveIntegerInput(
     cacheEntriesMaxAgeSeconds,
@@ -488,6 +494,7 @@ export function SpreadsheetApp() {
     setCacheStalePreviewSampleLimit("10");
     setCacheStaleMaxAgeSeconds("3600");
     setCacheStaleRemovalPreview(null);
+    setLastExportSummary(null);
   }, [workbook?.id]);
 
   useEffect(() => {
@@ -976,12 +983,18 @@ export function SpreadsheetApp() {
     try {
       clearUiError();
       const exportedWorkbook = await exportWorkbook(workbook.id);
+      const fileName = exportedWorkbook.file_name ?? `${workbook.name}.xlsx`;
       const fileUrl = URL.createObjectURL(exportedWorkbook.blob);
       const anchor = document.createElement("a");
       anchor.href = fileUrl;
-      anchor.download = exportedWorkbook.file_name ?? `${workbook.name}.xlsx`;
+      anchor.download = fileName;
       anchor.click();
       URL.revokeObjectURL(fileUrl);
+      setLastExportSummary({
+        fileName,
+        exportedAt: new Date().toISOString(),
+        compatibilityReport: exportedWorkbook.compatibility_report,
+      });
       const compatibilitySummary = exportedWorkbook.compatibility_report
         ? ` (preserved ${exportedWorkbook.compatibility_report.preserved.length}, transformed ${exportedWorkbook.compatibility_report.transformed.length}, unsupported ${exportedWorkbook.compatibility_report.unsupported.length})`
         : "";
@@ -3951,6 +3964,50 @@ export function SpreadsheetApp() {
                     ))}
                   </ul>
                 ) : null}
+              </div>
+            )}
+            {lastExportSummary && (
+              <div className="mb-2 text-xs text-slate-400">
+                latest export:{" "}
+                <span className="font-mono text-slate-200">
+                  {lastExportSummary.fileName}
+                </span>{" "}
+                <span className="text-slate-500">
+                  at {formatIsoTimestamp(lastExportSummary.exportedAt)} (
+                  {formatRelativeAge(lastExportSummary.exportedAt)})
+                </span>
+                {lastExportSummary.compatibilityReport ? (
+                  <div className="mt-1 grid gap-1 rounded border border-slate-700 bg-slate-950/40 p-2 text-[11px]">
+                    <p className="text-slate-300">
+                      preserved ({lastExportSummary.compatibilityReport.preserved.length}):
+                    </p>
+                    <ul className="list-disc pl-4 text-emerald-200">
+                      {lastExportSummary.compatibilityReport.preserved.map((entry) => (
+                        <li key={`preserved-${entry}`}>{entry}</li>
+                      ))}
+                    </ul>
+                    <p className="text-slate-300">
+                      transformed ({lastExportSummary.compatibilityReport.transformed.length}):
+                    </p>
+                    <ul className="list-disc pl-4 text-amber-200">
+                      {lastExportSummary.compatibilityReport.transformed.map((entry) => (
+                        <li key={`transformed-${entry}`}>{entry}</li>
+                      ))}
+                    </ul>
+                    <p className="text-slate-300">
+                      unsupported ({lastExportSummary.compatibilityReport.unsupported.length}):
+                    </p>
+                    <ul className="list-disc pl-4 text-rose-200">
+                      {lastExportSummary.compatibilityReport.unsupported.map((entry) => (
+                        <li key={`unsupported-${entry}`}>{entry}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    compatibility report metadata was not included in this export response.
+                  </p>
+                )}
               </div>
             )}
             {lastAgentRequestId && (
