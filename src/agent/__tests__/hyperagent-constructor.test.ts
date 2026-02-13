@@ -1049,6 +1049,42 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("initBrowser aborts stale provider starts after closeAgent generation changes", async () => {
+    const close = jest.fn(async () => undefined);
+    let resolveStart!: (browser: unknown) => void;
+    const startPromise = new Promise<unknown>((resolve) => {
+      resolveStart = resolve;
+    });
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browserProvider: {
+        start: () => Promise<unknown>;
+        close: typeof close;
+        getSession: () => unknown;
+      };
+      browser: unknown;
+      context: unknown;
+    };
+    internalAgent.browserProvider = {
+      start: () => startPromise,
+      close,
+      getSession: () => ({ id: "session-1" }),
+    };
+
+    const initPromise = agent.initBrowser();
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    resolveStart({});
+
+    await expect(initPromise).rejects.toThrow(
+      "Browser initialization cancelled because agent was closed"
+    );
+    expect(close).toHaveBeenCalled();
+    expect(internalAgent.browser).toBeNull();
+    expect(internalAgent.context).toBeNull();
+  });
+
   it("initBrowser recreates missing context for existing browser instances", async () => {
     const on = jest.fn();
     const context = { on };

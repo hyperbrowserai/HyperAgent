@@ -801,8 +801,27 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns A reference to the current rebrowser-playwright browser instance.
    */
   public async initBrowser(): Promise<Browser> {
+    const initGeneration = this.lifecycleGeneration;
     if (!this.browser) {
-      this.browser = await this.startBrowserProvider();
+      const browser = await this.startBrowserProvider();
+      if (!this.isTaskLifecycleGenerationActive(initGeneration)) {
+        try {
+          await this.closeBrowserProvider();
+        } catch (closeError) {
+          if (this.debug) {
+            console.warn(
+              `[HyperAgent] Failed to close browser provider after stale init: ${formatUnknownError(
+                closeError
+              )}`
+            );
+          }
+        }
+        throw new HyperagentError(
+          "Browser initialization cancelled because agent was closed",
+          500
+        );
+      }
+      this.browser = browser;
     }
 
     if (!this.context) {
@@ -812,6 +831,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       try {
         this.context = await this.resolveInitialBrowserContext(activeBrowser);
+        if (!this.isTaskLifecycleGenerationActive(initGeneration)) {
+          throw new HyperagentError(
+            "Browser initialization cancelled because agent was closed",
+            500
+          );
+        }
       } catch (error) {
         this.browser = null;
         this.context = null;
