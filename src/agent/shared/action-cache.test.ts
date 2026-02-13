@@ -412,4 +412,27 @@ describe("action cache helpers", () => {
     expect(script).toContain("await page.performClick(");
     expect(script).not.toContain("performInstruction");
   });
+
+  it("trims helper method and xpath before script generation", () => {
+    const helperEntry: ActionCacheEntry = {
+      stepIndex: 18,
+      instruction: "click login",
+      elementId: "0-1",
+      method: " click ",
+      arguments: [],
+      actionType: "actElement",
+      success: true,
+      message: "ok",
+      frameIndex: 0,
+      xpath: "  //button[1]  ",
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [helperEntry],
+    });
+
+    expect(script).toContain("await page.performClick(");
+    expect(script).toContain('"//button[1]"');
+    expect(script).not.toContain('"  //button[1]  "');
+  });
 });

@@ -150,9 +150,11 @@ ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)});`;
 ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
     }
 
-    const call = step.method ? METHOD_TO_CALL[step.method] : undefined;
+    const normalizedMethod = step.method?.trim();
+    const call = normalizedMethod ? METHOD_TO_CALL[normalizedMethod] : undefined;
     if (call) {
-      if (!isNonEmptyString(step.xpath)) {
+      const normalizedXPath = asNonEmptyTrimmedString(step.xpath);
+      if (!normalizedXPath) {
         return `${indent}// Step ${step.stepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"}, reason=missing xpath)`;
       }
       const options: Record<string, unknown> = {};
@@ -177,7 +179,7 @@ ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
           : "";
 
       const callArgs = [
-        `${argIndent}${JSON.stringify(step.xpath)},`,
+        `${argIndent}${JSON.stringify(normalizedXPath)},`,
         call.needsValue
           ? `${argIndent}${JSON.stringify(step.arguments?.[0] ?? "")},`
           : null,
