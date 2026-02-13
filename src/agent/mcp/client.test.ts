@@ -1,12 +1,55 @@
 import {
   MCPClient,
+  normalizeDiscoveredMCPTools,
   normalizeMCPToolParams,
   stringifyMCPPayload,
 } from "@/agent/mcp/client";
+import { Tool } from "@modelcontextprotocol/sdk/types";
 
 function setServersForClient(client: MCPClient, servers: Map<string, unknown>): void {
   (client as unknown as { servers: Map<string, unknown> }).servers = servers;
 }
+
+function createTool(name: string): Tool {
+  return {
+    name,
+    description: `${name} description`,
+    inputSchema: { type: "object", properties: {} },
+  } as Tool;
+}
+
+describe("normalizeDiscoveredMCPTools", () => {
+  it("normalizes discovered tool names and applies include filtering", () => {
+    const normalized = normalizeDiscoveredMCPTools(
+      [createTool(" search "), createTool("notes")],
+      { includeTools: ["search"] }
+    );
+    expect(normalized.map((entry) => entry.normalizedName)).toEqual(["search"]);
+  });
+
+  it("applies exclude filtering after normalization", () => {
+    const normalized = normalizeDiscoveredMCPTools(
+      [createTool("search"), createTool(" notes ")],
+      { excludeTools: ["notes"] }
+    );
+    expect(normalized.map((entry) => entry.normalizedName)).toEqual(["search"]);
+  });
+
+  it("rejects duplicate discovered tool names after normalization", () => {
+    expect(() =>
+      normalizeDiscoveredMCPTools(
+        [createTool("search"), createTool(" search ")],
+        {}
+      )
+    ).toThrow('MCP server returned duplicate tool name "search"');
+  });
+
+  it("rejects discovered tool names with unsupported control characters", () => {
+    expect(() =>
+      normalizeDiscoveredMCPTools([createTool("sea\nrch")], {})
+    ).toThrow("MCP tool name contains unsupported control characters");
+  });
+});
 
 describe("normalizeMCPToolParams", () => {
   it("returns object inputs unchanged", () => {

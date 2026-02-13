@@ -18,6 +18,14 @@ interface ServerConnection {
 }
 
 type MCPToolResult = Awaited<ReturnType<Client["callTool"]>>;
+type MCPToolDiscoveryOptions = Pick<
+  MCPServerConfig,
+  "includeTools" | "excludeTools"
+>;
+type NormalizedDiscoveredMCPTool = {
+  tool: Tool;
+  normalizedName: string;
+};
 const MAX_MCP_PAYLOAD_CHARS = 4000;
 const MAX_MCP_TOOL_PARAMS_JSON_CHARS = 100_000;
 const MAX_MCP_PARAM_DEPTH = 25;
@@ -125,6 +133,47 @@ function summarizeMCPServerIds(serverIds: string[]): string {
     return `${preview.join(", ")}, ... (+${omitted} more)`;
   }
   return preview.join(", ");
+}
+
+export function normalizeDiscoveredMCPTools(
+  tools: Tool[],
+  options: MCPToolDiscoveryOptions
+): NormalizedDiscoveredMCPTool[] {
+  const includeSet = options.includeTools
+    ? new Set(options.includeTools.map((name) => normalizeMCPExecutionToolName(name)))
+    : undefined;
+  const excludeSet = options.excludeTools
+    ? new Set(options.excludeTools.map((name) => normalizeMCPExecutionToolName(name)))
+    : undefined;
+  const seenToolNames = new Set<string>();
+  const normalizedTools: NormalizedDiscoveredMCPTool[] = [];
+
+  for (const tool of tools) {
+    const normalizedName = normalizeMCPExecutionToolName(tool.name);
+    if (seenToolNames.has(normalizedName)) {
+      throw new Error(
+        `MCP server returned duplicate tool name "${formatMCPIdentifier(
+          normalizedName,
+          "unknown-tool"
+        )}"`
+      );
+    }
+    seenToolNames.add(normalizedName);
+
+    if (includeSet && !includeSet.has(normalizedName)) {
+      continue;
+    }
+    if (excludeSet && excludeSet.has(normalizedName)) {
+      continue;
+    }
+
+    normalizedTools.push({
+      tool,
+      normalizedName,
+    });
+  }
+
+  return normalizedTools;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -455,30 +504,19 @@ class MCPClient {
       const toolsResult = await client.listTools();
       const toolsMap = new Map<string, Tool>();
 
+      const discoveredTools = normalizeDiscoveredMCPTools(
+        toolsResult.tools,
+        serverConfig
+      );
+
       // Create actions for each tool
-      const actions = toolsResult.tools
-        .filter((tool) => {
-          if (
-            serverConfig.includeTools &&
-            !serverConfig.includeTools.includes(tool.name)
-          ) {
-            return false;
-          }
-          if (
-            serverConfig.excludeTools &&
-            serverConfig.excludeTools.includes(tool.name)
-          ) {
-            return false;
-          }
-          return true;
-        })
-        .map((tool) => {
+      const actions = discoveredTools.map(({ tool, normalizedName }) => {
           // Store tool reference for later use
-          toolsMap.set(tool.name, tool);
+          toolsMap.set(normalizedName, tool);
 
           // Create action definition
           return {
-            type: tool.name,
+            type: normalizedName,
             actionParams: MCPToolActionParams.describe(
               `${tool.description ?? ""} Tool input schema: ${stringifyMCPPayload(tool.inputSchema)}`
             ),
@@ -496,14 +534,14 @@ class MCPClient {
               const targetServerId = serverId;
 
               const result = await ctx.mcpClient.executeTool(
-                tool.name,
+                normalizedName,
                 params,
                 targetServerId
               );
 
               return {
                 success: true,
-                message: `MCP tool ${tool.name} execution successful: ${stringifyMCPPayload(result)}`,
+                message: `MCP tool ${normalizedName} execution successful: ${stringifyMCPPayload(result)}`,
               };
             },
           };
