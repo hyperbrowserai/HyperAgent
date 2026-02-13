@@ -121,6 +121,23 @@ describe("normalizeOpenAICompatibleContent", () => {
     ]);
   });
 
+  it("strips control characters and truncates oversized tool names", () => {
+    const hugeName = `\u0000tool ${"x".repeat(400)}\n`;
+    const result = normalizeOpenAICompatibleContent([
+      {
+        type: "tool_call",
+        function: {
+          name: hugeName,
+          arguments: "{}",
+        },
+      },
+    ]);
+
+    const toolPart = result as Array<{ toolName: string }>;
+    expect(toolPart[0]?.toolName.length).toBeLessThanOrEqual(256);
+    expect(toolPart[0]?.toolName).not.toContain("\u0000");
+  });
+
   it("formats non-string text-part payloads safely", () => {
     expect(
       normalizeOpenAICompatibleContent([

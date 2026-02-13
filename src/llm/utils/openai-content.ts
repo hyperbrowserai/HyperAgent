@@ -7,12 +7,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeOptionalString(value: unknown): string | undefined {
+const MAX_TOOL_NAME_CHARS = 256;
+
+function normalizeOptionalString(
+  value: unknown,
+  maxChars: number
+): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  return trimmed.length > 0 ? trimmed : undefined;
+  const trimmed = value
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  return trimmed.slice(0, maxChars);
 }
 
 const NO_RESERVED_PROVIDER_OPTION_KEYS: ReadonlySet<string> = new Set();
@@ -66,7 +77,7 @@ function normalizeOpenAICompatibleContentPart(
     const fn = isRecord(part.function) ? part.function : {};
     return {
       type: "tool_call",
-      toolName: normalizeOptionalString(fn.name) ?? "unknown-tool",
+      toolName: normalizeOptionalString(fn.name, MAX_TOOL_NAME_CHARS) ?? "unknown-tool",
       arguments: sanitizeToolArguments(parseJsonMaybe(fn.arguments)),
     };
   }

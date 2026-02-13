@@ -10,17 +10,28 @@ export interface NormalizedOpenAIToolCall {
 
 const NO_RESERVED_PROVIDER_OPTION_KEYS: ReadonlySet<string> = new Set();
 const MAX_TOOL_CALL_DIAGNOSTIC_CHARS = 2_000;
+const MAX_TOOL_CALL_ID_CHARS = 256;
+const MAX_TOOL_CALL_NAME_CHARS = 256;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeOptionalString(value: unknown): string | undefined {
+function normalizeOptionalString(
+  value: unknown,
+  maxChars: number
+): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  return trimmed.length > 0 ? trimmed : undefined;
+  const trimmed = value
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  return trimmed.slice(0, maxChars);
 }
 
 function sanitizeToolArguments(value: unknown): unknown {
@@ -64,8 +75,10 @@ export function normalizeOpenAIToolCalls(
     if (toolCall.type === "function") {
       const fn = isRecord(toolCall.function) ? toolCall.function : {};
       return {
-        id: normalizeOptionalString(toolCall.id),
-        name: normalizeOptionalString(fn.name) ?? "unknown-tool",
+        id: normalizeOptionalString(toolCall.id, MAX_TOOL_CALL_ID_CHARS),
+        name:
+          normalizeOptionalString(fn.name, MAX_TOOL_CALL_NAME_CHARS) ??
+          "unknown-tool",
         arguments: sanitizeToolArguments(parseJsonMaybe(fn.arguments)),
       };
     }
@@ -73,8 +86,10 @@ export function normalizeOpenAIToolCalls(
     if (toolCall.type === "custom") {
       const custom = isRecord(toolCall.custom) ? toolCall.custom : {};
       return {
-        id: normalizeOptionalString(toolCall.id),
-        name: normalizeOptionalString(custom.name) ?? "unknown-tool",
+        id: normalizeOptionalString(toolCall.id, MAX_TOOL_CALL_ID_CHARS),
+        name:
+          normalizeOptionalString(custom.name, MAX_TOOL_CALL_NAME_CHARS) ??
+          "unknown-tool",
         arguments: sanitizeToolArguments(parseJsonMaybe(custom.input)),
       };
     }

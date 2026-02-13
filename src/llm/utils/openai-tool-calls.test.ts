@@ -201,4 +201,26 @@ describe("normalizeOpenAIToolCalls", () => {
       },
     ]);
   });
+
+  it("strips control characters and truncates oversized identifiers", () => {
+    const hugeName = `\u0000tool ${"x".repeat(400)}\n`;
+    const hugeId = `\u0000id ${"y".repeat(400)}\n`;
+
+    const result = normalizeOpenAIToolCalls([
+      {
+        id: hugeId,
+        type: "function",
+        function: {
+          name: hugeName,
+          arguments: "{}",
+        },
+      },
+    ]);
+
+    const normalized = result?.[0];
+    expect(normalized?.id?.length).toBeLessThanOrEqual(256);
+    expect(normalized?.name.length ?? 0).toBeLessThanOrEqual(256);
+    expect(normalized?.id).not.toContain("\u0000");
+    expect(normalized?.name).not.toContain("\u0000");
+  });
 });
