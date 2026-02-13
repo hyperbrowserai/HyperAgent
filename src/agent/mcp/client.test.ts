@@ -150,3 +150,60 @@ describe("MCPClient.executeTool server selection", () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 });
+
+describe("MCPClient disconnect lifecycle", () => {
+  function setServers(client: MCPClient, servers: Map<string, unknown>): void {
+    (client as unknown as { servers: Map<string, unknown> }).servers = servers;
+  }
+
+  it("disconnectServer closes transport and removes server", async () => {
+    const mcpClient = new MCPClient(false);
+    const close = jest.fn().mockResolvedValue(undefined);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            transport: { close },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.disconnectServer("server-1");
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(mcpClient.getServerIds()).toEqual([]);
+    expect(mcpClient.hasConnections()).toBe(false);
+  });
+
+  it("disconnect closes every connected server transport", async () => {
+    const mcpClient = new MCPClient(false);
+    const closeA = jest.fn().mockResolvedValue(undefined);
+    const closeB = jest.fn().mockResolvedValue(undefined);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            transport: { close: closeA },
+          },
+        ],
+        [
+          "server-b",
+          {
+            transport: { close: closeB },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.disconnect();
+
+    expect(closeA).toHaveBeenCalledTimes(1);
+    expect(closeB).toHaveBeenCalledTimes(1);
+    expect(mcpClient.hasConnections()).toBe(false);
+  });
+});

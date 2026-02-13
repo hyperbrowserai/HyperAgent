@@ -297,7 +297,7 @@ class MCPClient {
    * Disconnect from all servers
    */
   async disconnect(): Promise<void> {
-    for (const serverId of this.servers.keys()) {
+    for (const serverId of Array.from(this.servers.keys())) {
       await this.disconnectServer(serverId);
     }
   }
