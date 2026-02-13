@@ -340,6 +340,22 @@ pub fn parse_rounddown_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_sqrt_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "SQRT" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_power_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "POWER" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_isblank_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ISBLANK" && args.len() == 1 {
@@ -625,7 +641,9 @@ mod tests {
     parse_lower_formula, parse_match_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
+    parse_power_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
+    parse_sqrt_formula,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_vlookup_formula,
@@ -760,6 +778,13 @@ mod tests {
       .expect("rounddown should parse");
     assert_eq!(rounddown.0, "-12.399");
     assert_eq!(rounddown.1, "1");
+    assert_eq!(
+      parse_sqrt_formula("=SQRT(81)").as_deref(),
+      Some("81"),
+    );
+    let power = parse_power_formula("=POWER(3, 4)").expect("power should parse");
+    assert_eq!(power.0, "3");
+    assert_eq!(power.1, "4");
     assert_eq!(
       parse_isblank_formula("=ISBLANK(A1)").as_deref(),
       Some("A1"),

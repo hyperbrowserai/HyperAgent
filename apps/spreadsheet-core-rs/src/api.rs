@@ -72,6 +72,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "ROUND",
   "ROUNDUP",
   "ROUNDDOWN",
+  "SQRT",
+  "POWER",
   "LEFT",
   "RIGHT",
   "UPPER",

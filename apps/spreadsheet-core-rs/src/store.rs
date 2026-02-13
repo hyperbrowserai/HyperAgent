@@ -10,8 +10,10 @@ use crate::{
     parse_isblank_formula, parse_isnumber_formula, parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
     parse_match_formula, parse_month_formula, parse_not_formula,
+    parse_power_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
+    parse_sqrt_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_today_formula, parse_upper_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_year_formula, ConditionalAggregateFormula,
@@ -454,6 +456,20 @@ fn evaluate_formula(
       scaled.floor()
     } / factor;
     return Ok(Some(rounded.to_string()));
+  }
+
+  if let Some(sqrt_arg) = parse_sqrt_formula(formula) {
+    let value = parse_required_float(connection, sheet, &sqrt_arg)?;
+    if value.is_sign_negative() {
+      return Ok(None);
+    }
+    return Ok(Some(value.sqrt().to_string()));
+  }
+
+  if let Some((base_arg, exponent_arg)) = parse_power_formula(formula) {
+    let base = parse_required_float(connection, sheet, &base_arg)?;
+    let exponent = parse_required_float(connection, sheet, &exponent_arg)?;
+    return Ok(Some(base.powf(exponent).to_string()));
   }
 
   if let Some((text_arg, count_arg)) = parse_left_formula(formula) {
@@ -1935,12 +1951,30 @@ mod tests {
         value: None,
         formula: Some("=ROUNDDOWN(-12.399,1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 54,
+        value: None,
+        formula: Some("=SQRT(81)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 55,
+        value: None,
+        formula: Some("=POWER(3,4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 56,
+        value: None,
+        formula: Some("=SQRT(A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 51);
+    assert_eq!(updated_cells, 54);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -1954,7 +1988,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 53,
+        end_col: 56,
       },
     )
     .expect("cells should be fetched");
@@ -2036,6 +2070,9 @@ mod tests {
     assert_eq!(by_position(1, 51).evaluated_value.as_deref(), Some("12.35"));
     assert_eq!(by_position(1, 52).evaluated_value.as_deref(), Some("12.4"));
     assert_eq!(by_position(1, 53).evaluated_value.as_deref(), Some("-12.3"));
+    assert_eq!(by_position(1, 54).evaluated_value.as_deref(), Some("9"));
+    assert_eq!(by_position(1, 55).evaluated_value.as_deref(), Some("81"));
+    assert_eq!(by_position(1, 56).evaluated_value.as_deref(), Some("8.94427190999916"));
   }
 
   #[test]
@@ -2114,6 +2151,22 @@ mod tests {
       unsupported_formulas,
       vec![r#"=HLOOKUP("south",A1:B2,2,TRUE)"#.to_string()]
     );
+  }
+
+  #[test]
+  fn should_leave_negative_sqrt_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=SQRT(-1)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=SQRT(-1)".to_string()]);
   }
 
   #[test]
