@@ -341,6 +341,72 @@ describe("runFromActionCache hardening", () => {
     );
   });
 
+  it("skips replay debug artifact writes after closeAgent generation changes", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+      debug: true,
+    });
+    let resolveWait!: () => void;
+    const waitForTimeout = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWait = resolve;
+        })
+    );
+    const page = {
+      waitForTimeout,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "wait",
+          elementId: null,
+          method: null,
+          arguments: [],
+          actionParams: { duration: 10 },
+          frameIndex: null,
+          xpath: null,
+          actionType: "wait",
+          success: true,
+          message: "cached wait",
+        },
+        {
+          stepIndex: 1,
+          instruction: "wait again",
+          elementId: null,
+          method: null,
+          arguments: [],
+          actionParams: { duration: 10 },
+          frameIndex: null,
+          xpath: null,
+          actionType: "wait",
+          success: true,
+          message: "cached wait 2",
+        },
+      ],
+    };
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      return undefined;
+    });
+
+    try {
+      const replayPromise = agent.runFromActionCache(cache, page, { debug: true });
+      await expect(agent.closeAgent()).resolves.toBeUndefined();
+      resolveWait();
+
+      const replay = await replayPromise;
+      expect(replay.status).toBe(TaskStatus.FAILED);
+      expect(writeSpy).not.toHaveBeenCalled();
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
   it("fails replay step cleanly when special action execution throws", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

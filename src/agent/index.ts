@@ -1342,6 +1342,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const sourceTaskId =
       this.normalizeVariableKey((cache as { taskId?: unknown })?.taskId) ??
       "unknown-task";
+    const shouldWriteReplayDebug = (): boolean =>
+      debug && this.isTaskLifecycleGenerationActive(replayLifecycleGeneration);
     const safeReadStepField = (step: unknown, key: string): unknown => {
       if (!step || (typeof step !== "object" && typeof step !== "function")) {
         return undefined;
@@ -1464,7 +1466,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         ],
         status: TaskStatus.FAILED,
       };
-      if (debug) {
+      if (shouldWriteReplayDebug()) {
         try {
           const debugDir = "debug/action-cache";
           fs.mkdirSync(debugDir, { recursive: true });
@@ -1682,7 +1684,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       status: replayStatus,
     };
 
-    if (debug) {
+    if (shouldWriteReplayDebug()) {
       try {
         const debugDir = "debug/action-cache";
         fs.mkdirSync(debugDir, { recursive: true });
