@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Page } from "playwright-core";
 import { HyperAgent } from "@/agent";
 import { getDebugOptions, setDebugOptions } from "@/debug/options";
-import type { AgentActionDefinition, TaskState } from "@/types";
+import type { AgentActionDefinition, TaskParams, TaskState } from "@/types";
 import type { HyperAgentLLM } from "@/llm/types";
 import { runAgentTask } from "@/agent/tools/agent";
 import { TaskStatus, type AgentTaskOutput } from "@/types/agent/types";
@@ -115,6 +115,113 @@ describe("HyperAgent constructor and task controls", () => {
     };
     expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
     expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
+  });
+
+  it("executeTaskAsync cleans up state when setup throws before run starts", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const on = jest.fn();
+    const off = jest.fn();
+    const internalAgent = agent as unknown as {
+      context: {
+        on: typeof on;
+        off: typeof off;
+      } | null;
+      tasks: Record<string, unknown>;
+      taskResults: Record<string, unknown>;
+    };
+    internalAgent.context = { on, off };
+
+    const params = {} as TaskParams;
+    Object.defineProperty(params, "outputSchema", {
+      configurable: true,
+      get: () => {
+        throw new Error("output schema trap");
+      },
+    });
+
+    const fakePage = {} as unknown as Page;
+    await expect(agent.executeTaskAsync("test task", params, fakePage)).rejects
+      .toThrow("output schema trap");
+    expect(off).toHaveBeenCalledWith("page", expect.any(Function));
+    expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
+    expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
+  });
+
+  it("executeTaskAsync cleans up state when runAgentTask throws synchronously", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockImplementation(() => {
+      throw new Error("sync run trap");
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const on = jest.fn();
+    const off = jest.fn();
+    const internalAgent = agent as unknown as {
+      context: {
+        on: typeof on;
+        off: typeof off;
+      } | null;
+      tasks: Record<string, unknown>;
+      taskResults: Record<string, unknown>;
+    };
+    internalAgent.context = { on, off };
+
+    const fakePage = {} as unknown as Page;
+    await expect(agent.executeTaskAsync("test task", undefined, fakePage)).rejects
+      .toThrow("sync run trap");
+    expect(off).toHaveBeenCalledWith("page", expect.any(Function));
+    expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
+    expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
+  });
+
+  it("executeTaskAsync tolerates task-result promise assignment traps", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      taskResults: Record<string, Promise<AgentTaskOutput>>;
+    };
+    internalAgent.taskResults = new Proxy(
+      {},
+      {
+        set: () => {
+          throw new Error("task result set trap");
+        },
+      }
+    ) as Record<string, Promise<AgentTaskOutput>>;
+
+    const fakePage = {} as unknown as Page;
+    try {
+      const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.COMPLETED,
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to track task result promise")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it("emits and surfaces task-scoped errors from async execution", async () => {

@@ -447,6 +447,23 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private storeTaskResultPromise(
+    taskId: string,
+    result: Promise<AgentTaskOutput>
+  ): void {
+    try {
+      this.taskResults[taskId] = result;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to track task result promise for ${taskId}: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+  }
+
   private getTaskEntriesForClose(): Array<[string, TaskState]> {
     try {
       return Object.entries(this.tasks) as Array<[string, TaskState]>;
@@ -1052,62 +1069,75 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     const mergedParams = params ?? {};
-    const taskResult = runAgentTask(
-      {
-        llm: this.llm,
-        actions: this.getActions(mergedParams.outputSchema),
-        tokenLimit: this.tokenLimit,
-        debug: this.debug,
-        mcpClient: this.mcpClient,
-        variables: this._variables,
-        cdpActions: this.cdpActionsEnabled,
-        activePage: async () => activeTaskPage,
-      },
-      taskState,
-      mergedParams
-    )
-      .then((result) => {
-        this.storeTaskActionCache(taskId, result.actionCache);
-        cleanup();
-        return result;
-      })
-      .catch((error: unknown) => {
-        cleanup();
-        // Retrieve the correct state to update
-        const failedTaskState = this.tasks[taskId];
-        const normalizedTaskError =
-          error instanceof Error
-            ? error
-            : new Error(formatUnknownError(error));
-        const taskFailureError =
-          new HyperagentTaskError(taskId, normalizedTaskError);
-        if (failedTaskState) {
-          const currentStatus = this.readTaskStatus(
-            failedTaskState,
-            TaskStatus.FAILED
-          );
-          const nextStatus =
-            currentStatus === TaskStatus.CANCELLED
-              ? TaskStatus.CANCELLED
-              : TaskStatus.FAILED;
-          this.writeTaskStatus(failedTaskState, nextStatus);
-          if (nextStatus !== TaskStatus.CANCELLED) {
-            failedTaskState.error = taskFailureError.cause.message;
-            // Emit error on the central emitter, including the taskId
-            this.emitTaskErrorSafely(taskFailureError);
+    let taskResult: Promise<AgentTaskOutput>;
+    try {
+      taskResult = runAgentTask(
+        {
+          llm: this.llm,
+          actions: this.getActions(mergedParams.outputSchema),
+          tokenLimit: this.tokenLimit,
+          debug: this.debug,
+          mcpClient: this.mcpClient,
+          variables: this._variables,
+          cdpActions: this.cdpActionsEnabled,
+          activePage: async () => activeTaskPage,
+        },
+        taskState,
+        mergedParams
+      )
+        .then((result) => {
+          this.storeTaskActionCache(taskId, result.actionCache);
+          cleanup();
+          return result;
+        })
+        .catch((error: unknown) => {
+          cleanup();
+          // Retrieve the correct state to update
+          const failedTaskState = this.tasks[taskId];
+          const normalizedTaskError =
+            error instanceof Error
+              ? error
+              : new Error(formatUnknownError(error));
+          const taskFailureError =
+            new HyperagentTaskError(taskId, normalizedTaskError);
+          if (failedTaskState) {
+            const currentStatus = this.readTaskStatus(
+              failedTaskState,
+              TaskStatus.FAILED
+            );
+            const nextStatus =
+              currentStatus === TaskStatus.CANCELLED
+                ? TaskStatus.CANCELLED
+                : TaskStatus.FAILED;
+            this.writeTaskStatus(failedTaskState, nextStatus);
+            if (nextStatus !== TaskStatus.CANCELLED) {
+              failedTaskState.error = taskFailureError.cause.message;
+              // Emit error on the central emitter, including the taskId
+              this.emitTaskErrorSafely(taskFailureError);
+            }
+          } else {
+            // Fallback if task state somehow doesn't exist
+            console.error(
+              `Task state ${taskId} not found during error handling.`
+            );
           }
-        } else {
-          // Fallback if task state somehow doesn't exist
-          console.error(
-            `Task state ${taskId} not found during error handling.`
-          );
-        }
-        throw taskFailureError;
-      })
-      .finally(() => {
-        this.cleanupTaskLifecycle(taskId);
-      });
-    this.taskResults[taskId] = taskResult;
+          throw taskFailureError;
+        })
+        .finally(() => {
+          this.cleanupTaskLifecycle(taskId);
+        });
+    } catch (error) {
+      cleanup();
+      const currentStatus = this.readTaskStatus(taskState, TaskStatus.FAILED);
+      const nextStatus =
+        currentStatus === TaskStatus.CANCELLED
+          ? TaskStatus.CANCELLED
+          : TaskStatus.FAILED;
+      this.writeTaskStatus(taskState, nextStatus);
+      this.cleanupTaskLifecycle(taskId);
+      throw error;
+    }
+    this.storeTaskResultPromise(taskId, taskResult);
     return this.getTaskControl(taskId, taskResult);
   }
 
