@@ -88,6 +88,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private cdpActionsEnabled: boolean;
   private actionCacheByTaskId: Record<string, ActionCacheOutput> = {};
   private taskResults: Record<string, Promise<AgentTaskOutput>> = {};
+  private mcpActionTypesByServer: Map<string, Set<string>> = new Map();
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -291,6 +292,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       await this.mcpClient.disconnect();
       this.mcpClient = undefined;
     }
+    this.unregisterActionsByType(
+      Array.from(this.mcpActionTypesByServer.values()).flatMap((actionTypes) =>
+        Array.from(actionTypes)
+      )
+    );
+    this.mcpActionTypesByServer.clear();
 
     if (this.browser) {
       await this.browserProvider.close();
@@ -1394,6 +1401,58 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private unregisterActionsByType(actionTypes: Iterable<string>): void {
+    const removeTypes = new Set(actionTypes);
+    if (removeTypes.size === 0) {
+      return;
+    }
+    this.actions = this.actions.filter((action) => !removeTypes.has(action.type));
+  }
+
+  private registerMCPActions(
+    serverId: string,
+    actions: AgentActionDefinition[]
+  ): void {
+    const registeredActionTypes = new Set<string>();
+    try {
+      for (const action of actions) {
+        this.registerAction(action);
+        registeredActionTypes.add(action.type);
+      }
+      this.mcpActionTypesByServer.set(serverId, registeredActionTypes);
+    } catch (error) {
+      this.unregisterActionsByType(registeredActionTypes);
+      this.mcpActionTypesByServer.delete(serverId);
+      throw error;
+    }
+  }
+
+  private unregisterMCPActionsForServer(serverId: string): void {
+    const actionTypes = this.mcpActionTypesByServer.get(serverId);
+    if (!actionTypes) {
+      return;
+    }
+    this.unregisterActionsByType(actionTypes);
+    this.mcpActionTypesByServer.delete(serverId);
+  }
+
+  private async resetMCPClient(): Promise<void> {
+    if (this.mcpClient) {
+      await this.mcpClient.disconnect().catch((error) => {
+        if (this.debug) {
+          console.warn("Failed to reset existing MCP client:", error);
+        }
+      });
+      this.mcpClient = undefined;
+    }
+    this.unregisterActionsByType(
+      Array.from(this.mcpActionTypesByServer.values()).flatMap((actionTypes) =>
+        Array.from(actionTypes)
+      )
+    );
+    this.mcpActionTypesByServer.clear();
+  }
+
   /**
    * Initialize the MCP client with the given configuration
    * @param config The MCP configuration
@@ -1402,14 +1461,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!config || config.servers.length === 0) {
       return;
     }
+    await this.resetMCPClient();
     this.mcpClient = new MCPClient(this.debug);
     try {
       for (const serverConfig of config.servers) {
         try {
           const { serverId, actions } =
             await this.mcpClient.connectToServer(serverConfig);
-          for (const action of actions) {
-            this.registerAction(action);
+          try {
+            this.registerMCPActions(serverId, actions);
+          } catch (registrationError) {
+            await this.mcpClient.disconnectServer(serverId).catch(() => {});
+            throw registrationError;
           }
           if (this.debug) {
             console.log(`MCP server ${serverId} initialized successfully`);
@@ -1449,10 +1512,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     try {
       const { serverId, actions } =
         await this.mcpClient.connectToServer(serverConfig);
-
-      // Register the actions from this server
-      for (const action of actions) {
-        this.registerAction(action);
+      try {
+        this.registerMCPActions(serverId, actions);
+      } catch (registrationError) {
+        await this.mcpClient.disconnectServer(serverId).catch(() => {});
+        throw registrationError;
       }
 
       if (this.debug) {
@@ -1476,7 +1540,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     try {
-      this.mcpClient.disconnectServer(serverId);
+      this.unregisterMCPActionsForServer(serverId);
+      void this.mcpClient.disconnectServer(serverId).catch((error) => {
+        console.error(`Failed to disconnect from MCP server ${serverId}:`, error);
+      });
       return true;
     } catch (error) {
       console.error(`Failed to disconnect from MCP server ${serverId}:`, error);
