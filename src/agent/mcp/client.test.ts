@@ -2750,4 +2750,27 @@ describe("MCPClient server metadata accessors", () => {
       },
     ]);
   });
+
+  it("sanitizes oversized server identifiers in server info output", () => {
+    const mcpClient = new MCPClient(false);
+    const oversizedServerId = `server-${"x".repeat(300)}\nunsafe`;
+    setServersForClient(
+      mcpClient,
+      new Map([
+        [
+          oversizedServerId,
+          {
+            tools: new Map([["search", {}]]),
+          },
+        ],
+      ])
+    );
+
+    const info = mcpClient.getServerInfo();
+    expect(info).toHaveLength(1);
+    expect(info[0].id).toContain("[truncated]");
+    expect(info[0].id).not.toContain("\n");
+    expect(info[0].toolCount).toBe(1);
+    expect(info[0].toolNames).toEqual(["search"]);
+  });
 });

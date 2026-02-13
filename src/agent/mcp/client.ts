@@ -1575,7 +1575,7 @@ class MCPClient {
     return safeGetConnectedServerEntries(this.servers).map(([id, server]) => {
       const toolNames = safeGetServerToolNames(server);
       return {
-        id,
+        id: formatMCPIdentifier(id, "unknown-server"),
         toolCount: toolNames.length,
         toolNames,
       };
