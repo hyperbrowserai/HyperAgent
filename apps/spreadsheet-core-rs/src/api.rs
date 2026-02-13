@@ -75,6 +75,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "LEN",
   "PI",
   "ABS",
+  "FACT",
+  "COMBIN",
   "LN",
   "EXP",
   "LOG",

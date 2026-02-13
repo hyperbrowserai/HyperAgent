@@ -388,6 +388,22 @@ pub fn parse_log_formula(formula: &str) -> Option<(String, Option<String>)> {
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_fact_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "FACT" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_combin_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "COMBIN" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_sin_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "SIN" && args.len() == 1 {
@@ -1041,7 +1057,8 @@ mod tests {
     parse_iseven_formula, parse_isodd_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
-    parse_log_formula, parse_sin_formula, parse_cos_formula, parse_tan_formula,
+    parse_log_formula, parse_fact_formula, parse_combin_formula,
+    parse_sin_formula, parse_cos_formula, parse_tan_formula,
     parse_sinh_formula, parse_cosh_formula, parse_tanh_formula, parse_asin_formula,
     parse_acos_formula, parse_atan_formula, parse_atan2_formula, parse_degrees_formula,
     parse_radians_formula, parse_lower_formula,
@@ -1200,6 +1217,11 @@ mod tests {
     let log_args = parse_log_formula("=LOG(A1,10)").expect("log should parse");
     assert_eq!(log_args.0, "A1");
     assert_eq!(log_args.1.as_deref(), Some("10"));
+    assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
+    let combin_args =
+      parse_combin_formula("=COMBIN(A1,B1)").expect("combin should parse");
+    assert_eq!(combin_args.0, "A1");
+    assert_eq!(combin_args.1, "B1");
     assert_eq!(parse_sin_formula("=SIN(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_cos_formula("=COS(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_tan_formula("=TAN(A1)").as_deref(), Some("A1"));

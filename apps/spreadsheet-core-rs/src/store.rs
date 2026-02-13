@@ -6,7 +6,7 @@ use crate::{
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
-    parse_log_formula, parse_pi_formula,
+    parse_log_formula, parse_fact_formula, parse_combin_formula, parse_pi_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_sinh_formula,
     parse_cosh_formula, parse_tanh_formula, parse_asin_formula, parse_acos_formula,
     parse_atan_formula, parse_atan2_formula,
@@ -600,6 +600,38 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(value.log(base).to_string()));
+  }
+
+  if let Some(fact_arg) = parse_fact_formula(formula) {
+    let value = parse_required_integer(connection, sheet, &fact_arg)?;
+    if value < 0 || value > 170 {
+      return Ok(None);
+    }
+    let mut result = 1f64;
+    for index in 1..=value {
+      result *= f64::from(index);
+    }
+    return Ok(Some(result.to_string()));
+  }
+
+  if let Some((number_arg, chosen_arg)) = parse_combin_formula(formula) {
+    let number = parse_required_integer(connection, sheet, &number_arg)?;
+    let chosen = parse_required_integer(connection, sheet, &chosen_arg)?;
+    if number < 0 || chosen < 0 || chosen > number {
+      return Ok(None);
+    }
+    let mut k = chosen;
+    if k > number - k {
+      k = number - k;
+    }
+    let mut result = 1f64;
+    let mut step = 1i32;
+    while step <= k {
+      result *= f64::from(number - k + step);
+      result /= f64::from(step);
+      step += 1;
+    }
+    return Ok(Some(result.round().to_string()));
   }
 
   if let Some(sin_arg) = parse_sin_formula(formula) {
@@ -2939,12 +2971,24 @@ mod tests {
         value: None,
         formula: Some("=TANH(0)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 111,
+        value: None,
+        formula: Some("=FACT(5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 112,
+        value: None,
+        formula: Some("=COMBIN(5,2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 108);
+    assert_eq!(updated_cells, 110);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2958,7 +3002,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 110,
+        end_col: 112,
       },
     )
     .expect("cells should be fetched");
@@ -3125,6 +3169,8 @@ mod tests {
     assert_eq!(by_position(1, 108).evaluated_value.as_deref(), Some("0"));
     assert_eq!(by_position(1, 109).evaluated_value.as_deref(), Some("1"));
     assert_eq!(by_position(1, 110).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 111).evaluated_value.as_deref(), Some("120"));
+    assert_eq!(by_position(1, 112).evaluated_value.as_deref(), Some("10"));
   }
 
   #[test]
@@ -3288,6 +3334,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=LOG(100,1)".to_string(), "=LOG(100,0)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_fact_and_combin_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=FACT(-1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=COMBIN(5,7)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=FACT(-1)".to_string(), "=COMBIN(5,7)".to_string()],
     );
   }
 
