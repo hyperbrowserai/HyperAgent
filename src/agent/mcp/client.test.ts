@@ -39,6 +39,20 @@ describe("normalizeMCPToolParams", () => {
       "must parse to a JSON object"
     );
   });
+
+  it("rejects reserved object keys in parsed JSON params", () => {
+    expect(() => normalizeMCPToolParams('{"__proto__":{"x":1}}')).toThrow(
+      'MCP tool params cannot include reserved key "__proto__"'
+    );
+  });
+
+  it("rejects reserved object keys in direct object params", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        constructor: "bad",
+      })
+    ).toThrow('MCP tool params cannot include reserved key "constructor"');
+  });
 });
 
 describe("stringifyMCPPayload", () => {

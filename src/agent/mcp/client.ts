@@ -19,6 +19,7 @@ interface ServerConnection {
 
 type MCPToolResult = Awaited<ReturnType<Client["callTool"]>>;
 const MAX_MCP_PAYLOAD_CHARS = 4000;
+const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 const MCPToolActionParams = z.object({
   params: z
@@ -51,6 +52,19 @@ export function stringifyMCPPayload(value: unknown): string {
 export function normalizeMCPToolParams(
   input: MCPToolActionInput["params"]
 ): Record<string, unknown> {
+  const sanitizeParamObject = (
+    value: Record<string, unknown>
+  ): Record<string, unknown> => {
+    const sanitized: Record<string, unknown> = Object.create(null);
+    for (const [key, paramValue] of Object.entries(value)) {
+      if (UNSAFE_OBJECT_KEYS.has(key)) {
+        throw new Error(`MCP tool params cannot include reserved key "${key}"`);
+      }
+      sanitized[key] = paramValue;
+    }
+    return sanitized;
+  };
+
   if (typeof input === "string") {
     if (input.trim().length === 0) {
       throw new Error(
@@ -69,10 +83,10 @@ export function normalizeMCPToolParams(
         "MCP tool params must parse to a JSON object, not an array or primitive"
       );
     }
-    return parsed as Record<string, unknown>;
+    return sanitizeParamObject(parsed as Record<string, unknown>);
   }
 
-  return input;
+  return sanitizeParamObject(input);
 }
 
 class MCPClient {
