@@ -12,7 +12,8 @@ function ensureStringOutput(output: unknown, taskStatus: unknown): string {
 
 function safeStringify(value: unknown): string {
   try {
-    return JSON.stringify(value);
+    const serialized = JSON.stringify(value);
+    return typeof serialized === "string" ? serialized : String(value);
   } catch {
     return String(value);
   }

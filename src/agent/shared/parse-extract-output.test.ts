@@ -48,4 +48,13 @@ describe("parseExtractOutput", () => {
       parseExtractOutput("{\"total\":\"oops\"}", "completed", schema)
     ).toThrow("does not match schema");
   });
+
+  it("handles primitive parsed output without crashing schema error rendering", () => {
+    const schema = z.object({
+      total: z.number(),
+    });
+    expect(() => parseExtractOutput("1", "completed", schema)).toThrow(
+      "does not match schema"
+    );
+  });
 });
