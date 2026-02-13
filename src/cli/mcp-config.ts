@@ -104,8 +104,8 @@ function normalizeOptionalStringRecord(
       key.length === 0 ||
       typeof rawValue !== "string" ||
       isUnsafeKey ||
-      hasUnsupportedControlChars(key) ||
-      hasUnsupportedControlChars(rawValue)
+      hasAnyControlChars(key) ||
+      hasAnyControlChars(rawValue)
     ) {
       throw new Error(
         `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
@@ -145,7 +145,7 @@ function normalizeSSEUrl(value: unknown, index: number): string {
       `MCP server entry at index ${index} must include a non-empty "sseUrl" for SSE connections.`
     );
   }
-  if (hasUnsupportedControlChars(raw)) {
+  if (hasAnyControlChars(raw)) {
     throw new Error(
       `MCP server entry at index ${index} has invalid "sseUrl" value "${raw}".`
     );
@@ -203,7 +203,7 @@ function normalizeOptionalStringArray(
     normalized.some(
       (entry) =>
         entry.length > MAX_MCP_TOOL_NAME_CHARS ||
-        hasUnsupportedControlChars(entry)
+        hasAnyControlChars(entry)
     )
   ) {
     throw new Error(
@@ -348,7 +348,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 
     const normalizedId = isNonEmptyString(entry.id) ? entry.id.trim() : "";
     if (normalizedId.length > 0) {
-      if (hasUnsupportedControlChars(normalizedId)) {
+      if (hasAnyControlChars(normalizedId)) {
         throw new Error(
           `MCP server entry at index ${i} must provide "id" as a string when specified.`
         );
@@ -375,7 +375,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       : undefined;
     if (
       typeof rawConnectionType === "string" &&
-      hasUnsupportedControlChars(rawConnectionType)
+      hasAnyControlChars(rawConnectionType)
     ) {
       throw new Error(
         `MCP server entry at index ${i} has unsupported connectionType "${entry.connectionType}". Supported values are "stdio" and "sse".`

@@ -159,6 +159,11 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 must provide "id" as a string when specified.'
     );
+    expect(() =>
+      parseMCPServersConfig('[{"id":"bad\\nid","command":"npx"}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "id" as a string when specified.'
+    );
 
     expect(() =>
       parseMCPServersConfig('[{"connectionType":"sse\\u0007","command":"npx"}]')
@@ -233,6 +238,13 @@ describe("parseMCPServersConfig", () => {
       )
     ).toThrow(
       'MCP server entry at index 0 must provide "includeTools" as an array of non-empty strings.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"command":"npx","excludeTools":["bad\\nname"]}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "excludeTools" as an array of non-empty strings.'
     );
 
     expect(() =>
@@ -404,6 +416,18 @@ describe("parseMCPServersConfig", () => {
     expect(() =>
       parseMCPServersConfig(
         '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Authorization":"Bearer\\u0007token"}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig('[{"command":"npx","env":{"KEY":"line1\\nline2"}}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Authorization":"line1\\nline2"}}]'
       )
     ).toThrow(
       'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
