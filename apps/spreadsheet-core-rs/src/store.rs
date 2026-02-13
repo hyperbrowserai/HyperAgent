@@ -242,17 +242,45 @@ fn evaluate_formula(
   formula: &str,
 ) -> Result<Option<String>, ApiError> {
   if let Some((function, start, end)) = parse_aggregate_formula(formula) {
+    if function == "PRODUCT" {
+      let bounds = normalized_range_bounds(start, end);
+      let mut product = 1f64;
+      let mut has_numeric = false;
+      for row_offset in 0..bounds.height {
+        for col_offset in 0..bounds.width {
+          let row_index = bounds.start_row + row_offset;
+          let col_index = bounds.start_col + col_offset;
+          let value = load_cell_scalar(connection, sheet, row_index, col_index)?;
+          if let Ok(parsed) = value.trim().parse::<f64>() {
+            product *= parsed;
+            has_numeric = true;
+          }
+        }
+      }
+      return Ok(Some(if has_numeric {
+        product.to_string()
+      } else {
+        "0".to_string()
+      }));
+    }
+
     let aggregate_sql = match function.as_str() {
       "SUM" => "SUM",
       "AVERAGE" => "AVG",
       "MIN" => "MIN",
       "MAX" => "MAX",
       "COUNT" => "COUNT",
+      "SUMSQ" => "SUM",
       _ => return Ok(None),
     };
     let value_expr = if function == "COUNT" {
       format!(
         "{}(TRY_CAST(COALESCE(evaluated_value, raw_value) AS DOUBLE))",
+        aggregate_sql
+      )
+    } else if function == "SUMSQ" {
+      format!(
+        "{}(POW(COALESCE(TRY_CAST(evaluated_value AS DOUBLE), TRY_CAST(raw_value AS DOUBLE), 0), 2))",
         aggregate_sql
       )
     } else {
@@ -3219,12 +3247,24 @@ mod tests {
         value: None,
         formula: Some("=SUMPRODUCT(A1:A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 123,
+        value: None,
+        formula: Some("=SUMSQ(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 124,
+        value: None,
+        formula: Some("=PRODUCT(A1:A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 120);
+    assert_eq!(updated_cells, 122);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3238,7 +3278,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 122,
+        end_col: 124,
       },
     )
     .expect("cells should be fetched");
@@ -3417,6 +3457,8 @@ mod tests {
     assert_eq!(by_position(1, 120).evaluated_value.as_deref(), Some("12"));
     assert_eq!(by_position(1, 121).evaluated_value.as_deref(), Some("20800"));
     assert_eq!(by_position(1, 122).evaluated_value.as_deref(), Some("200"));
+    assert_eq!(by_position(1, 123).evaluated_value.as_deref(), Some("20800.0"));
+    assert_eq!(by_position(1, 124).evaluated_value.as_deref(), Some("9600"));
   }
 
   #[test]

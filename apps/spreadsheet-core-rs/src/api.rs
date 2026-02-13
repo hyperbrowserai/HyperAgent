@@ -55,6 +55,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "COUNTBLANK",
   "COUNTIF",
   "COUNTIFS",
+  "PRODUCT",
+  "SUMSQ",
   "SUMPRODUCT",
   "SUMIF",
   "SUMIFS",
