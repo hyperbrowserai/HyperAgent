@@ -497,6 +497,11 @@ export async function loadMCPServersFromFile(
     );
   }
   const normalizedFilePath = filePath.trim();
+  if (hasAnyControlChars(normalizedFilePath)) {
+    throw new Error(
+      "Failed to read MCP config file: path contains unsupported control characters."
+    );
+  }
 
   let fileStats: fs.Stats | undefined;
   try {

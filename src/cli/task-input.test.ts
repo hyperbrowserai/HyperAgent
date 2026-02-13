@@ -85,6 +85,14 @@ describe("loadTaskDescriptionFromFile", () => {
     ).rejects.toThrow("Task description file path must be a non-empty string.");
   });
 
+  it("throws when task file path contains control characters", async () => {
+    await expect(
+      loadTaskDescriptionFromFile("task\nfile.txt")
+    ).rejects.toThrow(
+      "Task description file path contains unsupported control characters."
+    );
+  });
+
   it("loads and trims task description text", async () => {
     const tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "hyperagent-task-input-")

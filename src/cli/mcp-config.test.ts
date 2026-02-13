@@ -634,6 +634,14 @@ describe("loadMCPServersFromFile", () => {
     );
   });
 
+  it("throws when config file path contains control characters", async () => {
+    await expect(
+      loadMCPServersFromFile("mcp\nconfig.json")
+    ).rejects.toThrow(
+      "Failed to read MCP config file: path contains unsupported control characters."
+    );
+  });
+
   it("loads and parses server config from file", async () => {
     const tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "hyperagent-mcp-config-")

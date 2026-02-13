@@ -11,6 +11,13 @@ function hasUnsupportedControlChars(value: string): boolean {
   });
 }
 
+function hasAnyControlChars(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127;
+  });
+}
+
 export function normalizeTaskDescription(
   value: string,
   sourceLabel: string
@@ -53,6 +60,11 @@ export async function loadTaskDescriptionFromFile(
     );
   }
   const normalizedFilePath = filePath.trim();
+  if (hasAnyControlChars(normalizedFilePath)) {
+    throw new Error(
+      "Task description file path contains unsupported control characters."
+    );
+  }
 
   let fileStats: fs.Stats | undefined;
   try {
