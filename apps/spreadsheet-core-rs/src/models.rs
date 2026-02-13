@@ -189,6 +189,12 @@ pub struct PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
+  pub request_id_prefix: String,
+  pub sample_limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplayAgentOpsCacheEntryRequest {
   pub request_id: String,
 }

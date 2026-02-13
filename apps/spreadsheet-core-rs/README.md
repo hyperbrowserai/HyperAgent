@@ -105,7 +105,7 @@ Cache helpers:
 - `POST /v1/workbooks/{id}/agent/ops/cache/reexecute` with `{ "request_id": "...", "new_request_id": "..." }` (reexecutes cached operations as fresh `agent/ops`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix` with `{ "request_id_prefix": "scenario-" }`
-- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview` with `{ "request_id_prefix": "scenario-" }` (reports matched count + sample IDs before deletion)
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview` with `{ "request_id_prefix": "scenario-", "sample_limit": 10 }` (optional sample_limit, reports matched count + sample IDs before deletion)
 
 Supported `op_type` values:
 - `get_workbook`

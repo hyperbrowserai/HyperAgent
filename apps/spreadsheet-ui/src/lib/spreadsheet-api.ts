@@ -330,13 +330,21 @@ export async function removeAgentOpsCacheEntriesByPrefix(
 export async function previewRemoveAgentOpsCacheEntriesByPrefix(
   workbookId: string,
   requestIdPrefix: string,
+  sampleLimit?: number,
 ): Promise<PreviewRemoveAgentOpsCacheEntriesByPrefixResponse> {
+  const safeSampleLimit =
+    typeof sampleLimit === "number"
+      ? Math.max(1, Math.min(sampleLimit, 100))
+      : undefined;
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove-by-prefix/preview`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ request_id_prefix: requestIdPrefix }),
+      body: JSON.stringify({
+        request_id_prefix: requestIdPrefix,
+        sample_limit: safeSampleLimit,
+      }),
     },
   );
   return parseJsonResponse<PreviewRemoveAgentOpsCacheEntriesByPrefixResponse>(response);

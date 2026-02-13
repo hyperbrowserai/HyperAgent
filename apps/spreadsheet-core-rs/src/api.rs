@@ -10,6 +10,7 @@ use crate::{
     RemoveAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntryResponse,
     RemoveAgentOpsCacheEntriesByPrefixRequest,
     RemoveAgentOpsCacheEntriesByPrefixResponse,
+    PreviewRemoveAgentOpsCacheEntriesByPrefixRequest,
     PreviewRemoveAgentOpsCacheEntriesByPrefixResponse,
     ReexecuteAgentOpsCacheEntryRequest, ReexecuteAgentOpsCacheEntryResponse,
     ReplayAgentOpsCacheEntryRequest, ReplayAgentOpsCacheEntryResponse,
@@ -1146,6 +1147,10 @@ async fn get_agent_schema(
       "removed_entries": "number of removed cache entries matching prefix",
       "remaining_entries": "entries left in cache after removal"
     },
+    "agent_ops_cache_remove_by_prefix_preview_request_shape": {
+      "request_id_prefix": "string (required)",
+      "sample_limit": "optional number (default 20, max 100)"
+    },
     "agent_ops_cache_remove_by_prefix_preview_response_shape": {
       "request_id_prefix": "string",
       "matched_entries": "number of cache entries matching prefix",
@@ -1752,12 +1757,13 @@ async fn remove_agent_ops_cache_entries_by_prefix(
   }))
 }
 
-const REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT: usize = 20;
+const DEFAULT_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT: usize = 20;
+const MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT: usize = 100;
 
 async fn preview_remove_agent_ops_cache_entries_by_prefix(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
-  Json(payload): Json<RemoveAgentOpsCacheEntriesByPrefixRequest>,
+  Json(payload): Json<PreviewRemoveAgentOpsCacheEntriesByPrefixRequest>,
 ) -> Result<Json<PreviewRemoveAgentOpsCacheEntriesByPrefixResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
   let request_id_prefix = payload.request_id_prefix.trim();
@@ -1767,12 +1773,16 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
       "request_id_prefix is required to preview cache removal by prefix.",
     ));
   }
+  let sample_limit = payload
+    .sample_limit
+    .unwrap_or(DEFAULT_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT)
+    .min(MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT);
   let (matched_entries, entries) = state
     .agent_ops_cache_entries(
       workbook_id,
       Some(request_id_prefix),
       0,
-      REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
+      sample_limit,
     )
     .await?;
   let sample_request_ids = entries
@@ -1782,7 +1792,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
   Ok(Json(PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
     request_id_prefix: request_id_prefix.to_string(),
     matched_entries,
-    sample_limit: REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
+    sample_limit,
     sample_request_ids,
   }))
 }
@@ -2003,6 +2013,7 @@ mod tests {
     models::{
       AgentOperation, AgentOpsRequest, RemoveAgentOpsCacheEntryRequest,
       RemoveAgentOpsCacheEntriesByPrefixRequest,
+      PreviewRemoveAgentOpsCacheEntriesByPrefixRequest,
       ReexecuteAgentOpsCacheEntryRequest,
       ReplayAgentOpsCacheEntryRequest,
     },
@@ -2646,8 +2657,9 @@ mod tests {
     let preview = preview_remove_agent_ops_cache_entries_by_prefix(
       State(state),
       Path(workbook.id),
-      Json(RemoveAgentOpsCacheEntriesByPrefixRequest {
+      Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
         request_id_prefix: "scenario-".to_string(),
+        sample_limit: Some(1),
       }),
     )
     .await
@@ -2655,7 +2667,8 @@ mod tests {
     .0;
     assert_eq!(preview.request_id_prefix, "scenario-");
     assert_eq!(preview.matched_entries, 2);
-    assert_eq!(preview.sample_request_ids.len(), 2);
+    assert_eq!(preview.sample_limit, 1);
+    assert_eq!(preview.sample_request_ids.len(), 1);
     assert_eq!(preview.sample_request_ids[0], "scenario-b");
   }
 
@@ -2700,8 +2713,9 @@ mod tests {
     let error = preview_remove_agent_ops_cache_entries_by_prefix(
       State(state),
       Path(workbook.id),
-      Json(RemoveAgentOpsCacheEntriesByPrefixRequest {
+      Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
         request_id_prefix: "   ".to_string(),
+        sample_limit: None,
       }),
     )
     .await
