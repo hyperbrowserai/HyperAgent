@@ -16,6 +16,38 @@ interface ServerConnection {
   actions: AgentActionDefinition[];
 }
 
+const MCPToolActionParams = z.object({
+  params: z
+    .union([z.string(), z.record(z.string(), z.unknown())])
+    .describe(
+      "Parameters for the MCP tool. Provide either a JSON object directly or a JSON string."
+    ),
+});
+
+type MCPToolActionInput = z.infer<typeof MCPToolActionParams>;
+
+export function normalizeMCPToolParams(
+  input: MCPToolActionInput["params"]
+): Record<string, unknown> {
+  if (typeof input === "string") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Invalid MCP tool params JSON string: ${message}`);
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error(
+        "MCP tool params must parse to a JSON object, not an array or primitive"
+      );
+    }
+    return parsed as Record<string, unknown>;
+  }
+
+  return input;
+}
+
 class MCPClient {
   private servers: Map<string, ServerConnection> = new Map();
   private debug: boolean;
@@ -115,18 +147,12 @@ class MCPClient {
           // Create action definition
           return {
             type: tool.name,
-            actionParams: z
-              .object({
-                params: z
-                  .string()
-                  .describe(
-                    `The stringified parameters to the ${tool.name} MCP tool. Here is the schema: ${JSON.stringify(tool.inputSchema)}`
-                  ),
-              })
-              .describe(tool.description ?? ""),
+            actionParams: MCPToolActionParams.describe(
+              `${tool.description ?? ""} Tool input schema: ${JSON.stringify(tool.inputSchema)}`
+            ),
             run: async (
               ctx: ActionContext,
-              action: any
+              action: MCPToolActionInput
             ): Promise<ActionOutput> => {
               if (!ctx.mcpClient) {
                 throw new Error(
@@ -134,7 +160,7 @@ class MCPClient {
                 );
               }
 
-              const params = JSON.parse(action.params);
+              const params = normalizeMCPToolParams(action.params);
               const targetServerId = serverId;
 
               const result = await ctx.mcpClient.executeTool(
