@@ -2851,6 +2851,30 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.workbook_import_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                workbook import endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.workbook_import_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.workbook_export_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                workbook export endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.workbook_export_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.workbook_export_response_headers_shape ? (
+              <p className="mb-2 text-xs text-slate-400">
+                export headers:{" "}
+                <span className="font-mono text-slate-200">
+                  {Object.keys(agentSchemaQuery.data.workbook_export_response_headers_shape).join(", ")}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.agent_ops_cache_stats_endpoint ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache stats endpoint:{" "}

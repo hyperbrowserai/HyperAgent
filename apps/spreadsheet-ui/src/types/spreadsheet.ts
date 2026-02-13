@@ -198,6 +198,10 @@ export interface AgentPresetInfo {
 
 export interface AgentSchemaInfo {
   endpoint: string;
+  workbook_import_endpoint?: string;
+  workbook_export_endpoint?: string;
+  workbook_import_response_shape?: Record<string, unknown>;
+  workbook_export_response_headers_shape?: Record<string, string>;
   agent_ops_preview_endpoint?: string;
   agent_ops_cache_stats_endpoint?: string;
   agent_ops_cache_entries_endpoint?: string;

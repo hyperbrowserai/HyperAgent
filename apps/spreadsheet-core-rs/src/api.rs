@@ -1060,6 +1060,24 @@ async fn get_agent_schema(
       "served_from_cache": "boolean; true when response reused by request_id idempotency cache",
       "results": "array of operation results"
     },
+    "workbook_import_endpoint": "/v1/workbooks/import",
+    "workbook_import_response_shape": {
+      "workbook": "imported workbook summary",
+      "import": {
+        "sheets_imported": "number of imported sheets",
+        "cells_imported": "number of imported cells",
+        "formula_cells_imported": "number of imported cells carrying formulas",
+        "formula_cells_with_cached_values": "formula cells with cached scalar values",
+        "formula_cells_without_cached_values": "formula cells without cached scalar values",
+        "warnings": "array of compatibility warning strings"
+      }
+    },
+    "workbook_export_endpoint": "/v1/workbooks/{id}/export",
+    "workbook_export_response_headers_shape": {
+      "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "content-disposition": "attachment filename for exported workbook",
+      "x-export-meta": "json compatibility report with preserved/transformed/unsupported arrays"
+    },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
@@ -4487,6 +4505,49 @@ mod tests {
         .get("agent_ops_cache_entry_detail_endpoint")
         .and_then(serde_json::Value::as_str),
       Some("/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_import_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/import"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_export_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/export"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_import_response_shape")
+        .and_then(|value| value.get("import"))
+        .and_then(|value| value.get("formula_cells_imported"))
+        .and_then(serde_json::Value::as_str),
+      Some("number of imported cells carrying formulas"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_import_response_shape")
+        .and_then(|value| value.get("import"))
+        .and_then(|value| value.get("formula_cells_with_cached_values"))
+        .and_then(serde_json::Value::as_str),
+      Some("formula cells with cached scalar values"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_import_response_shape")
+        .and_then(|value| value.get("import"))
+        .and_then(|value| value.get("formula_cells_without_cached_values"))
+        .and_then(serde_json::Value::as_str),
+      Some("formula cells without cached scalar values"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_export_response_headers_shape")
+        .and_then(|value| value.get("x-export-meta"))
+        .and_then(serde_json::Value::as_str),
+      Some("json compatibility report with preserved/transformed/unsupported arrays"),
     );
     assert_eq!(
       schema
