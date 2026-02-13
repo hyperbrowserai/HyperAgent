@@ -178,6 +178,26 @@ describe("ExtractActionDefinition.run", () => {
     }
   });
 
+  it("continues extraction when debug directory creation fails", async () => {
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw new Error("mkdir failed");
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createContext(undefined, { debugDir: "debug", debug: true });
+
+    try {
+      const result = await ExtractActionDefinition.run(ctx, {
+        objective: "Extract title",
+      });
+
+      expect(result.success).toBe(true);
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      mkdirSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("returns failure when llm responds without text content", async () => {
     const emptyTextLlm = createMockLLM(
       jest.fn().mockResolvedValue({
