@@ -89,6 +89,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "MID",
   "REPT",
   "SEARCH",
+  "FIND",
   "UPPER",
   "LOWER",
   "TRIM",

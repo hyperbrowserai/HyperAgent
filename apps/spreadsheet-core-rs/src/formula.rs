@@ -494,6 +494,16 @@ pub fn parse_search_formula(
   Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
 }
 
+pub fn parse_find_formula(
+  formula: &str,
+) -> Option<(String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "FIND" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
+}
+
 pub fn parse_date_formula(formula: &str) -> Option<(String, String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "DATE" && args.len() == 3 {
@@ -796,7 +806,8 @@ mod tests {
     parse_minifs_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
-    parse_mid_formula, parse_rept_formula, parse_search_formula,
+    parse_find_formula, parse_mid_formula, parse_rept_formula,
+    parse_search_formula,
     parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
@@ -1022,6 +1033,12 @@ mod tests {
     assert_eq!(search_args.0, r#""sheet""#);
     assert_eq!(search_args.1, r#""spreadsheet""#);
     assert_eq!(search_args.2.as_deref(), Some("2"));
+
+    let find_args = parse_find_formula(r#"=FIND("sheet","spreadsheet",2)"#)
+      .expect("find should parse");
+    assert_eq!(find_args.0, r#""sheet""#);
+    assert_eq!(find_args.1, r#""spreadsheet""#);
+    assert_eq!(find_args.2.as_deref(), Some("2"));
 
     let date_parts = parse_date_formula("=DATE(2026,2,13)").expect("date should parse");
     assert_eq!(date_parts, ("2026".to_string(), "2".to_string(), "13".to_string()));

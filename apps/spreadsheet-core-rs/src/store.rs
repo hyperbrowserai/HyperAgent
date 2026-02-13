@@ -18,6 +18,7 @@ use crate::{
     parse_power_formula,
     parse_or_formula, parse_rept_formula, parse_right_formula,
     parse_search_formula,
+    parse_find_formula,
     parse_single_ref_formula,
     parse_xor_formula,
     parse_sign_formula,
@@ -671,6 +672,33 @@ fn evaluate_formula(
       .to_lowercase();
     let needle = find_text.to_lowercase();
     let Some(byte_index) = candidate.find(&needle) else {
+      return Ok(None);
+    };
+    let char_index = candidate[..byte_index].chars().count();
+    let result_position = start_index + char_index + 1;
+    return Ok(Some(result_position.to_string()));
+  }
+
+  if let Some((find_text_arg, within_text_arg, start_num_arg)) =
+    parse_find_formula(formula)
+  {
+    let find_text = resolve_scalar_operand(connection, sheet, &find_text_arg)?;
+    let within_text = resolve_scalar_operand(connection, sheet, &within_text_arg)?;
+    let start_num = match start_num_arg {
+      Some(raw_start) => parse_required_integer(connection, sheet, &raw_start)?,
+      None => 1,
+    };
+    if start_num < 1 || find_text.is_empty() {
+      return Ok(None);
+    }
+    let start_index = usize::try_from(start_num - 1).unwrap_or(0);
+    let within_chars = within_text.chars().collect::<Vec<char>>();
+    if start_index >= within_chars.len() {
+      return Ok(None);
+    }
+
+    let candidate = within_chars[start_index..].iter().collect::<String>();
+    let Some(byte_index) = candidate.find(&find_text) else {
       return Ok(None);
     };
     let char_index = candidate[..byte_index].chars().count();
@@ -2438,12 +2466,24 @@ mod tests {
         value: None,
         formula: Some(r#"=SEARCH("E","Southeast",5)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 78,
+        value: None,
+        formula: Some(r#"=FIND("sheet","spreadsheet")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 79,
+        value: None,
+        formula: Some(r#"=FIND("e","Southeast",5)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 75);
+    assert_eq!(updated_cells, 77);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2457,7 +2497,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 77,
+        end_col: 79,
       },
     )
     .expect("cells should be fetched");
@@ -2570,6 +2610,8 @@ mod tests {
     assert_eq!(by_position(1, 75).evaluated_value.as_deref(), Some("nananana"));
     assert_eq!(by_position(1, 76).evaluated_value.as_deref(), Some("7"));
     assert_eq!(by_position(1, 77).evaluated_value.as_deref(), Some("6"));
+    assert_eq!(by_position(1, 78).evaluated_value.as_deref(), Some("7"));
+    assert_eq!(by_position(1, 79).evaluated_value.as_deref(), Some("6"));
   }
 
   #[test]
@@ -2728,6 +2770,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec![r#"=SEARCH("z","north")"#.to_string()]);
+  }
+
+  #[test]
+  fn should_leave_find_case_mismatch_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=FIND("S","southeast")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=FIND("S","southeast")"#.to_string()]);
   }
 
   #[test]
