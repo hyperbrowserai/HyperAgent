@@ -717,9 +717,9 @@ function safeGetServerToolNames(server: ServerConnection): string[] {
     if (!tools || typeof tools !== "object") {
       return [];
     }
-    return Array.from((tools as Map<string, Tool>).keys()).filter(
-      (name): name is string => typeof name === "string"
-    );
+    return Array.from((tools as Map<string, Tool>).keys())
+      .filter((name): name is string => typeof name === "string")
+      .map((name) => formatMCPIdentifier(name, "unknown-tool"));
   } catch {
     return [];
   }

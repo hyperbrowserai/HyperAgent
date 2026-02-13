@@ -2810,6 +2810,28 @@ describe("MCPClient server metadata accessors", () => {
     expect(info[0].toolNames).toEqual(["search"]);
   });
 
+  it("sanitizes oversized tool names in server info output", () => {
+    const mcpClient = new MCPClient(false);
+    const oversizedToolName = `tool-${"x".repeat(200)}\nunsafe`;
+    setServersForClient(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([[oversizedToolName, {}]]),
+          },
+        ],
+      ])
+    );
+
+    const info = mcpClient.getServerInfo();
+    expect(info).toHaveLength(1);
+    expect(info[0].toolCount).toBe(1);
+    expect(info[0].toolNames[0]).toContain("[truncated]");
+    expect(info[0].toolNames[0]).not.toContain("\n");
+  });
+
   it("sanitizes oversized server identifiers in server id output", () => {
     const mcpClient = new MCPClient(false);
     const oversizedServerId = `server-${"x".repeat(300)}\nunsafe`;
