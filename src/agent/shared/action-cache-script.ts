@@ -11,6 +11,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
+const asNonEmptyTrimmedString = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
 const asNumber = (value: unknown): number | undefined => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -73,12 +81,10 @@ export function createScriptFromActionCache(
       const actionParams = isRecord(step.actionParams)
         ? step.actionParams
         : undefined;
-      const argumentUrl = isNonEmptyString(step.arguments?.[0])
-        ? step.arguments[0]
-        : "";
+      const argumentUrl = asNonEmptyTrimmedString(step.arguments?.[0]) ?? "";
       const urlArg =
         argumentUrl ||
-        (isNonEmptyString(actionParams?.url) ? actionParams.url : "") ||
+        (asNonEmptyTrimmedString(actionParams?.url) ?? "") ||
         "https://example.com";
       return `${indent}// Step ${step.stepIndex}
 ${indent}await page.goto(

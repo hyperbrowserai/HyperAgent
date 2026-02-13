@@ -57,6 +57,28 @@ describe("action cache helpers", () => {
     expect(script).toContain('"https://example.org"');
   });
 
+  it("trims goToUrl argument before script generation", () => {
+    const goToEntry: ActionCacheEntry = {
+      stepIndex: 9,
+      instruction: "navigate",
+      elementId: null,
+      method: null,
+      arguments: ["  https://trimmed.example  "],
+      actionType: "goToUrl",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [goToEntry],
+    });
+
+    expect(script).toContain('"https://trimmed.example"');
+    expect(script).not.toContain('"  https://trimmed.example  "');
+  });
+
   it("renders wait script timeout from numeric actionParams duration", () => {
     const waitEntry: ActionCacheEntry = {
       stepIndex: 2,
