@@ -32,6 +32,23 @@ describe("LocalBrowserProvider lifecycle hardening", () => {
     await expect(provider.start()).rejects.toThrow(/\[truncated/);
   });
 
+  it("sanitizes control characters in launch diagnostics", async () => {
+    launch.mockRejectedValue(new Error(`launch\u0000\n${"x".repeat(2_000)}`));
+    const provider = new LocalBrowserProvider();
+
+    await provider
+      .start()
+      .then(() => {
+        throw new Error("expected start to reject");
+      })
+      .catch((error) => {
+        const message = String(error instanceof Error ? error.message : error);
+        expect(message).toContain("[truncated");
+        expect(message).not.toContain("\u0000");
+        expect(message).not.toContain("\n");
+      });
+  });
+
   it("rejects invalid launch payloads", async () => {
     launch.mockResolvedValue("invalid-browser" as never);
     const provider = new LocalBrowserProvider();
@@ -64,6 +81,28 @@ describe("LocalBrowserProvider lifecycle hardening", () => {
     } as never;
 
     await expect(provider.close()).rejects.toThrow(/\[truncated/);
+    expect(provider.getSession()).toBeNull();
+  });
+
+  it("sanitizes control characters in close diagnostics", async () => {
+    const provider = new LocalBrowserProvider();
+    provider.session = {
+      close: async () => {
+        throw new Error(`close\u0000\n${"x".repeat(2_000)}`);
+      },
+    } as never;
+
+    await provider
+      .close()
+      .then(() => {
+        throw new Error("expected close to reject");
+      })
+      .catch((error) => {
+        const message = String(error instanceof Error ? error.message : error);
+        expect(message).toContain("[truncated");
+        expect(message).not.toContain("\u0000");
+        expect(message).not.toContain("\n");
+      });
     expect(provider.getSession()).toBeNull();
   });
 

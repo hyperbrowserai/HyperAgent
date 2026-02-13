@@ -82,6 +82,31 @@ describe("HyperbrowserProvider lifecycle hardening", () => {
     await expect(provider.start()).rejects.toThrow(/\[truncated/);
   });
 
+  it("sanitizes control characters in start diagnostics", async () => {
+    createSession.mockResolvedValue({
+      id: "session-1",
+      wsEndpoint: "ws://example",
+      liveUrl: "https://live",
+      sessionUrl: "https://session",
+    });
+    connectOverCDP.mockRejectedValue(new Error(`cdp\u0000\n${"x".repeat(2_000)}`));
+    stopSession.mockRejectedValue(new Error(`stop\u0000\n${"x".repeat(2_000)}`));
+
+    const provider = new HyperbrowserProvider();
+
+    await provider
+      .start()
+      .then(() => {
+        throw new Error("expected start to reject");
+      })
+      .catch((error) => {
+        const message = String(error instanceof Error ? error.message : error);
+        expect(message).toContain("[truncated");
+        expect(message).not.toContain("\u0000");
+        expect(message).not.toContain("\n");
+      });
+  });
+
   it("rejects missing websocket endpoints and cleans up session", async () => {
     createSession.mockResolvedValue({
       id: "session-1",
@@ -161,5 +186,35 @@ describe("HyperbrowserProvider lifecycle hardening", () => {
     stopSession.mockRejectedValue(new Error("x".repeat(2_000)));
 
     await expect(provider.close()).rejects.toThrow(/\[truncated/);
+  });
+
+  it("sanitizes control characters in close diagnostics", async () => {
+    const provider = new HyperbrowserProvider();
+    provider.browser = {
+      close: async () => {
+        throw new Error(`browser\u0000\n${"x".repeat(2_000)}`);
+      },
+    } as never;
+    provider.session = {
+      id: "session-1",
+    } as never;
+    provider.hbClient = {
+      sessions: {
+        stop: stopSession,
+      },
+    } as never;
+    stopSession.mockRejectedValue(new Error(`stop\u0000\n${"x".repeat(2_000)}`));
+
+    await provider
+      .close()
+      .then(() => {
+        throw new Error("expected close to reject");
+      })
+      .catch((error) => {
+        const message = String(error instanceof Error ? error.message : error);
+        expect(message).toContain("[truncated");
+        expect(message).not.toContain("\u0000");
+        expect(message).not.toContain("\n");
+      });
   });
 });

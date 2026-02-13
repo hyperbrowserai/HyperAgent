@@ -12,7 +12,13 @@ import { formatUnknownError } from "@/utils";
 const MAX_HYPERBROWSER_DIAGNOSTIC_CHARS = 400;
 
 const formatHyperbrowserDiagnostic = (value: unknown): string => {
-  const normalized = formatUnknownError(value).replace(/\s+/g, " ").trim();
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
   const fallback = normalized.length > 0 ? normalized : "unknown error";
   if (fallback.length <= MAX_HYPERBROWSER_DIAGNOSTIC_CHARS) {
     return fallback;

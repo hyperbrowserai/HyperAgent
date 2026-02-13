@@ -16,7 +16,13 @@ export class LocalBrowserProvider extends BrowserProvider<Browser> {
   }
 
   private formatDiagnostic(value: unknown): string {
-    const normalized = formatUnknownError(value).replace(/\s+/g, " ").trim();
+    const normalized = Array.from(formatUnknownError(value), (char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    })
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
     const fallback = normalized.length > 0 ? normalized : "unknown error";
     if (fallback.length <= LocalBrowserProvider.MAX_DIAGNOSTIC_CHARS) {
       return fallback;
