@@ -740,4 +740,27 @@ describe("runAgentTask completion behavior", () => {
     expect(summaryContent).toContain("[truncated");
     expect(summaryContent.length).toBeLessThan(3_600);
   });
+
+  it("caps schema-error history to avoid unbounded growth", async () => {
+    const page = createMockPage();
+    const ctx = createSchemaRetryCtx("not-json");
+    ctx.schemaErrors = Array.from({ length: 20 }, (_, index) => ({
+      stepIndex: 100 + index,
+      error: `existing-error-${index}`,
+      rawResponse: "{}",
+    }));
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await runAgentTask(ctx, createTaskState(page));
+
+      expect(ctx.schemaErrors).toHaveLength(20);
+      expect(ctx.schemaErrors?.some((error) => error.stepIndex === 100)).toBe(
+        false
+      );
+      expect(ctx.schemaErrors?.some((error) => error.stepIndex === 0)).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

@@ -49,6 +49,7 @@ const MAX_STRUCTURED_DIAGNOSTIC_PARSE_CHARS = 100_000;
 const MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS = 4_000;
 const MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS = 8_000;
 const MAX_SCHEMA_ERROR_SUMMARY_CHARS = 3_000;
+const MAX_SCHEMA_ERROR_HISTORY = 20;
 
 function truncateDiagnosticText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -622,14 +623,22 @@ export const runAgentTask = async (
           );
 
           // Store error for cross-step learning
-          ctx.schemaErrors?.push({
-            stepIndex: currStep,
-            error: validationErrorForPrompt,
-            rawResponse: truncateDiagnosticText(
-              structuredResult.rawText || "",
-              MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS
-            ),
-          });
+          if (ctx.schemaErrors) {
+            ctx.schemaErrors.push({
+              stepIndex: currStep,
+              error: validationErrorForPrompt,
+              rawResponse: truncateDiagnosticText(
+                structuredResult.rawText || "",
+                MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS
+              ),
+            });
+            if (ctx.schemaErrors.length > MAX_SCHEMA_ERROR_HISTORY) {
+              ctx.schemaErrors.splice(
+                0,
+                ctx.schemaErrors.length - MAX_SCHEMA_ERROR_HISTORY
+              );
+            }
+          }
 
           // Append error feedback for next retry
           if (attempt < maxAttempts - 1) {
