@@ -690,6 +690,20 @@ export function SpreadsheetApp() {
     await Promise.all(tasks);
   }
 
+  async function refreshAgentOpsCacheQueries(workbookId: string): Promise<void> {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["agent-ops-cache", workbookId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["agent-ops-cache-entries", workbookId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["agent-ops-cache-prefixes", workbookId],
+      }),
+    ]);
+  }
+
   async function handleSaveFormula() {
     if (!workbook) {
       return;
@@ -1347,17 +1361,7 @@ export function SpreadsheetApp() {
           ? "Replay served from idempotency cache."
           : "Replay executed fresh (cache miss).",
       );
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-entries", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-prefixes", workbook.id],
-        }),
-      ]);
+      await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -1382,17 +1386,7 @@ export function SpreadsheetApp() {
       setCacheEntriesOffset(0);
       setSelectedCacheEntryDetail(null);
       setNotice(`Cleared ${response.cleared_entries} cached request entries.`);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-entries", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-prefixes", workbook.id],
-        }),
-      ]);
+      await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
       applyUiError(error, "Failed to clear agent ops idempotency cache.");
     } finally {
@@ -1513,17 +1507,7 @@ export function SpreadsheetApp() {
       setLastServedFromCache(response.cached_response.served_from_cache ?? true);
       setLastAgentOps(response.cached_response.results);
       setNotice(`Replayed cached response for request_id ${requestId}.`);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-entries", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-prefixes", workbook.id],
-        }),
-      ]);
+      await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
       applyUiError(error, "Failed to replay cached request id.");
     } finally {
@@ -1556,15 +1540,7 @@ export function SpreadsheetApp() {
         }.`,
       );
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-entries", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-prefixes", workbook.id],
-        }),
+        refreshAgentOpsCacheQueries(workbook.id),
         queryClient.invalidateQueries({
           queryKey: ["cells", workbook.id, activeSheet],
         }),
@@ -1598,17 +1574,7 @@ export function SpreadsheetApp() {
           ? `Removed cache entry ${response.request_id}.`
           : `No cache entry found for ${response.request_id}.`,
       );
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-entries", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-prefixes", workbook.id],
-        }),
-      ]);
+      await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
       applyUiError(error, "Failed to remove cache request id.");
     } finally {
@@ -1658,17 +1624,7 @@ export function SpreadsheetApp() {
             : ""
         }.`,
       );
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-entries", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-prefixes", workbook.id],
-        }),
-      ]);
+      await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
       applyUiError(error, "Failed to remove cache entries by prefix.");
     } finally {
@@ -1845,17 +1801,7 @@ export function SpreadsheetApp() {
             : ""
         }.`,
       );
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-entries", workbook.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache-prefixes", workbook.id],
-        }),
-      ]);
+      await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
       applyUiError(error, "Failed to remove stale cache entries.");
     } finally {
