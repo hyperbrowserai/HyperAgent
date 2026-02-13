@@ -8,6 +8,35 @@ import { getDebugOptions } from "@/debug/options";
 import { formatUnknownError } from "@/utils";
 import type { CDPSession as PlaywrightSession, Frame, Page } from "playwright-core";
 
+const MAX_PLAYWRIGHT_ADAPTER_DIAGNOSTIC_CHARS = 400;
+
+function sanitizePlaywrightAdapterDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncatePlaywrightAdapterDiagnostic(value: string): string {
+  if (value.length <= MAX_PLAYWRIGHT_ADAPTER_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  const omitted = value.length - MAX_PLAYWRIGHT_ADAPTER_DIAGNOSTIC_CHARS;
+  return `${value.slice(0, MAX_PLAYWRIGHT_ADAPTER_DIAGNOSTIC_CHARS)}... [truncated ${omitted} chars]`;
+}
+
+function formatPlaywrightAdapterDiagnostic(value: unknown): string {
+  const normalized = sanitizePlaywrightAdapterDiagnostic(formatUnknownError(value));
+  if (normalized.length === 0) {
+    return "unknown error";
+  }
+  return truncatePlaywrightAdapterDiagnostic(normalized);
+}
+
 class PlaywrightSessionAdapter implements CDPSession {
   readonly raw: PlaywrightSession;
   readonly id: string | null;
@@ -66,7 +95,9 @@ class PlaywrightSessionAdapter implements CDPSession {
       await this.session.detach();
     } catch (error) {
       console.warn(
-        `[CDP][PlaywrightAdapter] Failed to detach session: ${formatUnknownError(error)}`
+        `[CDP][PlaywrightAdapter] Failed to detach session: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
       );
     } finally {
       this.release(this);
@@ -276,7 +307,9 @@ export async function disposeCDPClientForPage(page: Page): Promise<void> {
   if (!client) return;
   await client.dispose().catch((error) => {
     console.warn(
-      `[CDP][PlaywrightAdapter] Failed to dispose client for page: ${formatUnknownError(error)}`
+      `[CDP][PlaywrightAdapter] Failed to dispose client for page: ${formatPlaywrightAdapterDiagnostic(
+        error
+      )}`
     );
   });
 }
@@ -288,7 +321,9 @@ export async function disposeAllCDPClients(): Promise<void> {
       pendingClients.delete(page);
       await client.dispose().catch((error) => {
         console.warn(
-          `[CDP][PlaywrightAdapter] Failed to dispose cached client: ${formatUnknownError(error)}`
+          `[CDP][PlaywrightAdapter] Failed to dispose cached client: ${formatPlaywrightAdapterDiagnostic(
+            error
+          )}`
         );
       });
     }
