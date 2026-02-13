@@ -23,6 +23,7 @@ import { loadMCPServersFromFile } from "./mcp-config";
 import { setRawModeIfSupported } from "./stdin-utils";
 import { loadTaskDescriptionFromFile } from "./task-input";
 import { pauseTaskIfRunning, resumeTaskIfPaused } from "./task-controls";
+import { attachTaskErrorHandler } from "./task-error-handler";
 
 const program = new Command();
 
@@ -140,6 +141,12 @@ program
       });
 
       let task: Task;
+      const onTaskError = (error: unknown): void => {
+        console.log(chalk.red(formatCliError(error)));
+        if (debug) {
+          console.trace(error);
+        }
+      };
 
       readline.emitKeypressEvents(process.stdin);
 
@@ -239,10 +246,7 @@ program
             debugOnAgentOutput: debugAgentOutput,
             onComplete: onComplete,
           });
-          task.emitter.addListener("error", (error) => {
-            task.cancel();
-            throw error;
-          });
+          attachTaskErrorHandler(task, onTaskError);
         } else {
           process.exit(0);
         }
@@ -274,10 +278,7 @@ program
         onComplete: onComplete,
         debugOnAgentOutput: debugAgentOutput,
       });
-      task.emitter.addListener("error", (error) => {
-        task.cancel();
-        throw error;
-      });
+      attachTaskErrorHandler(task, onTaskError);
     } catch (err) {
       console.log(chalk.red(formatCliError(err)));
       if (debug) {
