@@ -376,6 +376,54 @@ function createCircularParamsStepCtx(): AgentCtx {
   };
 }
 
+function createSchemaErrorSummaryCtx(): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "final answer",
+      },
+    },
+  };
+
+  const invokeStructured = jest.fn().mockResolvedValue({
+    rawText: JSON.stringify(parsedAction),
+    parsed: parsedAction,
+  });
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured,
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [createCompleteActionDefinition()],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+    schemaErrors: [
+      { stepIndex: 10, error: "x".repeat(3000), rawResponse: "{}" },
+      { stepIndex: 11, error: "y".repeat(3000), rawResponse: "{}" },
+      { stepIndex: 12, error: "z".repeat(3000), rawResponse: "{}" },
+    ],
+  };
+}
+
 function createTaskState(page: Page): TaskState {
   return {
     id: "task-1",
@@ -665,5 +713,31 @@ describe("runAgentTask completion behavior", () => {
     const result = await runAgentTask(ctx, createTaskState(page));
     expect(result.status).toBe(TaskStatus.COMPLETED);
     expect(result.output).toBe("final answer");
+  });
+
+  it("truncates schema-error summaries appended to retry context", async () => {
+    const page = createMockPage();
+    const ctx = createSchemaErrorSummaryCtx();
+
+    await runAgentTask(ctx, createTaskState(page));
+
+    const invokeStructuredMock = (
+      ctx.llm as unknown as { invokeStructured: jest.Mock }
+    ).invokeStructured;
+    const firstCallMessages = invokeStructuredMock.mock.calls[0]?.[1] as Array<{
+      role: string;
+      content: unknown;
+    }>;
+    const schemaSummaryMessage = firstCallMessages.find(
+      (message) =>
+        message.role === "user" &&
+        typeof message.content === "string" &&
+        message.content.includes("Previous steps had schema validation errors")
+    );
+
+    expect(schemaSummaryMessage).toBeDefined();
+    const summaryContent = schemaSummaryMessage?.content as string;
+    expect(summaryContent).toContain("[truncated");
+    expect(summaryContent.length).toBeLessThan(3_600);
   });
 });

@@ -48,6 +48,7 @@ const MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS = 4;
 const MAX_STRUCTURED_DIAGNOSTIC_PARSE_CHARS = 100_000;
 const MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS = 4_000;
 const MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS = 8_000;
+const MAX_SCHEMA_ERROR_SUMMARY_CHARS = 3_000;
 
 function truncateDiagnosticText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -501,10 +502,13 @@ export const runAgentTask = async (
 
       // Append accumulated schema errors from previous steps
       if (ctx.schemaErrors && ctx.schemaErrors.length > 0) {
-        const errorSummary = ctx.schemaErrors
-          .slice(-3) // Only keep last 3 errors to avoid context bloat
-          .map((err) => `Step ${err.stepIndex}: ${err.error}`)
-          .join("\n");
+        const errorSummary = truncateDiagnosticText(
+          ctx.schemaErrors
+            .slice(-3) // Only keep last 3 errors to avoid context bloat
+            .map((err) => `Step ${err.stepIndex}: ${err.error}`)
+            .join("\n"),
+          MAX_SCHEMA_ERROR_SUMMARY_CHARS
+        );
 
         msgs = [
           ...msgs,
