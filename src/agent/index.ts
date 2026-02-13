@@ -1233,6 +1233,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw new HyperagentError(`Task ${taskId} not found`);
     }
     const taskEmitter = new ErrorEmitter();
+    let settledStatus: TaskStatus | null = null;
+    const resolveSettledStatus = (value: unknown): TaskStatus => {
+      const rawStatus = this.safeReadField(value, "status");
+      if (
+        typeof rawStatus === "string" &&
+        HyperAgent.TASK_STATUS_VALUES.has(rawStatus)
+      ) {
+        return rawStatus as TaskStatus;
+      }
+      return this.readTaskStatus(taskState, TaskStatus.FAILED);
+    };
+    const readControlStatus = (): TaskStatus => {
+      if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+        return TaskStatus.CANCELLED;
+      }
+      if (settledStatus !== null) {
+        return settledStatus;
+      }
+      return this.readTaskStatus(taskState, TaskStatus.FAILED);
+    };
     const onTaskError = (error: Error): void => {
       if (!(error instanceof HyperagentTaskError) || error.taskId !== taskId) {
         return;
@@ -1271,42 +1291,48 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     }
     void result
+      .then((value) => {
+        settledStatus = resolveSettledStatus(value);
+      })
+      .catch(() => {
+        settledStatus = this.readTaskStatus(taskState, TaskStatus.FAILED);
+      })
       .finally(() => {
+        if (settledStatus === null) {
+          settledStatus = this.readTaskStatus(taskState, TaskStatus.FAILED);
+        }
         this.removeTaskErrorForwarder(taskId);
       })
       .catch(() => undefined);
 
     return {
       id: taskId,
-      getStatus: () =>
-        this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)
-          ? this.readTaskStatus(taskState, TaskStatus.FAILED)
-          : TaskStatus.CANCELLED,
+      getStatus: () => readControlStatus(),
       pause: () => {
-        if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
-          return TaskStatus.CANCELLED;
+        const status = readControlStatus();
+        if (settledStatus !== null) {
+          return status;
         }
-        const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
         if (status === TaskStatus.RUNNING) {
           return this.writeTaskStatus(taskState, TaskStatus.PAUSED, status);
         }
         return status;
       },
       resume: () => {
-        if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
-          return TaskStatus.CANCELLED;
+        const status = readControlStatus();
+        if (settledStatus !== null) {
+          return status;
         }
-        const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
         if (status === TaskStatus.PAUSED) {
           return this.writeTaskStatus(taskState, TaskStatus.RUNNING, status);
         }
         return status;
       },
       cancel: () => {
-        if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
-          return TaskStatus.CANCELLED;
+        const status = readControlStatus();
+        if (settledStatus !== null) {
+          return status;
         }
-        const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
         if (
           status === TaskStatus.PENDING ||
           status === TaskStatus.RUNNING ||

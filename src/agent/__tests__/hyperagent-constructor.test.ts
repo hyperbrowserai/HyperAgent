@@ -2194,6 +2194,123 @@ describe("HyperAgent constructor and task controls", () => {
     });
   });
 
+  it("task controls keep completed status after settlement despite late mutations", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    let capturedTaskState: TaskState | undefined;
+    mockedRunAgentTask.mockImplementation((_, taskState) => {
+      capturedTaskState = taskState;
+      return new Promise<AgentTaskOutput>((resolve) => {
+        resolveTask = resolve;
+      });
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("complete control", undefined, fakePage);
+
+    resolveTask({
+      taskId: task.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.COMPLETED,
+    });
+    expect(task.getStatus()).toBe(TaskStatus.COMPLETED);
+    if (capturedTaskState) {
+      capturedTaskState.status = TaskStatus.RUNNING;
+    }
+    expect(task.getStatus()).toBe(TaskStatus.COMPLETED);
+    expect(task.cancel()).toBe(TaskStatus.COMPLETED);
+    expect(task.pause()).toBe(TaskStatus.COMPLETED);
+    expect(task.resume()).toBe(TaskStatus.COMPLETED);
+  });
+
+  it("task controls keep failed status after settlement despite late mutations", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let rejectTask!: (error: unknown) => void;
+    let capturedTaskState: TaskState | undefined;
+    mockedRunAgentTask.mockImplementation((_, taskState) => {
+      capturedTaskState = taskState;
+      return new Promise<AgentTaskOutput>((_, reject) => {
+        rejectTask = reject;
+      });
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("fail control", undefined, fakePage);
+
+    rejectTask(new Error("control failure"));
+    await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+    expect(task.getStatus()).toBe(TaskStatus.FAILED);
+    if (capturedTaskState) {
+      capturedTaskState.status = TaskStatus.RUNNING;
+    }
+    expect(task.getStatus()).toBe(TaskStatus.FAILED);
+    expect(task.cancel()).toBe(TaskStatus.FAILED);
+    expect(task.pause()).toBe(TaskStatus.FAILED);
+    expect(task.resume()).toBe(TaskStatus.FAILED);
+  });
+
+  it("task controls keep cancelled status after manual cancellation settles", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    let capturedTaskState: TaskState | undefined;
+    mockedRunAgentTask.mockImplementation((_, taskState) => {
+      capturedTaskState = taskState;
+      return new Promise<AgentTaskOutput>((resolve) => {
+        resolveTask = resolve;
+      });
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("cancel control", undefined, fakePage);
+
+    expect(task.cancel()).toBe(TaskStatus.CANCELLED);
+    resolveTask({
+      taskId: task.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.CANCELLED,
+      output: "Task was cancelled",
+    });
+    expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
+    if (capturedTaskState) {
+      capturedTaskState.status = TaskStatus.RUNNING;
+    }
+    expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
+    expect(task.cancel()).toBe(TaskStatus.CANCELLED);
+    expect(task.pause()).toBe(TaskStatus.CANCELLED);
+    expect(task.resume()).toBe(TaskStatus.CANCELLED);
+  });
+
   it("closeAgent prevents in-flight async tasks from repopulating action cache", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     let resolveTask!: (value: AgentTaskOutput) => void;
