@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   HyperAgentLLM,
   HyperAgentMessage,
+  HyperAgentContentPart,
   HyperAgentStructuredResult,
   HyperAgentCapabilities,
   StructuredOutputRequest,
@@ -90,7 +91,7 @@ export class AnthropicClient implements HyperAgentLLM {
     }
   ): Promise<{
     role: "assistant";
-    content: string | any[];
+    content: string | HyperAgentContentPart[];
     toolCalls?: Array<{ id?: string; name: string; arguments: unknown }>;
     usage?: { inputTokens?: number; outputTokens?: number };
   }> {
