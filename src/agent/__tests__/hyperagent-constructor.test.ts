@@ -2189,6 +2189,107 @@ describe("HyperAgent constructor and task controls", () => {
     expect(internalAgent.actionCacheByTaskId).toEqual({});
   });
 
+  it("closeAgent tolerates trapped cache-registry reset assignments", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, TaskState>;
+      taskResults: Record<string, Promise<AgentTaskOutput>>;
+      actionCacheByTaskId: Record<string, unknown>;
+      actionCacheTaskOrder: string[];
+    };
+    const taskStore: Record<string, TaskState> = {
+      "task-a": {
+        id: "task-a",
+        task: "example",
+        status: TaskStatus.RUNNING,
+        startingPage: {} as Page,
+        steps: [],
+      },
+    };
+    const taskResultsStore: Record<string, Promise<AgentTaskOutput>> = {
+      "task-a": Promise.resolve({
+        taskId: "task-a",
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: "done",
+        actionCache: {
+          taskId: "task-a",
+          createdAt: new Date().toISOString(),
+          status: TaskStatus.COMPLETED,
+          steps: [],
+        },
+      }),
+    };
+    const actionCacheStore: Record<string, unknown> = {
+      "task-a": {
+        taskId: "task-a",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    };
+    const actionCacheOrderStore: string[] = ["task-a"];
+
+    Object.defineProperty(internalAgent, "tasks", {
+      configurable: true,
+      get: () => taskStore,
+      set: () => {
+        throw new Error("task reset trap");
+      },
+    });
+    Object.defineProperty(internalAgent, "taskResults", {
+      configurable: true,
+      get: () => taskResultsStore,
+      set: () => {
+        throw new Error("task results reset trap");
+      },
+    });
+    Object.defineProperty(internalAgent, "actionCacheByTaskId", {
+      configurable: true,
+      get: () => actionCacheStore,
+      set: () => {
+        throw new Error("action cache reset trap");
+      },
+    });
+    Object.defineProperty(internalAgent, "actionCacheTaskOrder", {
+      configurable: true,
+      get: () => actionCacheOrderStore,
+      set: () => {
+        throw new Error("action cache order reset trap");
+      },
+    });
+
+    try {
+      await expect(agent.closeAgent()).resolves.toBeUndefined();
+      expect(taskStore).toEqual({});
+      expect(taskResultsStore).toEqual({});
+      expect(actionCacheStore).toEqual({});
+      expect(actionCacheOrderStore).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to reset task registry during close")
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Failed to reset task-result registry during close"
+        )
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Failed to reset action-cache registry during close"
+        )
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to reset action-cache order during close")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("closeAgent tolerates trapped task-registry enumeration", async () => {
     const close = jest.fn(async () => undefined);
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});

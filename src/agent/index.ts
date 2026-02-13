@@ -532,6 +532,109 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private resetTasksForClose(): void {
+    try {
+      this.tasks = {};
+      return;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to reset task registry during close: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+    try {
+      const taskKeys = Object.keys(this.tasks);
+      for (const taskKey of taskKeys) {
+        try {
+          delete this.tasks[taskKey];
+        } catch {
+          // no-op
+        }
+      }
+    } catch {
+      // no-op
+    }
+  }
+
+  private resetTaskResultsForClose(): void {
+    try {
+      this.taskResults = {};
+      return;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to reset task-result registry during close: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+    try {
+      const taskResultKeys = Object.keys(this.taskResults);
+      for (const taskResultKey of taskResultKeys) {
+        try {
+          delete this.taskResults[taskResultKey];
+        } catch {
+          // no-op
+        }
+      }
+    } catch {
+      // no-op
+    }
+  }
+
+  private resetActionCacheByTaskForClose(): void {
+    try {
+      this.actionCacheByTaskId = {};
+      return;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to reset action-cache registry during close: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+    try {
+      const cacheKeys = Object.keys(this.actionCacheByTaskId);
+      for (const cacheKey of cacheKeys) {
+        try {
+          delete this.actionCacheByTaskId[cacheKey];
+        } catch {
+          // no-op
+        }
+      }
+    } catch {
+      // no-op
+    }
+  }
+
+  private resetActionCacheOrderForClose(): void {
+    try {
+      this.actionCacheTaskOrder = [];
+      return;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to reset action-cache order during close: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+    try {
+      if (Array.isArray(this.actionCacheTaskOrder)) {
+        this.actionCacheTaskOrder.length = 0;
+      }
+    } catch {
+      // no-op
+    }
+  }
+
   private storeTaskResultPromise(
     taskId: string,
     result: Promise<AgentTaskOutput>
@@ -1169,10 +1272,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         this._currentPage = null;
       }
     }
-    this.tasks = {};
-    this.taskResults = {};
-    this.actionCacheByTaskId = {};
-    this.actionCacheTaskOrder = [];
+    this.resetTasksForClose();
+    this.resetTaskResultsForClose();
+    this.resetActionCacheByTaskForClose();
+    this.resetActionCacheOrderForClose();
     this._currentPage = null;
   }
 
