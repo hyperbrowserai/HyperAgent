@@ -3,6 +3,17 @@ import { MCPServerConfig } from "@/types/config";
 import { formatUnknownError } from "@/utils";
 
 const MAX_MCP_CONFIG_FILE_CHARS = 1_000_000;
+const MAX_MCP_SERVER_ENTRIES = 100;
+const MAX_MCP_SERVER_ID_CHARS = 128;
+const MAX_MCP_COMMAND_CHARS = 2_048;
+const MAX_MCP_SSE_URL_CHARS = 4_000;
+const MAX_MCP_ARGS_PER_SERVER = 100;
+const MAX_MCP_ARG_CHARS = 4_000;
+const MAX_MCP_TOOL_LIST_ENTRIES = 200;
+const MAX_MCP_TOOL_NAME_CHARS = 256;
+const MAX_MCP_RECORD_ENTRIES = 200;
+const MAX_MCP_RECORD_KEY_CHARS = 256;
+const MAX_MCP_RECORD_VALUE_CHARS = 4_000;
 const UNSAFE_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -35,10 +46,18 @@ function normalizeOptionalArgs(value: unknown, index: number): string[] | undefi
       `MCP server entry at index ${index} must provide "args" as an array of strings.`
     );
   }
+  if (value.length > MAX_MCP_ARGS_PER_SERVER) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide no more than ${MAX_MCP_ARGS_PER_SERVER} "args" entries.`
+    );
+  }
   const normalized = (value as string[]).map((entry) => entry.trim());
   if (
     normalized.some(
-      (entry) => entry.length === 0 || hasUnsupportedControlChars(entry)
+      (entry) =>
+        entry.length === 0 ||
+        entry.length > MAX_MCP_ARG_CHARS ||
+        hasUnsupportedControlChars(entry)
     )
   ) {
     throw new Error(
@@ -61,10 +80,16 @@ function normalizeOptionalStringRecord(
       `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
     );
   }
+  const entries = Object.entries(value);
+  if (entries.length > MAX_MCP_RECORD_ENTRIES) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide no more than ${MAX_MCP_RECORD_ENTRIES} "${field}" entries.`
+    );
+  }
 
   const normalized: Record<string, string> = Object.create(null);
   const seenKeys = new Set<string>();
-  for (const [rawKey, rawValue] of Object.entries(value)) {
+  for (const [rawKey, rawValue] of entries) {
     const key = rawKey.trim();
     const normalizedKey = key.toLowerCase();
     const isUnsafeKey = UNSAFE_RECORD_KEYS.has(normalizedKey);
@@ -81,6 +106,14 @@ function normalizeOptionalStringRecord(
     }
     const normalizedValue =
       field === "sseHeaders" ? rawValue.trim() : rawValue;
+    if (
+      key.length > MAX_MCP_RECORD_KEY_CHARS ||
+      normalizedValue.length > MAX_MCP_RECORD_VALUE_CHARS
+    ) {
+      throw new Error(
+        `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
+      );
+    }
     if (field === "sseHeaders" && normalizedValue.length === 0) {
       throw new Error(
         `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
@@ -106,6 +139,11 @@ function normalizeSSEUrl(value: unknown, index: number): string {
     );
   }
   if (hasUnsupportedControlChars(raw)) {
+    throw new Error(
+      `MCP server entry at index ${index} has invalid "sseUrl" value "${raw}".`
+    );
+  }
+  if (raw.length > MAX_MCP_SSE_URL_CHARS) {
     throw new Error(
       `MCP server entry at index ${index} has invalid "sseUrl" value "${raw}".`
     );
@@ -139,6 +177,11 @@ function normalizeOptionalStringArray(
       `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
     );
   }
+  if (value.length > MAX_MCP_TOOL_LIST_ENTRIES) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide no more than ${MAX_MCP_TOOL_LIST_ENTRIES} "${field}" entries.`
+    );
+  }
   const normalized = value
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
@@ -149,7 +192,13 @@ function normalizeOptionalStringArray(
       `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
     );
   }
-  if (normalized.some((entry) => hasUnsupportedControlChars(entry))) {
+  if (
+    normalized.some(
+      (entry) =>
+        entry.length > MAX_MCP_TOOL_NAME_CHARS ||
+        hasUnsupportedControlChars(entry)
+    )
+  ) {
     throw new Error(
       `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
     );
@@ -174,6 +223,11 @@ function normalizeServersPayload(payload: unknown): unknown[] {
     if (servers.length === 0) {
       throw new Error(
         "MCP config must include at least one server entry."
+      );
+    }
+    if (servers.length > MAX_MCP_SERVER_ENTRIES) {
+      throw new Error(
+        `MCP config must include no more than ${MAX_MCP_SERVER_ENTRIES} server entries.`
       );
     }
     return servers;
@@ -292,6 +346,11 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
           `MCP server entry at index ${i} must provide "id" as a string when specified.`
         );
       }
+      if (normalizedId.length > MAX_MCP_SERVER_ID_CHARS) {
+        throw new Error(
+          `MCP server entry at index ${i} must provide "id" as a string when specified.`
+        );
+      }
       const normalizedIdLookup = normalizedId.toLowerCase();
       if (seenIds.has(normalizedIdLookup)) {
         throw new Error(
@@ -364,6 +423,11 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       );
     }
     if (hasUnsupportedControlChars(command)) {
+      throw new Error(
+        `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`
+      );
+    }
+    if (command.length > MAX_MCP_COMMAND_CHARS) {
       throw new Error(
         `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`
       );

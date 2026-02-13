@@ -86,6 +86,15 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("throws when config contains too many server entries", () => {
+    const entries = Array.from({ length: 101 }, () => ({
+      command: "npx",
+    }));
+    expect(() => parseMCPServersConfig(JSON.stringify(entries))).toThrow(
+      "MCP config must include no more than 100 server entries."
+    );
+  });
+
   it("throws when server entries are not objects", () => {
     expect(() => parseMCPServersConfig("[1]")).toThrow(
       "MCP server entry at index 0 must be an object."
@@ -162,6 +171,18 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 must include a non-empty "command" for stdio connections.'
     );
+
+    expect(() =>
+      parseMCPServersConfig(`[{"id":"${"x".repeat(129)}","command":"npx"}]`)
+    ).toThrow(
+      'MCP server entry at index 0 must provide "id" as a string when specified.'
+    );
+
+    expect(() =>
+      parseMCPServersConfig(`[{"command":"${"x".repeat(2049)}"}]`)
+    ).toThrow(
+      'MCP server entry at index 0 must include a non-empty "command" for stdio connections.'
+    );
   });
 
   it("returns normalized trimmed id/command/sseUrl fields", () => {
@@ -207,6 +228,24 @@ describe("parseMCPServersConfig", () => {
       )
     ).toThrow(
       'MCP server entry at index 0 must provide "includeTools" as an array of non-empty strings.'
+    );
+
+    expect(() =>
+      parseMCPServersConfig(
+        `[{"command":"npx","includeTools":[${Array.from({ length: 201 })
+          .map((_, i) => `"tool-${i}"`)
+          .join(",")}]}]`
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide no more than 200 "includeTools" entries.'
+    );
+
+    expect(() =>
+      parseMCPServersConfig(
+        `[{"command":"npx","excludeTools":["${"x".repeat(257)}"]}]`
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "excludeTools" as an array of non-empty strings.'
     );
   });
 
@@ -293,6 +332,20 @@ describe("parseMCPServersConfig", () => {
       'MCP server entry at index 0 must provide "args" as an array of non-empty strings.'
     );
     expect(() =>
+      parseMCPServersConfig(
+        `[{"command":"npx","args":[${Array.from({ length: 101 })
+          .map(() => '"ok"')
+          .join(",")}]}]`
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide no more than 100 "args" entries.'
+    );
+    expect(() =>
+      parseMCPServersConfig(`[{"command":"npx","args":["${"x".repeat(4001)}"]}]`)
+    ).toThrow(
+      'MCP server entry at index 0 must provide "args" as an array of non-empty strings.'
+    );
+    expect(() =>
       parseMCPServersConfig('[{"command":"npx","env":{"":1}}]')
     ).toThrow(
       'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
@@ -345,6 +398,29 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
     );
+    expect(() =>
+      parseMCPServersConfig(
+        `[{"command":"npx","env":{"${"k".repeat(257)}":"value"}}]`
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        `[{"command":"npx","env":{"KEY":"${"x".repeat(4001)}"}}]`
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        `[{"command":"npx","env":{${Array.from({ length: 201 })
+          .map((_, i) => `"k${i}":"v"`)
+          .join(",")}}}]`
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide no more than 200 "env" entries.'
+    );
 
     expect(() =>
       parseMCPServersConfig(
@@ -389,6 +465,14 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 has invalid "sseUrl" value "https://example.com/sse\u0007".'
     );
+
+    expect(() =>
+      parseMCPServersConfig(
+        `[{"connectionType":"sse","sseUrl":"https://example.com/${"x".repeat(
+          3990
+        )}"}]`
+      )
+    ).toThrow(/invalid "sseUrl" value/);
   });
 
   it("rejects ambiguous or mixed stdio/sse field combinations", () => {
