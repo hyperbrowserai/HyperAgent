@@ -125,7 +125,12 @@ describe("ExtractActionDefinition.run", () => {
       role: "assistant",
       content: "should not be called",
     });
-    const ctx = createContext(createMockLLM(invoke));
+    const pageContent = jest.fn().mockResolvedValue("<html>unused</html>");
+    const ctx = createContext(createMockLLM(invoke), {
+      page: {
+        content: pageContent,
+      } as unknown as ActionContext["page"],
+    });
 
     const result = await ExtractActionDefinition.run(ctx, {
       objective: "   ",
@@ -133,6 +138,7 @@ describe("ExtractActionDefinition.run", () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toContain("objective cannot be empty");
+    expect(pageContent).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalled();
   });
 

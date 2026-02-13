@@ -136,7 +136,6 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     action: ExtractActionType
   ): Promise<ActionOutput> => {
     try {
-      const content = await ctx.page.content();
       const objective = action.objective.trim();
       if (objective.length === 0) {
         return {
@@ -144,6 +143,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           message: "Extraction objective cannot be empty.",
         };
       }
+      const content = await ctx.page.content();
       const normalizedTokenLimit = normalizeTokenLimit(ctx.tokenLimit);
       const debugDir = ctx.debugDir
         ? ensureDebugDirSafe(ctx.debugDir, ctx.debug)
