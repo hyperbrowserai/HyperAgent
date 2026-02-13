@@ -7,7 +7,12 @@ export function attachTaskErrorHandler(
   task: Task,
   onError: TaskErrorHandler
 ): void {
+  let hasHandledError = false;
   task.emitter.addListener("error", (error: unknown) => {
+    if (hasHandledError) {
+      return;
+    }
+    hasHandledError = true;
     task.cancel();
     try {
       onError(error);

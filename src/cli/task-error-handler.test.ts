@@ -45,4 +45,23 @@ describe("attachTaskErrorHandler", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("handles only the first emitted task error", () => {
+    const emitter = new EventEmitter();
+    const cancel = jest.fn();
+    const onError = jest.fn();
+    const task = {
+      cancel,
+      emitter,
+    } as unknown as Task;
+
+    attachTaskErrorHandler(task, onError);
+
+    emitter.emit("error", { reason: "first" });
+    emitter.emit("error", { reason: "second" });
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith({ reason: "first" });
+  });
 });
