@@ -177,6 +177,43 @@ describe("OpenAIClient", () => {
     expect(payload?.max_tokens).not.toBe(999);
   });
 
+  it("sanitizes reserved provider options in structured invoke path", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: '{"ok":"yes"}',
+          },
+        },
+      ],
+    });
+
+    const client = new OpenAIClient({ model: "gpt-test" });
+    await client.invokeStructured(
+      {
+        schema: z.object({ ok: z.string() }),
+        options: {
+          providerOptions: {
+            model: "override-model",
+            messages: [{ role: "user", content: "bad" }],
+            response_format: { type: "text" },
+            top_p: 0.4,
+          },
+        },
+      },
+      [{ role: "user", content: "hello" }]
+    );
+
+    expect(createCompletionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-test",
+        messages: [],
+        response_format: { type: "json_schema" },
+        top_p: 0.4,
+      })
+    );
+  });
+
   it("does not crash structured-schema debug logging on circular schema payloads", async () => {
     const circularSchema: Record<string, unknown> = {};
     circularSchema.self = circularSchema;

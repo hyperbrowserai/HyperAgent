@@ -268,4 +268,57 @@ describe("AnthropicClient", () => {
     >;
     expect(payload?.max_tokens).not.toBe(999);
   });
+
+  it("sanitizes reserved provider options in simple structured path", async () => {
+    createMessageMock.mockResolvedValue({
+      content: [
+        {
+          type: "tool_use",
+          input: {
+            result: {
+              value: "ok",
+            },
+          },
+        },
+      ],
+    });
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    await client.invokeStructured(
+      {
+        schema: z.object({
+          value: z.string(),
+        }),
+        options: {
+          providerOptions: {
+            model: "override-model",
+            messages: [{ role: "user", content: "bad" }],
+            tools: [{ name: "override-tool" }],
+            tool_choice: { type: "any" },
+            top_p: 0.7,
+          },
+        },
+      },
+      [{ role: "user", content: "hello" }]
+    );
+
+    expect(createMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "claude-test",
+        messages: [],
+        top_p: 0.7,
+      })
+    );
+    const payload = createMessageMock.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload?.tools).toEqual([
+      {
+        name: "structured_output",
+        input_schema: { type: "object", properties: {} },
+      },
+    ]);
+    expect(payload?.tool_choice).toEqual({ type: "tool" });
+  });
 });

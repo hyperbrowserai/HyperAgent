@@ -1,4 +1,5 @@
 import { DeepSeekClient } from "@/llm/providers/deepseek";
+import { z } from "zod";
 
 const createCompletionMock = jest.fn();
 
@@ -14,6 +15,10 @@ jest.mock("openai", () => {
 
 jest.mock("@/llm/utils/message-converter", () => ({
   convertToOpenAIMessages: jest.fn(() => []),
+}));
+
+jest.mock("@/llm/utils/schema-converter", () => ({
+  convertToOpenAIJsonSchema: jest.fn(() => ({ type: "json_schema" })),
 }));
 
 describe("DeepSeekClient", () => {
@@ -149,5 +154,42 @@ describe("DeepSeekClient", () => {
       unknown
     >;
     expect(payload?.max_tokens).not.toBe(999);
+  });
+
+  it("sanitizes reserved provider options in structured invoke path", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: '{"ok":true}',
+          },
+        },
+      ],
+    });
+
+    const client = new DeepSeekClient({ model: "deepseek-test" });
+    await client.invokeStructured(
+      {
+        schema: z.object({ ok: z.boolean() }),
+        options: {
+          providerOptions: {
+            model: "override-model",
+            messages: [{ role: "user", content: "bad" }],
+            response_format: { type: "text" },
+            top_p: 0.4,
+          },
+        },
+      },
+      [{ role: "user", content: "hello" }]
+    );
+
+    expect(createCompletionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "deepseek-test",
+        messages: [],
+        response_format: { type: "json_schema" },
+        top_p: 0.4,
+      })
+    );
   });
 });
