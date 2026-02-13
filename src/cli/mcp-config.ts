@@ -36,7 +36,11 @@ function normalizeOptionalArgs(value: unknown, index: number): string[] | undefi
     );
   }
   const normalized = (value as string[]).map((entry) => entry.trim());
-  if (normalized.some((entry) => entry.length === 0)) {
+  if (
+    normalized.some(
+      (entry) => entry.length === 0 || hasUnsupportedControlChars(entry)
+    )
+  ) {
     throw new Error(
       `MCP server entry at index ${index} must provide "args" as an array of non-empty strings.`
     );
@@ -130,6 +134,11 @@ function normalizeOptionalStringArray(
     .filter((entry) => entry.length > 0);
 
   if (normalized.length !== value.length) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
+    );
+  }
+  if (normalized.some((entry) => hasUnsupportedControlChars(entry))) {
     throw new Error(
       `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
     );

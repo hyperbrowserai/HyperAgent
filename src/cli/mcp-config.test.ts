@@ -180,6 +180,14 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 must provide "excludeTools" as an array of non-empty strings.'
     );
+
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"command":"npx","includeTools":["sea\\u0007rch"]}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "includeTools" as an array of non-empty strings.'
+    );
   });
 
   it("throws when include/exclude tool arrays contain duplicates after trimming", () => {
@@ -256,6 +264,11 @@ describe("parseMCPServersConfig", () => {
     );
     expect(() =>
       parseMCPServersConfig('[{"command":"npx","args":[" "]}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "args" as an array of non-empty strings.'
+    );
+    expect(() =>
+      parseMCPServersConfig('[{"command":"npx","args":["ok\\u0007bad"]}]')
     ).toThrow(
       'MCP server entry at index 0 must provide "args" as an array of non-empty strings.'
     );
