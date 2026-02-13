@@ -67,6 +67,18 @@ export interface AgentOpsCacheEntry {
   result_count: number;
 }
 
+export interface AgentOpsCachePrefix {
+  prefix: string;
+  entry_count: number;
+}
+
+export interface AgentOpsCachePrefixesResponse {
+  total_prefixes: number;
+  returned_prefixes: number;
+  limit: number;
+  prefixes: AgentOpsCachePrefix[];
+}
+
 export interface AgentOpsCacheEntriesResponse {
   total_entries: number;
   returned_entries: number;
@@ -125,6 +137,7 @@ export interface AgentSchemaInfo {
   agent_ops_cache_stats_endpoint?: string;
   agent_ops_cache_entries_endpoint?: string;
   agent_ops_cache_entry_detail_endpoint?: string;
+  agent_ops_cache_prefixes_endpoint?: string;
   agent_ops_cache_clear_endpoint?: string;
   agent_ops_cache_replay_endpoint?: string;
   agent_ops_cache_remove_endpoint?: string;

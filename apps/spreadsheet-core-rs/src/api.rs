@@ -3,9 +3,10 @@ use crate::{
   models::{
     AgentOperation, AgentOperationResult, AgentOpsCacheEntriesResponse,
     AgentOpsCacheEntry, AgentOpsCacheEntryDetailResponse,
+    AgentOpsCachePrefix, AgentOpsCachePrefixesResponse,
     AgentOpsCacheStatsResponse, AgentOpsRequest, AgentOpsResponse,
-    AgentOpsPreviewRequest, AgentOpsPreviewResponse, AgentPresetRunRequest,
-    AgentScenarioRunRequest,
+    AgentOpsPreviewRequest, AgentOpsPreviewResponse,
+    AgentPresetRunRequest, AgentScenarioRunRequest,
     RemoveAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntryResponse,
     RemoveAgentOpsCacheEntriesByPrefixRequest,
     RemoveAgentOpsCacheEntriesByPrefixResponse,
@@ -76,6 +77,10 @@ pub fn create_router(state: AppState) -> Router {
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
       get(agent_ops_cache_entry_detail),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache/prefixes",
+      get(agent_ops_cache_prefixes),
     )
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/clear",
@@ -1032,6 +1037,7 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
+    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8",
     "agent_ops_cache_entries_query_shape": {
       "request_id_prefix": "optional string filter (prefix match)",
       "offset": "optional number, default 0",
@@ -1067,6 +1073,12 @@ async fn get_agent_schema(
         "operation_count": "number of cached operations in this request",
         "result_count": "number of cached operation results"
       }]
+    },
+    "agent_ops_cache_prefixes_response_shape": {
+      "total_prefixes": "total distinct prefix suggestions available",
+      "returned_prefixes": "number of prefixes returned",
+      "limit": "applied limit (default 8, max 100)",
+      "prefixes": [{ "prefix": "string", "entry_count": "number of matching cache entries" }]
     },
     "agent_ops_cache_entry_detail_response_shape": {
       "request_id": "string",
@@ -1400,8 +1412,15 @@ struct AgentOpsCacheEntriesQuery {
   limit: Option<usize>,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+struct AgentOpsCachePrefixesQuery {
+  limit: Option<usize>,
+}
+
 const DEFAULT_AGENT_OPS_CACHE_ENTRIES_LIMIT: usize = 20;
 const MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT: usize = 200;
+const DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT: usize = 8;
+const MAX_AGENT_OPS_CACHE_PREFIXES_LIMIT: usize = 100;
 
 async fn agent_ops_cache_stats(
   State(state): State<AppState>,
@@ -1486,6 +1505,34 @@ async fn agent_ops_cache_entry_detail(
     result_count: cached_response.results.len(),
     cached_response,
     operations,
+  }))
+}
+
+async fn agent_ops_cache_prefixes(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Query(query): Query<AgentOpsCachePrefixesQuery>,
+) -> Result<Json<AgentOpsCachePrefixesResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let limit = query
+    .limit
+    .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
+    .min(MAX_AGENT_OPS_CACHE_PREFIXES_LIMIT);
+  let (total_prefixes, prefixes) = state
+    .agent_ops_cache_prefixes(workbook_id, limit)
+    .await?;
+  let mapped_prefixes = prefixes
+    .into_iter()
+    .map(|(prefix, entry_count)| AgentOpsCachePrefix {
+      prefix,
+      entry_count,
+    })
+    .collect::<Vec<_>>();
+  Ok(Json(AgentOpsCachePrefixesResponse {
+    total_prefixes,
+    returned_prefixes: mapped_prefixes.len(),
+    limit,
+    prefixes: mapped_prefixes,
   }))
 }
 
@@ -1741,6 +1788,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/ops/cache": {"get": {"summary": "Inspect request-id idempotency cache status for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/entries": {"get": {"summary": "List recent request-id idempotency cache entries for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}": {"get": {"summary": "Get detailed payload for a single cached request-id entry"}},
+      "/v1/workbooks/{id}/agent/ops/cache/prefixes": {"get": {"summary": "List request-id prefix suggestions from cached entries"}},
       "/v1/workbooks/{id}/agent/ops/cache/clear": {"post": {"summary": "Clear request-id idempotency cache for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/replay": {"post": {"summary": "Replay a cached request-id response for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/remove": {"post": {"summary": "Remove a single request-id idempotency cache entry for agent ops"}},
@@ -1769,6 +1817,7 @@ mod tests {
 
   use super::{
     agent_ops, agent_ops_cache_entries, agent_ops_cache_entry_detail,
+    agent_ops_cache_prefixes,
     agent_ops_cache_stats,
     clear_agent_ops_cache, get_agent_schema, remove_agent_ops_cache_entry,
     remove_agent_ops_cache_entries_by_prefix,
@@ -1777,6 +1826,7 @@ mod tests {
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
     validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
+    AgentOpsCachePrefixesQuery,
     MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
   };
   use crate::{
@@ -2176,6 +2226,49 @@ mod tests {
       filtered_response.entries[0].request_id,
       "handler-entries-2",
     );
+  }
+
+  #[tokio::test]
+  async fn should_list_cache_prefixes_via_handler() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-prefixes".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["scenario-a", "scenario-b", "preset-a"] {
+      let _ = agent_ops(
+        State(state.clone()),
+        Path(workbook.id),
+        Json(AgentOpsRequest {
+          request_id: Some(request_id.to_string()),
+          actor: Some("test".to_string()),
+          stop_on_error: Some(true),
+          expected_operations_signature: None,
+          operations: vec![AgentOperation::Recalculate],
+        }),
+      )
+      .await
+      .expect("agent ops should succeed");
+    }
+
+    let prefixes = agent_ops_cache_prefixes(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery { limit: Some(10) }),
+    )
+    .await
+    .expect("prefixes should load")
+    .0;
+
+    assert_eq!(prefixes.total_prefixes, 2);
+    assert_eq!(prefixes.returned_prefixes, 2);
+    assert_eq!(prefixes.prefixes[0].prefix, "scenario-");
+    assert_eq!(prefixes.prefixes[0].entry_count, 2);
+    assert_eq!(prefixes.prefixes[1].prefix, "preset-");
+    assert_eq!(prefixes.prefixes[1].entry_count, 1);
   }
 
   #[tokio::test]
@@ -2584,6 +2677,12 @@ mod tests {
         .get("agent_ops_cache_entry_detail_endpoint")
         .and_then(serde_json::Value::as_str),
       Some("/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8"),
     );
     assert_eq!(
       schema

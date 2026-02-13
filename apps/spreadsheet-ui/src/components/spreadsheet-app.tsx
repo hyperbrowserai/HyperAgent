@@ -14,6 +14,7 @@ import {
   exportWorkbook,
   getAgentOpsCacheEntryDetail,
   getAgentOpsCacheEntries,
+  getAgentOpsCachePrefixes,
   getAgentOpsCacheStats,
   getAgentPresetOperations,
   getAgentSchema,
@@ -244,6 +245,12 @@ export function SpreadsheetApp() {
       ),
   });
 
+  const agentOpsCachePrefixesQuery = useQuery({
+    queryKey: ["agent-ops-cache-prefixes", workbook?.id],
+    enabled: Boolean(workbook?.id),
+    queryFn: () => getAgentOpsCachePrefixes(workbook!.id, 12),
+  });
+
   const wizardScenarioOpsQuery = useQuery({
     queryKey: ["wizard-scenario-ops", workbook?.id, wizardScenario, wizardIncludeFileBase64],
     enabled: wizardScenario.length > 0,
@@ -324,6 +331,9 @@ export function SpreadsheetApp() {
       queryClient.invalidateQueries({
         queryKey: ["agent-ops-cache-entries", workbook.id],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["agent-ops-cache-prefixes", workbook.id],
+      });
     });
     return unsubscribe;
   }, [workbook?.id, activeSheet, queryClient, appendEvent]);
@@ -401,22 +411,7 @@ export function SpreadsheetApp() {
   const wizardPresetOpsSignature =
     wizardPresetOpsQuery.data?.operations_signature ?? null;
   const wizardPreviewSource = workbook ? "workbook-scoped" : "global";
-  const cachePrefixSuggestions = useMemo(() => {
-    const entries = agentOpsCacheEntriesQuery.data?.entries ?? [];
-    return Array.from(
-      new Set(
-        entries
-          .map((entry) => {
-            const delimiterIndex = entry.request_id.indexOf("-");
-            if (delimiterIndex <= 0) {
-              return null;
-            }
-            return entry.request_id.slice(0, delimiterIndex + 1);
-          })
-          .filter((value): value is string => Boolean(value)),
-      ),
-    ).slice(0, 6);
-  }, [agentOpsCacheEntriesQuery.data?.entries]);
+  const cachePrefixSuggestions = agentOpsCachePrefixesQuery.data?.prefixes ?? [];
   const scenarioSignatureStatus =
     lastScenario === wizardScenario &&
     lastOperationsSignature &&
@@ -543,6 +538,9 @@ export function SpreadsheetApp() {
         }),
         queryClient.invalidateQueries({
           queryKey: ["agent-ops-cache-entries", workbookId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-prefixes", workbookId],
         }),
       );
     }
@@ -1213,6 +1211,9 @@ export function SpreadsheetApp() {
         queryClient.invalidateQueries({
           queryKey: ["agent-ops-cache-entries", workbook.id],
         }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-prefixes", workbook.id],
+        }),
       ]);
     } catch (error) {
       if (
@@ -1244,6 +1245,9 @@ export function SpreadsheetApp() {
         }),
         queryClient.invalidateQueries({
           queryKey: ["agent-ops-cache-entries", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-prefixes", workbook.id],
         }),
       ]);
     } catch (error) {
@@ -1373,6 +1377,9 @@ export function SpreadsheetApp() {
         queryClient.invalidateQueries({
           queryKey: ["agent-ops-cache-entries", workbook.id],
         }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-prefixes", workbook.id],
+        }),
       ]);
     } catch (error) {
       applyUiError(error, "Failed to replay cached request id.");
@@ -1403,6 +1410,9 @@ export function SpreadsheetApp() {
         }),
         queryClient.invalidateQueries({
           queryKey: ["agent-ops-cache-entries", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-prefixes", workbook.id],
         }),
       ]);
     } catch (error) {
@@ -1445,6 +1455,9 @@ export function SpreadsheetApp() {
         }),
         queryClient.invalidateQueries({
           queryKey: ["agent-ops-cache-entries", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-prefixes", workbook.id],
         }),
       ]);
     } catch (error) {
@@ -2185,6 +2198,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_prefixes_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache prefixes endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_prefixes_endpoint}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.agent_ops_cache_clear_endpoint ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache clear endpoint:{" "}
@@ -2298,15 +2319,18 @@ export function SpreadsheetApp() {
                       <span className="text-[10px] text-slate-500">suggestions:</span>
                       {cachePrefixSuggestions.map((suggestion) => (
                         <button
-                          key={suggestion}
-                          onClick={() => setCacheRequestIdPrefix(suggestion)}
+                          key={suggestion.prefix}
+                          onClick={() => setCacheRequestIdPrefix(suggestion.prefix)}
                           className={`rounded border px-1.5 py-0.5 text-[10px] ${
-                            cacheRequestIdPrefix === suggestion
+                            cacheRequestIdPrefix === suggestion.prefix
                               ? "border-indigo-500/80 bg-indigo-500/20 text-indigo-200"
                               : "border-slate-700 text-slate-300 hover:bg-slate-800"
                           }`}
                         >
-                          {suggestion}
+                          {suggestion.prefix}
+                          <span className="ml-1 text-slate-400">
+                            {suggestion.entry_count}
+                          </span>
                         </button>
                       ))}
                     </div>

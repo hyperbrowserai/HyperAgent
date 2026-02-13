@@ -361,6 +361,41 @@ impl AppState {
     Ok((removed_entries, record.agent_ops_cache_order.len()))
   }
 
+  pub async fn agent_ops_cache_prefixes(
+    &self,
+    workbook_id: Uuid,
+    limit: usize,
+  ) -> Result<(usize, Vec<(String, usize)>), ApiError> {
+    let guard = self.workbooks.read().await;
+    let record = guard
+      .get(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+
+    let mut prefix_counts: HashMap<String, usize> = HashMap::new();
+    for request_id in &record.agent_ops_cache_order {
+      let Some(delimiter_index) = request_id.find('-') else {
+        continue;
+      };
+      if delimiter_index == 0 {
+        continue;
+      }
+      let prefix = request_id[..=delimiter_index].to_string();
+      let entry = prefix_counts.entry(prefix).or_insert(0);
+      *entry += 1;
+    }
+
+    let total_prefixes = prefix_counts.len();
+    let mut prefixes = prefix_counts.into_iter().collect::<Vec<_>>();
+    prefixes.sort_by(|left, right| {
+      right
+        .1
+        .cmp(&left.1)
+        .then_with(|| left.0.cmp(&right.0))
+    });
+    prefixes.truncate(limit);
+    Ok((total_prefixes, prefixes))
+  }
+
   pub async fn remove_agent_ops_cache_entry(
     &self,
     workbook_id: Uuid,
@@ -699,5 +734,49 @@ mod tests {
       .await
       .expect("cache lookup should succeed");
     assert!(preset_entry.is_some());
+  }
+
+  #[tokio::test]
+  async fn should_list_cache_prefix_suggestions_by_count() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-prefixes".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in [
+      "scenario-a",
+      "scenario-b",
+      "preset-a",
+      "preset-b",
+      "preset-c",
+      "other",
+    ] {
+      state
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id.to_string(),
+          vec![AgentOperation::Recalculate],
+          AgentOpsResponse {
+            request_id: Some(request_id.to_string()),
+            operations_signature: Some(format!("sig-{request_id}")),
+            served_from_cache: false,
+            results: Vec::new(),
+          },
+        )
+        .await
+        .expect("cache update should succeed");
+    }
+
+    let (total_prefixes, prefixes) = state
+      .agent_ops_cache_prefixes(workbook.id, 5)
+      .await
+      .expect("prefix suggestions should load");
+    assert_eq!(total_prefixes, 2);
+    assert_eq!(prefixes.len(), 2);
+    assert_eq!(prefixes[0], ("preset-".to_string(), 3));
+    assert_eq!(prefixes[1], ("scenario-".to_string(), 2));
   }
 }

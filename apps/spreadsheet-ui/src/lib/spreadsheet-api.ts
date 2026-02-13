@@ -1,6 +1,7 @@
 import {
   AgentOpsCacheEntryDetailResponse,
   AgentOpsCacheEntriesResponse,
+  AgentOpsCachePrefixesResponse,
   AgentOpsPreviewResponse,
   AgentOpsCacheStatsResponse,
   ClearAgentOpsCacheResponse,
@@ -231,6 +232,17 @@ export async function getAgentOpsCacheEntryDetail(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/entries/${encodeURIComponent(requestId)}`,
   );
   return parseJsonResponse<AgentOpsCacheEntryDetailResponse>(response);
+}
+
+export async function getAgentOpsCachePrefixes(
+  workbookId: string,
+  limit: number = 8,
+): Promise<AgentOpsCachePrefixesResponse> {
+  const safeLimit = Math.max(1, Math.min(limit, 100));
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/prefixes?limit=${safeLimit}`,
+  );
+  return parseJsonResponse<AgentOpsCachePrefixesResponse>(response);
 }
 
 export async function clearAgentOpsCache(

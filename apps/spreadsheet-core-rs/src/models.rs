@@ -220,6 +220,20 @@ pub struct AgentOpsCacheEntriesResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsCachePrefix {
+  pub prefix: String,
+  pub entry_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsCachePrefixesResponse {
+  pub total_prefixes: usize,
+  pub returned_prefixes: usize,
+  pub limit: usize,
+  pub prefixes: Vec<AgentOpsCachePrefix>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentPresetRunRequest {
   pub request_id: Option<String>,
   pub actor: Option<String>,
