@@ -422,6 +422,31 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private cleanupTaskLifecycle(taskId: string): void {
+    try {
+      delete this.taskResults[taskId];
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to clear task result for ${taskId}: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+    try {
+      delete this.tasks[taskId];
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to clear task state for ${taskId}: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+  }
+
   private attachBrowserPageListener(context: BrowserContext): void {
     const contextOn = this.safeReadField(context, "on");
     if (typeof contextOn !== "function") {
@@ -1066,8 +1091,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         throw taskFailureError;
       })
       .finally(() => {
-        delete this.taskResults[taskId];
-        delete this.tasks[taskId];
+        this.cleanupTaskLifecycle(taskId);
       });
     this.taskResults[taskId] = taskResult;
     return this.getTaskControl(taskId, taskResult);
@@ -1135,7 +1159,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       );
       cleanup();
       this.storeTaskActionCache(taskId, result.actionCache);
-      delete this.tasks[taskId];
+      this.cleanupTaskLifecycle(taskId);
       return result;
     } catch (error) {
       cleanup();
@@ -1145,7 +1169,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           ? TaskStatus.CANCELLED
           : TaskStatus.FAILED;
       this.writeTaskStatus(taskState, nextStatus);
-      delete this.tasks[taskId];
+      this.cleanupTaskLifecycle(taskId);
       throw error;
     }
   }

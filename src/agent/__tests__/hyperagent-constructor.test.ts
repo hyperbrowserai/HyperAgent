@@ -372,6 +372,110 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("executeTaskAsync tolerates task-lifecycle cleanup deletion traps", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      taskResults: Record<string, Promise<AgentTaskOutput>>;
+      tasks: Record<string, unknown>;
+    };
+    internalAgent.taskResults = new Proxy(
+      {},
+      {
+        deleteProperty: () => {
+          throw new Error("taskResults delete trap");
+        },
+      }
+    ) as Record<string, Promise<AgentTaskOutput>>;
+    internalAgent.tasks = new Proxy(
+      {},
+      {
+        deleteProperty: () => {
+          throw new Error("tasks delete trap");
+        },
+      }
+    );
+
+    const fakePage = {} as unknown as Page;
+    try {
+      const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.COMPLETED,
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to clear task result")
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to clear task state")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("executeTask tolerates task-state cleanup deletion traps", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, unknown>;
+    };
+    internalAgent.tasks = new Proxy(
+      {},
+      {
+        deleteProperty: () => {
+          throw new Error("tasks delete trap");
+        },
+      }
+    );
+
+    const fakePage = {} as unknown as Page;
+    try {
+      await expect(agent.executeTask("sync task", undefined, fakePage)).resolves
+        .toMatchObject({
+          status: TaskStatus.COMPLETED,
+        });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to clear task state")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("returns variable snapshots without exposing internal mutable store", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
