@@ -462,6 +462,30 @@ export function SpreadsheetApp() {
     return parsedDate.toLocaleString();
   }
 
+  function formatRelativeAge(value: string): string {
+    const parsedDate = new Date(value);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return "unknown";
+    }
+    const deltaSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - parsedDate.getTime()) / 1000),
+    );
+    if (deltaSeconds < 60) {
+      return `${deltaSeconds}s ago`;
+    }
+    const deltaMinutes = Math.floor(deltaSeconds / 60);
+    if (deltaMinutes < 60) {
+      return `${deltaMinutes}m ago`;
+    }
+    const deltaHours = Math.floor(deltaMinutes / 60);
+    if (deltaHours < 24) {
+      return `${deltaHours}h ago`;
+    }
+    const deltaDays = Math.floor(deltaHours / 24);
+    return `${deltaDays}d ago`;
+  }
+
   function applyUiError(error: unknown, fallback: string): void {
     setUiNotice(null);
     if (error instanceof SpreadsheetApiError) {
@@ -2629,6 +2653,9 @@ export function SpreadsheetApp() {
                               <span className="ml-1 font-mono text-slate-300">
                                 {formatIsoTimestamp(entry.cached_at)}
                               </span>
+                              <span className="ml-1 text-slate-400">
+                                ({formatRelativeAge(entry.cached_at)})
+                              </span>
                             </span>
                             <span className="ml-2 text-slate-500">
                               ops:
@@ -2793,6 +2820,9 @@ export function SpreadsheetApp() {
                         · cached:{" "}
                         <span className="font-mono text-slate-300">
                           {formatIsoTimestamp(selectedCacheEntryDetail.cached_at)}
+                        </span>{" "}
+                        <span className="text-slate-400">
+                          ({formatRelativeAge(selectedCacheEntryDetail.cached_at)})
                         </span>
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-1">
