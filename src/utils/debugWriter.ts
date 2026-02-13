@@ -89,6 +89,16 @@ function stringifyDebugJson(value: unknown): string {
   );
 }
 
+function writeDebugFileSafe(filePath: string, content: string | Buffer): void {
+  try {
+    fs.writeFileSync(filePath, content);
+  } catch (error) {
+    console.warn(
+      `[debugWriter] Failed to write "${filePath}": ${formatUnknownError(error)}`
+    );
+  }
+}
+
 /**
  * Initialize a new debug session
  */
@@ -131,22 +141,22 @@ export async function writeAiActionDebug(
     domElementCount: debugData.domElementCount,
     success: debugData.success,
   };
-  fs.writeFileSync(
+  writeDebugFileSafe(
     path.join(debugDir, "metadata.json"),
     stringifyDebugJson(metadata)
   );
 
   // Write DOM tree
-  fs.writeFileSync(path.join(debugDir, "dom-tree.txt"), debugData.domTree);
+  writeDebugFileSafe(path.join(debugDir, "dom-tree.txt"), debugData.domTree);
 
   // Write screenshot if available
   if (debugData.screenshot) {
-    fs.writeFileSync(path.join(debugDir, "screenshot.png"), debugData.screenshot);
+    writeDebugFileSafe(path.join(debugDir, "screenshot.png"), debugData.screenshot);
   }
 
   // Write found element info
   if (debugData.foundElement) {
-    fs.writeFileSync(
+    writeDebugFileSafe(
       path.join(debugDir, "found-element.json"),
       stringifyDebugJson(debugData.foundElement)
     );
@@ -154,12 +164,12 @@ export async function writeAiActionDebug(
 
   // Write LLM response if available
   if (debugData.llmResponse) {
-    fs.writeFileSync(
+    writeDebugFileSafe(
       path.join(debugDir, "llm-response.json"),
       stringifyDebugJson(debugData.llmResponse)
     );
     // Also write just the raw text for easy viewing
-    fs.writeFileSync(
+    writeDebugFileSafe(
       path.join(debugDir, "llm-response.txt"),
       debugData.llmResponse.rawText
     );
@@ -170,8 +180,8 @@ export async function writeAiActionDebug(
     const elementsText = debugData.availableElements
       .map((e) => `[${e.id}] ${e.role}: "${e.label}"`)
       .join("\n");
-    fs.writeFileSync(path.join(debugDir, "available-elements.txt"), elementsText);
-    fs.writeFileSync(
+    writeDebugFileSafe(path.join(debugDir, "available-elements.txt"), elementsText);
+    writeDebugFileSafe(
       path.join(debugDir, "available-elements.json"),
       stringifyDebugJson(debugData.availableElements)
     );
@@ -179,7 +189,7 @@ export async function writeAiActionDebug(
 
   // Write error if present
   if (debugData.error) {
-    fs.writeFileSync(
+    writeDebugFileSafe(
       path.join(debugDir, "error.json"),
       stringifyDebugJson(debugData.error)
     );
@@ -187,7 +197,7 @@ export async function writeAiActionDebug(
 
   // Write frame debug info if available
   if (debugData.frameDebugInfo && debugData.frameDebugInfo.length > 0) {
-    fs.writeFileSync(
+    writeDebugFileSafe(
       path.join(debugDir, "frame-debug-info.json"),
       stringifyDebugJson(debugData.frameDebugInfo)
     );
@@ -219,7 +229,7 @@ export async function writeAiActionDebug(
       })
       .join("\n\n");
 
-    fs.writeFileSync(path.join(debugDir, "frame-debug-summary.txt"), frameSummary);
+    writeDebugFileSafe(path.join(debugDir, "frame-debug-summary.txt"), frameSummary);
   }
 
   return debugDir;

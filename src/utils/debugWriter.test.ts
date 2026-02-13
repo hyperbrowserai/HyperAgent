@@ -54,4 +54,61 @@ describe("writeAiActionDebug", () => {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("continues writing debug artifacts when one file write fails", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-debug-writer-")
+    );
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const originalWrite = fs.writeFileSync;
+    let hasThrown = false;
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(
+      (
+        filePath: fs.PathOrFileDescriptor,
+        data: string | NodeJS.ArrayBufferView,
+        options?: fs.WriteFileOptions
+      ) => {
+        if (!hasThrown && String(filePath).endsWith("metadata.json")) {
+          hasThrown = true;
+          throw { reason: "disk once failure" };
+        }
+        return originalWrite(filePath, data, options);
+      }
+    );
+
+    const debugData: DebugData = {
+      instruction: "click login",
+      url: "https://example.com",
+      timestamp: new Date().toISOString(),
+      domElementCount: 5,
+      domTree: "dom tree",
+      llmResponse: {
+        rawText: "{}",
+        parsed: { ok: true },
+      },
+      success: true,
+    };
+
+    try {
+      const debugDir = await writeAiActionDebug(debugData, tempDir);
+      const domTree = await fs.promises.readFile(
+        path.join(debugDir, "dom-tree.txt"),
+        "utf-8"
+      );
+      const llmText = await fs.promises.readFile(
+        path.join(debugDir, "llm-response.txt"),
+        "utf-8"
+      );
+
+      expect(domTree).toBe("dom tree");
+      expect(llmText).toBe("{}");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[debugWriter] Failed to write")
+      );
+    } finally {
+      writeSpy.mockRestore();
+      warnSpy.mockRestore();
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });
