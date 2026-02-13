@@ -58,6 +58,22 @@ describe("retry", () => {
     expect(func).toHaveBeenCalledTimes(10);
   });
 
+  it("caps exponential backoff delay to bounded maximum", async () => {
+    const func = jest.fn().mockRejectedValue(new Error("always fails"));
+
+    await expect(
+      retry({
+        func,
+        params: { retryCount: 10 },
+      })
+    ).rejects.toThrow("always fails");
+
+    expect(sleep).toHaveBeenCalledTimes(9);
+    const sleepDelays = sleep.mock.calls.map((call) => call[0] as number);
+    expect(Math.max(...sleepDelays)).toBe(10000);
+    expect(sleepDelays.some((delay) => delay > 10000)).toBe(false);
+  });
+
   it("does not sleep after the final failed attempt", async () => {
     const func = jest.fn().mockRejectedValue(new Error("always fails"));
 

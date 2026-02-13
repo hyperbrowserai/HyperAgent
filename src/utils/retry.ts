@@ -3,6 +3,7 @@ import { formatUnknownError } from "./format-unknown-error";
 
 const DEFAULT_RETRY_COUNT = 3;
 const MAX_RETRY_COUNT = 10;
+const MAX_RETRY_DELAY_MS = 10_000;
 
 function normalizeRetryCount(value?: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -39,7 +40,8 @@ export async function retry<T>({
       }
       lastError = error;
       if (attempt < retryCount - 1) {
-        await sleep(Math.pow(2, attempt) * 1000);
+        const delayMs = Math.min(Math.pow(2, attempt) * 1000, MAX_RETRY_DELAY_MS);
+        await sleep(delayMs);
       }
     }
   }
