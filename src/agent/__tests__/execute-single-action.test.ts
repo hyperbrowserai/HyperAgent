@@ -113,6 +113,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       resolvedByTimeout: false,
       forcedDrops: 0,
     });
+    writeAiActionDebug.mockResolvedValue(undefined);
   });
 
   it("passes maxElementRetries and retryDelayMs to findElementWithInstruction", async () => {
@@ -220,6 +221,167 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       expect(result.status).toBe(TaskStatus.COMPLETED);
       expect(errorSpy).toHaveBeenCalledWith(
         '[aiAction] Failed to write debug data: {"reason":"debug writer crashed"}'
+      );
+    } finally {
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  it("preserves not-found diagnostics when page.url getter throws in debug mode", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => {
+        throw new Error("url trap");
+      },
+      screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
+    } as unknown as Page;
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    findElementWithInstruction.mockResolvedValueOnce({
+      success: false,
+      domState: {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      elementMap: new Map(),
+      llmResponse: {
+        rawText: "{}",
+        parsed: {},
+      },
+    });
+
+    try {
+      await expect(
+        agent.executeSingleAction("click login", page, {
+          maxElementRetries: 1,
+        })
+      ).rejects.toThrow("No elements found for instruction");
+
+      expect(writeAiActionDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "about:blank",
+        })
+      );
+    } finally {
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("continues debug-data writes when screenshot accessor traps throw", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+      get screenshot(): never {
+        throw new Error("screenshot trap");
+      },
+    } as unknown as Page;
+    performAction.mockRejectedValueOnce(new Error("perform failed"));
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await expect(
+        agent.executeSingleAction("click login", page, {
+          maxElementRetries: 1,
+        })
+      ).rejects.toThrow("perform failed");
+
+      expect(writeAiActionDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+        })
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("keeps element-not-found errors readable when page.url getter traps", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    findElementWithInstruction.mockResolvedValueOnce({
+      success: false,
+      domState: {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      elementMap: new Map(),
+      llmResponse: {
+        rawText: "{}",
+        parsed: {},
+      },
+    });
+    const page = {
+      url: () => {
+        throw new Error("url trap");
+      },
+      screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
+    } as unknown as Page;
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await expect(
+        agent.executeSingleAction("click missing", page, {
+          maxElementRetries: 1,
+        })
+      ).rejects.toThrow("No elements found for instruction");
+      expect(writeAiActionDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "about:blank",
+        })
+      );
+    } finally {
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  it("continues debug writing when screenshot accessor traps throw", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    performAction.mockRejectedValueOnce({ reason: "perform crashed" });
+    writeAiActionDebug.mockResolvedValue(undefined);
+    const page = {
+      url: () => "https://example.com",
+      get screenshot(): unknown {
+        throw new Error("screenshot trap");
+      },
+    } as unknown as Page;
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await expect(
+        agent.executeSingleAction("click login", page, {
+          maxElementRetries: 1,
+        })
+      ).rejects.toThrow('Failed to execute action: {"reason":"perform crashed"}');
+
+      expect(writeAiActionDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          screenshot: undefined,
+        })
       );
     } finally {
       errorSpy.mockRestore();

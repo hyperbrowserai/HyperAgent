@@ -556,6 +556,105 @@ describe("HyperAgent constructor and task controls", () => {
     expect(internalAgent.executeSingleAction).toHaveBeenCalledTimes(2);
   });
 
+  it("hyperPage.extract rejects blank task descriptions when provided", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: jest.fn(),
+        off: jest.fn(),
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+      url: () => "https://example.com",
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+
+    const [hyperPage] = await agent.getPages();
+    await expect(
+      hyperPage.extract("   ")
+    ).rejects.toThrow("Task description must be non-empty when provided");
+    expect(mockedRunAgentTask).not.toHaveBeenCalled();
+  });
+
+  it("hyperPage.extract normalizes maxSteps and task prompt input", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: jest.fn(),
+        off: jest.fn(),
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+      url: () => "https://example.com",
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+
+    const [hyperPage] = await agent.getPages();
+    await hyperPage.extract("  summarize inventory  ", undefined, {
+      maxSteps: Number.NaN,
+    });
+
+    const taskStateArg = mockedRunAgentTask.mock.calls[0]?.[1] as {
+      task: string;
+    };
+    const paramsArg = mockedRunAgentTask.mock.calls[0]?.[2] as {
+      maxSteps?: number;
+    };
+    expect(taskStateArg.task).toContain("summarize inventory");
+    expect(taskStateArg.task).not.toContain("  summarize inventory  ");
+    expect(paramsArg.maxSteps).toBe(2);
+  });
+
   it("executeTaskAsync tolerates context listener attachment failures", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({

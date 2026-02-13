@@ -257,6 +257,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return pageCandidate as Page;
   }
 
+  private async captureDebugScreenshot(page: Page): Promise<Buffer | null> {
+    let screenshotMethod: unknown;
+    try {
+      screenshotMethod = (page as unknown as Record<string, unknown>).screenshot;
+    } catch {
+      return null;
+    }
+    if (typeof screenshotMethod !== "function") {
+      return null;
+    }
+    try {
+      const screenshot = await (screenshotMethod as (options: {
+        type: string;
+      }) => Promise<Buffer | null>)({ type: "png" });
+      return Buffer.isBuffer(screenshot) ? screenshot : null;
+    } catch {
+      return null;
+    }
+  }
+
   private getSafeMCPServerIds(): string[] {
     if (!this.mcpClient) {
       return [];
@@ -1232,7 +1252,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       console.error(
         `[aiAction] No elements found for instruction: "${instruction}" after ${maxRetries} attempts`
       );
-      console.error(`[aiAction] Current URL: ${page.url()}`);
+      console.error(`[aiAction] Current URL: ${this.safeGetPageUrl(page)}`);
       console.error(
         `[aiAction] Total elements in final a11y tree: ${result.domState.elements.size}`
       );
@@ -1287,15 +1307,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const { writeAiActionDebug } = await import("../utils/debugWriter");
 
     try {
-      const screenshot = await params.page
-        .screenshot({ type: "png" })
-        .catch(() => null);
+      const screenshot = await this.captureDebugScreenshot(params.page);
+      const safeUrl = this.safeGetPageUrl(params.page);
 
       if (params.success && params.element) {
         // Success case - write found element data
         await writeAiActionDebug({
           instruction: params.instruction,
-          url: params.page.url(),
+          url: safeUrl,
           timestamp: params.startTime,
           domElementCount: params.domState.elements.size,
           domTree: params.domState.domState,
@@ -1319,7 +1338,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
         await writeAiActionDebug({
           instruction: params.instruction,
-          url: params.page.url(),
+          url: safeUrl,
           timestamp: params.startTime,
           domElementCount: params.domState.elements.size,
           domTree: params.domState.domState,
@@ -2182,6 +2201,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       outputSchema?: T,
       params?: Omit<TaskParams, "outputSchema">
     ): Promise<T extends z.ZodType<unknown> ? z.infer<T> : string> => {
+      const normalizedTask =
+        typeof task === "string" ? task.trim() : undefined;
+      if (typeof task === "string" && (!normalizedTask || normalizedTask.length === 0)) {
+        throw new HyperagentError(
+          "Task description must be non-empty when provided",
+          400
+        );
+      }
       if (!task && !outputSchema) {
         throw new HyperagentError(
           "No task description or output schema specified",
@@ -2189,13 +2216,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         );
       }
       const taskParams: TaskParams = {
-        maxSteps: params?.maxSteps ?? 2,
         ...params,
+        maxSteps: this.normalizeRetryCount(params?.maxSteps, 2, 20),
         outputSchema,
       };
-      if (task) {
+      if (normalizedTask) {
         const res = await this.executeTask(
-          `You have to perform an extraction on the current page. You have to perform the extraction according to the task: ${task}. Make sure your final response only contains the extracted content`,
+          `You have to perform an extraction on the current page. You have to perform the extraction according to the task: ${normalizedTask}. Make sure your final response only contains the extracted content`,
           taskParams,
           getActivePage()
         );
