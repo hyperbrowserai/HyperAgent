@@ -103,7 +103,7 @@ ${indent}await page.waitForTimeout(${waitMs});`;
         return `${indent}// Step ${step.stepIndex} (extract skipped: missing instruction)`;
       }
       return `${indent}// Step ${step.stepIndex}
-${indent}await page.extract("${step.instruction}");`;
+${indent}await page.extract(${JSON.stringify(step.instruction)});`;
     }
 
     const call = step.method ? METHOD_TO_CALL[step.method] : undefined;

@@ -145,4 +145,26 @@ describe("action cache helpers", () => {
     expect(script).toContain("extract skipped: missing instruction");
     expect(script).not.toContain("await page.extract(");
   });
+
+  it("escapes extract instruction content in generated script", () => {
+    const instruction = 'extract "quoted" title\nand subtitle';
+    const extractEntry: ActionCacheEntry = {
+      stepIndex: 7,
+      instruction,
+      elementId: null,
+      method: null,
+      arguments: [],
+      actionType: "extract",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [extractEntry],
+    });
+
+    expect(script).toContain(`await page.extract(${JSON.stringify(instruction)});`);
+  });
 });
