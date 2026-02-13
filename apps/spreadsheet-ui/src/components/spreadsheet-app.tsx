@@ -61,6 +61,7 @@ export function SpreadsheetApp() {
   const [isRunningPreset, setIsRunningPreset] = useState(false);
   const [isRunningScenario, setIsRunningScenario] = useState(false);
   const [isRunningSelectedScenario, setIsRunningSelectedScenario] = useState(false);
+  const [isRunningPreviewOps, setIsRunningPreviewOps] = useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
@@ -508,6 +509,38 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleRunPreviewOperationsOnCurrentWorkbook() {
+    if (!workbook || wizardScenarioOps.length === 0) {
+      return;
+    }
+    setIsRunningPreviewOps(true);
+    try {
+      setUiError(null);
+      const response = await runAgentOps(workbook.id, {
+        request_id: `scenario-preview-ops-${wizardScenario}-${Date.now()}`,
+        actor: "ui-scenario-preview-ops",
+        stop_on_error: true,
+        operations: wizardScenarioOps,
+      });
+      setLastScenario(wizardScenario);
+      setLastPreset(null);
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastAgentOps(response.results);
+      setLastWizardImportSummary(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["cells", workbook.id, activeSheet],
+      });
+    } catch (error) {
+      setUiError(
+        error instanceof Error
+          ? error.message
+          : `Failed to run preview operations for ${wizardScenario}.`,
+      );
+    } finally {
+      setIsRunningPreviewOps(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -819,6 +852,19 @@ export function SpreadsheetApp() {
                   ? "Running in workbook..."
                   : "Run in Current Workbook"}
               </button>
+              <button
+                onClick={handleRunPreviewOperationsOnCurrentWorkbook}
+                disabled={
+                  !workbook ||
+                  wizardScenarioOps.length === 0 ||
+                  isRunningPreviewOps
+                }
+                className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40"
+              >
+                {isRunningPreviewOps
+                  ? "Running preview ops..."
+                  : "Run Preview via agent/ops"}
+              </button>
             </div>
             {(wizardPresetsQuery.data ?? []).length > 0 ? (
               <div className="mt-2 flex flex-wrap gap-1">
@@ -848,6 +894,14 @@ export function SpreadsheetApp() {
                     </span>
                   ))}
                 </div>
+                <details className="mt-2 rounded border border-slate-800 bg-slate-900 p-2">
+                  <summary className="cursor-pointer text-[11px] text-slate-400">
+                    Show operation JSON payload
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap break-all text-[11px] text-slate-300">
+                    {JSON.stringify(wizardScenarioOps, null, 2)}
+                  </pre>
+                </details>
               </div>
             ) : null}
           </div>
