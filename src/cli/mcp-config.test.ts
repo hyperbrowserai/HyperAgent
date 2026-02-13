@@ -156,6 +156,18 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("infers SSE connectionType when only sseUrl is provided", () => {
+    const parsed = parseMCPServersConfig(
+      '[{"sseUrl":"https://example.com/sse"}]'
+    );
+    expect(parsed).toEqual([
+      {
+        connectionType: "sse",
+        sseUrl: "https://example.com/sse",
+      },
+    ]);
+  });
+
   it("validates args/env/sseHeaders shapes and normalizes record keys", () => {
     const parsed = parseMCPServersConfig(
       '[{"command":"npx","args":["-y","server"],"env":{" KEY ":"value"}},{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{" Authorization ":"Bearer token"}}]'

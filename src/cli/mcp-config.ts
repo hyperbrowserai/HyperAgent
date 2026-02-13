@@ -229,7 +229,15 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
         `MCP server entry at index ${i} has unsupported connectionType "${entry.connectionType}". Supported values are "stdio" and "sse".`
       );
     }
-    const connectionType = rawConnectionType === "sse" ? "sse" : "stdio";
+    const hasCommand = isNonEmptyString(entry.command);
+    const hasSseUrl = isNonEmptyString(entry.sseUrl);
+    const inferredConnectionType =
+      !rawConnectionType && hasSseUrl && !hasCommand ? "sse" : "stdio";
+    const connectionType = rawConnectionType === "sse"
+      ? "sse"
+      : rawConnectionType === "stdio"
+        ? "stdio"
+        : inferredConnectionType;
     normalizedEntry.connectionType = connectionType;
     if (connectionType === "sse") {
       const sseUrl = normalizeSSEUrl(entry.sseUrl, i);
