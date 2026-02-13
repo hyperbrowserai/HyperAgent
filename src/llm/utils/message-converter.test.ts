@@ -183,6 +183,25 @@ describe("system message text extraction", () => {
     expect(system).toBe("rule one\nrule two");
   });
 
+  it("combines multiple Anthropic system messages in order", () => {
+    const { system } = convertToAnthropicMessages([
+      {
+        role: "system",
+        content: "primary system instruction",
+      },
+      {
+        role: "system",
+        content: [{ type: "text", text: "secondary instruction" }],
+      },
+      {
+        role: "user",
+        content: "hello",
+      },
+    ]);
+
+    expect(system).toBe("primary system instruction\n\nsecondary instruction");
+  });
+
   it("extracts system text parts for Gemini conversion", () => {
     const { systemInstruction } = convertToGeminiMessages([
       {
@@ -202,6 +221,27 @@ describe("system message text extraction", () => {
     expect(systemInstruction).toBe("rule one\nrule two");
   });
 
+  it("combines multiple Gemini system messages in order", () => {
+    const { systemInstruction } = convertToGeminiMessages([
+      {
+        role: "system",
+        content: "primary system instruction",
+      },
+      {
+        role: "system",
+        content: [{ type: "text", text: "secondary instruction" }],
+      },
+      {
+        role: "user",
+        content: "hello",
+      },
+    ]);
+
+    expect(systemInstruction).toBe(
+      "primary system instruction\n\nsecondary instruction"
+    );
+  });
+
   it("normalizes unknown Gemini content parts into text blocks", () => {
     const circularPart: Record<string, unknown> = { type: "mystery" };
     circularPart.self = circularPart;
@@ -216,6 +256,28 @@ describe("system message text extraction", () => {
     expect(messages[0]?.parts).toEqual([
       {
         text: '{"type":"mystery","self":"[Circular]"}',
+      },
+    ]);
+  });
+
+  it("normalizes unknown Anthropic content parts into text blocks", () => {
+    const { messages } = convertToAnthropicMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_call",
+            toolName: "lookup",
+            arguments: { id: "123" },
+          },
+        ],
+      },
+    ]);
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "text",
+        text: '{"type":"tool_call","toolName":"lookup","arguments":{"id":"123"}}',
       },
     ]);
   });

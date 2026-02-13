@@ -117,11 +117,14 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
 
 export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
   const anthropicMessages: MessageParam[] = [];
-  let systemMessage: string | undefined;
+  const systemMessageParts: string[] = [];
 
   for (const msg of messages) {
     if (msg.role === "system") {
-      systemMessage = extractTextContent(msg.content);
+      const systemText = extractTextContent(msg.content);
+      if (systemText.length > 0) {
+        systemMessageParts.push(systemText);
+      }
       continue;
     }
 
@@ -148,6 +151,12 @@ export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
             },
           };
           blocks.push(imageBlock);
+        } else {
+          const textBlock: TextBlockParam = {
+            type: "text",
+            text: formatUnknownError(part),
+          };
+          blocks.push(textBlock);
         }
       }
       content = blocks;
@@ -159,6 +168,10 @@ export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
     });
   }
 
+  const systemMessage =
+    systemMessageParts.length > 0
+      ? systemMessageParts.join("\n\n")
+      : undefined;
   return { messages: anthropicMessages, system: systemMessage };
 }
 
@@ -184,11 +197,14 @@ function normalizeImageMimeType(
 
 export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
   const geminiMessages: Record<string, unknown>[] = [];
-  let systemInstruction: string | undefined;
+  const systemInstructionParts: string[] = [];
 
   for (const msg of messages) {
     if (msg.role === "system") {
-      systemInstruction = extractTextContent(msg.content);
+      const systemText = extractTextContent(msg.content);
+      if (systemText.length > 0) {
+        systemInstructionParts.push(systemText);
+      }
       continue;
     }
 
@@ -218,6 +234,10 @@ export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
     geminiMessages.push(geminiMessage);
   }
 
+  const systemInstruction =
+    systemInstructionParts.length > 0
+      ? systemInstructionParts.join("\n\n")
+      : undefined;
   return { messages: geminiMessages, systemInstruction };
 }
 
