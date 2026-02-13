@@ -30,6 +30,20 @@ pub struct ConditionalAggregateFormula {
   pub value_range_end: Option<(u32, u32)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CriteriaCondition {
+  pub range_start: (u32, u32),
+  pub range_end: (u32, u32),
+  pub criteria: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MultiCriteriaAggregateFormula {
+  pub value_range_start: Option<(u32, u32)>,
+  pub value_range_end: Option<(u32, u32)>,
+  pub conditions: Vec<CriteriaCondition>,
+}
+
 pub fn address_from_row_col(row: u32, col: u32) -> String {
   format!("{}{}", index_to_col(col), row)
 }
@@ -246,6 +260,45 @@ pub fn parse_averageif_formula(
   parse_conditional_aggregate_formula(formula, "AVERAGEIF")
 }
 
+pub fn parse_countifs_formula(
+  formula: &str,
+) -> Option<MultiCriteriaAggregateFormula> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "COUNTIFS" || args.len() < 2 || args.len() % 2 != 0 {
+    return None;
+  }
+
+  let mut conditions = Vec::new();
+  let mut index = 0usize;
+  while index + 1 < args.len() {
+    let (range_start, range_end) = parse_range_reference(&args[index])?;
+    conditions.push(CriteriaCondition {
+      range_start,
+      range_end,
+      criteria: args[index + 1].clone(),
+    });
+    index += 2;
+  }
+
+  Some(MultiCriteriaAggregateFormula {
+    value_range_start: None,
+    value_range_end: None,
+    conditions,
+  })
+}
+
+pub fn parse_sumifs_formula(
+  formula: &str,
+) -> Option<MultiCriteriaAggregateFormula> {
+  parse_multi_criteria_aggregate_formula(formula, "SUMIFS")
+}
+
+pub fn parse_averageifs_formula(
+  formula: &str,
+) -> Option<MultiCriteriaAggregateFormula> {
+  parse_multi_criteria_aggregate_formula(formula, "AVERAGEIFS")
+}
+
 fn parse_conditional_aggregate_formula(
   formula: &str,
   function_name: &str,
@@ -269,6 +322,35 @@ fn parse_conditional_aggregate_formula(
     criteria: args[1].clone(),
     value_range_start,
     value_range_end,
+  })
+}
+
+fn parse_multi_criteria_aggregate_formula(
+  formula: &str,
+  function_name: &str,
+) -> Option<MultiCriteriaAggregateFormula> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != function_name || args.len() < 3 || args.len() % 2 == 0 {
+    return None;
+  }
+
+  let (value_range_start, value_range_end) = parse_range_reference(&args[0])?;
+  let mut conditions = Vec::new();
+  let mut index = 1usize;
+  while index + 1 < args.len() {
+    let (range_start, range_end) = parse_range_reference(&args[index])?;
+    conditions.push(CriteriaCondition {
+      range_start,
+      range_end,
+      criteria: args[index + 1].clone(),
+    });
+    index += 2;
+  }
+
+  Some(MultiCriteriaAggregateFormula {
+    value_range_start: Some(value_range_start),
+    value_range_end: Some(value_range_end),
+    conditions,
   })
 }
 
@@ -365,11 +447,11 @@ fn parse_range_reference(value: &str) -> Option<((u32, u32), (u32, u32))> {
 mod tests {
   use super::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
-    parse_averageif_formula,
+    parse_averageif_formula, parse_averageifs_formula,
     parse_concat_formula, parse_date_formula, parse_day_formula,
     parse_left_formula, parse_len_formula, parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
-    parse_sumif_formula,
+    parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_if_formula, parse_today_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula,
     parse_year_formula,
@@ -489,5 +571,39 @@ mod tests {
     assert_eq!(averageif.criteria_range_end, (5, 1));
     assert_eq!(averageif.value_range_start, None);
     assert_eq!(averageif.value_range_end, None);
+
+    let countifs = parse_countifs_formula(
+      r#"=COUNTIFS(A1:A5,">=10",C1:C5,"east")"#,
+    )
+    .expect("countifs should parse");
+    assert_eq!(countifs.value_range_start, None);
+    assert_eq!(countifs.value_range_end, None);
+    assert_eq!(countifs.conditions.len(), 2);
+    assert_eq!(countifs.conditions[0].range_start, (1, 1));
+    assert_eq!(countifs.conditions[0].range_end, (5, 1));
+    assert_eq!(countifs.conditions[0].criteria, r#"">=10""#);
+    assert_eq!(countifs.conditions[1].range_start, (1, 3));
+    assert_eq!(countifs.conditions[1].range_end, (5, 3));
+    assert_eq!(countifs.conditions[1].criteria, r#""east""#);
+
+    let sumifs = parse_sumifs_formula(
+      r#"=SUMIFS(B1:B5,A1:A5,">=10",C1:C5,"east")"#,
+    )
+    .expect("sumifs should parse");
+    assert_eq!(sumifs.value_range_start, Some((1, 2)));
+    assert_eq!(sumifs.value_range_end, Some((5, 2)));
+    assert_eq!(sumifs.conditions.len(), 2);
+    assert_eq!(sumifs.conditions[0].range_start, (1, 1));
+    assert_eq!(sumifs.conditions[0].criteria, r#"">=10""#);
+    assert_eq!(sumifs.conditions[1].range_start, (1, 3));
+    assert_eq!(sumifs.conditions[1].criteria, r#""east""#);
+
+    let averageifs = parse_averageifs_formula(
+      r#"=AVERAGEIFS(B1:B5,A1:A5,">=10",C1:C5,"east")"#,
+    )
+    .expect("averageifs should parse");
+    assert_eq!(averageifs.value_range_start, Some((1, 2)));
+    assert_eq!(averageifs.value_range_end, Some((5, 2)));
+    assert_eq!(averageifs.conditions.len(), 2);
   }
 }
