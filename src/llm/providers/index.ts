@@ -93,7 +93,10 @@ export function createLLMClient(config: LLMConfig): HyperAgentLLM {
   const model = normalizeModel(config.model);
   const temperature = normalizeTemperature(config.temperature);
   const maxTokens = normalizeMaxTokens(config.maxTokens);
-  const baseURL = normalizeBaseURL(config.baseURL);
+  const baseURL =
+    provider === "openai" || provider === "deepseek"
+      ? normalizeBaseURL(config.baseURL)
+      : undefined;
   const apiKey = normalizeApiKey(config.apiKey);
 
   switch (provider) {

@@ -126,4 +126,21 @@ describe("createLLMClient", () => {
       })
     ).toThrow("Invalid LLM baseURL protocol: ftp:");
   });
+
+  it("ignores invalid baseURL for providers that do not use it", () => {
+    expect(() =>
+      createLLMClient({
+        provider: "anthropic",
+        model: "claude-3-5-sonnet",
+        baseURL: "not-a-url",
+      })
+    ).not.toThrow();
+
+    expect(createAnthropicClientMock).toHaveBeenCalledWith({
+      apiKey: undefined,
+      model: "claude-3-5-sonnet",
+      temperature: undefined,
+      maxTokens: undefined,
+    });
+  });
 });
