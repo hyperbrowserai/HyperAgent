@@ -5,6 +5,7 @@
 
 import type { Page, Frame } from 'playwright-core';
 import type { CDPSession } from '@/cdp';
+import { formatUnknownError } from '@/utils';
 
 /**
  * Browser-side functions to detect scrollable elements
@@ -184,7 +185,9 @@ export async function getScrollableElementXpaths(
     }, topN);
     return xpaths;
   } catch (error) {
-    console.warn('Error getting scrollable element xpaths:', error);
+    console.warn(
+      `Error getting scrollable element xpaths: ${formatUnknownError(error)}`
+    );
     return [];
   }
 }
@@ -237,13 +240,17 @@ export async function findScrollableElementIds(
         }
       } catch (error) {
         // Silently ignore errors for individual elements
-        console.warn(`Error resolving XPath ${xpath}:`, error);
+        console.warn(
+          `Error resolving XPath ${xpath}: ${formatUnknownError(error)}`
+        );
       }
     }
 
     return backendIds;
   } catch (error) {
-    console.error('Error finding scrollable element IDs:', error);
+    console.error(
+      `Error finding scrollable element IDs: ${formatUnknownError(error)}`
+    );
     return new Set();
   }
 }
