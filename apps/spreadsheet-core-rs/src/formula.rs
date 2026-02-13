@@ -372,6 +372,30 @@ pub fn parse_log10_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_sin_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "SIN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_cos_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "COS" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_tan_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "TAN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_round_formula(formula: &str) -> Option<(String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ROUND" && args.len() == 2 {
@@ -928,7 +952,8 @@ mod tests {
     parse_index_formula, parse_int_formula, parse_isblank_formula,
     parse_iseven_formula, parse_isodd_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
-    parse_len_formula, parse_ln_formula, parse_log10_formula, parse_lower_formula,
+    parse_len_formula, parse_ln_formula, parse_log10_formula, parse_sin_formula,
+    parse_cos_formula, parse_tan_formula, parse_lower_formula,
     parse_match_formula, parse_maxifs_formula,
     parse_minifs_formula,
     parse_month_formula,
@@ -1080,6 +1105,9 @@ mod tests {
     );
     assert_eq!(parse_ln_formula("=LN(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_log10_formula("=LOG10(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_sin_formula("=SIN(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_cos_formula("=COS(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_tan_formula("=TAN(A1)").as_deref(), Some("A1"));
     let round = parse_round_formula("=ROUND(12.345, 2)").expect("round should parse");
     assert_eq!(round.0, "12.345");
     assert_eq!(round.1, "2");

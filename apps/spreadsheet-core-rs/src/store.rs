@@ -6,6 +6,7 @@ use crate::{
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_ln_formula, parse_log10_formula, parse_pi_formula,
+    parse_sin_formula, parse_cos_formula, parse_tan_formula,
     parse_choose_formula, parse_left_formula,
     parse_ceiling_formula, parse_exact_formula, parse_floor_formula,
     parse_index_formula,
@@ -578,6 +579,21 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(value.log10().to_string()));
+  }
+
+  if let Some(sin_arg) = parse_sin_formula(formula) {
+    let value = parse_required_float(connection, sheet, &sin_arg)?;
+    return Ok(Some(value.sin().to_string()));
+  }
+
+  if let Some(cos_arg) = parse_cos_formula(formula) {
+    let value = parse_required_float(connection, sheet, &cos_arg)?;
+    return Ok(Some(value.cos().to_string()));
+  }
+
+  if let Some(tan_arg) = parse_tan_formula(formula) {
+    let value = parse_required_float(connection, sheet, &tan_arg)?;
+    return Ok(Some(value.tan().to_string()));
   }
 
   if let Some(abs_arg) = parse_abs_formula(formula) {
@@ -2766,12 +2782,30 @@ mod tests {
         value: None,
         formula: Some("=LOG10(1000)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 97,
+        value: None,
+        formula: Some("=SIN(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 98,
+        value: None,
+        formula: Some("=COS(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 99,
+        value: None,
+        formula: Some("=TAN(0)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 94);
+    assert_eq!(updated_cells, 97);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2785,7 +2819,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 96,
+        end_col: 99,
       },
     )
     .expect("cells should be fetched");
@@ -2926,6 +2960,9 @@ mod tests {
     );
     assert_eq!(by_position(1, 95).evaluated_value.as_deref(), Some("0"));
     assert_eq!(by_position(1, 96).evaluated_value.as_deref(), Some("3"));
+    assert_eq!(by_position(1, 97).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 98).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 99).evaluated_value.as_deref(), Some("0"));
   }
 
   #[test]
