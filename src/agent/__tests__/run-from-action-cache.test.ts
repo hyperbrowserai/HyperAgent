@@ -743,6 +743,55 @@ describe("runFromActionCache hardening", () => {
     expect(message.length).toBeLessThanOrEqual(4_100);
   });
 
+  it("truncates oversized replay step lists to bounded limits", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      taskId: "perform-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "ok",
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const maxReplaySteps = (
+      HyperAgent as unknown as { MAX_REPLAY_STEPS: number }
+    ).MAX_REPLAY_STEPS;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: Array.from({ length: maxReplaySteps + 1 }, (_, index) => ({
+        stepIndex: index,
+        instruction: `step ${index}`,
+        elementId: null,
+        method: null,
+        arguments: [],
+        frameIndex: null,
+        xpath: null,
+        actionType: "unknown-action",
+        success: true,
+        message: "cached",
+      })),
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(perform).toHaveBeenCalledTimes(maxReplaySteps);
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    const finalStep = replay.steps[replay.steps.length - 1];
+    expect(finalStep?.actionType).toBe("replay-limit");
+    expect(finalStep?.message).toContain("Replay truncated after");
+  });
+
   it("handles malformed non-finite step indices safely", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

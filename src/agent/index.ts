@@ -83,6 +83,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     MAX_LABEL_LENGTH: 60,
   };
   private static readonly MAX_REPLAY_OUTPUT_CHARS = 4_000;
+  private static readonly MAX_REPLAY_STEPS = 1_000;
   private static readonly MAX_ACTION_CACHE_ENTRIES = 200;
 
   private llm: HyperAgentLLM;
@@ -1462,12 +1463,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
 
     let sortedSteps: unknown[] = [];
+    let omittedReplaySteps = 0;
     try {
       sortedSteps = readCacheSteps().sort(
         (a, b) =>
           getSortStepIndex(getStepIndexValue(a)) -
           getSortStepIndex(getStepIndexValue(b))
       );
+      if (sortedSteps.length > HyperAgent.MAX_REPLAY_STEPS) {
+        omittedReplaySteps = sortedSteps.length - HyperAgent.MAX_REPLAY_STEPS;
+        sortedSteps = sortedSteps.slice(0, HyperAgent.MAX_REPLAY_STEPS);
+      }
     } catch (error) {
       const replayResult: ActionCacheReplayResult = {
         replayId,
@@ -1697,6 +1703,22 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (!recordReplayStep(step, result)) {
         break;
       }
+    }
+
+    if (omittedReplaySteps > 0) {
+      replayStatus = TaskStatus.FAILED;
+      stepsResult.push({
+        stepIndex: -1,
+        actionType: "replay-limit",
+        usedXPath: false,
+        fallbackUsed: false,
+        cachedXPath: null,
+        fallbackXPath: null,
+        fallbackElementId: null,
+        retries: 0,
+        success: false,
+        message: `Replay truncated after ${HyperAgent.MAX_REPLAY_STEPS} steps; ${omittedReplaySteps} additional step(s) were skipped`,
+      });
     }
 
     const replayResult: ActionCacheReplayResult = {
