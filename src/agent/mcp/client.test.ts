@@ -217,7 +217,7 @@ describe("normalizeMCPListToolsPayload", () => {
           command: "npx",
         })
       ).rejects.toThrow(
-        "Invalid MCP listTools response: Invalid MCP listTools response: expected a tools array"
+        "Invalid MCP listTools response: expected a tools array"
       );
       expect(closeSpy).toHaveBeenCalledTimes(1);
     } finally {

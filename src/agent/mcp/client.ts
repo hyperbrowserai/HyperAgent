@@ -614,9 +614,12 @@ function safeGetMCPListToolsPayload(value: unknown): Tool[] {
   try {
     return normalizeMCPListToolsPayload(value);
   } catch (error) {
-    throw new Error(
-      `Invalid MCP listTools response: ${formatUnknownError(error)}`
-    );
+    const message = formatUnknownError(error);
+    const prefix = "Invalid MCP listTools response:";
+    if (message.startsWith(prefix)) {
+      throw new Error(message);
+    }
+    throw new Error(`${prefix} ${message}`);
   }
 }
 
