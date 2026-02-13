@@ -1175,11 +1175,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mergedParams
       )
         .then((result) => {
+          cleanup();
           if (this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
             this.storeTaskActionCache(taskId, result.actionCache);
+            return result;
           }
-          cleanup();
-          return result;
+          this.writeTaskStatus(taskState, TaskStatus.CANCELLED, TaskStatus.CANCELLED);
+          return {
+            ...result,
+            status: TaskStatus.CANCELLED,
+          };
         })
         .catch((error: unknown) => {
           cleanup();
@@ -1282,7 +1287,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     this.tasks[taskId] = taskState;
     try {
       const mergedParams = params ?? {};
-      const result = await runAgentTask(
+      let result = await runAgentTask(
         {
           llm: this.llm,
           actions: this.getActions(mergedParams?.outputSchema),
@@ -1299,6 +1304,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       cleanup();
       if (this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
         this.storeTaskActionCache(taskId, result.actionCache);
+      } else {
+        this.writeTaskStatus(taskState, TaskStatus.CANCELLED, TaskStatus.CANCELLED);
+        result = {
+          ...result,
+          status: TaskStatus.CANCELLED,
+        };
       }
       this.cleanupTaskLifecycle(taskId);
       return result;

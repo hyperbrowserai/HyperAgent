@@ -1847,9 +1847,45 @@ describe("HyperAgent constructor and task controls", () => {
       },
     });
     await expect(task.result).resolves.toMatchObject({
-      status: TaskStatus.COMPLETED,
+      status: TaskStatus.CANCELLED,
     });
+    expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
     expect(internalAgent.actionCacheByTaskId).toEqual({});
+  });
+
+  it("executeTask returns cancelled output when closeAgent occurs mid-run", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const execution = agent.executeTask("sync long running", undefined, fakePage);
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    resolveTask({
+      taskId: "sync-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "sync-task",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    await expect(execution).resolves.toMatchObject({
+      status: TaskStatus.CANCELLED,
+    });
   });
 
   it("closeAgent avoids noisy missing-task logs for late async failures", async () => {
