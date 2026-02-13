@@ -166,27 +166,27 @@ export function normalizeMCPToolParams(
         for (const [rawKey, mapValue] of value.entries()) {
           const normalizedRawKey =
             typeof rawKey === "string" ? rawKey : formatUnknownError(rawKey);
-          const trimmedKey = normalizedRawKey.trim();
-          if (trimmedKey.length === 0) {
+          const normalizedMapKey = normalizedRawKey.trim().replace(/\s+/g, " ");
+          if (normalizedMapKey.length === 0) {
             throw new Error("MCP tool params cannot include empty keys");
           }
-          if (trimmedKey.length > MAX_MCP_PARAM_KEY_CHARS) {
+          if (normalizedMapKey.length > MAX_MCP_PARAM_KEY_CHARS) {
             throw new Error(
               `MCP tool params cannot include keys longer than ${MAX_MCP_PARAM_KEY_CHARS} characters`
             );
           }
-          if (hasUnsupportedControlChars(trimmedKey)) {
+          if (hasUnsupportedControlChars(normalizedMapKey)) {
             throw new Error(
               "MCP tool params cannot include keys with control characters"
             );
           }
-          if (seenMapKeys.has(trimmedKey)) {
+          if (seenMapKeys.has(normalizedMapKey)) {
             throw new Error(
-              `MCP tool params cannot include duplicate key after trimming: "${trimmedKey}"`
+              `MCP tool params cannot include duplicate key after trimming: "${normalizedMapKey}"`
             );
           }
-          seenMapKeys.add(trimmedKey);
-          sanitizedMap[trimmedKey] = sanitizeParamValue(
+          seenMapKeys.add(normalizedMapKey);
+          sanitizedMap[normalizedMapKey] = sanitizeParamValue(
             mapValue,
             seen,
             depth + 1
@@ -215,16 +215,16 @@ export function normalizeMCPToolParams(
         }
         const seenKeys = new Set<string>();
         for (const [key, paramValue] of entries) {
-          const trimmedKey = key.trim();
-          if (trimmedKey.length === 0) {
+          const normalizedObjectKey = key.trim().replace(/\s+/g, " ");
+          if (normalizedObjectKey.length === 0) {
             throw new Error("MCP tool params cannot include empty keys");
           }
-          if (trimmedKey.length > MAX_MCP_PARAM_KEY_CHARS) {
+          if (normalizedObjectKey.length > MAX_MCP_PARAM_KEY_CHARS) {
             throw new Error(
               `MCP tool params cannot include keys longer than ${MAX_MCP_PARAM_KEY_CHARS} characters`
             );
           }
-          if (hasUnsupportedControlChars(trimmedKey)) {
+          if (hasUnsupportedControlChars(normalizedObjectKey)) {
             throw new Error(
               "MCP tool params cannot include keys with control characters"
             );
@@ -233,13 +233,17 @@ export function normalizeMCPToolParams(
           if (UNSAFE_OBJECT_KEYS.has(normalizedKey)) {
             throw new Error(`MCP tool params cannot include reserved key "${key}"`);
           }
-          if (seenKeys.has(trimmedKey)) {
+          if (seenKeys.has(normalizedObjectKey)) {
             throw new Error(
-              `MCP tool params cannot include duplicate key after trimming: "${trimmedKey}"`
+              `MCP tool params cannot include duplicate key after trimming: "${normalizedObjectKey}"`
             );
           }
-          seenKeys.add(trimmedKey);
-          sanitized[trimmedKey] = sanitizeParamValue(paramValue, seen, depth + 1);
+          seenKeys.add(normalizedObjectKey);
+          sanitized[normalizedObjectKey] = sanitizeParamValue(
+            paramValue,
+            seen,
+            depth + 1
+          );
         }
         return sanitized;
       } finally {

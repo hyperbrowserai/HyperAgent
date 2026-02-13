@@ -24,6 +24,16 @@ describe("normalizeMCPToolParams", () => {
     });
   });
 
+  it("normalizes internal key whitespace before forwarding params", () => {
+    expect(
+      normalizeMCPToolParams({
+        " user   id ": "42",
+      })
+    ).toEqual({
+      "user id": "42",
+    });
+  });
+
   it("parses valid JSON object strings", () => {
     const json = "{\"query\":\"weather\",\"units\":\"metric\"}";
     expect(normalizeMCPToolParams(json)).toEqual({
@@ -217,6 +227,20 @@ describe("normalizeMCPToolParams", () => {
     ).toThrow('MCP tool params cannot include duplicate key after trimming: "key"');
   });
 
+  it("rejects duplicate map keys after collapsing internal whitespace", () => {
+    const map = new Map<unknown, unknown>([
+      ["user   id", "first"],
+      ["user id", "second"],
+    ]);
+    expect(() =>
+      normalizeMCPToolParams({
+        metadata: map as unknown as Record<string, unknown>,
+      })
+    ).toThrow(
+      'MCP tool params cannot include duplicate key after trimming: "user id"'
+    );
+  });
+
   it("rejects map keys that exceed maximum length", () => {
     const map = new Map<unknown, unknown>([[`${"k".repeat(257)}`, "value"]]);
     expect(() =>
@@ -289,6 +313,17 @@ describe("normalizeMCPToolParams", () => {
         " query ": "finance",
       })
     ).toThrow('MCP tool params cannot include duplicate key after trimming: "query"');
+  });
+
+  it("rejects duplicate keys after collapsing internal whitespace", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        "user   id": "weather",
+        "user id": "finance",
+      })
+    ).toThrow(
+      'MCP tool params cannot include duplicate key after trimming: "user id"'
+    );
   });
 
   it("rejects params that exceed maximum nesting depth", () => {
