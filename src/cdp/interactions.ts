@@ -61,14 +61,38 @@ interface SelectOptionOptions {
   value: string;
 }
 
+function formatInteractionDiagnostic(
+  value: unknown,
+  fallback: string
+): string {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = stripControlChars(raw).replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  if (normalized.length <= MAX_INTERACTION_DIAGNOSTIC_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(
+    0,
+    MAX_INTERACTION_DIAGNOSTIC_CHARS
+  )}... [truncated ${normalized.length - MAX_INTERACTION_DIAGNOSTIC_CHARS} chars]`;
+}
+
 function createScrollIntoViewFailureMessage(
   primaryError: unknown,
   fallbackError: unknown
 ): string {
   return (
     `[CDP][Interactions] Failed to scroll element into view. ` +
-    `Primary method failed: ${formatUnknownError(primaryError)}. ` +
-    `Fallback also failed: ${formatUnknownError(fallbackError)}`
+    `Primary method failed: ${formatInteractionDiagnostic(
+      primaryError,
+      "unknown error"
+    )}. ` +
+    `Fallback also failed: ${formatInteractionDiagnostic(
+      fallbackError,
+      "unknown error"
+    )}`
   );
 }
 
@@ -288,18 +312,7 @@ function ensureActionContext(ctx: CDPActionContext): void {
 }
 
 function formatActionMethodDiagnostic(value: unknown): string {
-  const raw = typeof value === "string" ? value : formatUnknownError(value);
-  const normalized = stripControlChars(raw).replace(/\s+/g, " ").trim();
-  if (normalized.length === 0) {
-    return "unknown-method";
-  }
-  if (normalized.length <= MAX_INTERACTION_DIAGNOSTIC_CHARS) {
-    return normalized;
-  }
-  return `${normalized.slice(
-    0,
-    MAX_INTERACTION_DIAGNOSTIC_CHARS
-  )}... [truncated ${normalized.length - MAX_INTERACTION_DIAGNOSTIC_CHARS} chars]`;
+  return formatInteractionDiagnostic(value, "unknown-method");
 }
 
 function ensureActionTextInputSize(

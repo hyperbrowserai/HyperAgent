@@ -151,6 +151,38 @@ describe("dispatchCDPAction scroll fallback failures", () => {
       '[CDP][Interactions] Failed to scroll element into view. Primary method failed: {"primary":"scroll failed"}. Fallback also failed: {"fallback":"runtime fallback failed"}'
     );
   });
+
+  it("sanitizes and truncates oversized scroll fallback diagnostics", async () => {
+    const oversizedPrimary = `primary\u0000\n${"x".repeat(2_000)}`;
+    const oversizedFallback = `fallback\u0000\n${"y".repeat(2_000)}`;
+    const session = createSession(async (method) => {
+      if (method === "DOM.scrollIntoViewIfNeeded") {
+        throw new Error(oversizedPrimary);
+      }
+      if (method === "Runtime.callFunctionOn") {
+        throw new Error(oversizedFallback);
+      }
+      return {};
+    });
+
+    try {
+      await dispatchCDPAction("scrollToElement", [], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      });
+      throw new Error("Expected dispatchCDPAction to throw");
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("[truncated");
+      expect(message).not.toContain("\u0000");
+      expect(message).not.toContain("\n");
+      expect(message.length).toBeLessThan(700);
+    }
+  });
 });
 
 describe("dispatchCDPAction press key normalization", () => {
