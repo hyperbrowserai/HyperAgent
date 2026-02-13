@@ -7,6 +7,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 const NO_RESERVED_PROVIDER_OPTION_KEYS: ReadonlySet<string> = new Set();
 
 function sanitizeToolArguments(value: unknown): unknown {
@@ -58,7 +66,7 @@ function normalizeOpenAICompatibleContentPart(
     const fn = isRecord(part.function) ? part.function : {};
     return {
       type: "tool_call",
-      toolName: typeof fn.name === "string" ? fn.name : "unknown-tool",
+      toolName: normalizeOptionalString(fn.name) ?? "unknown-tool",
       arguments: sanitizeToolArguments(parseJsonMaybe(fn.arguments)),
     };
   }

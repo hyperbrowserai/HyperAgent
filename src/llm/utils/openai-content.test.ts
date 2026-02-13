@@ -81,6 +81,26 @@ describe("normalizeOpenAICompatibleContent", () => {
     ]);
   });
 
+  it("normalizes whitespace-only tool names to fallback", () => {
+    expect(
+      normalizeOpenAICompatibleContent([
+        {
+          type: "tool_call",
+          function: {
+            name: "   ",
+            arguments: "{}",
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        type: "tool_call",
+        toolName: "unknown-tool",
+        arguments: {},
+      },
+    ]);
+  });
+
   it("formats non-string text-part payloads safely", () => {
     expect(
       normalizeOpenAICompatibleContent([
