@@ -136,6 +136,26 @@ describe("performAction variable interpolation", () => {
     expect(result.message).toContain('{"reason":"playwright failed"}');
   });
 
+  it("sanitizes and truncates oversized Playwright failure diagnostics", async () => {
+    const hugeFailure = `playwright\u0000\n${"x".repeat(5_000)}`;
+    executePlaywrightMethod.mockRejectedValue(new Error(hugeFailure));
+
+    const context = createContext();
+
+    const result = await performAction(context, {
+      elementId: "0-1",
+      method: "fill",
+      arguments: ["value"],
+      instruction: "Fill input",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).not.toContain("\u0000");
+    expect(result.message).not.toContain("\n");
+    expect(result.message).toContain("…");
+    expect(result.message.length).toBeLessThan(1_200);
+  });
+
   it("defaults to empty method arguments when params.arguments is invalid", async () => {
     const context = createContext();
 

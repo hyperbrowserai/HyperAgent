@@ -20,6 +20,17 @@ const MAX_ACTION_ARG_CHARS = 20_000;
 const MAX_ACTION_METHOD_CHARS = 128;
 const MAX_ACTION_TEXT_CHARS = 1_000;
 
+function sanitizeActionText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
 function safeReadRecordField(
   value: unknown,
   key: string
@@ -41,7 +52,7 @@ function normalizeTextInput(
 ): string {
   const source =
     typeof value === "string" ? value : value == null ? fallback : formatUnknownError(value);
-  const normalized = source.replace(/\s+/g, " ").trim();
+  const normalized = sanitizeActionText(source);
   if (normalized.length === 0) {
     return fallback;
   }
