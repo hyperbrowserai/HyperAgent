@@ -141,4 +141,81 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toContain("Waited 750ms");
     expect(replay.steps[0]?.retries).toBe(1);
   });
+
+  it("fails replay step cleanly when special action execution throws", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const waitForTimeout = jest
+      .fn()
+      .mockRejectedValue(new Error("timeout call failed"));
+    const page = {
+      waitForTimeout,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "wait before next action",
+          elementId: null,
+          method: null,
+          arguments: [],
+          actionParams: { duration: 100 },
+          frameIndex: null,
+          xpath: null,
+          actionType: "wait",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("Replay step 0 failed");
+    expect(replay.steps[0]?.message).toContain("timeout call failed");
+  });
+
+  it("fails replay step cleanly when helper dispatch throws", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const performClick = jest
+      .fn()
+      .mockRejectedValue(new Error("helper click failed"));
+    const page = {
+      performClick,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "click login",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: "//button[1]",
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("Replay step 0 failed");
+    expect(replay.steps[0]?.message).toContain("helper click failed");
+  });
 });

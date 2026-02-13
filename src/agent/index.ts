@@ -613,81 +613,99 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const page = getPage();
       const hyperPage = page as HyperPage;
       let result: TaskOutput;
-      const replaySpecialResult = await executeReplaySpecialAction({
-        taskId: cache.taskId,
-        actionType: step.actionType,
-        instruction: step.instruction,
-        arguments: step.arguments,
-        actionParams: step.actionParams,
-        page: hyperPage,
-        retries: 1,
-      });
+      try {
+        const replaySpecialResult = await executeReplaySpecialAction({
+          taskId: cache.taskId,
+          actionType: step.actionType,
+          instruction: step.instruction,
+          arguments: step.arguments,
+          actionParams: step.actionParams,
+          page: hyperPage,
+          retries: 1,
+        });
 
-      if (replaySpecialResult) {
-        result = replaySpecialResult;
-      } else {
-        const method = step.method;
-        if (method && isPageActionMethod(method)) {
-          const xpath = step.xpath;
-          const hasXPath =
-            typeof xpath === "string" && xpath.trim().length > 0;
-          if (!hasXPath) {
-            if (step.instruction) {
-              result = await hyperPage.perform(step.instruction);
-            } else {
-              result = {
-                taskId: cache.taskId,
-                status: TaskStatus.FAILED,
-                steps: [],
-                output: `Cannot replay action type "${step.actionType}" with method "${method}" without XPath or instruction`,
-                replayStepMeta: {
-                  usedCachedAction: false,
-                  fallbackUsed: false,
-                  retries: 0,
-                  cachedXPath: null,
-                  fallbackXPath: null,
-                  fallbackElementId: null,
-                },
-              };
-            }
-            if (!recordReplayStep(step, result)) {
-              break;
-            }
-            continue;
-          }
-          const options: PerformOptions = {
-            performInstruction: step.instruction ?? null,
-            maxSteps: maxXPathRetries,
-          };
-          if (step.frameIndex !== null && step.frameIndex !== undefined) {
-            options.frameIndex = step.frameIndex;
-          }
-          const valueArg = step.arguments?.[0];
-          result = await dispatchPerformHelper(
-            hyperPage,
-            method,
-            xpath,
-            valueArg,
-            options
-          );
-        } else if (step.instruction) {
-          result = await hyperPage.perform(step.instruction);
+        if (replaySpecialResult) {
+          result = replaySpecialResult;
         } else {
-          result = {
-            taskId: cache.taskId,
-            status: TaskStatus.FAILED,
-            steps: [],
-            output: `Cannot replay action type "${step.actionType}" without instruction`,
-            replayStepMeta: {
-              usedCachedAction: false,
-              fallbackUsed: false,
-              retries: 0,
-              cachedXPath: null,
-              fallbackXPath: null,
-              fallbackElementId: null,
-            },
-          };
+          const method = step.method;
+          if (method && isPageActionMethod(method)) {
+            const xpath = step.xpath;
+            const hasXPath =
+              typeof xpath === "string" && xpath.trim().length > 0;
+            if (!hasXPath) {
+              if (step.instruction) {
+                result = await hyperPage.perform(step.instruction);
+              } else {
+                result = {
+                  taskId: cache.taskId,
+                  status: TaskStatus.FAILED,
+                  steps: [],
+                  output: `Cannot replay action type "${step.actionType}" with method "${method}" without XPath or instruction`,
+                  replayStepMeta: {
+                    usedCachedAction: false,
+                    fallbackUsed: false,
+                    retries: 0,
+                    cachedXPath: null,
+                    fallbackXPath: null,
+                    fallbackElementId: null,
+                  },
+                };
+              }
+              if (!recordReplayStep(step, result)) {
+                break;
+              }
+              continue;
+            }
+            const options: PerformOptions = {
+              performInstruction: step.instruction ?? null,
+              maxSteps: maxXPathRetries,
+            };
+            if (step.frameIndex !== null && step.frameIndex !== undefined) {
+              options.frameIndex = step.frameIndex;
+            }
+            const valueArg = step.arguments?.[0];
+            result = await dispatchPerformHelper(
+              hyperPage,
+              method,
+              xpath,
+              valueArg,
+              options
+            );
+          } else if (step.instruction) {
+            result = await hyperPage.perform(step.instruction);
+          } else {
+            result = {
+              taskId: cache.taskId,
+              status: TaskStatus.FAILED,
+              steps: [],
+              output: `Cannot replay action type "${step.actionType}" without instruction`,
+              replayStepMeta: {
+                usedCachedAction: false,
+                fallbackUsed: false,
+                retries: 0,
+                cachedXPath: null,
+                fallbackXPath: null,
+                fallbackElementId: null,
+              },
+            };
+          }
         }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        result = {
+          taskId: cache.taskId,
+          status: TaskStatus.FAILED,
+          steps: [],
+          output: `Replay step ${step.stepIndex} failed: ${message}`,
+          replayStepMeta: {
+            usedCachedAction: false,
+            fallbackUsed: false,
+            retries: 1,
+            cachedXPath: step.xpath ?? null,
+            fallbackXPath: null,
+            fallbackElementId: null,
+          },
+        };
       }
 
       if (!recordReplayStep(step, result)) {
