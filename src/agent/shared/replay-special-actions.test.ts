@@ -69,6 +69,20 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toBe("Waited 1500ms");
   });
 
+  it("defaults wait duration when parsed value is negative", async () => {
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-6",
+      actionType: "wait",
+      actionParams: { duration: -5 },
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForTimeout).toHaveBeenCalledWith(1000);
+    expect(result?.output).toBe("Waited 1000ms");
+  });
+
   it("fails extract replay when instruction is missing", async () => {
     const page = createPage({
       extract: jest.fn(),

@@ -41,6 +41,14 @@ function asNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function normalizeWaitMs(value: unknown): number {
+  const parsed = asNumber(value);
+  if (parsed === undefined) {
+    return 1000;
+  }
+  return parsed >= 0 ? parsed : 1000;
+}
+
 export async function executeReplaySpecialAction(
   params: ReplaySpecialActionInput
 ): Promise<TaskOutput | null> {
@@ -104,7 +112,7 @@ export async function executeReplaySpecialAction(
   }
 
   if (actionType === "wait") {
-    const waitMs = asNumber(actionArgs?.[0] ?? actionParams?.duration) ?? 1000;
+    const waitMs = normalizeWaitMs(actionArgs?.[0] ?? actionParams?.duration);
     await page.waitForTimeout(waitMs);
     return {
       taskId,
