@@ -120,6 +120,22 @@ describe("ExtractActionDefinition.run", () => {
     expect(contentParts[0]?.type).toBe("text");
   });
 
+  it("fails fast when extraction objective is empty", async () => {
+    const invoke = jest.fn().mockResolvedValue({
+      role: "assistant",
+      content: "should not be called",
+    });
+    const ctx = createContext(createMockLLM(invoke));
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "   ",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("objective cannot be empty");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("does not fail when debug file writes throw", async () => {
     const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
       throw new Error("disk full");

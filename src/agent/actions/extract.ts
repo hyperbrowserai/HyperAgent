@@ -122,7 +122,13 @@ export const ExtractActionDefinition: AgentActionDefinition = {
   ): Promise<ActionOutput> => {
     try {
       const content = await ctx.page.content();
-      const objective = action.objective;
+      const objective = action.objective.trim();
+      if (objective.length === 0) {
+        return {
+          success: false,
+          message: "Extraction objective cannot be empty.",
+        };
+      }
       const normalizedTokenLimit = normalizeTokenLimit(ctx.tokenLimit);
       let markdown: string;
       try {
