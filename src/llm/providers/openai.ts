@@ -10,6 +10,7 @@ import {
 } from "../types";
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
+import { parseJsonMaybe } from "../utils/safe-json";
 import { getDebugOptions } from "@/debug/options";
 
 const ENV_STRUCTURED_SCHEMA_DEBUG =
@@ -55,8 +56,8 @@ function convertFromOpenAIContent(
       } else if (part.type === "tool_call") {
         return {
           type: "tool_call",
-          toolName: part.function.name,
-          arguments: JSON.parse(part.function.arguments),
+          toolName: part.function?.name ?? "unknown-tool",
+          arguments: parseJsonMaybe(part.function?.arguments),
         };
       }
       // Fallback for unknown types
@@ -124,13 +125,13 @@ export class OpenAIClient implements HyperAgentLLM {
         return {
           id: tc.id,
           name: tc.function.name,
-          arguments: JSON.parse(tc.function.arguments),
+          arguments: parseJsonMaybe(tc.function.arguments),
         };
       } else if (tc.type === "custom") {
         return {
           id: tc.id,
           name: tc.custom.name,
-          arguments: JSON.parse(tc.custom.input),
+          arguments: parseJsonMaybe(tc.custom.input),
         };
       }
       throw new Error(`Unknown tool call type: ${(tc as any).type}`);

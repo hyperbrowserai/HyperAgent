@@ -10,6 +10,7 @@ import {
 } from "../types";
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
+import { parseJsonMaybe } from "../utils/safe-json";
 import { z } from "zod";
 
 export interface DeepSeekClientConfig {
@@ -83,13 +84,13 @@ export class DeepSeekClient implements HyperAgentLLM {
         return {
           id: tc.id,
           name: tc.function.name,
-          arguments: JSON.parse(tc.function.arguments),
+          arguments: parseJsonMaybe(tc.function.arguments),
         };
       } else if (tc.type === "custom") {
         return {
           id: tc.id,
           name: tc.custom.name,
-          arguments: JSON.parse(tc.custom.input),
+          arguments: parseJsonMaybe(tc.custom.input),
         };
       }
       throw new Error(`Unknown tool call type: ${(tc as any).type}`);

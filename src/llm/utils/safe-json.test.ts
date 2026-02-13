@@ -1,0 +1,17 @@
+import { parseJsonMaybe } from "@/llm/utils/safe-json";
+
+describe("parseJsonMaybe", () => {
+  it("parses valid JSON strings", () => {
+    expect(parseJsonMaybe('{"ok":true}')).toEqual({ ok: true });
+  });
+
+  it("returns original string when parsing fails", () => {
+    expect(parseJsonMaybe("{broken")).toBe("{broken");
+  });
+
+  it("returns non-string values unchanged", () => {
+    const obj = { a: 1 };
+    expect(parseJsonMaybe(obj)).toBe(obj);
+    expect(parseJsonMaybe(1)).toBe(1);
+  });
+});
