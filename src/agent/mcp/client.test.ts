@@ -127,4 +127,26 @@ describe("MCPClient.executeTool server selection", () => {
       mcpClient.executeTool("search", { query: "missing" }, "unknown-server")
     ).rejects.toThrow("No valid server found for tool search");
   });
+
+  it("throws when target server is connected but missing the tool", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn();
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["notes", {}]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "server-a")
+    ).rejects.toThrow('Tool "search" is not registered on server "server-a"');
+    expect(callTool).not.toHaveBeenCalled();
+  });
 });

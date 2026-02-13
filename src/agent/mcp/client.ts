@@ -236,6 +236,11 @@ class MCPClient {
     if (!server) {
       throw new Error(`Server with ID ${serverId} not found`);
     }
+    if (!server.tools.has(toolName)) {
+      throw new Error(
+        `Tool "${toolName}" is not registered on server "${serverId}"`
+      );
+    }
 
     try {
       const result = await server.client.callTool({
