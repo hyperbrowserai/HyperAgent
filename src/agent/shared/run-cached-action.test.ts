@@ -403,6 +403,89 @@ describe("runCachedStep", () => {
     );
   });
 
+  it("normalizes invalid fallback responses safely", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));
+    const performFallback = jest.fn().mockResolvedValue("not-an-object");
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: 0,
+        arguments: [],
+      },
+      maxSteps: 1,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+      performFallback,
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("invalid response payload");
+    expect(result.replayStepMeta).toEqual(
+      expect.objectContaining({
+        usedCachedAction: true,
+        fallbackUsed: true,
+        retries: 1,
+        cachedXPath: "//button[1]",
+      })
+    );
+  });
+
+  it("handles trap-prone fallback replay metadata getters safely", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));
+    const replayStepMeta = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "fallbackXPath" || prop === "fallbackElementId") {
+            throw new Error("fallback meta trap");
+          }
+          return undefined;
+        },
+      }
+    );
+    const performFallback = jest.fn().mockResolvedValue({
+      taskId: "fallback-task",
+      status: TaskStatus.COMPLETED,
+      output: "fallback done",
+      replayStepMeta,
+    });
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: 0,
+        arguments: [],
+      },
+      maxSteps: 1,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+      performFallback,
+    });
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.replayStepMeta).toEqual(
+      expect.objectContaining({
+        fallbackXPath: null,
+        fallbackElementId: null,
+      })
+    );
+  });
+
   it("normalizes invalid maxSteps values to a single attempt", async () => {
     executeReplaySpecialAction.mockResolvedValue(null);
     resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));

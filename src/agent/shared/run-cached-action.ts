@@ -86,6 +86,94 @@ const normalizeCachedFrameIndex = (value: unknown): number => {
   return Math.floor(value);
 };
 
+const safeReadTaskOutputField = (
+  value: unknown,
+  key: keyof TaskOutput
+): unknown => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+};
+
+const safeReadRecordField = (
+  value: unknown,
+  key: string
+): unknown => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+};
+
+const normalizeTaskStatus = (value: unknown): TaskStatus => {
+  if (
+    value === TaskStatus.COMPLETED ||
+    value === TaskStatus.FAILED ||
+    value === TaskStatus.CANCELLED ||
+    value === TaskStatus.PAUSED ||
+    value === TaskStatus.PENDING ||
+    value === TaskStatus.RUNNING
+  ) {
+    return value;
+  }
+  return TaskStatus.FAILED;
+};
+
+function normalizeFallbackTaskOutput(
+  fallbackResult: unknown,
+  taskId: string,
+  retries: number,
+  cachedXPath: string | null
+): TaskOutput {
+  const status = normalizeTaskStatus(safeReadTaskOutputField(fallbackResult, "status"));
+  const outputValue = safeReadTaskOutputField(fallbackResult, "output");
+  const replayStepMetaValue = safeReadTaskOutputField(
+    fallbackResult,
+    "replayStepMeta"
+  );
+  const normalizedReplayStepMeta = isRecord(replayStepMetaValue)
+    ? replayStepMetaValue
+    : undefined;
+
+  return {
+    taskId:
+      normalizeOptionalTrimmedString(
+        safeReadTaskOutputField(fallbackResult, "taskId")
+      ) ?? taskId,
+    status,
+    steps: [],
+    output:
+      typeof outputValue === "string"
+        ? outputValue
+        : status === TaskStatus.FAILED
+          ? "Fallback perform returned an invalid response payload."
+          : "Fallback perform completed.",
+    replayStepMeta: {
+      usedCachedAction: true,
+      fallbackUsed: true,
+      retries,
+      cachedXPath,
+      fallbackXPath:
+        normalizeOptionalTrimmedString(
+          safeReadRecordField(normalizedReplayStepMeta, "fallbackXPath")
+        ) ?? null,
+      fallbackElementId:
+        normalizeOptionalTrimmedString(
+          safeReadRecordField(normalizedReplayStepMeta, "fallbackElementId")
+        ) ?? null,
+    },
+  };
+}
+
 const normalizeMaxSteps = (value: number): number =>
   Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
 
@@ -238,7 +326,7 @@ export async function runCachedStep(
 
   // All cached attempts failed; optionally fall back to LLM perform
   if (params.performFallback) {
-    const fb = await params.performFallback(instruction).catch((error) => {
+    const fallbackResult = await params.performFallback(instruction).catch((error) => {
       const message = formatUnknownError(error);
       return {
         taskId,
@@ -255,9 +343,16 @@ export async function runCachedStep(
         },
       } satisfies TaskOutput;
     });
+    const normalizedFallback = normalizeFallbackTaskOutput(
+      fallbackResult,
+      taskId,
+      attempts,
+      normalizedXPath ?? null
+    );
     if (debug) {
       const cachedXPath = normalizedXPath || "N/A";
-      const resolvedXPath = fb.replayStepMeta?.fallbackXPath || "N/A";
+      const resolvedXPath =
+        normalizedFallback.replayStepMeta?.fallbackXPath || "N/A";
       // eslint-disable-next-line no-console
       console.log(
         `
@@ -268,17 +363,7 @@ export async function runCachedStep(
 `
       );
     }
-    return {
-      ...fb,
-      replayStepMeta: {
-        usedCachedAction: true,
-        fallbackUsed: true,
-        retries: attempts,
-        cachedXPath: normalizedXPath ?? null,
-        fallbackXPath: fb.replayStepMeta?.fallbackXPath ?? null,
-        fallbackElementId: fb.replayStepMeta?.fallbackElementId ?? null,
-      },
-    };
+    return normalizedFallback;
   }
 
   return {
