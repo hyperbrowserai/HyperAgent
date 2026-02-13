@@ -108,11 +108,20 @@ function normalizeOptionalStringArray(
 }
 
 function normalizeServersPayload(payload: unknown): unknown[] {
+  const ensureNonEmpty = (servers: unknown[]): unknown[] => {
+    if (servers.length === 0) {
+      throw new Error(
+        "MCP config must include at least one server entry."
+      );
+    }
+    return servers;
+  };
+
   if (Array.isArray(payload)) {
-    return payload;
+    return ensureNonEmpty(payload);
   }
   if (isRecord(payload) && Array.isArray(payload.servers)) {
-    return payload.servers;
+    return ensureNonEmpty(payload.servers);
   }
   throw new Error(
     'MCP config must be a JSON array or an object with a "servers" array.'

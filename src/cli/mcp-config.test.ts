@@ -46,6 +46,15 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("throws when config contains no server entries", () => {
+    expect(() => parseMCPServersConfig("[]")).toThrow(
+      "MCP config must include at least one server entry."
+    );
+    expect(() => parseMCPServersConfig('{"servers":[]}')).toThrow(
+      "MCP config must include at least one server entry."
+    );
+  });
+
   it("throws when server entries are not objects", () => {
     expect(() => parseMCPServersConfig("[1]")).toThrow(
       "MCP server entry at index 0 must be an object."
