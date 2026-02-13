@@ -9,7 +9,8 @@ use crate::{
     parse_ceiling_formula, parse_floor_formula, parse_index_formula,
     parse_isblank_formula, parse_isnumber_formula, parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
-    parse_match_formula, parse_mod_formula, parse_month_formula,
+    parse_match_formula, parse_maxifs_formula, parse_minifs_formula,
+    parse_mod_formula, parse_month_formula,
     parse_not_formula,
     parse_power_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
@@ -296,6 +297,14 @@ fn evaluate_formula(
 
   if let Some(averageifs_formula) = parse_averageifs_formula(formula) {
     return evaluate_averageifs_formula(connection, sheet, &averageifs_formula);
+  }
+
+  if let Some(minifs_formula) = parse_minifs_formula(formula) {
+    return evaluate_minifs_formula(connection, sheet, &minifs_formula);
+  }
+
+  if let Some(maxifs_formula) = parse_maxifs_formula(formula) {
+    return evaluate_maxifs_formula(connection, sheet, &maxifs_formula);
   }
 
   if let Some((condition, true_value, false_value)) = parse_if_formula(formula) {
@@ -937,6 +946,92 @@ fn evaluate_averageifs_formula(
     return Ok(Some("0".to_string()));
   }
   Ok(Some((total / numeric_matches as f64).to_string()))
+}
+
+fn evaluate_minifs_formula(
+  connection: &Connection,
+  sheet: &str,
+  formula: &MultiCriteriaAggregateFormula,
+) -> Result<Option<String>, ApiError> {
+  let Some((value_bounds, conditions)) = build_multi_criteria_runtime(
+    connection,
+    sheet,
+    formula,
+  )? else {
+    return Ok(None);
+  };
+
+  let mut minimum_value: Option<f64> = None;
+  for row_offset in 0..value_bounds.height {
+    for col_offset in 0..value_bounds.width {
+      if !evaluate_multi_criteria_match(
+        connection,
+        sheet,
+        &conditions,
+        row_offset,
+        col_offset,
+      )? {
+        continue;
+      }
+      let value = load_cell_scalar(
+        connection,
+        sheet,
+        value_bounds.start_row + row_offset,
+        value_bounds.start_col + col_offset,
+      )?;
+      if let Ok(number) = value.trim().parse::<f64>() {
+        minimum_value = Some(match minimum_value {
+          Some(existing) => existing.min(number),
+          None => number,
+        });
+      }
+    }
+  }
+
+  Ok(Some(minimum_value.unwrap_or(0.0).to_string()))
+}
+
+fn evaluate_maxifs_formula(
+  connection: &Connection,
+  sheet: &str,
+  formula: &MultiCriteriaAggregateFormula,
+) -> Result<Option<String>, ApiError> {
+  let Some((value_bounds, conditions)) = build_multi_criteria_runtime(
+    connection,
+    sheet,
+    formula,
+  )? else {
+    return Ok(None);
+  };
+
+  let mut maximum_value: Option<f64> = None;
+  for row_offset in 0..value_bounds.height {
+    for col_offset in 0..value_bounds.width {
+      if !evaluate_multi_criteria_match(
+        connection,
+        sheet,
+        &conditions,
+        row_offset,
+        col_offset,
+      )? {
+        continue;
+      }
+      let value = load_cell_scalar(
+        connection,
+        sheet,
+        value_bounds.start_row + row_offset,
+        value_bounds.start_col + col_offset,
+      )?;
+      if let Ok(number) = value.trim().parse::<f64>() {
+        maximum_value = Some(match maximum_value {
+          Some(existing) => existing.max(number),
+          None => number,
+        });
+      }
+    }
+  }
+
+  Ok(Some(maximum_value.unwrap_or(0.0).to_string()))
 }
 
 fn build_multi_criteria_runtime(
@@ -2047,12 +2142,24 @@ mod tests {
         value: None,
         formula: Some("=SIGN(-12.5)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 61,
+        value: None,
+        formula: Some(r#"=MINIFS(A1:A2,E1:E2,"south",A1:A2,">=80")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 62,
+        value: None,
+        formula: Some(r#"=MAXIFS(A1:A2,E1:E2,"south",A1:A2,">=80")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 58);
+    assert_eq!(updated_cells, 60);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2066,7 +2173,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 60,
+        end_col: 62,
       },
     )
     .expect("cells should be fetched");
@@ -2155,6 +2262,8 @@ mod tests {
     assert_eq!(by_position(1, 58).evaluated_value.as_deref(), Some("-12.25"));
     assert_eq!(by_position(1, 59).evaluated_value.as_deref(), Some("1"));
     assert_eq!(by_position(1, 60).evaluated_value.as_deref(), Some("-1"));
+    assert_eq!(by_position(1, 61).evaluated_value.as_deref(), Some("80"));
+    assert_eq!(by_position(1, 62).evaluated_value.as_deref(), Some("80"));
   }
 
   #[test]
@@ -2477,6 +2586,51 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=SUMIFS(A1:A2,B1:B2,"south",A1:A3,">=80")"#.to_string()]
+    );
+  }
+
+  #[test]
+  fn should_leave_mismatched_minifs_ranges_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!("north")),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: Some(json!("south")),
+        formula: None,
+      },
+      CellMutation {
+        row: 4,
+        col: 1,
+        value: None,
+        formula: Some(r#"=MINIFS(A1:A2,B1:B2,"south",A1:A3,">=80")"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=MINIFS(A1:A2,B1:B2,"south",A1:A3,">=80")"#.to_string()]
     );
   }
 }

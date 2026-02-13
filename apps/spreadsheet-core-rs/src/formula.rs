@@ -518,6 +518,18 @@ pub fn parse_averageifs_formula(
   parse_multi_criteria_aggregate_formula(formula, "AVERAGEIFS")
 }
 
+pub fn parse_minifs_formula(
+  formula: &str,
+) -> Option<MultiCriteriaAggregateFormula> {
+  parse_multi_criteria_aggregate_formula(formula, "MINIFS")
+}
+
+pub fn parse_maxifs_formula(
+  formula: &str,
+) -> Option<MultiCriteriaAggregateFormula> {
+  parse_multi_criteria_aggregate_formula(formula, "MAXIFS")
+}
+
 fn parse_conditional_aggregate_formula(
   formula: &str,
   function_name: &str,
@@ -671,7 +683,8 @@ mod tests {
     parse_ceiling_formula, parse_floor_formula,
     parse_index_formula, parse_isblank_formula, parse_isnumber_formula,
     parse_istext_formula, parse_left_formula, parse_len_formula,
-    parse_lower_formula, parse_match_formula,
+    parse_lower_formula, parse_match_formula, parse_maxifs_formula,
+    parse_minifs_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_mod_formula, parse_sign_formula,
@@ -924,5 +937,21 @@ mod tests {
     assert_eq!(averageifs.value_range_start, Some((1, 2)));
     assert_eq!(averageifs.value_range_end, Some((5, 2)));
     assert_eq!(averageifs.conditions.len(), 2);
+
+    let minifs = parse_minifs_formula(
+      r#"=MINIFS(B1:B5,A1:A5,">=10",C1:C5,"east")"#,
+    )
+    .expect("minifs should parse");
+    assert_eq!(minifs.value_range_start, Some((1, 2)));
+    assert_eq!(minifs.value_range_end, Some((5, 2)));
+    assert_eq!(minifs.conditions.len(), 2);
+
+    let maxifs = parse_maxifs_formula(
+      r#"=MAXIFS(B1:B5,A1:A5,">=10",C1:C5,"east")"#,
+    )
+    .expect("maxifs should parse");
+    assert_eq!(maxifs.value_range_start, Some((1, 2)));
+    assert_eq!(maxifs.value_range_end, Some((5, 2)));
+    assert_eq!(maxifs.conditions.len(), 2);
   }
 }

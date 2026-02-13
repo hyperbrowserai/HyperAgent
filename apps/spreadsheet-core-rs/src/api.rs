@@ -55,6 +55,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "COUNTIFS",
   "SUMIF",
   "SUMIFS",
+  "MINIFS",
+  "MAXIFS",
   "AVERAGEIF",
   "AVERAGEIFS",
   "direct references",
