@@ -14,6 +14,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Built-in scenario runner (seed/export orchestration)
 - Wizard flow: optional XLSX upload + scenario execution in one action
 - Wizard metadata discovery (schema/presets/scenarios) with scenario operation preview
+- Wizard can toggle export payload embedding (`include_file_base64`) before execution
 - Event stream viewer with per-event-type filtering
 
 ## Run

@@ -13,6 +13,7 @@ import {
   exportWorkbook,
   getAgentSchema,
   getAgentPresets,
+  getAgentScenarioOperations,
   getAgentScenarios,
   getWizardPresets,
   getWizardScenarioOperations,
@@ -63,6 +64,7 @@ export function SpreadsheetApp() {
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
   const [wizardScenario, setWizardScenario] = useState("seed_then_export");
+  const [wizardIncludeFileBase64, setWizardIncludeFileBase64] = useState(false);
   const [wizardWorkbookName, setWizardWorkbookName] = useState("Wizard Workbook");
   const [wizardFile, setWizardFile] = useState<File | null>(null);
   const [eventFilter, setEventFilter] = useState<string>("all");
@@ -146,9 +148,16 @@ export function SpreadsheetApp() {
   });
 
   const wizardScenarioOpsQuery = useQuery({
-    queryKey: ["wizard-scenario-ops", wizardScenario],
+    queryKey: ["wizard-scenario-ops", workbook?.id, wizardScenario, wizardIncludeFileBase64],
     enabled: wizardScenario.length > 0,
-    queryFn: () => getWizardScenarioOperations(wizardScenario, false),
+    queryFn: () =>
+      workbook?.id
+        ? getAgentScenarioOperations(
+            workbook.id,
+            wizardScenario,
+            wizardIncludeFileBase64,
+          )
+        : getWizardScenarioOperations(wizardScenario, wizardIncludeFileBase64),
   });
 
   useEffect(() => {
@@ -478,7 +487,7 @@ export function SpreadsheetApp() {
         request_id: `wizard-${wizardScenario}-${Date.now()}`,
         actor: "ui-wizard",
         stop_on_error: true,
-        include_file_base64: false,
+        include_file_base64: wizardIncludeFileBase64,
         workbook_name: wizardWorkbookName,
         file: wizardFile,
       });
@@ -724,6 +733,17 @@ export function SpreadsheetApp() {
                 className="w-40 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
                 placeholder="Workbook name"
               />
+              <label className="flex items-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={wizardIncludeFileBase64}
+                  onChange={(event) =>
+                    setWizardIncludeFileBase64(event.target.checked)
+                  }
+                  className="h-3.5 w-3.5 accent-teal-400"
+                />
+                include export file in response
+              </label>
               <label className="cursor-pointer rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800">
                 {wizardFile ? wizardFile.name : "Attach .xlsx (optional)"}
                 <input

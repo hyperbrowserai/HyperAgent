@@ -205,6 +205,23 @@ export async function getAgentScenarios(
   return data.scenarios;
 }
 
+export async function getAgentScenarioOperations(
+  workbookId: string,
+  scenario: string,
+  includeFileBase64: boolean,
+): Promise<AgentOperationPreview[]> {
+  const query = new URLSearchParams({
+    include_file_base64: String(includeFileBase64),
+  });
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/scenarios/${scenario}/operations?${query.toString()}`,
+  );
+  const data = await parseJsonResponse<{ operations: AgentOperationPreview[] }>(
+    response,
+  );
+  return data.operations;
+}
+
 export async function getWizardScenarios(): Promise<AgentScenarioInfo[]> {
   const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/scenarios`);
   const data = await parseJsonResponse<{ scenarios: AgentScenarioInfo[] }>(
