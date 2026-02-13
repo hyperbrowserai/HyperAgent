@@ -240,6 +240,11 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     }
     const hasCommand = isNonEmptyString(entry.command);
     const hasSseUrl = isNonEmptyString(entry.sseUrl);
+    if (!rawConnectionType && hasCommand && hasSseUrl) {
+      throw new Error(
+        `MCP server entry at index ${i} is ambiguous: provide either "command" (stdio) or "sseUrl" (sse), or set explicit "connectionType".`
+      );
+    }
     const inferredConnectionType =
       !rawConnectionType && hasSseUrl && !hasCommand ? "sse" : "stdio";
     const connectionType = rawConnectionType === "sse"
@@ -249,10 +254,21 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
         : inferredConnectionType;
     normalizedEntry.connectionType = connectionType;
     if (connectionType === "sse") {
+      if (hasCommand || args || env) {
+        throw new Error(
+          `MCP server entry at index ${i} configured as sse cannot define stdio fields ("command", "args", or "env").`
+        );
+      }
       const sseUrl = normalizeSSEUrl(entry.sseUrl, i);
       normalizedEntry.sseUrl = sseUrl;
       normalizedServers.push(normalizedEntry as MCPServerConfig);
       continue;
+    }
+
+    if (hasSseUrl || sseHeaders) {
+      throw new Error(
+        `MCP server entry at index ${i} configured as stdio cannot define sse fields ("sseUrl" or "sseHeaders").`
+      );
     }
 
     const command = isNonEmptyString(entry.command) ? entry.command.trim() : "";

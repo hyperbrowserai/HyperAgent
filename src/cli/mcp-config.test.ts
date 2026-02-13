@@ -262,6 +262,32 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("rejects ambiguous or mixed stdio/sse field combinations", () => {
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"command":"npx","sseUrl":"https://example.com/sse"}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 is ambiguous: provide either "command" (stdio) or "sseUrl" (sse), or set explicit "connectionType".'
+    );
+
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","command":"npx","sseUrl":"https://example.com/sse"}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 configured as sse cannot define stdio fields ("command", "args", or "env").'
+    );
+
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"stdio","command":"npx","sseUrl":"https://example.com/sse"}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 configured as stdio cannot define sse fields ("sseUrl" or "sseHeaders").'
+    );
+  });
+
   it("throws when includeTools and excludeTools overlap", () => {
     expect(() =>
       parseMCPServersConfig(
