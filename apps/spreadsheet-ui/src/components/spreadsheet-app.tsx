@@ -531,6 +531,9 @@ export function SpreadsheetApp() {
   const cachePrefixSuggestions = hasInvalidCacheEntriesMaxAgeInput
     ? []
     : (agentOpsCachePrefixesQuery.data?.prefixes ?? []);
+  const hasActiveCacheScopeFilters =
+    cacheRequestIdPrefix.trim().length > 0
+    || typeof normalizedCacheEntriesMaxAgeSeconds === "number";
   const scenarioSignatureStatus =
     lastScenario === wizardScenario &&
     lastOperationsSignature &&
@@ -2656,7 +2659,10 @@ export function SpreadsheetApp() {
                   </span>
                   <button
                     onClick={handleClearAgentOpsCache}
-                    disabled={isClearingOpsCache || agentOpsCacheQuery.data.entries === 0}
+                    disabled={
+                      isClearingOpsCache
+                      || (!hasActiveCacheScopeFilters && agentOpsCacheQuery.data.entries === 0)
+                    }
                     className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                   >
                     {isClearingOpsCache ? "Clearing..." : "Clear cache"}

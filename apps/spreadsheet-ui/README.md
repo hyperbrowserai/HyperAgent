@@ -48,6 +48,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent integration panel displays discovered cache stats/clear endpoint metadata from schema
 - Agent integration panel shows live idempotency cache stats (entries/oldest/newest plus oldest/newest `cached_at`) with a clear-cache control, scoped by active age filter when provided
 - Cache stats scope follows active prefix + age filters for consistent cache triage context
+- Clear-cache action stays globally available under scoped filters (even when scoped entry count is zero)
 - Age-scoped cache stats/entries/prefix views surface backend cutoff timestamps for precise stale-window visibility
 - Scoped cutoff timestamps also show relative-age labels for quick recency checks
 - Stale preview/remove notices include scoped cutoff timestamp + relative age context
