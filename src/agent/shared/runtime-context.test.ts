@@ -67,6 +67,13 @@ describe("initializeRuntimeContext", () => {
     );
   });
 
+  it("truncates oversized CDP acquisition diagnostics", async () => {
+    const page = {} as unknown as Page;
+    getCDPClientMock.mockRejectedValue(new Error(`x${"y".repeat(2_000)}\ncdp trap`));
+
+    await expect(initializeRuntimeContext(page)).rejects.toThrow(/\[truncated/);
+  });
+
   it("throws when frame context manager is invalid", async () => {
     const page = {} as unknown as Page;
     getCDPClientMock.mockResolvedValue({ id: "client-3" });
@@ -94,6 +101,29 @@ describe("initializeRuntimeContext", () => {
         "[FrameContext] Failed to initialize frame context manager:",
         "init failed"
       );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("truncates oversized initialization diagnostics in logs and errors", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const page = {} as unknown as Page;
+    getCDPClientMock.mockResolvedValue({ id: "client-5" });
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest.fn(),
+      ensureInitialized: jest
+        .fn()
+        .mockRejectedValue(new Error(`x${"y".repeat(2_000)}\ninit failed`)),
+    });
+
+    try {
+      await expect(initializeRuntimeContext(page, true)).rejects.toThrow(
+        /\[truncated/
+      );
+      const warnMessage = String(warnSpy.mock.calls[0]?.[1] ?? "");
+      expect(warnMessage).toContain("[truncated");
+      expect(warnMessage).not.toContain("\n");
     } finally {
       warnSpy.mockRestore();
     }

@@ -12,6 +12,27 @@ export interface RuntimeContext {
   frameContextManager: FrameContextManager;
 }
 
+const MAX_RUNTIME_CONTEXT_DIAGNOSTIC_CHARS = 400;
+
+function formatRuntimeContextDiagnostic(value: unknown): string {
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_RUNTIME_CONTEXT_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_RUNTIME_CONTEXT_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_RUNTIME_CONTEXT_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
+
 /**
  * Initialize shared runtime context for agent operations
  * Handles CDP client acquisition and frame manager initialization
@@ -29,7 +50,9 @@ export async function initializeRuntimeContext(
     cdpClient = await getCDPClient(page);
   } catch (error) {
     throw new Error(
-      `[FrameContext] Failed to acquire CDP client: ${formatUnknownError(error)}`
+      `[FrameContext] Failed to acquire CDP client: ${formatRuntimeContextDiagnostic(
+        error
+      )}`
     );
   }
 
@@ -38,7 +61,9 @@ export async function initializeRuntimeContext(
     frameContextManager = getOrCreateFrameContextManager(cdpClient);
   } catch (error) {
     throw new Error(
-      `[FrameContext] Failed to create frame context manager: ${formatUnknownError(error)}`
+      `[FrameContext] Failed to create frame context manager: ${formatRuntimeContextDiagnostic(
+        error
+      )}`
     );
   }
 
@@ -57,14 +82,15 @@ export async function initializeRuntimeContext(
     }
     await frameContextManager.ensureInitialized();
   } catch (error) {
+    const diagnostic = formatRuntimeContextDiagnostic(error);
     if (debug) {
       console.warn(
         "[FrameContext] Failed to initialize frame context manager:",
-        formatUnknownError(error)
+        diagnostic
       );
     }
     throw new Error(
-      `[FrameContext] Failed to initialize frame context manager: ${formatUnknownError(error)}`
+      `[FrameContext] Failed to initialize frame context manager: ${diagnostic}`
     );
   }
 
