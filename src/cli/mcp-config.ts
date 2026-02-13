@@ -31,10 +31,21 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
   }
 
   const servers = normalizeServersPayload(parsed);
+  const seenIds = new Set<string>();
   for (let i = 0; i < servers.length; i += 1) {
     const entry = servers[i];
     if (!isRecord(entry)) {
       throw new Error(`MCP server entry at index ${i} must be an object.`);
+    }
+
+    const normalizedId = isNonEmptyString(entry.id) ? entry.id.trim() : "";
+    if (normalizedId.length > 0) {
+      if (seenIds.has(normalizedId)) {
+        throw new Error(
+          `MCP server entry at index ${i} reuses duplicate id "${normalizedId}".`
+        );
+      }
+      seenIds.add(normalizedId);
     }
 
     const connectionType =

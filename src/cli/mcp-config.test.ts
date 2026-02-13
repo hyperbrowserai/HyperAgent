@@ -62,4 +62,12 @@ describe("parseMCPServersConfig", () => {
       'MCP server entry at index 0 must include a non-empty "sseUrl" for SSE connections.'
     );
   });
+
+  it("throws when duplicate non-empty server IDs are declared", () => {
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"id":"shared","command":"npx"},{"id":"shared","command":"node"}]'
+      )
+    ).toThrow('MCP server entry at index 1 reuses duplicate id "shared".');
+  });
 });
