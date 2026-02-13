@@ -63,6 +63,7 @@ import { createScriptFromActionCache } from "./shared/action-cache-script";
 import { attachCachedActionHelpers } from "./shared/action-cache-exec";
 import { AgentDeps } from "@/types/agent/types";
 import { parseExtractOutput } from "./shared/parse-extract-output";
+import { executeReplaySpecialAction } from "./shared/replay-special-actions";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -668,171 +669,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const page = getPage();
       const hyperPage = page as HyperPage;
       let result: TaskOutput;
+      const replaySpecialResult = await executeReplaySpecialAction({
+        taskId: cache.taskId,
+        actionType: step.actionType,
+        instruction: step.instruction,
+        arguments: step.arguments,
+        actionParams: step.actionParams,
+        page: hyperPage,
+      });
 
-      if (step.actionType === "goToUrl") {
-        const actionParams =
-          step.actionParams && typeof step.actionParams === "object"
-            ? (step.actionParams as Record<string, unknown>)
-            : undefined;
-        const url =
-          (step.arguments && step.arguments[0]) ||
-          (typeof actionParams?.url === "string" ? actionParams.url : "") ||
-          "";
-        if (!url || typeof url !== "string") {
-          result = {
-            taskId: cache.taskId,
-            status: TaskStatus.FAILED,
-            steps: [],
-            output: "Missing URL for goToUrl",
-          };
-        } else {
-          await hyperPage.goto(url, { waitUntil: "domcontentloaded" });
-          await waitForSettledDOM(hyperPage);
-          markDomSnapshotDirty(hyperPage);
-          result = {
-            taskId: cache.taskId,
-            status: TaskStatus.COMPLETED,
-            steps: [],
-            output: `Navigated to ${url}`,
-            replayStepMeta: {
-              usedCachedAction: true,
-              fallbackUsed: false,
-              retries: 0,
-              cachedXPath: null,
-              fallbackXPath: null,
-              fallbackElementId: null,
-            },
-          };
-        }
-      } else if (step.actionType === "complete") {
-        result = {
-          taskId: cache.taskId,
-          status: TaskStatus.COMPLETED,
-          steps: [],
-          output: "Task Complete",
-          replayStepMeta: {
-            usedCachedAction: true,
-            fallbackUsed: false,
-            retries: 0,
-            cachedXPath: null,
-            fallbackXPath: null,
-            fallbackElementId: null,
-          },
-        };
-      } else if (step.actionType === "refreshPage") {
-        await hyperPage.reload({ waitUntil: "domcontentloaded" });
-        await waitForSettledDOM(hyperPage);
-        markDomSnapshotDirty(hyperPage);
-        result = {
-          taskId: cache.taskId,
-          status: TaskStatus.COMPLETED,
-          steps: [],
-          output: "Page refreshed",
-          actionCache: {
-            taskId: cache.taskId,
-            createdAt: cache.createdAt,
-            status: TaskStatus.COMPLETED,
-            steps: [],
-          },
-          replayStepMeta: {
-            usedCachedAction: true,
-            fallbackUsed: false,
-            retries: 0,
-            cachedXPath: null,
-            fallbackXPath: null,
-            fallbackElementId: null,
-          },
-        };
-      } else if (step.actionType === "wait") {
-        const actionParams =
-          step.actionParams && typeof step.actionParams === "object"
-            ? (step.actionParams as Record<string, unknown>)
-            : undefined;
-        const durationRaw =
-          (step.arguments && step.arguments[0]) ||
-          actionParams?.duration;
-        const durationMs =
-          typeof durationRaw === "number"
-            ? durationRaw
-            : Number.parseInt(String(durationRaw ?? ""), 10);
-        const waitMs = Number.isFinite(durationMs) ? durationMs : 1000;
-        await hyperPage.waitForTimeout(waitMs);
-        result = {
-          taskId: cache.taskId,
-          status: TaskStatus.COMPLETED,
-          steps: [],
-          output: `Waited ${waitMs}ms`,
-          actionCache: {
-            taskId: cache.taskId,
-            createdAt: cache.createdAt,
-            status: TaskStatus.COMPLETED,
-            steps: [],
-          },
-          replayStepMeta: {
-            usedCachedAction: true,
-            fallbackUsed: false,
-            retries: 0,
-            cachedXPath: null,
-            fallbackXPath: null,
-            fallbackElementId: null,
-          },
-        };
-      } else if (step.actionType === "extract") {
-        try {
-          if (!step.instruction) {
-            throw new Error("Missing objective/instruction for extract action");
-          }
-          const extractResult = await hyperPage.extract(step.instruction);
-          result = {
-            taskId: cache.taskId,
-            status: TaskStatus.COMPLETED,
-            steps: [],
-            output:
-              typeof extractResult === "string"
-                ? extractResult
-                : JSON.stringify(extractResult),
-            replayStepMeta: {
-              usedCachedAction: true,
-              fallbackUsed: false,
-              retries: 0,
-              cachedXPath: null,
-              fallbackXPath: null,
-              fallbackElementId: null,
-            },
-          };
-        } catch (err: unknown) {
-          const errorMessage =
-            err instanceof Error ? err.message : String(err);
-          result = {
-            taskId: cache.taskId,
-            status: TaskStatus.FAILED,
-            steps: [],
-            output: `Extract failed: ${errorMessage}`,
-            replayStepMeta: {
-              usedCachedAction: true,
-              fallbackUsed: false,
-              retries: 0,
-              cachedXPath: null,
-              fallbackXPath: null,
-              fallbackElementId: null,
-            },
-          };
-        }
-      } else if (step.actionType === "analyzePdf") {
-        result = {
-          taskId: cache.taskId,
-          status: TaskStatus.FAILED,
-          steps: [],
-          output: "analyzePdf replay is not supported in runFromActionCache.",
-          replayStepMeta: {
-            usedCachedAction: true,
-            fallbackUsed: false,
-            retries: 0,
-            cachedXPath: null,
-            fallbackXPath: null,
-            fallbackElementId: null,
-          },
-        };
+      if (replaySpecialResult) {
+        result = replaySpecialResult;
       } else {
         const method = step.method;
         if (method && validHelperMethods.has(method)) {

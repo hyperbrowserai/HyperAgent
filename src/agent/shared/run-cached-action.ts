@@ -8,6 +8,7 @@ import { initializeRuntimeContext } from "@/agent/shared/runtime-context";
 import { resolveXPathWithCDP } from "@/agent/shared/xpath-cdp-resolver";
 import { resolveElement, dispatchCDPAction } from "@/cdp";
 import { TaskOutput, TaskStatus } from "@/types/agent/types";
+import { executeReplaySpecialAction } from "@/agent/shared/replay-special-actions";
 
 export interface CachedActionInput {
   actionType: string;
@@ -55,54 +56,30 @@ export async function runCachedStep(
 
   const taskId = uuidv4();
 
-  if (cachedAction.actionType === "goToUrl") {
-    const actionParams = isRecord(cachedAction.actionParams)
+  const specialActionResult = await executeReplaySpecialAction({
+    taskId,
+    actionType: cachedAction.actionType,
+    instruction,
+    arguments: cachedAction.arguments,
+    actionParams: isRecord(cachedAction.actionParams)
       ? cachedAction.actionParams
-      : undefined;
-    const url =
-      (cachedAction.arguments && cachedAction.arguments[0]) ||
-      (typeof actionParams?.url === "string" ? actionParams.url : "") ||
-      "";
-    if (!url || typeof url !== "string") {
-      return {
-        taskId,
-        status: TaskStatus.FAILED,
-        steps: [],
-        output: "Missing URL for goToUrl",
-      };
-    }
-    await page.goto(url, { waitUntil: "domcontentloaded" });
-    await waitForSettledDOM(page);
-    markDomSnapshotDirty(page);
-    return {
-      taskId,
-      status: TaskStatus.COMPLETED,
-      steps: [],
-      output: `Navigated to ${url}`,
-      replayStepMeta: {
-        usedCachedAction: true,
-        fallbackUsed: false,
-        retries: 1,
-        cachedXPath: null,
-        fallbackXPath: null,
-        fallbackElementId: null,
-      },
+      : undefined,
+    page,
+  });
+  if (specialActionResult) {
+    const replayStepMeta = specialActionResult.replayStepMeta ?? {
+      usedCachedAction: true,
+      fallbackUsed: false,
+      retries: 1,
+      cachedXPath: null,
+      fallbackXPath: null,
+      fallbackElementId: null,
     };
-  }
-
-  if (cachedAction.actionType === "complete") {
     return {
-      taskId,
-      status: TaskStatus.COMPLETED,
-      steps: [],
-      output: "Task Complete",
+      ...specialActionResult,
       replayStepMeta: {
-        usedCachedAction: true,
-        fallbackUsed: false,
+        ...replayStepMeta,
         retries: 1,
-        cachedXPath: null,
-        fallbackXPath: null,
-        fallbackElementId: null,
       },
     };
   }
