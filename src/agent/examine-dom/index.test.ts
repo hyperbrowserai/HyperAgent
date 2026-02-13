@@ -115,10 +115,15 @@ describe("extractValueFromInstruction", () => {
       "test@example.com"
     );
     expect(extractValueFromInstruction("type hello into search box")).toBe(
-      "search box"
+      "hello"
     );
     expect(extractValueFromInstruction("enter password123 in password field")).toBe(
-      "password field"
+      "password123"
     );
+  });
+
+  it("returns empty string when no value can be inferred", () => {
+    expect(extractValueFromInstruction("click submit button")).toBe("");
+    expect(extractValueFromInstruction("   ")).toBe("");
   });
 });

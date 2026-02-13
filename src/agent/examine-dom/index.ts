@@ -140,14 +140,28 @@ export async function examineDom(
  * @returns The extracted value or empty string if no value found
  */
 export function extractValueFromInstruction(instruction: string): string {
-  // Pattern: "with X", "into X", "in X"
-  const patterns = [/with\s+(.+)$/i, /into\s+(.+)$/i, /in\s+(.+)$/i];
+  const normalizedInstruction = instruction.trim();
+  if (normalizedInstruction.length === 0) {
+    return "";
+  }
 
-  for (const pattern of patterns) {
-    const match = instruction.match(pattern);
-    if (match) {
-      return match[1].trim();
-    }
+  const withMatch = normalizedInstruction.match(/\bwith\s+(.+)$/i);
+  if (withMatch) {
+    return withMatch[1].trim();
+  }
+
+  const intoMatch = normalizedInstruction.match(
+    /^(?:fill|type|enter)\s+(.+?)\s+\binto\b/i
+  );
+  if (intoMatch) {
+    return intoMatch[1].trim();
+  }
+
+  const inMatch = normalizedInstruction.match(
+    /^(?:fill|type|enter)\s+(.+?)\s+\bin\b/i
+  );
+  if (inMatch) {
+    return inMatch[1].trim();
   }
 
   return "";
