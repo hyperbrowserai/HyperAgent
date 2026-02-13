@@ -23,18 +23,12 @@ export const PAGE_ACTION_METHODS = [
   "prevChunk",
 ] as const;
 
-type Includes<T extends readonly string[]> = (
-  haystack: readonly string[],
-  needle: string
-) => needle is T[number];
-
-const includes = ((haystack: readonly string[], needle: string): boolean =>
-  haystack.includes(needle)) as Includes<typeof PAGE_ACTION_METHODS>;
+const pageActionMethodSet: ReadonlySet<string> = new Set(PAGE_ACTION_METHODS);
 
 export type PageAction = (typeof PAGE_ACTION_METHODS)[number];
 
 export function isPageActionMethod(method: string): method is PageAction {
-  return includes(PAGE_ACTION_METHODS, method);
+  return pageActionMethodSet.has(method);
 }
 
 export function dispatchPerformHelper(
