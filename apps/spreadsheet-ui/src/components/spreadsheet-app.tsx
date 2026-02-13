@@ -10,6 +10,7 @@ import dynamic from "next/dynamic";
 import {
   createWorkbook,
   exportWorkbook,
+  getAgentPresets,
   getCells,
   importWorkbook,
   runAgentOps,
@@ -69,6 +70,12 @@ export function SpreadsheetApp() {
     queryKey: ["cells", workbook?.id, activeSheet],
     enabled: Boolean(workbook?.id),
     queryFn: () => getCells(workbook!.id, activeSheet),
+  });
+
+  const presetsQuery = useQuery({
+    queryKey: ["agent-presets", workbook?.id],
+    enabled: Boolean(workbook?.id),
+    queryFn: () => getAgentPresets(workbook!.id),
   });
 
   useEffect(() => {
@@ -260,9 +267,7 @@ export function SpreadsheetApp() {
     }
   }
 
-  async function handlePresetRun(
-    preset: "seed_sales_demo" | "export_snapshot",
-  ) {
+  async function handlePresetRun(preset: string) {
     if (!workbook) {
       return;
     }
@@ -272,7 +277,7 @@ export function SpreadsheetApp() {
         request_id: `preset-${preset}-${Date.now()}`,
         actor: "ui-preset",
         stop_on_error: true,
-        include_file_base64: false,
+        include_file_base64: preset === "export_snapshot" ? false : undefined,
       });
       setLastPreset(response.preset);
       setLastAgentRequestId(response.request_id ?? null);
@@ -325,20 +330,23 @@ export function SpreadsheetApp() {
               >
                 Export .xlsx
               </button>
-              <button
-                onClick={() => handlePresetRun("seed_sales_demo")}
-                disabled={!workbook || isRunningPreset}
-                className="rounded-md bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-400 disabled:opacity-40"
-              >
-                {isRunningPreset ? "Running preset..." : "Run Seed Preset"}
-              </button>
-              <button
-                onClick={() => handlePresetRun("export_snapshot")}
-                disabled={!workbook || isRunningPreset}
-                className="rounded-md bg-cyan-500 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-400 disabled:opacity-40"
-              >
-                Run Export Preset
-              </button>
+              {(presetsQuery.data ?? []).map((presetInfo, index) => (
+                <button
+                  key={presetInfo.preset}
+                  onClick={() => handlePresetRun(presetInfo.preset)}
+                  disabled={!workbook || isRunningPreset}
+                  title={`${presetInfo.description} (ops: ${presetInfo.operations.join(", ")})`}
+                  className={`rounded-md px-3 py-2 text-sm font-medium text-white disabled:opacity-40 ${
+                    index % 2 === 0
+                      ? "bg-amber-500 hover:bg-amber-400"
+                      : "bg-cyan-500 hover:bg-cyan-400"
+                  }`}
+                >
+                  {isRunningPreset
+                    ? "Running preset..."
+                    : `Preset: ${presetInfo.preset}`}
+                </button>
+              ))}
               <button
                 onClick={handleAgentDemoFlow}
                 disabled={!workbook || isRunningAgentFlow}

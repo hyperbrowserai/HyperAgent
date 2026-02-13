@@ -51,3 +51,9 @@ export interface AgentPresetResponse {
   request_id?: string;
   results: AgentOperationResult[];
 }
+
+export interface AgentPresetInfo {
+  preset: string;
+  description: string;
+  operations: string[];
+}
