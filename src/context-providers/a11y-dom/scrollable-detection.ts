@@ -179,11 +179,19 @@ export async function getScrollableElementXpaths(
   topN?: number
 ): Promise<string[]> {
   try {
-    const xpaths = await pageOrFrame.evaluate((n) => {
+    const rawXpaths = await pageOrFrame.evaluate((n) => {
       // @ts-ignore - function injected via script
       return window.__hyperagent_getScrollableElementXpaths?.(n) ?? [];
     }, topN);
-    return xpaths;
+
+    if (!Array.isArray(rawXpaths)) {
+      return [];
+    }
+
+    return rawXpaths
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
   } catch (error) {
     console.warn(
       `Error getting scrollable element xpaths: ${formatUnknownError(error)}`
