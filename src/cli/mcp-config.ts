@@ -83,6 +83,20 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 export async function loadMCPServersFromFile(
   filePath: string
 ): Promise<MCPServerConfig[]> {
-  const fileContent = await fs.promises.readFile(filePath, "utf-8");
-  return parseMCPServersConfig(fileContent);
+  let fileContent: string;
+  try {
+    fileContent = await fs.promises.readFile(filePath, "utf-8");
+  } catch (error) {
+    throw new Error(
+      `Failed to read MCP config file "${filePath}": ${formatUnknownError(error)}`
+    );
+  }
+
+  try {
+    return parseMCPServersConfig(fileContent);
+  } catch (error) {
+    throw new Error(
+      `Invalid MCP config file "${filePath}": ${formatUnknownError(error)}`
+    );
+  }
 }

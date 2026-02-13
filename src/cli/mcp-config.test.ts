@@ -1,4 +1,10 @@
-import { parseMCPServersConfig } from "@/cli/mcp-config";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  loadMCPServersFromFile,
+  parseMCPServersConfig,
+} from "@/cli/mcp-config";
 
 describe("parseMCPServersConfig", () => {
   it("parses array-formatted config", () => {
@@ -92,5 +98,57 @@ describe("parseMCPServersConfig", () => {
         sseUrl: "https://example.com/sse",
       },
     ]);
+  });
+});
+
+describe("loadMCPServersFromFile", () => {
+  it("loads and parses server config from file", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-mcp-config-")
+    );
+    const filePath = path.join(tempDir, "mcp.json");
+    await fs.promises.writeFile(
+      filePath,
+      '[{"id":"demo","command":"npx","args":["-y","server"]}]',
+      "utf-8"
+    );
+
+    try {
+      const parsed = await loadMCPServersFromFile(filePath);
+      expect(parsed).toEqual([
+        {
+          id: "demo",
+          command: "npx",
+          args: ["-y", "server"],
+          connectionType: "stdio",
+        },
+      ]);
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("throws readable error when config file cannot be read", async () => {
+    await expect(
+      loadMCPServersFromFile("/tmp/does-not-exist-mcp-config.json")
+    ).rejects.toThrow(
+      'Failed to read MCP config file "/tmp/does-not-exist-mcp-config.json":'
+    );
+  });
+
+  it("throws readable error when config file contents are invalid", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-mcp-config-")
+    );
+    const filePath = path.join(tempDir, "mcp.json");
+    await fs.promises.writeFile(filePath, "{broken", "utf-8");
+
+    try {
+      await expect(loadMCPServersFromFile(filePath)).rejects.toThrow(
+        `Invalid MCP config file "${filePath}": Invalid MCP config JSON`
+      );
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
