@@ -397,6 +397,22 @@ export function SpreadsheetApp() {
   const wizardPresetOpsSignature =
     wizardPresetOpsQuery.data?.operations_signature ?? null;
   const wizardPreviewSource = workbook ? "workbook-scoped" : "global";
+  const cachePrefixSuggestions = useMemo(() => {
+    const entries = agentOpsCacheEntriesQuery.data?.entries ?? [];
+    return Array.from(
+      new Set(
+        entries
+          .map((entry) => {
+            const delimiterIndex = entry.request_id.indexOf("-");
+            if (delimiterIndex <= 0) {
+              return null;
+            }
+            return entry.request_id.slice(0, delimiterIndex + 1);
+          })
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ).slice(0, 6);
+  }, [agentOpsCacheEntriesQuery.data?.entries]);
   const scenarioSignatureStatus =
     lastScenario === wizardScenario &&
     lastOperationsSignature &&
@@ -2192,6 +2208,24 @@ export function SpreadsheetApp() {
                       Clear
                     </button>
                   </div>
+                  {cachePrefixSuggestions.length > 0 ? (
+                    <div className="mb-2 flex flex-wrap items-center gap-1">
+                      <span className="text-[10px] text-slate-500">suggestions:</span>
+                      {cachePrefixSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => setCacheRequestIdPrefix(suggestion)}
+                          className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                            cacheRequestIdPrefix === suggestion
+                              ? "border-indigo-500/80 bg-indigo-500/20 text-indigo-200"
+                              : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                          }`}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-[11px] text-slate-500">
                       recent request IDs (newest first):
