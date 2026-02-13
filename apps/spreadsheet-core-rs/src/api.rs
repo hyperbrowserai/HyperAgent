@@ -76,6 +76,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "PI",
   "ABS",
   "LN",
+  "EXP",
+  "LOG",
   "LOG10",
   "SIN",
   "COS",

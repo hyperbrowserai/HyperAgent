@@ -5,7 +5,8 @@ use crate::{
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
-    parse_abs_formula, parse_ln_formula, parse_log10_formula, parse_pi_formula,
+    parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
+    parse_log_formula, parse_pi_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_asin_formula,
     parse_acos_formula, parse_atan_formula, parse_atan2_formula,
     parse_degrees_formula, parse_radians_formula,
@@ -581,6 +582,23 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(value.log10().to_string()));
+  }
+
+  if let Some(exp_arg) = parse_exp_formula(formula) {
+    let value = parse_required_float(connection, sheet, &exp_arg)?;
+    return Ok(Some(value.exp().to_string()));
+  }
+
+  if let Some((number_arg, base_arg)) = parse_log_formula(formula) {
+    let value = parse_required_float(connection, sheet, &number_arg)?;
+    let base = match base_arg {
+      Some(raw_base) => parse_required_float(connection, sheet, &raw_base)?,
+      None => 10.0,
+    };
+    if value <= 0.0 || base <= 0.0 || (base - 1.0).abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    return Ok(Some(value.log(base).to_string()));
   }
 
   if let Some(sin_arg) = parse_sin_formula(formula) {
@@ -2875,12 +2893,24 @@ mod tests {
         value: None,
         formula: Some("=RADIANS(180)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 106,
+        value: None,
+        formula: Some("=EXP(1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 107,
+        value: None,
+        formula: Some("=LOG(100,10)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 103);
+    assert_eq!(updated_cells, 105);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2894,7 +2924,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 105,
+        end_col: 107,
       },
     )
     .expect("cells should be fetched");
@@ -3053,6 +3083,11 @@ mod tests {
       by_position(1, 105).evaluated_value.as_deref(),
       Some("3.141592653589793"),
     );
+    assert_eq!(
+      by_position(1, 106).evaluated_value.as_deref(),
+      Some("2.718281828459045"),
+    );
+    assert_eq!(by_position(1, 107).evaluated_value.as_deref(), Some("2"));
   }
 
   #[test]
@@ -3189,6 +3224,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=LN(0)".to_string(), "=LOG10(-1)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_log_bases_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=LOG(100,1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=LOG(100,0)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=LOG(100,1)".to_string(), "=LOG(100,0)".to_string()],
     );
   }
 
