@@ -1,4 +1,5 @@
 import { TaskStatus } from "@/types";
+import { formatUnknownError } from "@/utils";
 
 type PauseableTask = {
   getStatus: () => TaskStatus;
@@ -14,10 +15,26 @@ export function pauseTaskIfRunning(task?: PauseableTask): boolean {
   if (!task) {
     return false;
   }
-  if (task.getStatus() !== TaskStatus.RUNNING) {
+  let status: TaskStatus;
+  try {
+    status = task.getStatus();
+  } catch (error) {
+    console.warn(
+      `[CLI] Failed to read task status for pause: ${formatUnknownError(error)}`
+    );
     return false;
   }
-  task.pause();
+  if (status !== TaskStatus.RUNNING) {
+    return false;
+  }
+  try {
+    task.pause();
+  } catch (error) {
+    console.warn(
+      `[CLI] Failed to pause task: ${formatUnknownError(error)}`
+    );
+    return false;
+  }
   return true;
 }
 
@@ -25,9 +42,25 @@ export function resumeTaskIfPaused(task?: ResumableTask): boolean {
   if (!task) {
     return false;
   }
-  if (task.getStatus() !== TaskStatus.PAUSED) {
+  let status: TaskStatus;
+  try {
+    status = task.getStatus();
+  } catch (error) {
+    console.warn(
+      `[CLI] Failed to read task status for resume: ${formatUnknownError(error)}`
+    );
     return false;
   }
-  task.resume();
+  if (status !== TaskStatus.PAUSED) {
+    return false;
+  }
+  try {
+    task.resume();
+  } catch (error) {
+    console.warn(
+      `[CLI] Failed to resume task: ${formatUnknownError(error)}`
+    );
+    return false;
+  }
   return true;
 }
