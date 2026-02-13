@@ -1,4 +1,5 @@
 import type { Task } from "@/types";
+import { formatUnknownError } from "@/utils";
 
 export type TaskErrorHandler = (error: unknown) => void;
 
@@ -8,6 +9,12 @@ export function attachTaskErrorHandler(
 ): void {
   task.emitter.addListener("error", (error: unknown) => {
     task.cancel();
-    onError(error);
+    try {
+      onError(error);
+    } catch (handlerError) {
+      console.error(
+        `[CLI] Task error handler failed: ${formatUnknownError(handlerError)}`
+      );
+    }
   });
 }

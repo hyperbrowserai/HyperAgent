@@ -20,4 +20,29 @@ describe("attachTaskErrorHandler", () => {
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith(errorPayload);
   });
+
+  it("logs readable message when error callback itself throws", () => {
+    const emitter = new EventEmitter();
+    const cancel = jest.fn();
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const task = {
+      cancel,
+      emitter,
+    } as unknown as Task;
+
+    try {
+      attachTaskErrorHandler(task, () => {
+        throw { reason: "callback blew up" };
+      });
+
+      emitter.emit("error", { reason: "task failed" });
+
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[CLI] Task error handler failed: {"reason":"callback blew up"}'
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
