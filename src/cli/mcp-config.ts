@@ -22,7 +22,13 @@ function normalizeOptionalArgs(value: unknown, index: number): string[] | undefi
       `MCP server entry at index ${index} must provide "args" as an array of strings.`
     );
   }
-  return value as string[];
+  const normalized = (value as string[]).map((entry) => entry.trim());
+  if (normalized.some((entry) => entry.length === 0)) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "args" as an array of non-empty strings.`
+    );
+  }
+  return normalized;
 }
 
 function normalizeOptionalStringRecord(
