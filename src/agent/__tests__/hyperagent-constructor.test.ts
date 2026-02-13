@@ -2461,6 +2461,39 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("closeAgent truncates oversized lifecycle diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browserProvider: {
+        close: () => Promise<void>;
+        getSession: () => unknown;
+      };
+      browser: null;
+      context: null;
+    };
+    internalAgent.browserProvider = {
+      close: async () => {
+        throw new Error("x".repeat(2_000));
+      },
+      getSession: () => ({ id: "session-1" }),
+    };
+    internalAgent.browser = null;
+    internalAgent.context = null;
+
+    try {
+      await expect(agent.closeAgent()).resolves.toBeUndefined();
+      const warnedMessages = warnSpy.mock.calls.map((call) => String(call[0] ?? ""));
+      expect(warnedMessages.some((message) => message.includes("[truncated"))).toBe(
+        true
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("task controls stay cancelled after close despite late task-state mutations", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     let resolveTask!: (value: AgentTaskOutput) => void;

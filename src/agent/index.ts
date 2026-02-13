@@ -84,6 +84,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   };
   private static readonly MAX_REPLAY_OUTPUT_CHARS = 4_000;
   private static readonly MAX_REPLAY_DIAGNOSTIC_CHARS = 400;
+  private static readonly MAX_LIFECYCLE_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_REPLAY_STEPS = 1_000;
   private static readonly MAX_ACTION_CACHE_ENTRIES = 200;
   private static readonly DEFAULT_ACTION_CACHE_CREATED_AT =
@@ -135,6 +136,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch {
       return false;
     }
+  }
+
+  private formatLifecycleDiagnostic(value: unknown): string {
+    const normalized = formatUnknownError(value).replace(/\s+/g, " ").trim();
+    const fallback = normalized.length > 0 ? normalized : "unknown error";
+    if (fallback.length <= HyperAgent.MAX_LIFECYCLE_DIAGNOSTIC_CHARS) {
+      return fallback;
+    }
+    const omitted =
+      fallback.length - HyperAgent.MAX_LIFECYCLE_DIAGNOSTIC_CHARS;
+    return `${fallback.slice(
+      0,
+      HyperAgent.MAX_LIFECYCLE_DIAGNOSTIC_CHARS
+    )}... [truncated ${omitted} chars]`;
   }
 
   private readTaskStatus(
@@ -539,7 +554,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to reset task registry during close: ${formatUnknownError(
+          `[HyperAgent] Failed to reset task registry during close: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -566,7 +581,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to reset task-result registry during close: ${formatUnknownError(
+          `[HyperAgent] Failed to reset task-result registry during close: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -593,7 +608,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to reset action-cache registry during close: ${formatUnknownError(
+          `[HyperAgent] Failed to reset action-cache registry during close: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -620,7 +635,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to reset action-cache order during close: ${formatUnknownError(
+          `[HyperAgent] Failed to reset action-cache order during close: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -1228,7 +1243,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     this.clearTaskErrorForwarders();
     await disposeAllCDPClients().catch((error) => {
       console.warn(
-        `[HyperAgent] Failed to dispose CDP clients: ${formatUnknownError(error)}`
+        `[HyperAgent] Failed to dispose CDP clients: ${this.formatLifecycleDiagnostic(
+          error
+        )}`
       );
     });
     for (const [, task] of this.getTaskEntriesForClose()) {
@@ -1247,7 +1264,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         await this.mcpClient.disconnect();
       } catch (error) {
         console.warn(
-          `[HyperAgent] Failed to disconnect MCP client: ${formatUnknownError(error)}`
+          `[HyperAgent] Failed to disconnect MCP client: ${this.formatLifecycleDiagnostic(
+            error
+          )}`
         );
       } finally {
         this.mcpClient = undefined;
@@ -1264,7 +1283,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         await this.closeBrowserProvider();
       } catch (error) {
         console.warn(
-          `[HyperAgent] ${formatUnknownError(error)}`
+          `[HyperAgent] ${this.formatLifecycleDiagnostic(error)}`
         );
       } finally {
         this.browser = null;
