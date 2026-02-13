@@ -2213,6 +2213,18 @@ export function SpreadsheetApp() {
                                 {entry.operations_signature?.slice(0, 12) ?? "-"}
                               </span>
                             </span>
+                            <span className="ml-2 text-slate-500">
+                              ops:
+                              <span className="ml-1 font-mono text-slate-300">
+                                {entry.operation_count}
+                              </span>
+                            </span>
+                            <span className="ml-2 text-slate-500">
+                              results:
+                              <span className="ml-1 font-mono text-slate-300">
+                                {entry.result_count}
+                              </span>
+                            </span>
                           </div>
                           <div className="flex items-center gap-1">
                             <button

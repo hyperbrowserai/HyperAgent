@@ -183,6 +183,8 @@ pub struct ReplayAgentOpsCacheEntryResponse {
 pub struct AgentOpsCacheEntry {
   pub request_id: String,
   pub operations_signature: Option<String>,
+  pub operation_count: usize,
+  pub result_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

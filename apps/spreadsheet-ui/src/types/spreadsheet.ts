@@ -63,6 +63,8 @@ export interface AgentOpsCacheStatsResponse {
 export interface AgentOpsCacheEntry {
   request_id: string;
   operations_signature: string | null;
+  operation_count: number;
+  result_count: number;
 }
 
 export interface AgentOpsCacheEntriesResponse {

@@ -90,7 +90,7 @@ Plan-preview helper:
 
 Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache`
-- `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20` (newest-first paged request-id summaries, optional prefix filter, max `limit=200`)
+- `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20` (newest-first paged request-id summaries, optional prefix filter, max `limit=200`, includes operation/result counts)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay` with `{ "request_id": "..." }` (returns `{ cached_response, operations }` where `operations` are the original cached ops payload)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`

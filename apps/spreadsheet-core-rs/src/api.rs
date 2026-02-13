@@ -1048,7 +1048,12 @@ async fn get_agent_schema(
       "offset": "start index in newest-first order",
       "limit": "applied limit (default 20, max 200)",
       "has_more": "true when another page exists after this response",
-      "entries": [{ "request_id": "string", "operations_signature": "optional string" }]
+      "entries": [{
+        "request_id": "string",
+        "operations_signature": "optional string",
+        "operation_count": "number of cached operations in this request",
+        "result_count": "number of cached operation results"
+      }]
     },
     "agent_ops_cache_clear_response_shape": {
       "cleared_entries": "number of removed cache entries"
@@ -1406,9 +1411,11 @@ async fn agent_ops_cache_entries(
     .await?;
   let mapped_entries = entries
     .into_iter()
-    .map(|(request_id, operations_signature)| AgentOpsCacheEntry {
+    .map(|(request_id, operations_signature, operation_count, result_count)| AgentOpsCacheEntry {
       request_id,
       operations_signature,
+      operation_count,
+      result_count,
     })
     .collect::<Vec<_>>();
   let has_more = offset + mapped_entries.len() < total_entries;
@@ -2037,6 +2044,8 @@ mod tests {
     assert!(entries_response.has_more);
     assert_eq!(entries_response.entries[0].request_id, "handler-entries-3");
     assert_eq!(entries_response.entries[1].request_id, "handler-entries-2");
+    assert_eq!(entries_response.entries[0].operation_count, 1);
+    assert_eq!(entries_response.entries[0].result_count, 1);
 
     let capped_response = agent_ops_cache_entries(
       State(state.clone()),

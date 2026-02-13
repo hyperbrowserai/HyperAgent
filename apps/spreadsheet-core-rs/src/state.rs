@@ -277,7 +277,7 @@ impl AppState {
     request_id_prefix: Option<&str>,
     offset: usize,
     limit: usize,
-  ) -> Result<(usize, Vec<(String, Option<String>)>), ApiError> {
+  ) -> Result<(usize, Vec<(String, Option<String>, usize, usize)>), ApiError> {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
@@ -302,9 +302,14 @@ impl AppState {
       .skip(offset)
       .take(limit)
       .filter_map(|request_id| {
-        record.agent_ops_cache.get(&request_id).map(|response| {
-          (request_id, response.operations_signature.clone())
-        })
+        let response = record.agent_ops_cache.get(&request_id)?;
+        let operations = record.agent_ops_cached_operations.get(&request_id)?;
+        Some((
+          request_id,
+          response.operations_signature.clone(),
+          operations.len(),
+          response.results.len(),
+        ))
       })
       .collect::<Vec<_>>();
     Ok((total_entries, entries))
@@ -552,6 +557,8 @@ mod tests {
     assert_eq!(entries[0].0, "req-3");
     assert_eq!(entries[1].0, "req-2");
     assert_eq!(entries[0].1.as_deref(), Some("sig-3"));
+    assert_eq!(entries[0].2, 1);
+    assert_eq!(entries[0].3, 0);
 
     let (_, paged_entries) = state
       .agent_ops_cache_entries(workbook.id, None, 2, 2)
@@ -567,6 +574,7 @@ mod tests {
     assert_eq!(filtered_total, 1);
     assert_eq!(filtered_entries.len(), 1);
     assert_eq!(filtered_entries[0].0, "req-2");
+    assert_eq!(filtered_entries[0].2, 1);
   }
 
   #[tokio::test]
