@@ -133,6 +133,7 @@ export function SpreadsheetApp() {
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [cacheRemovePreviewSampleLimit, setCacheRemovePreviewSampleLimit] = useState("10");
+  const [cacheStalePreviewSampleLimit, setCacheStalePreviewSampleLimit] = useState("10");
   const [cacheStaleMaxAgeSeconds, setCacheStaleMaxAgeSeconds] = useState("3600");
   const [isPreviewingStaleCache, setIsPreviewingStaleCache] = useState(false);
   const [isRemovingStaleCache, setIsRemovingStaleCache] = useState(false);
@@ -326,6 +327,7 @@ export function SpreadsheetApp() {
     setCacheRerunRequestId("");
     setCachePrefixRemovalPreview(null);
     setCacheRemovePreviewSampleLimit("10");
+    setCacheStalePreviewSampleLimit("10");
     setCacheStaleMaxAgeSeconds("3600");
     setCacheStaleRemovalPreview(null);
   }, [workbook?.id]);
@@ -1642,7 +1644,7 @@ export function SpreadsheetApp() {
     if (maxAgeSeconds === null) {
       return;
     }
-    const parsedSampleLimit = Number.parseInt(cacheRemovePreviewSampleLimit, 10);
+    const parsedSampleLimit = Number.parseInt(cacheStalePreviewSampleLimit, 10);
     const normalizedSampleLimit = Number.isNaN(parsedSampleLimit)
       ? undefined
       : Math.max(1, Math.min(parsedSampleLimit, 100));
@@ -1681,7 +1683,7 @@ export function SpreadsheetApp() {
     if (maxAgeSeconds === null) {
       return;
     }
-    const parsedSampleLimit = Number.parseInt(cacheRemovePreviewSampleLimit, 10);
+    const parsedSampleLimit = Number.parseInt(cacheStalePreviewSampleLimit, 10);
     const normalizedSampleLimit = Number.isNaN(parsedSampleLimit)
       ? undefined
       : Math.max(1, Math.min(parsedSampleLimit, 100));
@@ -2654,6 +2656,17 @@ export function SpreadsheetApp() {
                       }
                       inputMode="numeric"
                       className="h-6 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-amber-500"
+                    />
+                    <label className="text-[10px] text-slate-500">
+                      stale sample
+                    </label>
+                    <input
+                      value={cacheStalePreviewSampleLimit}
+                      onChange={(event) =>
+                        setCacheStalePreviewSampleLimit(event.target.value)
+                      }
+                      inputMode="numeric"
+                      className="h-6 w-14 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-amber-500"
                     />
                     <button
                       onClick={handlePreviewRemoveStaleCacheEntries}
