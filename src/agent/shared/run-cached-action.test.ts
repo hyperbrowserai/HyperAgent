@@ -142,6 +142,74 @@ describe("runCachedStep", () => {
     expect(result.replayStepMeta?.retries).toBe(1);
   });
 
+  it("sanitizes oversized special action outputs before returning", async () => {
+    executeReplaySpecialAction.mockResolvedValue({
+      taskId: "task-uuid",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: `x${"y".repeat(5_000)}\nunsafe`,
+      replayStepMeta: {
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 2,
+        cachedXPath: "//button[1]",
+        fallbackXPath: null,
+        fallbackElementId: null,
+      },
+    });
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "done",
+      cachedAction: {
+        actionType: "complete",
+      },
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toContain("[truncated");
+    expect(result.output).not.toContain("\n");
+    expect(result.replayStepMeta?.retries).toBe(2);
+    expect(result.replayStepMeta?.cachedXPath).toBe("//button[1]");
+  });
+
+  it("normalizes malformed special action payloads safely", async () => {
+    executeReplaySpecialAction.mockResolvedValue({
+      taskId: "  ",
+      status: "bad-status",
+      steps: [],
+      output: { bad: true },
+      replayStepMeta: {
+        retries: "bad",
+      },
+    });
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "done",
+      cachedAction: {
+        actionType: "complete",
+      },
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toBe("Special cached action failed.");
+    expect(result.replayStepMeta).toEqual(
+      expect.objectContaining({
+        usedCachedAction: true,
+        retries: 1,
+      })
+    );
+  });
+
   it("returns unsupported error for non-special non-actElement actions", async () => {
     executeReplaySpecialAction.mockResolvedValue(null);
 

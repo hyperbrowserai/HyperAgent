@@ -236,6 +236,63 @@ function normalizeFallbackTaskOutput(
   };
 }
 
+function normalizeSpecialActionTaskOutput(
+  specialResult: unknown,
+  taskId: string,
+  retries: number,
+  cachedXPath: string | null
+): TaskOutput {
+  const status = normalizeTaskStatus(safeReadTaskOutputField(specialResult, "status"));
+  const outputValue = safeReadTaskOutputField(specialResult, "output");
+  const replayStepMetaValue = safeReadTaskOutputField(
+    specialResult,
+    "replayStepMeta"
+  );
+  const normalizedReplayStepMeta = isRecord(replayStepMetaValue)
+    ? replayStepMetaValue
+    : undefined;
+  const rawRetries = safeReadRecordField(normalizedReplayStepMeta, "retries");
+  const normalizedRetries =
+    typeof rawRetries === "number" &&
+    Number.isFinite(rawRetries) &&
+    rawRetries > 0
+      ? Math.floor(rawRetries)
+      : retries;
+
+  return {
+    taskId:
+      normalizeOptionalTrimmedString(
+        safeReadTaskOutputField(specialResult, "taskId")
+      ) ?? taskId,
+    status,
+    steps: [],
+    output: normalizeCachedActionOutputText(
+      outputValue,
+      status === TaskStatus.FAILED
+        ? "Special cached action failed."
+        : "Special cached action completed."
+    ),
+    replayStepMeta: {
+      usedCachedAction: true,
+      fallbackUsed:
+        safeReadRecordField(normalizedReplayStepMeta, "fallbackUsed") === true,
+      retries: normalizedRetries,
+      cachedXPath:
+        normalizeOptionalTrimmedString(
+          safeReadRecordField(normalizedReplayStepMeta, "cachedXPath")
+        ) ?? cachedXPath,
+      fallbackXPath:
+        normalizeOptionalTrimmedString(
+          safeReadRecordField(normalizedReplayStepMeta, "fallbackXPath")
+        ) ?? null,
+      fallbackElementId:
+        normalizeOptionalTrimmedString(
+          safeReadRecordField(normalizedReplayStepMeta, "fallbackElementId")
+        ) ?? null,
+    },
+  };
+}
+
 const normalizeMaxSteps = (value: number): number =>
   Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
 
@@ -310,7 +367,12 @@ export async function runCachedStep(
     } satisfies TaskOutput;
   });
   if (specialActionResult) {
-    return specialActionResult;
+    return normalizeSpecialActionTaskOutput(
+      specialActionResult,
+      taskId,
+      1,
+      normalizedXPath ?? null
+    );
   }
 
   if (
