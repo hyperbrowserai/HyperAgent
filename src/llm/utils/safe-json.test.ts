@@ -5,8 +5,16 @@ describe("parseJsonMaybe", () => {
     expect(parseJsonMaybe('{"ok":true}')).toEqual({ ok: true });
   });
 
+  it("parses JSON strings with BOM and surrounding whitespace", () => {
+    expect(parseJsonMaybe(" \n\uFEFF {\"ok\":true} \n")).toEqual({ ok: true });
+  });
+
   it("returns original string when parsing fails", () => {
     expect(parseJsonMaybe("{broken")).toBe("{broken");
+  });
+
+  it("returns original string when value is only whitespace", () => {
+    expect(parseJsonMaybe("   ")).toBe("   ");
   });
 
   it("returns non-string values unchanged", () => {
