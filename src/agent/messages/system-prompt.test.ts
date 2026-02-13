@@ -12,4 +12,9 @@ describe("SYSTEM_PROMPT action contract", () => {
     expect(SYSTEM_PROMPT).not.toContain("scrollNextChunk");
     expect(SYSTEM_PROMPT).not.toContain("scrollPrevChunk");
   });
+
+  it("references canonical selectOptionFromDropdown interaction name", () => {
+    expect(SYSTEM_PROMPT).toContain("selectOptionFromDropdown");
+    expect(SYSTEM_PROMPT).not.toContain("click, fill, type, press, select,");
+  });
 });
