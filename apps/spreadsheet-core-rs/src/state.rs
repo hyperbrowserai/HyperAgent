@@ -412,12 +412,28 @@ impl AppState {
     workbook_id: Uuid,
     request_id_prefix: &str,
     cutoff_timestamp: Option<DateTime<Utc>>,
-  ) -> Result<(usize, usize), ApiError> {
+  ) -> Result<(usize, usize, usize), ApiError> {
     let mut guard = self.workbooks.write().await;
     let record = guard
       .get_mut(&workbook_id)
       .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
 
+    let unscoped_matched_entries = record
+      .agent_ops_cache_order
+      .iter()
+      .filter(|request_id| {
+        cutoff_timestamp
+          .as_ref()
+          .map(|cutoff| {
+            record
+              .agent_ops_cache_timestamps
+              .get(*request_id)
+              .map(|cached_at| cached_at <= cutoff)
+              .unwrap_or(false)
+          })
+          .unwrap_or(true)
+      })
+      .count();
     let matching_request_ids = record
       .agent_ops_cache_order
       .iter()
@@ -454,7 +470,11 @@ impl AppState {
       }
     }
 
-    Ok((removed_entries, record.agent_ops_cache_order.len()))
+    Ok((
+      removed_entries,
+      unscoped_matched_entries,
+      record.agent_ops_cache_order.len(),
+    ))
   }
 
   pub async fn remove_stale_agent_ops_cache_entries(
@@ -976,11 +996,12 @@ mod tests {
         .expect("cache update should succeed");
     }
 
-    let (removed_entries, remaining_entries) = state
+    let (removed_entries, unscoped_matched_entries, remaining_entries) = state
       .remove_agent_ops_cache_entries_by_prefix(workbook.id, "scenario-", None)
       .await
       .expect("prefix removal should succeed");
     assert_eq!(removed_entries, 2);
+    assert_eq!(unscoped_matched_entries, 3);
     assert_eq!(remaining_entries, 1);
 
     let scenario_entry = state
@@ -995,7 +1016,11 @@ mod tests {
     assert!(preset_entry.is_some());
 
     let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
-    let (age_removed_entries, age_remaining_entries) = state
+    let (
+      age_removed_entries,
+      age_unscoped_matched_entries,
+      age_remaining_entries,
+    ) = state
       .remove_agent_ops_cache_entries_by_prefix(
         workbook.id,
         "preset-",
@@ -1004,6 +1029,7 @@ mod tests {
       .await
       .expect("age-filtered prefix removal should succeed");
     assert_eq!(age_removed_entries, 0);
+    assert_eq!(age_unscoped_matched_entries, 0);
     assert_eq!(age_remaining_entries, 1);
   }
 

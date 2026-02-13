@@ -185,6 +185,7 @@ pub struct RemoveAgentOpsCacheEntriesByPrefixResponse {
   pub request_id_prefix: String,
   pub max_age_seconds: Option<i64>,
   pub cutoff_timestamp: Option<DateTime<Utc>>,
+  pub unscoped_matched_entries: usize,
   pub removed_entries: usize,
   pub remaining_entries: usize,
 }
@@ -195,6 +196,7 @@ pub struct PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
   pub max_age_seconds: Option<i64>,
   pub cutoff_timestamp: Option<DateTime<Utc>>,
   pub matched_entries: usize,
+  pub unscoped_matched_entries: usize,
   pub sample_limit: usize,
   pub sample_request_ids: Vec<String>,
 }

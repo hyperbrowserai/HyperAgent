@@ -1178,6 +1178,7 @@ async fn get_agent_schema(
       "request_id_prefix": "string",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
+      "unscoped_matched_entries": "number of age-scoped cache entries before prefix filtering",
       "removed_entries": "number of removed cache entries matching prefix",
       "remaining_entries": "entries left in cache after removal"
     },
@@ -1191,6 +1192,7 @@ async fn get_agent_schema(
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "matched_entries": "number of cache entries matching prefix",
+      "unscoped_matched_entries": "number of age-scoped cache entries before prefix filtering",
       "sample_limit": "max sample request ids returned",
       "sample_request_ids": "newest-first sample matching request ids"
     },
@@ -1852,7 +1854,7 @@ async fn remove_agent_ops_cache_entries_by_prefix(
     "request_id_prefix is required to remove cache entries by prefix.",
   )?;
   let cutoff_timestamp = max_age_cutoff_timestamp(payload.max_age_seconds)?;
-  let (removed_entries, remaining_entries) = state
+  let (removed_entries, unscoped_matched_entries, remaining_entries) = state
     .remove_agent_ops_cache_entries_by_prefix(
       workbook_id,
       request_id_prefix.as_str(),
@@ -1863,6 +1865,7 @@ async fn remove_agent_ops_cache_entries_by_prefix(
     request_id_prefix,
     max_age_seconds: payload.max_age_seconds,
     cutoff_timestamp,
+    unscoped_matched_entries,
     removed_entries,
     remaining_entries,
   }))
@@ -1943,6 +1946,9 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
       sample_limit,
     )
     .await?;
+  let (unscoped_matched_entries, _, _) = state
+    .agent_ops_cache_entries(workbook_id, None, cutoff_timestamp, 0, 0)
+    .await?;
   let sample_request_ids = entries
     .into_iter()
     .map(|entry| entry.0)
@@ -1952,6 +1958,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
     max_age_seconds: payload.max_age_seconds,
     cutoff_timestamp,
     matched_entries,
+    unscoped_matched_entries,
     sample_limit,
     sample_request_ids,
   }))
@@ -2998,6 +3005,7 @@ mod tests {
     .0;
     assert_eq!(age_filtered_remove.max_age_seconds, Some(86_400));
     assert!(age_filtered_remove.cutoff_timestamp.is_some());
+    assert_eq!(age_filtered_remove.unscoped_matched_entries, 0);
     assert_eq!(age_filtered_remove.removed_entries, 0);
     assert_eq!(age_filtered_remove.remaining_entries, 3);
 
@@ -3015,6 +3023,7 @@ mod tests {
     assert_eq!(remove_response.request_id_prefix, "scenario-");
     assert_eq!(remove_response.max_age_seconds, None);
     assert!(remove_response.cutoff_timestamp.is_none());
+    assert_eq!(remove_response.unscoped_matched_entries, 3);
     assert_eq!(remove_response.removed_entries, 2);
     assert_eq!(remove_response.remaining_entries, 1);
 
@@ -3077,6 +3086,7 @@ mod tests {
     assert_eq!(preview.max_age_seconds, None);
     assert!(preview.cutoff_timestamp.is_none());
     assert_eq!(preview.matched_entries, 2);
+    assert_eq!(preview.unscoped_matched_entries, 3);
     assert_eq!(preview.sample_limit, 1);
     assert_eq!(preview.sample_request_ids.len(), 1);
     assert_eq!(preview.sample_request_ids[0], "scenario-b");
@@ -3096,6 +3106,7 @@ mod tests {
     assert_eq!(age_filtered_preview.max_age_seconds, Some(86_400));
     assert!(age_filtered_preview.cutoff_timestamp.is_some());
     assert_eq!(age_filtered_preview.matched_entries, 0);
+    assert_eq!(age_filtered_preview.unscoped_matched_entries, 0);
     assert!(age_filtered_preview.sample_request_ids.is_empty());
 
     let clamped_preview = preview_remove_agent_ops_cache_entries_by_prefix(
@@ -3110,6 +3121,7 @@ mod tests {
     .await
     .expect("zero sample limit should clamp to one")
     .0;
+    assert_eq!(clamped_preview.unscoped_matched_entries, 3);
     assert_eq!(clamped_preview.sample_limit, 1);
     assert_eq!(clamped_preview.sample_request_ids.len(), 1);
 
@@ -3761,6 +3773,20 @@ mod tests {
         .and_then(|value| value.get("request_id_prefix"))
         .and_then(serde_json::Value::as_str),
       Some("echoed filter prefix when provided"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_remove_by_prefix_response_shape")
+        .and_then(|value| value.get("unscoped_matched_entries"))
+        .and_then(serde_json::Value::as_str),
+      Some("number of age-scoped cache entries before prefix filtering"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_remove_by_prefix_preview_response_shape")
+        .and_then(|value| value.get("unscoped_matched_entries"))
+        .and_then(serde_json::Value::as_str),
+      Some("number of age-scoped cache entries before prefix filtering"),
     );
     assert_eq!(
       schema

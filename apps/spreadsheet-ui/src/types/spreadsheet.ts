@@ -112,6 +112,7 @@ export interface RemoveAgentOpsCacheEntriesByPrefixResponse {
   request_id_prefix: string;
   max_age_seconds: number | null;
   cutoff_timestamp: string | null;
+  unscoped_matched_entries: number;
   removed_entries: number;
   remaining_entries: number;
 }
@@ -121,6 +122,7 @@ export interface PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
   max_age_seconds: number | null;
   cutoff_timestamp: string | null;
   matched_entries: number;
+  unscoped_matched_entries: number;
   sample_limit: number;
   sample_request_ids: string[];
 }

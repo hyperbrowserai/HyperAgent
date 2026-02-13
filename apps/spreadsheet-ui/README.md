@@ -74,6 +74,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Prefix-filtered cache view includes a preview action that shows matched counts/sample IDs before bulk removal
 - Prefix preview/removal actions now inherit active age filter scope for stale-only cleanup
 - Prefix preview/removal feedback now includes applied cutoff timestamp when age scope is active
+- Prefix preview/removal feedback shows scoped vs global match counts when filters narrow scope
 - Prefix-removal preview supports configurable sample-size limits
 - Prefix-removal preview sample IDs are clickable to open cache detail inspector directly
 - Stale-cache controls support age-threshold preview/removal (`max_age_seconds`) backed by server-side `cached_at` cutoff
