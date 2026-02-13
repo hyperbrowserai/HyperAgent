@@ -80,6 +80,20 @@ function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function computeMarkdownTokenBudget(params: {
+  tokenLimit: number;
+  objective: string;
+  hasScreenshot: boolean;
+}): number {
+  const { tokenLimit, objective, hasScreenshot } = params;
+  const templateText = hasScreenshot
+    ? `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n\nHere is a screenshot of the page:\n`
+    : `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n\nNo screenshot was available. Use the page content to extract the answer.`;
+  const templateTokens = estimateTextTokenCount(templateText);
+  const available = Math.floor(tokenLimit * 0.9) - templateTokens;
+  return Math.max(32, available);
+}
+
 export const ExtractActionDefinition: AgentActionDefinition = {
   type: "extract" as const,
   actionParams: ExtractAction,
@@ -119,7 +133,15 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         );
       }
 
-      const trimmedMarkdown = trimMarkdownToTokenLimit(markdown, ctx.tokenLimit);
+      const markdownTokenBudget = computeMarkdownTokenBudget({
+        tokenLimit: ctx.tokenLimit,
+        objective,
+        hasScreenshot: Boolean(screenshotData),
+      });
+      const trimmedMarkdown = trimMarkdownToTokenLimit(
+        markdown,
+        markdownTokenBudget
+      );
       if (ctx.debugDir) {
         writeDebugFileSafe(
           `${ctx.debugDir}/extract-markdown-content.md`,

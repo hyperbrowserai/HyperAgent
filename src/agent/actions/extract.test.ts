@@ -159,4 +159,26 @@ describe("ExtractActionDefinition.run", () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain("markdown parse failed");
   });
+
+  it("applies markdown token budget based on overall token limit", async () => {
+    getCDPClient.mockRejectedValue(new Error("cdp unavailable"));
+    parseMarkdown.mockResolvedValue("token ".repeat(3000));
+    const invoke = jest.fn().mockResolvedValue({
+      role: "assistant",
+      content: "budgeted extraction",
+    });
+    const ctx = createContext(createMockLLM(invoke), { tokenLimit: 120 });
+
+    await ExtractActionDefinition.run(ctx, {
+      objective: "Extract concise summary",
+    });
+
+    const messages = invoke.mock.calls[0]?.[0] as Array<{
+      role: string;
+      content: Array<{ type: string; text?: string }>;
+    }>;
+    const promptText = messages[0]?.content?.[0]?.text ?? "";
+    expect(promptText).toContain("[Content truncated due to token limit]");
+    expect(estimateTextTokenCount(promptText)).toBeLessThanOrEqual(120);
+  });
 });
