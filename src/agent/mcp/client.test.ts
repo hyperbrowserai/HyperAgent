@@ -75,6 +75,28 @@ describe("MCPClient.executeTool server selection", () => {
     });
   });
 
+  it("throws when only connected server lacks requested tool", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn();
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            tools: new Map([["notes", {}]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await expect(
+      mcpClient.executeTool("search", { query: "weather" })
+    ).rejects.toThrow('Tool "search" is not registered on server "server-1"');
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
   it("finds matching server by tool name when multiple are connected", async () => {
     const mcpClient = new MCPClient(false);
     const searchCallTool = jest.fn().mockResolvedValue({ content: [] });
