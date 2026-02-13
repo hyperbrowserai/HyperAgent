@@ -27,6 +27,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/import`
 - `GET /v1/workbooks/{id}`
 - `GET /v1/workbooks/{id}/sheets`
+- `POST /v1/workbooks/{id}/sheets`
 - `POST /v1/workbooks/{id}/cells/set-batch`
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
 - `GET /v1/workbooks/{id}/agent/presets`
@@ -52,6 +53,7 @@ Request options:
 Supported `op_type` values:
 - `get_workbook`
 - `list_sheets`
+- `create_sheet`
 - `set_cells`
 - `get_cells`
 - `recalculate`

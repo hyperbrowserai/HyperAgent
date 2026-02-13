@@ -105,7 +105,7 @@ impl AppState {
     &self,
     workbook_id: Uuid,
     sheet: &str,
-  ) -> Result<(), ApiError> {
+  ) -> Result<bool, ApiError> {
     let mut guard = self.workbooks.write().await;
     let record = guard
       .get_mut(&workbook_id)
@@ -113,8 +113,9 @@ impl AppState {
 
     if !record.summary.sheets.iter().any(|entry| entry == sheet) {
       record.summary.sheets.push(sheet.to_string());
+      return Ok(true);
     }
-    Ok(())
+    Ok(false)
   }
 
   pub async fn upsert_chart(

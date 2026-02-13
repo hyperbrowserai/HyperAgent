@@ -3,7 +3,8 @@ use crate::{
   models::{
     AgentOperation, AgentOperationResult, AgentOpsRequest, AgentOpsResponse,
     AgentPresetRunRequest,
-    CellMutation, CreateWorkbookRequest, CreateWorkbookResponse, ExportResponse, GetCellsRequest,
+    CellMutation, CreateSheetRequest, CreateSheetResponse, CreateWorkbookRequest,
+    CreateWorkbookResponse, ExportResponse, GetCellsRequest,
     GetCellsResponse, QueryRequest, RecalculateResponse, SetCellsRequest,
     SetCellsResponse, UpsertChartRequest,
   },
@@ -34,7 +35,10 @@ pub fn create_router(state: AppState) -> Router {
     .route("/v1/workbooks", post(create_workbook))
     .route("/v1/workbooks/import", post(import_workbook))
     .route("/v1/workbooks/{id}", get(get_workbook))
-    .route("/v1/workbooks/{id}/sheets", get(get_sheets))
+    .route(
+      "/v1/workbooks/{id}/sheets",
+      get(get_sheets).post(create_sheet),
+    )
     .route("/v1/workbooks/{id}/cells/set-batch", post(set_cells_batch))
     .route("/v1/workbooks/{id}/agent/ops", post(agent_ops))
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
@@ -101,7 +105,7 @@ async fn import_workbook(
   let import_result = import_xlsx(&db_path, &bytes)?;
 
   for sheet_name in &import_result.sheet_names {
-    state.register_sheet_if_missing(workbook.id, sheet_name).await?;
+    let _ = state.register_sheet_if_missing(workbook.id, sheet_name).await?;
   }
   for warning in &import_result.warnings {
     state.add_warning(workbook.id, warning.clone()).await?;
@@ -147,6 +151,57 @@ async fn get_sheets(
   Ok(Json(json!({ "sheets": sheets })))
 }
 
+fn normalize_sheet_name(name: &str) -> Result<String, ApiError> {
+  let trimmed = name.trim();
+  if trimmed.is_empty() {
+    return Err(ApiError::BadRequest(
+      "Sheet name cannot be empty.".to_string(),
+    ));
+  }
+  if trimmed.len() > 31 {
+    return Err(ApiError::BadRequest(
+      "Sheet name cannot exceed 31 characters.".to_string(),
+    ));
+  }
+  if trimmed.contains(['[', ']', '*', '?', '/', '\\']) {
+    return Err(ApiError::BadRequest(
+      "Sheet name contains invalid characters.".to_string(),
+    ));
+  }
+  Ok(trimmed.to_string())
+}
+
+async fn create_sheet(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<CreateSheetRequest>,
+) -> Result<Json<CreateSheetResponse>, ApiError> {
+  let actor = payload.actor.unwrap_or_else(|| "api".to_string());
+  let sheet_name = normalize_sheet_name(payload.sheet.as_str())?;
+  let created = state
+    .register_sheet_if_missing(workbook_id, sheet_name.as_str())
+    .await?;
+  if created {
+    state
+      .emit_event(
+        workbook_id,
+        "sheet.added",
+        actor.as_str(),
+        json!({
+          "sheet": sheet_name
+        }),
+      )
+      .await?;
+  }
+
+  let sheets = state.list_sheets(workbook_id).await?;
+  Ok(Json(CreateSheetResponse {
+    sheet: sheet_name,
+    created,
+    sheets,
+  }))
+}
+
 async fn apply_set_cells(
   state: &AppState,
   workbook_id: Uuid,
@@ -154,7 +209,19 @@ async fn apply_set_cells(
   cells: &[CellMutation],
   actor: &str,
 ) -> Result<usize, ApiError> {
-  state.register_sheet_if_missing(workbook_id, sheet).await?;
+  let created = state.register_sheet_if_missing(workbook_id, sheet).await?;
+  if created {
+    state
+      .emit_event(
+        workbook_id,
+        "sheet.added",
+        actor,
+        json!({
+          "sheet": sheet
+        }),
+      )
+      .await?;
+  }
   let db_path = state.db_path(workbook_id).await?;
   let updated = set_cells(&db_path, sheet, cells)?;
   let (recalculated, unsupported_formulas) = recalculate_formulas(&db_path)?;
@@ -271,11 +338,21 @@ async fn upsert_chart(
   Path(workbook_id): Path<Uuid>,
   Json(payload): Json<UpsertChartRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-  state
+  let created = state
     .register_sheet_if_missing(workbook_id, payload.chart.sheet.as_str())
     .await?;
-  state.upsert_chart(workbook_id, payload.chart.clone()).await?;
   let actor = payload.actor.unwrap_or_else(|| "api".to_string());
+  if created {
+    state
+      .emit_event(
+        workbook_id,
+        "sheet.added",
+        actor.as_str(),
+        json!({ "sheet": payload.chart.sheet.as_str() }),
+      )
+      .await?;
+  }
+  state.upsert_chart(workbook_id, payload.chart.clone()).await?;
   state
     .emit_event(
       workbook_id,
@@ -414,6 +491,32 @@ async fn execute_agent_operations(
           .await
           .map(|sheets| json!({ "sheets": sheets })),
       ),
+      AgentOperation::CreateSheet { sheet } => (
+        "create_sheet".to_string(),
+        async {
+          let sheet_name = normalize_sheet_name(sheet.as_str())?;
+          let created = state
+            .register_sheet_if_missing(workbook_id, sheet_name.as_str())
+            .await?;
+          if created {
+            state
+              .emit_event(
+                workbook_id,
+                "sheet.added",
+                actor,
+                json!({ "sheet": sheet_name.as_str() }),
+              )
+              .await?;
+          }
+          let sheets = state.list_sheets(workbook_id).await?;
+          Ok::<serde_json::Value, ApiError>(json!({
+            "sheet": sheet_name,
+            "created": created,
+            "sheets": sheets
+          }))
+        }
+        .await,
+      ),
       AgentOperation::SetCells { sheet, cells } => (
         "set_cells".to_string(),
         apply_set_cells(state, workbook_id, sheet.as_str(), &cells, actor)
@@ -443,9 +546,19 @@ async fn execute_agent_operations(
       ),
       AgentOperation::UpsertChart { chart } => {
         let result = async {
-          state
+          let created = state
             .register_sheet_if_missing(workbook_id, chart.sheet.as_str())
             .await?;
+          if created {
+            state
+              .emit_event(
+                workbook_id,
+                "sheet.added",
+                actor,
+                json!({ "sheet": chart.sheet.as_str() }),
+              )
+              .await?;
+          }
           state.upsert_chart(workbook_id, chart.clone()).await?;
           state
             .emit_event(
@@ -649,9 +762,9 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks": {"post": {"summary": "Create workbook"}},
       "/v1/workbooks/import": {"post": {"summary": "Import .xlsx"}},
       "/v1/workbooks/{id}": {"get": {"summary": "Get workbook"}},
-      "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}},
+      "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}, "post": {"summary": "Create sheet"}},
       "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
-      "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports export_workbook op)"}},
+      "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports create_sheet/export_workbook ops)"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}": {"post": {"summary": "Run built-in AI operation preset (seed_sales_demo/export_snapshot)"}},
       "/v1/workbooks/{id}/cells/get": {"post": {"summary": "Get range cells"}},

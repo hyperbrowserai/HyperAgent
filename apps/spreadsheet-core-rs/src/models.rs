@@ -51,6 +51,19 @@ pub struct SetCellsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSheetRequest {
+  pub sheet: String,
+  pub actor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSheetResponse {
+  pub sheet: String,
+  pub created: bool,
+  pub sheets: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CellMutation {
   pub row: u32,
   pub col: u32,
@@ -131,6 +144,9 @@ pub struct AgentPresetRunRequest {
 pub enum AgentOperation {
   GetWorkbook,
   ListSheets,
+  CreateSheet {
+    sheet: String,
+  },
   SetCells {
     sheet: String,
     cells: Vec<CellMutation>,
