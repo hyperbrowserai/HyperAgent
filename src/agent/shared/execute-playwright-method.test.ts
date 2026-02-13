@@ -62,4 +62,30 @@ describe("executePlaywrightMethod", () => {
     const call = evaluateSpy.mock.calls[0];
     expect(call?.[1]).toEqual({ yArg: "0" });
   });
+
+  it("preserves numeric zero values for fill and selectOption actions", async () => {
+    const fillSpy = jest.fn().mockResolvedValue(undefined);
+    const selectSpy = jest.fn().mockResolvedValue(undefined);
+    const locator = createMockLocator({
+      fill: fillSpy,
+      selectOption: selectSpy,
+    });
+
+    await executePlaywrightMethod("fill", [0], locator);
+    await executePlaywrightMethod("selectOptionFromDropdown", [0], locator);
+
+    expect(fillSpy).toHaveBeenCalledWith("0");
+    expect(selectSpy).toHaveBeenCalledWith("0");
+  });
+
+  it("falls back to Enter when press key is empty string", async () => {
+    const pressSpy = jest.fn().mockResolvedValue(undefined);
+    const locator = createMockLocator({
+      press: pressSpy,
+    });
+
+    await executePlaywrightMethod("press", [""], locator);
+
+    expect(pressSpy).toHaveBeenCalledWith("Enter");
+  });
 });

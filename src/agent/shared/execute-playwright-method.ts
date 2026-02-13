@@ -14,6 +14,16 @@ function stringifyMethodArgs(args: unknown[]): string {
   }
 }
 
+function coerceStringArg(value: unknown, fallback: string): string {
+  if (typeof value === "string") {
+    return value.length > 0 ? value : fallback;
+  }
+  if (value == null) {
+    return fallback;
+  }
+  return String(value);
+}
+
 /**
  * Execute a Playwright method on a locator
  * Handles all supported action types (click, fill, scroll, etc.)
@@ -59,16 +69,16 @@ export async function executePlaywrightMethod(
       break;
     case "type":
     case "fill":
-      await locator.fill((args[0] as string) || "");
+      await locator.fill(coerceStringArg(args[0], ""));
       break;
     case "selectOptionFromDropdown":
-      await locator.selectOption((args[0] as string) || "");
+      await locator.selectOption(coerceStringArg(args[0], ""));
       break;
     case "hover":
       await locator.hover();
       break;
     case "press":
-      await locator.press((args[0] as string) || "Enter");
+      await locator.press(coerceStringArg(args[0], "Enter"));
       break;
     case "check":
       await locator.check();
