@@ -262,6 +262,46 @@ describe("buildAgentStepMessages", () => {
     expect(joined).not.toContain("[20] https://example.com/20");
   });
 
+  it("truncates oversized tab URLs in open-tab summary", async () => {
+    const longUrl = `https://example.com/${"x".repeat(2000)}`;
+    const page = createFakePage(longUrl, [longUrl]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+    const openTabsSection = messages.find(
+      (message) =>
+        typeof message.content === "string" &&
+        message.content.includes("=== Open Tabs ===")
+    );
+    const tabLine =
+      typeof openTabsSection?.content === "string"
+        ? openTabsSection.content
+            .split("\n")
+            .find((line) => line.startsWith("[0]")) ?? ""
+        : "";
+
+    expect(joined).toContain("[tab url truncated]");
+    expect(tabLine.length).toBeLessThanOrEqual(560);
+  });
+
   it("truncates oversized thought, memory, and action output messages", async () => {
     const longText = "x".repeat(5000);
     const step = createStep(0);

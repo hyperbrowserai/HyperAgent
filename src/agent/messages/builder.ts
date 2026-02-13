@@ -10,6 +10,7 @@ import { formatUnknownError } from "@/utils";
 const MAX_HISTORY_STEPS = 10;
 const MAX_SERIALIZED_PROMPT_VALUE_CHARS = 2000;
 const MAX_OPEN_TAB_ENTRIES = 20;
+const MAX_TAB_URL_CHARS = 500;
 
 function truncatePromptText(value: string): string {
   if (value.length <= MAX_SERIALIZED_PROMPT_VALUE_CHARS) {
@@ -19,6 +20,13 @@ function truncatePromptText(value: string): string {
     value.slice(0, MAX_SERIALIZED_PROMPT_VALUE_CHARS) +
     "... [truncated for prompt budget]"
   );
+}
+
+function truncateTabUrl(url: string): string {
+  if (url.length <= MAX_TAB_URL_CHARS) {
+    return url;
+  }
+  return `${url.slice(0, MAX_TAB_URL_CHARS)}... [tab url truncated]`;
 }
 
 function safeSerializeForPrompt(value: unknown): string {
@@ -53,7 +61,7 @@ function getOpenTabsSummary(page: Page): string {
     const hiddenCount = Math.max(0, pages.length - visibleTabs.length);
     const tabLines = visibleTabs.map((openPage, index) => {
       const currentMarker = openPage === page ? " (current)" : "";
-      return `[${index}] ${openPage.url() || "about:blank"}${currentMarker}`;
+      return `[${index}] ${truncateTabUrl(openPage.url() || "about:blank")}${currentMarker}`;
     });
     if (hiddenCount > 0) {
       tabLines.push(`... ${hiddenCount} more tabs omitted`);
