@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Page } from "playwright-core";
+import fs from "fs";
 import type { AgentActionDefinition } from "@/types";
 import type { AgentCtx } from "@/agent/tools/types";
 import { TaskStatus, type TaskState } from "@/types/agent/types";
@@ -226,5 +227,33 @@ describe("runAgentTask completion behavior", () => {
 
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.output).toContain("Action complete failed: intentional failure");
+  });
+
+  it("does not fail task when debug artifact IO throws", async () => {
+    const page = createMockPage();
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw new Error("mkdir denied");
+    });
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      throw new Error("write denied");
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.debug = true;
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page), {
+        debugDir: "debug/test",
+      });
+
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      mkdirSpy.mockRestore();
+      writeSpy.mockRestore();
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
   });
 });

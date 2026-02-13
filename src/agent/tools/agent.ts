@@ -66,6 +66,32 @@ const writeFrameGraphSnapshot = async (
 const formatUnknownError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+const ensureDirectorySafe = (dir: string, debug?: boolean): boolean => {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return true;
+  } catch (error) {
+    if (debug) {
+      console.error(`[DebugIO] Failed to create directory "${dir}":`, error);
+    }
+    return false;
+  }
+};
+
+const writeDebugFileSafe = (
+  filePath: string,
+  content: string | Buffer,
+  debug?: boolean
+): void => {
+  try {
+    fs.writeFileSync(filePath, content);
+  } catch (error) {
+    if (debug) {
+      console.error(`[DebugIO] Failed to write file "${filePath}":`, error);
+    }
+  }
+};
+
 const compositeScreenshot = async (
   page: Page,
   overlay: string,
@@ -322,7 +348,7 @@ export const runAgentTask = async (
         stepIndex: currStep,
       };
       if (ctx.debug) {
-        fs.mkdirSync(debugStepDir, { recursive: true });
+        ensureDirectorySafe(debugStepDir, ctx.debug);
       }
 
       // Get A11y DOM State (visual mode optional, default false for performance)
@@ -382,12 +408,13 @@ export const runAgentTask = async (
 
       // Store Dom State for Debugging
       if (ctx.debug) {
-        fs.mkdirSync(debugDir, { recursive: true });
-        fs.writeFileSync(`${debugStepDir}/elems.txt`, domState.domState);
+        ensureDirectorySafe(debugDir, ctx.debug);
+        writeDebugFileSafe(`${debugStepDir}/elems.txt`, domState.domState, ctx.debug);
         if (trimmedScreenshot) {
-          fs.writeFileSync(
+          writeDebugFileSafe(
             `${debugStepDir}/screenshot.png`,
-            Buffer.from(trimmedScreenshot, "base64")
+            Buffer.from(trimmedScreenshot, "base64"),
+            ctx.debug
           );
         }
       }
@@ -421,9 +448,10 @@ export const runAgentTask = async (
 
       // Store Agent Step Messages for Debugging
       if (ctx.debug) {
-        fs.writeFileSync(
+        writeDebugFileSafe(
           `${debugStepDir}/msgs.json`,
-          JSON.stringify(msgs, null, 2)
+          JSON.stringify(msgs, null, 2),
+          ctx.debug
         );
       }
 
@@ -706,13 +734,15 @@ export const runAgentTask = async (
 
       if (ctx.debug) {
         await writeFrameGraphSnapshot(page, debugStepDir, ctx.debug);
-        fs.writeFileSync(
+        writeDebugFileSafe(
           `${debugStepDir}/stepOutput.json`,
-          JSON.stringify(step, null, 2)
+          JSON.stringify(step, null, 2),
+          ctx.debug
         );
-        fs.writeFileSync(
+        writeDebugFileSafe(
           `${debugStepDir}/perf.json`,
-          JSON.stringify(stepMetrics, null, 2)
+          JSON.stringify(stepMetrics, null, 2),
+          ctx.debug
         );
       }
     }
@@ -729,10 +759,11 @@ export const runAgentTask = async (
     steps: actionCacheSteps,
   };
   if (ctx.debug) {
-    fs.mkdirSync(debugDir, { recursive: true });
-    fs.writeFileSync(
+    ensureDirectorySafe(debugDir, ctx.debug);
+    writeDebugFileSafe(
       `${debugDir}/action-cache.json`,
-      JSON.stringify(actionCache, null, 2)
+      JSON.stringify(actionCache, null, 2),
+      ctx.debug
     );
   }
 
@@ -744,9 +775,10 @@ export const runAgentTask = async (
     actionCache,
   };
   if (ctx.debug) {
-    fs.writeFileSync(
+    writeDebugFileSafe(
       `${debugDir}/taskOutput.json`,
-      JSON.stringify(taskOutput, null, 2)
+      JSON.stringify(taskOutput, null, 2),
+      ctx.debug
     );
   }
   await params?.onComplete?.(taskOutput);
