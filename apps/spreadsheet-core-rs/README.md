@@ -68,6 +68,48 @@ Supported `preset` values:
 - `seed_sales_demo` — fills demo regional sales, recalculates formulas, syncs chart metadata.
 - `export_snapshot` — recalculates and exports workbook (can include base64 file payload).
 
+### Example: run an agent operation batch
+
+```bash
+curl -X POST "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/ops" \
+  -H "content-type: application/json" \
+  -d '{
+    "request_id": "ops-demo-1",
+    "actor": "demo-agent",
+    "stop_on_error": true,
+    "operations": [
+      {
+        "op_type": "create_sheet",
+        "sheet": "Data"
+      },
+      {
+        "op_type": "set_cells",
+        "sheet": "Data",
+        "cells": [
+          { "row": 1, "col": 1, "value": "Region" },
+          { "row": 1, "col": 2, "value": "Revenue" },
+          { "row": 2, "col": 1, "value": "North" },
+          { "row": 2, "col": 2, "value": 120 }
+        ]
+      },
+      {
+        "op_type": "export_workbook",
+        "include_file_base64": false
+      }
+    ]
+  }'
+```
+
+### Example: discover and run built-in presets
+
+```bash
+curl "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/presets"
+
+curl -X POST "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/presets/seed_sales_demo" \
+  -H "content-type: application/json" \
+  -d '{ "request_id": "preset-seed-1", "actor": "demo-agent", "stop_on_error": true }'
+```
+
 ## Testing
 
 ```bash

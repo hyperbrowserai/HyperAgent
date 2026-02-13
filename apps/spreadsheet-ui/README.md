@@ -9,6 +9,8 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Workbook import/export controls
 - Realtime server stream sync via SSE
 - Live chart preview with metadata sync endpoint
+- Dynamic sheet tabs + add-sheet controls
+- Agent batch execution + built-in preset runner
 
 ## Run
 
