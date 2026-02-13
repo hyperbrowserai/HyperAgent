@@ -104,6 +104,9 @@ export function normalizeMCPToolParams(
         seen.delete(value);
       }
     }
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      throw new Error("MCP tool params cannot include non-finite number values");
+    }
     if (typeof value === "bigint") {
       return `${value.toString()}n`;
     }

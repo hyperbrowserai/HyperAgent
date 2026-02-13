@@ -128,12 +128,26 @@ describe("normalizeMCPToolParams", () => {
     );
   });
 
+  it("rejects non-finite number values in direct object params", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        score: Number.NaN,
+      })
+    ).toThrow("MCP tool params cannot include non-finite number values");
+  });
+
   it("rejects escaped control characters after JSON parsing", () => {
     expect(() =>
       normalizeMCPToolParams('{"query":"a\\u0007b"}')
     ).toThrow(
       "MCP tool params cannot include unsupported control characters in string values"
     );
+  });
+
+  it("rejects non-finite number values after JSON parsing", () => {
+    expect(() =>
+      normalizeMCPToolParams('{"score":1e309}')
+    ).toThrow("MCP tool params cannot include non-finite number values");
   });
 
   it("rejects oversized string values in direct object params", () => {
