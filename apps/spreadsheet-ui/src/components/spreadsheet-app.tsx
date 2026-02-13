@@ -440,7 +440,6 @@ export function SpreadsheetApp() {
       setLastAgentOps(response.results);
       setLastPreset(null);
       setLastScenario(null);
-      setLastOperationsSignature(null);
       setLastWizardImportSummary(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
@@ -566,7 +565,8 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentOps(response.results);
-      setLastOperationsSignature(null);
+      setLastPreset(null);
+      setLastScenario(null);
       setLastWizardImportSummary(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
@@ -679,17 +679,22 @@ export function SpreadsheetApp() {
     setIsRunningSelectedScenario(true);
     try {
       setUiError(null);
+      const scenarioPlan = await getAgentScenarioOperations(
+        workbook.id,
+        wizardScenario,
+        wizardIncludeFileBase64,
+      );
       const response = await runAgentScenario(workbook.id, wizardScenario, {
         request_id: `scenario-selected-${wizardScenario}-${Date.now()}`,
         actor: "ui-scenario-selected",
         stop_on_error: true,
         include_file_base64: wizardIncludeFileBase64,
-        expected_operations_signature: wizardScenarioOpsSignature ?? undefined,
+        expected_operations_signature: scenarioPlan.operations_signature,
       });
       setLastScenario(response.scenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
-      setLastExecutedOperations(wizardScenarioOps);
+      setLastExecutedOperations(scenarioPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -762,17 +767,22 @@ export function SpreadsheetApp() {
     setIsRunningSelectedPreset(true);
     try {
       setUiError(null);
+      const presetPlan = await getAgentPresetOperations(
+        workbook.id,
+        wizardPresetPreview,
+        wizardIncludeFileBase64,
+      );
       const response = await runAgentPreset(workbook.id, wizardPresetPreview, {
         request_id: `preset-selected-${wizardPresetPreview}-${Date.now()}`,
         actor: "ui-preset-selected",
         stop_on_error: true,
         include_file_base64: wizardIncludeFileBase64,
-        expected_operations_signature: wizardPresetOpsSignature ?? undefined,
+        expected_operations_signature: presetPlan.operations_signature,
       });
       setLastPreset(response.preset);
       setLastScenario(null);
       setLastOperationsSignature(response.operations_signature ?? null);
-      setLastExecutedOperations(wizardPresetOps);
+      setLastExecutedOperations(presetPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -1045,13 +1055,17 @@ export function SpreadsheetApp() {
     setIsRunningWizard(true);
     try {
       setUiError(null);
+      const scenarioPlan = await getWizardScenarioOperations(
+        wizardScenario,
+        wizardIncludeFileBase64,
+      );
       const response = await runAgentWizard({
         scenario: wizardScenario,
         request_id: `wizard-${wizardScenario}-${Date.now()}`,
         actor: "ui-wizard",
         stop_on_error: true,
         include_file_base64: wizardIncludeFileBase64,
-        expected_operations_signature: wizardScenarioOpsSignature ?? undefined,
+        expected_operations_signature: scenarioPlan.operations_signature,
         workbook_name: wizardWorkbookName,
         file: wizardFile,
       });
@@ -1060,7 +1074,7 @@ export function SpreadsheetApp() {
       setLastScenario(response.scenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
-      setLastExecutedOperations(wizardScenarioOps);
+      setLastExecutedOperations(scenarioPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(
