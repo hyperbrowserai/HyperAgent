@@ -113,6 +113,56 @@ export function normalizeMCPToolParams(
     if (value instanceof Date) {
       return Number.isNaN(value.getTime()) ? value.toString() : value.toISOString();
     }
+    if (value instanceof Set) {
+      if (seen.has(value)) {
+        throw new Error("MCP tool params cannot include circular references");
+      }
+      seen.add(value);
+      try {
+        return Array.from(value).map((entry) =>
+          sanitizeParamValue(entry, seen, depth + 1)
+        );
+      } finally {
+        seen.delete(value);
+      }
+    }
+    if (value instanceof Map) {
+      if (seen.has(value)) {
+        throw new Error("MCP tool params cannot include circular references");
+      }
+      seen.add(value);
+      try {
+        const sanitizedMap: Record<string, unknown> = Object.create(null);
+        const seenMapKeys = new Set<string>();
+        for (const [rawKey, mapValue] of value.entries()) {
+          const normalizedRawKey =
+            typeof rawKey === "string" ? rawKey : formatUnknownError(rawKey);
+          const trimmedKey = normalizedRawKey.trim();
+          if (trimmedKey.length === 0) {
+            throw new Error("MCP tool params cannot include empty keys");
+          }
+          if (hasUnsupportedControlChars(trimmedKey)) {
+            throw new Error(
+              "MCP tool params cannot include keys with control characters"
+            );
+          }
+          if (seenMapKeys.has(trimmedKey)) {
+            throw new Error(
+              `MCP tool params cannot include duplicate key after trimming: "${trimmedKey}"`
+            );
+          }
+          seenMapKeys.add(trimmedKey);
+          sanitizedMap[trimmedKey] = sanitizeParamValue(
+            mapValue,
+            seen,
+            depth + 1
+          );
+        }
+        return sanitizedMap;
+      } finally {
+        seen.delete(value);
+      }
+    }
     if (typeof value === "object" && value !== null) {
       if (seen.has(value)) {
         throw new Error("MCP tool params cannot include circular references");

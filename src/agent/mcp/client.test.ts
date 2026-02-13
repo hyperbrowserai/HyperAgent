@@ -128,19 +128,34 @@ describe("normalizeMCPToolParams", () => {
     });
   });
 
-  it("normalizes Date values and non-plain objects safely", () => {
+  it("normalizes Date, Map, and Set values safely", () => {
     const date = new Date("2025-01-01T00:00:00.000Z");
     const map = new Map([["key", "value"]]);
+    const set = new Set(["alpha", 2]);
 
     expect(
       normalizeMCPToolParams({
         createdAt: date,
         metadata: map as unknown as Record<string, unknown>,
+        tags: set as unknown as Record<string, unknown>,
       })
     ).toEqual({
       createdAt: "2025-01-01T00:00:00.000Z",
-      metadata: "{}",
+      metadata: { key: "value" },
+      tags: ["alpha", 2],
     });
+  });
+
+  it("rejects duplicate keys when map keys collide after trimming", () => {
+    const map = new Map<unknown, unknown>([
+      [" key ", "first"],
+      ["key", "second"],
+    ]);
+    expect(() =>
+      normalizeMCPToolParams({
+        metadata: map as unknown as Record<string, unknown>,
+      })
+    ).toThrow('MCP tool params cannot include duplicate key after trimming: "key"');
   });
 
   it("rejects circular references in direct object params", () => {
