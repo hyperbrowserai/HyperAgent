@@ -367,7 +367,14 @@ function coerceActionStringArg(value: unknown, fallback = ""): string {
   if (value == null) {
     return fallback;
   }
-  return typeof value === "string" ? value : String(value);
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return String(value);
+  } catch {
+    return fallback;
+  }
 }
 
 function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {

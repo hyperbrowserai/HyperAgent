@@ -253,6 +253,36 @@ describe("dispatchCDPAction press key normalization", () => {
     expect(typeof keyDown?.params?.key).toBe("string");
     expect((keyDown?.params?.key as string).length).toBeLessThanOrEqual(64);
   });
+
+  it("falls back safely when key-string coercion throws", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+    const badValue = {
+      toString(): string {
+        throw new Error("coercion failure");
+      },
+    };
+
+    await dispatchCDPAction("press", [badValue], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const keyDown = calls.find(
+      (call) =>
+        call.method === "Input.dispatchKeyEvent" &&
+        call.params?.type === "keyDown"
+    );
+    expect(keyDown?.params?.key).toBe("Enter");
+    expect(keyDown?.params?.windowsVirtualKeyCode).toBe(13);
+  });
 });
 
 describe("dispatchCDPAction argument coercion", () => {
