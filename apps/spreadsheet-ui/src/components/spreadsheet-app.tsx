@@ -52,6 +52,7 @@ export function SpreadsheetApp() {
   const [isRunningPreset, setIsRunningPreset] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
+  const [uiError, setUiError] = useState<string | null>(null);
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
@@ -59,15 +60,23 @@ export function SpreadsheetApp() {
   const createWorkbookMutation = useMutation({
     mutationFn: () => createWorkbook("Agent Workbook"),
     onSuccess: (createdWorkbook) => {
+      setUiError(null);
       setWorkbook(createdWorkbook);
+    },
+    onError: (error) => {
+      setUiError(error.message);
     },
   });
 
   const importMutation = useMutation({
     mutationFn: (file: File) => importWorkbook(file),
     onSuccess: (importedWorkbook) => {
+      setUiError(null);
       setWorkbook(importedWorkbook);
       queryClient.invalidateQueries({ queryKey: ["cells", importedWorkbook.id] });
+    },
+    onError: (error) => {
+      setUiError(error.message);
     },
   });
 
@@ -169,6 +178,7 @@ export function SpreadsheetApp() {
 
     setIsSaving(true);
     try {
+      setUiError(null);
       const isFormula = formulaInput.trim().startsWith("=");
       const response = await runAgentOps(workbook.id, {
         request_id: `formula-${Date.now()}`,
@@ -205,6 +215,10 @@ export function SpreadsheetApp() {
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : "Failed to apply cell update.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -214,27 +228,41 @@ export function SpreadsheetApp() {
     if (!workbook) {
       return;
     }
-    const blob = await exportWorkbook(workbook.id);
-    const fileUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = fileUrl;
-    anchor.download = `${workbook.name}.xlsx`;
-    anchor.click();
-    URL.revokeObjectURL(fileUrl);
+    try {
+      setUiError(null);
+      const blob = await exportWorkbook(workbook.id);
+      const fileUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = fileUrl;
+      anchor.download = `${workbook.name}.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(fileUrl);
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : "Failed to export workbook.",
+      );
+    }
   }
 
   async function handleChartSync() {
     if (!workbook) {
       return;
     }
-    await upsertChart(workbook.id, {
-      id: "chart-default",
-      sheet: activeSheet,
-      chart_type: "bar",
-      title: "Column B by Column A",
-      categories_range: `${activeSheet}!$A$1:$A$10`,
-      values_range: `${activeSheet}!$B$1:$B$10`,
-    });
+    try {
+      setUiError(null);
+      await upsertChart(workbook.id, {
+        id: "chart-default",
+        sheet: activeSheet,
+        chart_type: "bar",
+        title: "Column B by Column A",
+        categories_range: `${activeSheet}!$A$1:$A$10`,
+        values_range: `${activeSheet}!$B$1:$B$10`,
+      });
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : "Failed to sync chart metadata.",
+      );
+    }
   }
 
   async function handleAgentDemoFlow() {
@@ -243,6 +271,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningAgentFlow(true);
     try {
+      setUiError(null);
       const response = await runAgentOps(workbook.id, {
         request_id: `agent-demo-${Date.now()}`,
         actor: "ui-agent-demo",
@@ -281,6 +310,10 @@ export function SpreadsheetApp() {
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : "Failed to run agent demo flow.",
+      );
     } finally {
       setIsRunningAgentFlow(false);
     }
@@ -292,6 +325,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningPreset(true);
     try {
+      setUiError(null);
       const response = await runAgentPreset(workbook.id, preset, {
         request_id: `preset-${preset}-${Date.now()}`,
         actor: "ui-preset",
@@ -304,6 +338,10 @@ export function SpreadsheetApp() {
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : `Failed to run preset ${preset}.`,
+      );
     } finally {
       setIsRunningPreset(false);
     }
@@ -319,12 +357,17 @@ export function SpreadsheetApp() {
     }
     setIsCreatingSheet(true);
     try {
+      setUiError(null);
       await createSheet(workbook.id, trimmed);
       setActiveSheet(trimmed);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workbook", workbook.id] }),
         queryClient.invalidateQueries({ queryKey: ["cells", workbook.id, trimmed] }),
       ]);
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : "Failed to create sheet.",
+      );
     } finally {
       setIsCreatingSheet(false);
     }
@@ -418,6 +461,19 @@ export function SpreadsheetApp() {
                   <li key={warning}>{warning}</li>
                 ))}
               </ul>
+            </div>
+          ) : null}
+          {uiError ? (
+            <div className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-100">
+              <div className="flex items-center justify-between gap-2">
+                <span>{uiError}</span>
+                <button
+                  onClick={() => setUiError(null)}
+                  className="rounded border border-rose-300/30 px-2 py-0.5 text-[11px] hover:bg-rose-500/20"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
