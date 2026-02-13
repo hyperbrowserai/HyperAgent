@@ -260,6 +260,10 @@ export class FrameContextManager {
   }
 
   clear(): void {
+    for (const trackedFrame of Array.from(this.playwrightOopifCache.keys())) {
+      this.removeCachedPlaywrightFrame(trackedFrame);
+    }
+
     this.graph.clear();
     this.sessions.clear();
     this.frameExecutionContexts.clear();
@@ -507,7 +511,9 @@ export class FrameContextManager {
         };
       } catch (_error) {
         this.log(
-          `[FrameContext] Failed to process OOPIF ${frameUrl}: ${_error}`
+          `[FrameContext] Failed to process OOPIF ${frameUrl}: ${formatUnknownError(
+            _error
+          )}`
         );
         if (oopifSession) {
           await oopifSession.detach().catch(() => {

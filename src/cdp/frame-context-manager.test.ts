@@ -115,4 +115,39 @@ describe("FrameContextManager listener bookkeeping", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("cleans cached Playwright OOPIF detach handlers on clear", () => {
+    const session = new FakeSession();
+    const manager = new FrameContextManager(createFakeClient(session));
+    const fakeFrame = {
+      url: () => "https://example.com/iframe",
+      parentFrame: () => null,
+      name: () => "iframe",
+      isDetached: () => false,
+    };
+    const detachHandler = jest.fn();
+
+    (
+      manager as unknown as {
+        playwrightOopifCache: Map<unknown, unknown>;
+      }
+    ).playwrightOopifCache.set(fakeFrame, {
+      frameId: "oopif-1",
+      session,
+      url: "https://example.com/iframe",
+      playwrightFrame: fakeFrame,
+      detachHandler,
+    });
+
+    manager.clear();
+
+    expect(session.offEvents).toContain("Detached");
+    expect(
+      (
+        manager as unknown as {
+          playwrightOopifCache: Map<unknown, unknown>;
+        }
+      ).playwrightOopifCache.size
+    ).toBe(0);
+  });
 });
