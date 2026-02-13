@@ -2044,6 +2044,42 @@ describe("MCPClient.executeTool server selection", () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
+  it("throws readable errors when tool registry retrieval traps after lookup", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn();
+    const throwingTools = new Proxy(new Map([["search", createTool("search")]]), {
+      get(target, prop, receiver): unknown {
+        if (prop === "get") {
+          return () => {
+            throw new Error("tool retrieval unavailable");
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: throwingTools as unknown as Map<string, unknown>,
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "server-a")
+    ).rejects.toThrow("MCP tool registry lookup failed: tool retrieval unavailable");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
   it("sanitizes tool names in missing-tool diagnostics", async () => {
     const mcpClient = new MCPClient(false);
     const callTool = jest.fn();

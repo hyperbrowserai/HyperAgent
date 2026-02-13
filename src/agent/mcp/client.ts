@@ -802,6 +802,22 @@ function resolveMCPToolNameOnServer(
   return {};
 }
 
+function safeGetMCPToolByName(
+  tools: Map<string, Tool>,
+  toolName: string
+): Tool | undefined {
+  try {
+    return tools.get(toolName);
+  } catch (error) {
+    throw new Error(
+      `MCP tool registry lookup failed: ${formatMCPIdentifier(
+        error,
+        "unknown-error"
+      )}`
+    );
+  }
+}
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -1404,7 +1420,7 @@ class MCPClient {
         `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
       );
     }
-    const registeredTool = server.tools.get(resolvedToolName);
+    const registeredTool = safeGetMCPToolByName(server.tools, resolvedToolName);
     if (!registeredTool) {
       throw new Error(
         `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
