@@ -83,6 +83,19 @@ describe("sanitizeProviderOptions", () => {
     });
   });
 
+  it("sanitizes control characters in custom option keys", () => {
+    expect(
+      sanitizeProviderOptions(
+        {
+          "  top\n\tp  ": 0.7,
+        },
+        reserved
+      )
+    ).toEqual({
+      "top p": 0.7,
+    });
+  });
+
   it("recursively removes unsafe keys from nested objects", () => {
     const result = sanitizeProviderOptions(
       {
@@ -200,6 +213,106 @@ describe("sanitizeProviderOptions", () => {
       bigintValue: "42n",
       symbolValue: "Symbol(token)",
       functionValue: "[Function sampleFunction]",
+    });
+  });
+
+  it("truncates oversized string option values", () => {
+    const result = sanitizeProviderOptions(
+      {
+        metadata: "x".repeat(20_100),
+      },
+      reserved
+    ) as Record<string, unknown>;
+
+    expect(typeof result.metadata).toBe("string");
+    expect(result.metadata as string).toContain("[truncated");
+    expect((result.metadata as string).length).toBeLessThan(20_200);
+  });
+
+  it("returns deterministic marker for arrays that fail during traversal", () => {
+    const trappedArray = new Proxy(["ok"], {
+      get: (target, prop, receiver) => {
+        if (prop === "map") {
+          throw new Error("array map trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const result = sanitizeProviderOptions(
+      {
+        metadata: trappedArray,
+      },
+      reserved
+    );
+
+    expect(result).toEqual({
+      metadata: "[UnserializableArray: array map trap]",
+    });
+  });
+
+  it("returns deterministic marker for objects that fail during entry traversal", () => {
+    const trappedObject = new Proxy(
+      {},
+      {
+        ownKeys: () => {
+          throw new Error("entry trap");
+        },
+      }
+    );
+
+    const result = sanitizeProviderOptions(
+      {
+        metadata: trappedObject,
+      },
+      reserved
+    );
+
+    expect(result).toEqual({
+      metadata: "[UnserializableObject: entry trap]",
+    });
+  });
+
+  it("returns undefined when top-level options object entries are unreadable", () => {
+    const trappedOptions = new Proxy(
+      {},
+      {
+        ownKeys: () => {
+          throw new Error("top-level entry trap");
+        },
+      }
+    );
+
+    expect(
+      sanitizeProviderOptions(
+        trappedOptions as unknown as Record<string, unknown>,
+        reserved
+      )
+    ).toBeUndefined();
+  });
+
+  it("falls back safely when reserved-key iteration throws", () => {
+    const trappedReservedKeys = new Proxy(
+      new Set(["model"]),
+      {
+        get: (target, prop, receiver) => {
+          if (prop === Symbol.iterator) {
+            throw new Error("reserved iterator trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+
+    expect(
+      sanitizeProviderOptions(
+        {
+          top_p: 0.8,
+        },
+        trappedReservedKeys as unknown as ReadonlySet<string>
+      )
+    ).toEqual({
+      top_p: 0.8,
     });
   });
 
