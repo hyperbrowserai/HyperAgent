@@ -1259,9 +1259,12 @@ class MCPClient {
       }
       return { serverId, actions };
     } catch (error) {
+      const isPendingServerRegistered =
+        typeof pendingServerId === "string" &&
+        safeHasConnectedServer(this.servers, pendingServerId);
       if (
         pendingTransport &&
-        (!pendingServerId || !this.servers.has(pendingServerId))
+        !isPendingServerRegistered
       ) {
         try {
           await pendingTransport.close();

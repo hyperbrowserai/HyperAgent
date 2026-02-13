@@ -731,6 +731,44 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("closes pending transport when server registry write traps", async () => {
+    const connectSpy = jest
+      .spyOn(Client.prototype, "connect")
+      .mockResolvedValue(undefined);
+    const listToolsSpy = jest.spyOn(Client.prototype, "listTools").mockResolvedValue({
+      tools: [createTool("search")],
+    } as unknown as Awaited<ReturnType<Client["listTools"]>>);
+    const closeSpy = jest
+      .spyOn(StdioClientTransport.prototype, "close")
+      .mockResolvedValue(undefined);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const mcpClient = new MCPClient(false);
+    setServersForClient(
+      mcpClient,
+      {
+        has: (): boolean => false,
+        keys: (): IterableIterator<string> => [][Symbol.iterator](),
+        set: (): never => {
+          throw new Error("x".repeat(2_000));
+        },
+      } as unknown as Map<string, unknown>
+    );
+
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+        })
+      ).rejects.toThrow(/\[truncated/);
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      connectSpy.mockRestore();
+      listToolsSpy.mockRestore();
+      closeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("truncates oversized connect failures before rethrowing", async () => {
     const connectSpy = jest
       .spyOn(Client.prototype, "connect")
