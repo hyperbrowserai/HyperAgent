@@ -45,6 +45,25 @@ describe("normalizeOpenAICompatibleContent", () => {
     ]);
   });
 
+  it("defaults missing tool-call content arguments to empty object", () => {
+    expect(
+      normalizeOpenAICompatibleContent([
+        {
+          type: "tool_call",
+          function: {
+            name: "lookup",
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        type: "tool_call",
+        toolName: "lookup",
+        arguments: {},
+      },
+    ]);
+  });
+
   it("formats non-string text-part payloads safely", () => {
     expect(
       normalizeOpenAICompatibleContent([

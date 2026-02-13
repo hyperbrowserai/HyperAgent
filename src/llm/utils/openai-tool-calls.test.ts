@@ -148,4 +148,24 @@ describe("normalizeOpenAIToolCalls", () => {
       },
     ]);
   });
+
+  it("defaults missing tool-call arguments to empty object", () => {
+    expect(
+      normalizeOpenAIToolCalls([
+        {
+          id: "fn-1",
+          type: "function",
+          function: {
+            name: "lookup",
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        id: "fn-1",
+        name: "lookup",
+        arguments: {},
+      },
+    ]);
+  });
 });

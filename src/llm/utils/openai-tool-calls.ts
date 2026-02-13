@@ -27,7 +27,9 @@ function sanitizeToolArguments(value: unknown): unknown {
     { arguments: value },
     NO_RESERVED_PROVIDER_OPTION_KEYS
   );
-  return sanitized?.arguments;
+  return typeof sanitized?.arguments === "undefined"
+    ? {}
+    : sanitized.arguments;
 }
 
 export function normalizeOpenAIToolCalls(
