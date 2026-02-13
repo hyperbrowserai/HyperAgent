@@ -1,4 +1,5 @@
 import {
+  AgentOpsCacheEntryDetailResponse,
   AgentOpsCacheEntriesResponse,
   AgentOpsPreviewResponse,
   AgentOpsCacheStatsResponse,
@@ -219,6 +220,16 @@ export async function getAgentOpsCacheEntries(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/entries?${params.toString()}`,
   );
   return parseJsonResponse<AgentOpsCacheEntriesResponse>(response);
+}
+
+export async function getAgentOpsCacheEntryDetail(
+  workbookId: string,
+  requestId: string,
+): Promise<AgentOpsCacheEntryDetailResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/entries/${encodeURIComponent(requestId)}`,
+  );
+  return parseJsonResponse<AgentOpsCacheEntryDetailResponse>(response);
 }
 
 export async function clearAgentOpsCache(

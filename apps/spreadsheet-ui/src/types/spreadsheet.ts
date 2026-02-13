@@ -88,6 +88,14 @@ export interface ReplayAgentOpsCacheEntryResponse {
   operations: AgentOperationPreview[];
 }
 
+export interface AgentOpsCacheEntryDetailResponse {
+  request_id: string;
+  operation_count: number;
+  result_count: number;
+  cached_response: AgentOpsResponse;
+  operations: AgentOperationPreview[];
+}
+
 export interface ClearAgentOpsCacheResponse {
   cleared_entries: number;
 }
@@ -110,6 +118,7 @@ export interface AgentSchemaInfo {
   agent_ops_preview_endpoint?: string;
   agent_ops_cache_stats_endpoint?: string;
   agent_ops_cache_entries_endpoint?: string;
+  agent_ops_cache_entry_detail_endpoint?: string;
   agent_ops_cache_clear_endpoint?: string;
   agent_ops_cache_replay_endpoint?: string;
   agent_ops_cache_remove_endpoint?: string;

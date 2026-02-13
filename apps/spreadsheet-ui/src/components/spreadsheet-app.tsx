@@ -12,6 +12,7 @@ import {
   createSheet,
   createWorkbook,
   exportWorkbook,
+  getAgentOpsCacheEntryDetail,
   getAgentOpsCacheEntries,
   getAgentOpsCacheStats,
   getAgentPresetOperations,
@@ -40,7 +41,11 @@ import {
 } from "@/lib/spreadsheet-api";
 import { buildAddress, indexToColumn, TOTAL_COLS, TOTAL_ROWS } from "@/lib/cell-address";
 import { useWorkbookStore } from "@/store/workbook-store";
-import { AgentOperationPreview, AgentOperationResult } from "@/types/spreadsheet";
+import {
+  AgentOpsCacheEntryDetailResponse,
+  AgentOperationPreview,
+  AgentOperationResult,
+} from "@/types/spreadsheet";
 
 const ChartPreview = dynamic(
   () => import("@/components/chart-preview").then((module) => module.ChartPreview),
@@ -105,14 +110,19 @@ export function SpreadsheetApp() {
     useState(false);
   const [isReplayingLastRequest, setIsReplayingLastRequest] = useState(false);
   const [replayingCacheRequestId, setReplayingCacheRequestId] = useState<string | null>(null);
+  const [inspectingCacheRequestId, setInspectingCacheRequestId] = useState<string | null>(null);
   const [isClearingOpsCache, setIsClearingOpsCache] = useState(false);
   const [copyingCacheRequestId, setCopyingCacheRequestId] = useState<string | null>(null);
   const [copyingCacheOpsPayloadRequestId, setCopyingCacheOpsPayloadRequestId] = useState<
     string | null
   >(null);
+  const [isCopyingCacheDetailJson, setIsCopyingCacheDetailJson] = useState(false);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
+  const [selectedCacheEntryDetail, setSelectedCacheEntryDetail] = useState<
+    AgentOpsCacheEntryDetailResponse | null
+  >(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -276,6 +286,7 @@ export function SpreadsheetApp() {
 
   useEffect(() => {
     setCacheEntriesOffset(0);
+    setSelectedCacheEntryDetail(null);
   }, [workbook?.id]);
 
   useEffect(() => {
@@ -1205,6 +1216,7 @@ export function SpreadsheetApp() {
       clearUiError();
       const response = await clearAgentOpsCache(workbook.id);
       setCacheEntriesOffset(0);
+      setSelectedCacheEntryDetail(null);
       setNotice(`Cleared ${response.cleared_entries} cached request entries.`);
       await Promise.all([
         queryClient.invalidateQueries({
@@ -1262,6 +1274,42 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleInspectCacheRequestId(requestId: string) {
+    if (!workbook) {
+      return;
+    }
+    setInspectingCacheRequestId(requestId);
+    try {
+      clearUiError();
+      const detail = await getAgentOpsCacheEntryDetail(workbook.id, requestId);
+      setSelectedCacheEntryDetail(detail);
+    } catch (error) {
+      applyUiError(error, "Failed to inspect cached request id.");
+    } finally {
+      setInspectingCacheRequestId(null);
+    }
+  }
+
+  async function handleCopySelectedCacheDetail() {
+    if (!selectedCacheEntryDetail) {
+      return;
+    }
+    setIsCopyingCacheDetailJson(true);
+    try {
+      clearUiError();
+      await navigator.clipboard.writeText(
+        JSON.stringify(selectedCacheEntryDetail, null, 2),
+      );
+      setNotice(
+        `Copied cache detail for request_id ${selectedCacheEntryDetail.request_id}.`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy cache detail JSON.");
+    } finally {
+      setIsCopyingCacheDetailJson(false);
+    }
+  }
+
   async function handleReplayCacheRequestId(requestId: string) {
     if (!workbook) {
       return;
@@ -1301,6 +1349,9 @@ export function SpreadsheetApp() {
     try {
       clearUiError();
       const response = await removeAgentOpsCacheEntry(workbook.id, requestId);
+      if (response.removed && selectedCacheEntryDetail?.request_id === requestId) {
+        setSelectedCacheEntryDetail(null);
+      }
       setNotice(
         response.removed
           ? `Removed cache entry ${response.request_id}.`
@@ -2044,6 +2095,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_entry_detail_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache entry detail endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_entry_detail_endpoint}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.agent_ops_cache_clear_endpoint ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache clear endpoint:{" "}
@@ -2228,9 +2287,25 @@ export function SpreadsheetApp() {
                           </div>
                           <div className="flex items-center gap-1">
                             <button
+                              onClick={() => handleInspectCacheRequestId(entry.request_id)}
+                              disabled={
+                                inspectingCacheRequestId === entry.request_id
+                                || replayingCacheRequestId === entry.request_id
+                                || removingCacheRequestId === entry.request_id
+                                || copyingCacheRequestId === entry.request_id
+                                || copyingCacheOpsPayloadRequestId === entry.request_id
+                              }
+                              className="rounded border border-cyan-700/70 px-1.5 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-900/40 disabled:opacity-50"
+                            >
+                              {inspectingCacheRequestId === entry.request_id
+                                ? "Inspecting..."
+                                : "Inspect"}
+                            </button>
+                            <button
                               onClick={() => handleReplayCacheRequestId(entry.request_id)}
                               disabled={
                                 replayingCacheRequestId === entry.request_id
+                                || inspectingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
                                 || copyingCacheOpsPayloadRequestId === entry.request_id
@@ -2247,6 +2322,7 @@ export function SpreadsheetApp() {
                               }
                               disabled={
                                 copyingCacheOpsPayloadRequestId === entry.request_id
+                                || inspectingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
@@ -2263,6 +2339,7 @@ export function SpreadsheetApp() {
                                 copyingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
+                                || inspectingCacheRequestId === entry.request_id
                                 || copyingCacheOpsPayloadRequestId === entry.request_id
                               }
                               className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
@@ -2277,6 +2354,7 @@ export function SpreadsheetApp() {
                                 removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
+                                || inspectingCacheRequestId === entry.request_id
                                 || copyingCacheOpsPayloadRequestId === entry.request_id
                               }
                               className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
@@ -2294,6 +2372,35 @@ export function SpreadsheetApp() {
                       No cached request IDs yet.
                     </p>
                   )}
+                  {selectedCacheEntryDetail ? (
+                    <div className="mt-2 rounded border border-slate-800 bg-slate-950/70 p-2">
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                        <span className="text-slate-300">
+                          selected detail:{" "}
+                          <span className="font-mono text-slate-100">
+                            {selectedCacheEntryDetail.request_id}
+                          </span>
+                        </span>
+                        <button
+                          onClick={handleCopySelectedCacheDetail}
+                          disabled={isCopyingCacheDetailJson}
+                          className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                        >
+                          {isCopyingCacheDetailJson ? "Copying..." : "Copy detail JSON"}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        ops:{" "}
+                        <span className="font-mono text-slate-300">
+                          {selectedCacheEntryDetail.operation_count}
+                        </span>{" "}
+                        · results:{" "}
+                        <span className="font-mono text-slate-300">
+                          {selectedCacheEntryDetail.result_count}
+                        </span>
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}

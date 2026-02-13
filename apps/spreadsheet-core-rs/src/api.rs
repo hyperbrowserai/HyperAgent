@@ -2,9 +2,10 @@ use crate::{
   error::ApiError,
   models::{
     AgentOperation, AgentOperationResult, AgentOpsCacheEntriesResponse,
-    AgentOpsCacheEntry, AgentOpsCacheStatsResponse, AgentOpsRequest,
-    AgentOpsResponse, AgentOpsPreviewRequest, AgentOpsPreviewResponse,
-    AgentPresetRunRequest, AgentScenarioRunRequest,
+    AgentOpsCacheEntry, AgentOpsCacheEntryDetailResponse,
+    AgentOpsCacheStatsResponse, AgentOpsRequest, AgentOpsResponse,
+    AgentOpsPreviewRequest, AgentOpsPreviewResponse, AgentPresetRunRequest,
+    AgentScenarioRunRequest,
     RemoveAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntryResponse,
     ReplayAgentOpsCacheEntryRequest, ReplayAgentOpsCacheEntryResponse,
     AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
@@ -69,6 +70,10 @@ pub fn create_router(state: AppState) -> Router {
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/entries",
       get(agent_ops_cache_entries),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
+      get(agent_ops_cache_entry_detail),
     )
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/clear",
@@ -1020,6 +1025,7 @@ async fn get_agent_schema(
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
+    "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
     "agent_ops_cache_entries_query_shape": {
       "request_id_prefix": "optional string filter (prefix match)",
       "offset": "optional number, default 0",
@@ -1054,6 +1060,13 @@ async fn get_agent_schema(
         "operation_count": "number of cached operations in this request",
         "result_count": "number of cached operation results"
       }]
+    },
+    "agent_ops_cache_entry_detail_response_shape": {
+      "request_id": "string",
+      "operation_count": "number of cached operations in this request",
+      "result_count": "number of cached operation results",
+      "cached_response": "cached agent_ops response payload",
+      "operations": "cached operation array for this request id"
     },
     "agent_ops_cache_clear_response_shape": {
       "cleared_entries": "number of removed cache entries"
@@ -1430,6 +1443,36 @@ async fn agent_ops_cache_entries(
   }))
 }
 
+async fn agent_ops_cache_entry_detail(
+  State(state): State<AppState>,
+  Path((workbook_id, request_id)): Path<(Uuid, String)>,
+) -> Result<Json<AgentOpsCacheEntryDetailResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let normalized_request_id = request_id.trim();
+  if normalized_request_id.is_empty() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID",
+      "request_id is required to fetch cache entry detail.",
+    ));
+  }
+  let (cached_response, operations) = state
+    .get_cached_agent_ops_replay_data(workbook_id, normalized_request_id)
+    .await?
+    .ok_or_else(|| {
+      ApiError::bad_request_with_code(
+        "CACHE_ENTRY_NOT_FOUND",
+        format!("No cache entry found for request_id '{normalized_request_id}'."),
+      )
+    })?;
+  Ok(Json(AgentOpsCacheEntryDetailResponse {
+    request_id: normalized_request_id.to_string(),
+    operation_count: operations.len(),
+    result_count: cached_response.results.len(),
+    cached_response,
+    operations,
+  }))
+}
+
 async fn clear_agent_ops_cache(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
@@ -1658,6 +1701,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/ops/preview": {"post": {"summary": "Preview and sign a provided agent operation plan without execution"}},
       "/v1/workbooks/{id}/agent/ops/cache": {"get": {"summary": "Inspect request-id idempotency cache status for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/entries": {"get": {"summary": "List recent request-id idempotency cache entries for agent ops"}},
+      "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}": {"get": {"summary": "Get detailed payload for a single cached request-id entry"}},
       "/v1/workbooks/{id}/agent/ops/cache/clear": {"post": {"summary": "Clear request-id idempotency cache for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/replay": {"post": {"summary": "Replay a cached request-id response for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/remove": {"post": {"summary": "Remove a single request-id idempotency cache entry for agent ops"}},
@@ -1684,7 +1728,8 @@ mod tests {
   use tempfile::tempdir;
 
   use super::{
-    agent_ops, agent_ops_cache_entries, agent_ops_cache_stats,
+    agent_ops, agent_ops_cache_entries, agent_ops_cache_entry_detail,
+    agent_ops_cache_stats,
     clear_agent_ops_cache, get_agent_schema, remove_agent_ops_cache_entry,
     replay_agent_ops_cache_entry,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
@@ -2092,6 +2137,70 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn should_return_cache_entry_detail_via_handler() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-detail".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let _ = agent_ops(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(AgentOpsRequest {
+        request_id: Some("detail-1".to_string()),
+        actor: Some("test".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+        operations: vec![AgentOperation::Recalculate],
+      }),
+    )
+    .await
+    .expect("agent ops should succeed");
+
+    let detail = agent_ops_cache_entry_detail(
+      State(state),
+      Path((workbook.id, "detail-1".to_string())),
+    )
+    .await
+    .expect("cache detail should load")
+    .0;
+
+    assert_eq!(detail.request_id, "detail-1");
+    assert_eq!(detail.operation_count, 1);
+    assert_eq!(detail.result_count, 1);
+    assert!(detail.cached_response.request_id.is_some());
+    assert_eq!(detail.operations.len(), 1);
+  }
+
+  #[tokio::test]
+  async fn should_reject_missing_cache_entry_detail_via_handler() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-detail-missing".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let error = agent_ops_cache_entry_detail(
+      State(state),
+      Path((workbook.id, "missing-detail".to_string())),
+    )
+    .await
+    .expect_err("missing detail should fail");
+
+    match error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "CACHE_ENTRY_NOT_FOUND");
+      }
+      _ => panic!("expected missing detail to use cache entry not found code"),
+    }
+  }
+
+  #[tokio::test]
   async fn should_remove_single_cache_entry_via_handler() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =
@@ -2337,6 +2446,12 @@ mod tests {
       Some(
         "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
       ),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_entry_detail_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}"),
     );
     assert_eq!(
       schema
