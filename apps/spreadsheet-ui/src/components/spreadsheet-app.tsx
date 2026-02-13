@@ -51,6 +51,7 @@ import {
   ExportCompatibilityReport,
   AgentOperationPreview,
   AgentOperationResult,
+  WorkbookEvent,
 } from "@/types/spreadsheet";
 
 const ChartPreview = dynamic(
@@ -75,6 +76,93 @@ function parsePositiveIntegerInput(value: string): number | undefined {
     return undefined;
   }
   return parsedValue;
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function parseCompatibilityReport(
+  value: unknown,
+): ExportCompatibilityReport | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const report = value as Partial<ExportCompatibilityReport>;
+  const preserved = parseStringArray(report.preserved);
+  const transformed = parseStringArray(report.transformed);
+  const unsupported = parseStringArray(report.unsupported);
+  if (
+    preserved.length === 0
+    && transformed.length === 0
+    && unsupported.length === 0
+  ) {
+    return null;
+  }
+  return {
+    preserved,
+    transformed,
+    unsupported,
+  };
+}
+
+function parseImportSummaryFromEvent(event: WorkbookEvent): {
+  sheetsImported: number;
+  cellsImported: number;
+  formulaCellsImported: number;
+  formulaCellsWithCachedValues: number;
+  formulaCellsWithoutCachedValues: number;
+  warnings: string[];
+} | null {
+  if (event.event_type !== "workbook.imported") {
+    return null;
+  }
+  const sheetsImported = event.payload.sheets_imported;
+  const cellsImported = event.payload.cells_imported;
+  const formulaCellsImported = event.payload.formula_cells_imported;
+  const formulaCellsWithCachedValues =
+    event.payload.formula_cells_with_cached_values;
+  const formulaCellsWithoutCachedValues =
+    event.payload.formula_cells_without_cached_values;
+  if (
+    typeof sheetsImported !== "number"
+    || typeof cellsImported !== "number"
+    || typeof formulaCellsImported !== "number"
+    || typeof formulaCellsWithCachedValues !== "number"
+    || typeof formulaCellsWithoutCachedValues !== "number"
+  ) {
+    return null;
+  }
+  return {
+    sheetsImported,
+    cellsImported,
+    formulaCellsImported,
+    formulaCellsWithCachedValues,
+    formulaCellsWithoutCachedValues,
+    warnings: parseStringArray(event.payload.warnings),
+  };
+}
+
+function parseExportSummaryFromEvent(event: WorkbookEvent): {
+  fileName: string;
+  exportedAt: string;
+  compatibilityReport: ExportCompatibilityReport | null;
+} | null {
+  if (event.event_type !== "workbook.exported") {
+    return null;
+  }
+  const fileName = event.payload.file_name;
+  if (typeof fileName !== "string" || !fileName.trim()) {
+    return null;
+  }
+  return {
+    fileName,
+    exportedAt: event.timestamp,
+    compatibilityReport: parseCompatibilityReport(event.payload.compatibility_report),
+  };
 }
 
 function extractRequestIdPrefix(requestId: string): string | null {
@@ -576,6 +664,14 @@ export function SpreadsheetApp() {
     }
     const unsubscribe = subscribeToWorkbookEvents(workbook.id, (event) => {
       appendEvent(event);
+      const importSummary = parseImportSummaryFromEvent(event);
+      if (importSummary) {
+        setLastWizardImportSummary(importSummary);
+      }
+      const exportSummary = parseExportSummaryFromEvent(event);
+      if (exportSummary) {
+        setLastExportSummary(exportSummary);
+      }
       queryClient.invalidateQueries({ queryKey: ["cells", workbook.id, activeSheet] });
       queryClient.invalidateQueries({ queryKey: ["workbook", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-presets", workbook.id] });
