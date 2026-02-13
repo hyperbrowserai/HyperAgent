@@ -1394,11 +1394,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return this.readTaskStatus(taskState, TaskStatus.FAILED);
     };
     const readControlStatus = (): TaskStatus => {
-      if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
-        return TaskStatus.CANCELLED;
-      }
       if (settledStatus !== null) {
         return settledStatus;
+      }
+      if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+        return TaskStatus.CANCELLED;
       }
       return this.readTaskStatus(taskState, TaskStatus.FAILED);
     };

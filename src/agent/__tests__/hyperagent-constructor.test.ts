@@ -2806,6 +2806,12 @@ describe("HyperAgent constructor and task controls", () => {
     expect(task.cancel()).toBe(TaskStatus.COMPLETED);
     expect(task.pause()).toBe(TaskStatus.COMPLETED);
     expect(task.resume()).toBe(TaskStatus.COMPLETED);
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    expect(task.getStatus()).toBe(TaskStatus.COMPLETED);
+    expect(task.cancel()).toBe(TaskStatus.COMPLETED);
+    expect(task.pause()).toBe(TaskStatus.COMPLETED);
+    expect(task.resume()).toBe(TaskStatus.COMPLETED);
   });
 
   it("task controls keep failed status after settlement despite late mutations", async () => {
@@ -2831,6 +2837,12 @@ describe("HyperAgent constructor and task controls", () => {
     if (capturedTaskState) {
       capturedTaskState.status = TaskStatus.RUNNING;
     }
+    expect(task.getStatus()).toBe(TaskStatus.FAILED);
+    expect(task.cancel()).toBe(TaskStatus.FAILED);
+    expect(task.pause()).toBe(TaskStatus.FAILED);
+    expect(task.resume()).toBe(TaskStatus.FAILED);
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
     expect(task.getStatus()).toBe(TaskStatus.FAILED);
     expect(task.cancel()).toBe(TaskStatus.FAILED);
     expect(task.pause()).toBe(TaskStatus.FAILED);
