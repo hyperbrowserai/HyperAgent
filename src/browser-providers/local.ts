@@ -1,5 +1,6 @@
 import { chromium, Browser, LaunchOptions } from "playwright-core";
 import BrowserProvider from "@/types/browser-providers/types";
+import { formatUnknownError } from "@/utils";
 
 export type LocalBrowserProviderOptions = Omit<LaunchOptions, "channel"> & {
   channel?: string;
@@ -14,17 +15,40 @@ export class LocalBrowserProvider extends BrowserProvider<Browser> {
   }
   async start(): Promise<Browser> {
     const launchArgs = this.options?.args ?? [];
-    const browser = await chromium.launch({
-      ...(this.options ?? {}),
-      channel: this.options?.channel ?? "chrome",
-      headless: this.options?.headless ?? false,
-      args: ["--disable-blink-features=AutomationControlled", ...launchArgs],
-    });
-    this.session = browser;
+    let browser: unknown;
+    try {
+      browser = await chromium.launch({
+        ...(this.options ?? {}),
+        channel: this.options?.channel ?? "chrome",
+        headless: this.options?.headless ?? false,
+        args: ["--disable-blink-features=AutomationControlled", ...launchArgs],
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to launch local browser: ${formatUnknownError(error)}`
+      );
+    }
+
+    if (!browser || typeof browser !== "object") {
+      throw new Error("Local browser launch returned an invalid browser");
+    }
+
+    this.session = browser as Browser;
     return this.session;
   }
   async close(): Promise<void> {
-    return await this.session?.close();
+    const session = this.session;
+    this.session = undefined;
+    if (!session) {
+      return;
+    }
+    try {
+      await session.close();
+    } catch (error) {
+      throw new Error(
+        `Failed to close local browser session: ${formatUnknownError(error)}`
+      );
+    }
   }
   public getSession() {
     if (!this.session) {
