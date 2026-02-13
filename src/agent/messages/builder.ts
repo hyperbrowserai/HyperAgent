@@ -72,6 +72,14 @@ function getOpenTabsSummary(page: Page): string {
   }
 }
 
+function getCurrentUrlSummary(page: Page): string {
+  try {
+    return truncateTabUrl(page.url() || "about:blank");
+  } catch {
+    return "Current URL unavailable";
+  }
+}
+
 export const buildAgentStepMessages = async (
   baseMessages: HyperAgentMessage[],
   steps: AgentStep[],
@@ -92,7 +100,7 @@ export const buildAgentStepMessages = async (
   // Add current URL section
   messages.push({
     role: "user",
-    content: `=== Current URL ===\n${page.url()}\n`,
+    content: `=== Current URL ===\n${getCurrentUrlSummary(page)}\n`,
   });
 
   const openTabs = getOpenTabsSummary(page);

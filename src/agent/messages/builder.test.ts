@@ -232,6 +232,42 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("Open tabs unavailable");
   });
 
+  it("falls back to placeholder text when current URL cannot be read", async () => {
+    const page = {
+      url: () => {
+        throw new Error("url unavailable");
+      },
+      context: () =>
+        ({
+          pages: () => [],
+        } as unknown as ReturnType<Page["context"]>),
+    } as unknown as Page;
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("=== Current URL ===");
+    expect(joined).toContain("Current URL unavailable");
+  });
+
   it("caps open-tab listing and reports omitted tab count", async () => {
     const urls = Array.from({ length: 25 }, (_, idx) => `https://example.com/${idx}`);
     const page = createFakePage("https://example.com/0", urls);
