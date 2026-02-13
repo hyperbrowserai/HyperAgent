@@ -52,11 +52,17 @@ export function stringifyMCPPayload(value: unknown): string {
 export function normalizeMCPToolParams(
   input: MCPToolActionInput["params"]
 ): Record<string, unknown> {
+  const normalizeParamKey = (value: string): string => value.trim().toLowerCase();
+
   const sanitizeParamValue = (
     value: unknown,
     seen: WeakSet<object>
   ): unknown => {
     if (Array.isArray(value)) {
+      if (seen.has(value)) {
+        throw new Error("MCP tool params cannot include circular references");
+      }
+      seen.add(value);
       try {
         return value.map((entry) => sanitizeParamValue(entry, seen));
       } finally {
@@ -71,7 +77,7 @@ export function normalizeMCPToolParams(
       try {
         const sanitized: Record<string, unknown> = Object.create(null);
         for (const [key, paramValue] of Object.entries(value)) {
-          if (UNSAFE_OBJECT_KEYS.has(key)) {
+          if (UNSAFE_OBJECT_KEYS.has(normalizeParamKey(key))) {
             throw new Error(`MCP tool params cannot include reserved key "${key}"`);
           }
           sanitized[key] = sanitizeParamValue(paramValue, seen);

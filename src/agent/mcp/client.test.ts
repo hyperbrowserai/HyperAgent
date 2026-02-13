@@ -68,6 +68,24 @@ describe("normalizeMCPToolParams", () => {
     );
   });
 
+  it("rejects circular references in array params", () => {
+    const circularArray: unknown[] = [];
+    circularArray.push(circularArray);
+    expect(() =>
+      normalizeMCPToolParams({
+        items: circularArray,
+      })
+    ).toThrow("MCP tool params cannot include circular references");
+  });
+
+  it("rejects reserved keys case-insensitively after trimming", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        "  Constructor  ": "bad",
+      })
+    ).toThrow('MCP tool params cannot include reserved key "  Constructor  "');
+  });
+
   it("allows repeated shared object references across sibling fields", () => {
     const shared = { query: "weather" };
     expect(
