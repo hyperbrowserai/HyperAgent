@@ -480,10 +480,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         cleanup();
         // Retrieve the correct state to update
         const failedTaskState = this.tasks[taskId];
-        const taskFailureError =
+        const normalizedTaskError =
           error instanceof Error
-            ? new HyperagentTaskError(taskId, error)
-            : new HyperagentTaskError(taskId, new Error(String(error)));
+            ? error
+            : new Error(formatUnknownError(error));
+        const taskFailureError =
+          new HyperagentTaskError(taskId, normalizedTaskError);
         if (failedTaskState) {
           failedTaskState.status = TaskStatus.FAILED;
           failedTaskState.error = taskFailureError.cause.message;

@@ -143,6 +143,29 @@ describe("HyperAgent constructor and task controls", () => {
     expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
   });
 
+  it("serializes non-Error async task failures with readable cause", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockRejectedValue({ reason: "object boom" });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+    const emittedErrorPromise = new Promise<Error>((resolve) => {
+      task.emitter.once("error", resolve);
+    });
+
+    await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+    const emittedError = await emittedErrorPromise;
+
+    expect(emittedError).toBeInstanceOf(HyperagentTaskError);
+    expect((emittedError as HyperagentTaskError).taskId).toBe(task.id);
+    expect((emittedError as HyperagentTaskError).cause.message).toBe(
+      '{"reason":"object boom"}'
+    );
+  });
+
   it("cleans internal task state after synchronous executeTask completion", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({
