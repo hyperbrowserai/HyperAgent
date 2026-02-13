@@ -8,6 +8,9 @@ interface CreateScriptFromActionCacheParams {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+
 export function createScriptFromActionCache(
   params: CreateScriptFromActionCacheParams
 ): string {
@@ -48,8 +51,13 @@ export function createScriptFromActionCache(
     }
 
     if (step.actionType === "goToUrl") {
+      const actionParams = isRecord(step.actionParams)
+        ? step.actionParams
+        : undefined;
       const urlArg =
-        (step.arguments && step.arguments[0]) || "https://example.com";
+        (step.arguments && step.arguments[0]) ||
+        (isNonEmptyString(actionParams?.url) ? actionParams.url : "") ||
+        "https://example.com";
       return `${indent}// Step ${step.stepIndex}
 ${indent}await page.goto(
 ${argIndent}${JSON.stringify(urlArg)},
@@ -76,17 +84,17 @@ ${indent}await page.waitForTimeout(${waitMs});`;
     }
 
     if (step.actionType === "extract") {
+      if (!isNonEmptyString(step.instruction)) {
+        return `${indent}// Step ${step.stepIndex} (extract skipped: missing instruction)`;
+      }
       return `${indent}// Step ${step.stepIndex}
 ${indent}await page.extract("${step.instruction}");`;
     }
 
     const call = step.method ? METHOD_TO_CALL[step.method] : undefined;
     if (call) {
-      const args: string[] = [];
-      args.push(JSON.stringify(step.xpath));
-      if (call.needsValue) {
-        const value = step.arguments?.[0] ?? "";
-        args.push(JSON.stringify(value));
+      if (!isNonEmptyString(step.xpath)) {
+        return `${indent}// Step ${step.stepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"}, reason=missing xpath)`;
       }
       const options: Record<string, unknown> = {};
       if (step.instruction) {

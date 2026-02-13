@@ -56,4 +56,48 @@ describe("action cache helpers", () => {
 
     expect(script).toContain("waitForTimeout(2500)");
   });
+
+  it("skips helper generation when xpath is missing", () => {
+    const actElementEntry: ActionCacheEntry = {
+      stepIndex: 3,
+      instruction: "click login",
+      elementId: "0-10",
+      method: "click",
+      arguments: [],
+      actionType: "actElement",
+      success: true,
+      message: "ok",
+      frameIndex: 0,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [actElementEntry],
+    });
+
+    expect(script).toContain("reason=missing xpath");
+    expect(script).not.toContain("await page.performClick(");
+  });
+
+  it("skips extract generation when instruction is missing", () => {
+    const extractEntry: ActionCacheEntry = {
+      stepIndex: 4,
+      instruction: undefined,
+      elementId: null,
+      method: null,
+      arguments: [],
+      actionType: "extract",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [extractEntry],
+    });
+
+    expect(script).toContain("extract skipped: missing instruction");
+    expect(script).not.toContain("await page.extract(");
+  });
 });
