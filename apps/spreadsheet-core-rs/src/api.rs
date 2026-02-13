@@ -148,6 +148,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "YEAR",
   "MONTH",
   "DAY",
+  "WEEKDAY",
+  "WEEKNUM",
   "ROW",
   "COLUMN",
   "ROWS",

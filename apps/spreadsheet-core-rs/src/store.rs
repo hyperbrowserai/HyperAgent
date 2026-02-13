@@ -45,7 +45,8 @@ use crate::{
     parse_today_formula, parse_now_formula, parse_true_formula,
     parse_false_formula, parse_upper_formula,
     parse_vlookup_formula,
-    parse_xlookup_formula, parse_year_formula, ConditionalAggregateFormula,
+    parse_xlookup_formula, parse_year_formula, parse_weekday_formula,
+    parse_weeknum_formula, ConditionalAggregateFormula,
     HLookupFormula, IndexFormula, MatchFormula, MultiCriteriaAggregateFormula,
     VLookupFormula, XLookupFormula,
   },
@@ -1311,6 +1312,44 @@ fn evaluate_formula(
   if let Some(day_arg) = parse_day_formula(formula) {
     let date = parse_date_operand(connection, sheet, &day_arg)?;
     return Ok(Some(date.map(|value| value.day().to_string()).unwrap_or_default()));
+  }
+
+  if let Some((date_arg, return_type_arg)) = parse_weekday_formula(formula) {
+    let date = parse_date_operand(connection, sheet, &date_arg)?;
+    let Some(date_value) = date else {
+      return Ok(Some(String::new()));
+    };
+    let return_type = match return_type_arg {
+      Some(raw_type) => parse_required_integer(connection, sheet, &raw_type)?,
+      None => 1,
+    };
+    let weekday = match return_type {
+      1 => date_value.weekday().num_days_from_sunday() + 1,
+      2 => date_value.weekday().num_days_from_monday() + 1,
+      3 => date_value.weekday().num_days_from_monday(),
+      _ => return Ok(None),
+    };
+    return Ok(Some(weekday.to_string()));
+  }
+
+  if let Some((date_arg, return_type_arg)) = parse_weeknum_formula(formula) {
+    let date = parse_date_operand(connection, sheet, &date_arg)?;
+    let Some(date_value) = date else {
+      return Ok(Some(String::new()));
+    };
+    let return_type = match return_type_arg {
+      Some(raw_type) => parse_required_integer(connection, sheet, &raw_type)?,
+      None => 1,
+    };
+    let year_start = NaiveDate::from_ymd_opt(date_value.year(), 1, 1)
+      .ok_or_else(|| ApiError::internal("Invalid year for WEEKNUM".to_string()))?;
+    let day_offset = match return_type {
+      1 => year_start.weekday().num_days_from_sunday(),
+      2 => year_start.weekday().num_days_from_monday(),
+      _ => return Ok(None),
+    };
+    let week_number = ((date_value.ordinal() + day_offset - 1) / 7) + 1;
+    return Ok(Some(week_number.to_string()));
   }
 
   if let Some(hour_arg) = parse_hour_formula(formula) {
@@ -3419,12 +3458,36 @@ mod tests {
         value: None,
         formula: Some("=SMALL(A1:A2,1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 132,
+        value: None,
+        formula: Some("=WEEKDAY(L1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 133,
+        value: None,
+        formula: Some("=WEEKDAY(L1,2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 134,
+        value: None,
+        formula: Some("=WEEKNUM(L1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 135,
+        value: None,
+        formula: Some("=WEEKNUM(L1,2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 129);
+    assert_eq!(updated_cells, 133);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3438,7 +3501,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 131,
+        end_col: 135,
       },
     )
     .expect("cells should be fetched");
@@ -3626,6 +3689,10 @@ mod tests {
     assert_eq!(by_position(1, 129).evaluated_value.as_deref(), Some("100.0"));
     assert_eq!(by_position(1, 130).evaluated_value.as_deref(), Some("120"));
     assert_eq!(by_position(1, 131).evaluated_value.as_deref(), Some("80"));
+    assert_eq!(by_position(1, 132).evaluated_value.as_deref(), Some("6"));
+    assert_eq!(by_position(1, 133).evaluated_value.as_deref(), Some("5"));
+    assert_eq!(by_position(1, 134).evaluated_value.as_deref(), Some("7"));
+    assert_eq!(by_position(1, 135).evaluated_value.as_deref(), Some("7"));
   }
 
   #[test]
@@ -3805,6 +3872,39 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=LOG(100,1)".to_string(), "=LOG(100,0)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_weekday_weeknum_return_types_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!("2026-02-13")),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=WEEKDAY(A1,9)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=WEEKNUM(A1,9)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=WEEKDAY(A1,9)".to_string(), "=WEEKNUM(A1,9)".to_string()],
     );
   }
 

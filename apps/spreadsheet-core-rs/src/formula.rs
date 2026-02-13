@@ -838,6 +838,26 @@ pub fn parse_day_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_weekday_formula(
+  formula: &str,
+) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "WEEKDAY" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_weeknum_formula(
+  formula: &str,
+) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "WEEKNUM" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
 pub fn parse_hour_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "HOUR" && args.len() == 1 {
@@ -1221,7 +1241,8 @@ mod tests {
     parse_today_formula, parse_now_formula, parse_true_formula,
     parse_false_formula, parse_pi_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
-    parse_year_formula, parse_upper_formula, parse_trim_formula,
+    parse_year_formula, parse_weekday_formula, parse_weeknum_formula,
+    parse_upper_formula, parse_trim_formula,
   };
 
   #[test]
@@ -1547,6 +1568,14 @@ mod tests {
       Some("A1"),
     );
     assert_eq!(parse_day_formula("=DAY(A1)").as_deref(), Some("A1"));
+    let weekday =
+      parse_weekday_formula("=WEEKDAY(A1,2)").expect("weekday should parse");
+    assert_eq!(weekday.0, "A1");
+    assert_eq!(weekday.1.as_deref(), Some("2"));
+    let weeknum =
+      parse_weeknum_formula("=WEEKNUM(A1,2)").expect("weeknum should parse");
+    assert_eq!(weeknum.0, "A1");
+    assert_eq!(weeknum.1.as_deref(), Some("2"));
     assert_eq!(parse_hour_formula("=HOUR(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_minute_formula("=MINUTE(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_second_formula("=SECOND(A1)").as_deref(), Some("A1"));
