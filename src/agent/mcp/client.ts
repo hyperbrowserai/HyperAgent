@@ -40,6 +40,8 @@ const MAX_MCP_TOOL_DIAGNOSTIC_ITEMS = 10;
 const MAX_MCP_CONFIG_SERVER_ID_CHARS = 128;
 const MAX_MCP_CONFIG_COMMAND_CHARS = 2_048;
 const MAX_MCP_CONFIG_SSE_URL_CHARS = 4_000;
+const MAX_MCP_CONFIG_ARGS_PER_SERVER = 100;
+const MAX_MCP_CONFIG_ARG_CHARS = 4_000;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -212,6 +214,38 @@ function normalizeMCPConnectionSSEUrl(sseUrl?: string): string {
     throw new Error("SSE URL must use http:// or https://");
   }
   return parsedUrl.toString();
+}
+
+function normalizeMCPConnectionArgs(args?: string[]): string[] | undefined {
+  if (typeof args === "undefined") {
+    return undefined;
+  }
+  if (!Array.isArray(args)) {
+    throw new Error("MCP command args must be an array of non-empty strings");
+  }
+  if (args.length > MAX_MCP_CONFIG_ARGS_PER_SERVER) {
+    throw new Error(
+      `MCP command args cannot contain more than ${MAX_MCP_CONFIG_ARGS_PER_SERVER} entries`
+    );
+  }
+  return args.map((arg) => {
+    if (typeof arg !== "string") {
+      throw new Error("MCP command args must be an array of non-empty strings");
+    }
+    const normalized = arg.trim();
+    if (normalized.length === 0) {
+      throw new Error("MCP command args must be an array of non-empty strings");
+    }
+    if (hasAnyControlChars(normalized)) {
+      throw new Error("MCP command args contain unsupported control characters");
+    }
+    if (normalized.length > MAX_MCP_CONFIG_ARG_CHARS) {
+      throw new Error(
+        `MCP command args cannot include entries longer than ${MAX_MCP_CONFIG_ARG_CHARS} characters`
+      );
+    }
+    return normalized;
+  });
 }
 
 function summarizeMCPServerIds(serverIds: string[]): string {
@@ -664,10 +698,11 @@ class MCPClient {
         };
       } else {
         const command = normalizeMCPConnectionCommand(serverConfig.command);
+        const args = normalizeMCPConnectionArgs(serverConfig.args);
 
         transport = new StdioClientTransport({
           command,
-          args: serverConfig.args,
+          args,
           env: {
             ...((process.env ?? {}) as Record<string, string>),
             ...(serverConfig.env ?? {}),

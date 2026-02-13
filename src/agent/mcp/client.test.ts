@@ -667,6 +667,85 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("rejects non-array command args", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          args: "invalid" as unknown as string[],
+        })
+      ).rejects.toThrow("MCP command args must be an array of non-empty strings");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects command args with blank entries after trimming", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          args: ["   "],
+        })
+      ).rejects.toThrow("MCP command args must be an array of non-empty strings");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects command args with control characters", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          args: ["bad\narg"],
+        })
+      ).rejects.toThrow("MCP command args contain unsupported control characters");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects oversized command args", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          args: ["x".repeat(4_001)],
+        })
+      ).rejects.toThrow(
+        "MCP command args cannot include entries longer than 4000 characters"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects command args with too many entries", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          args: Array.from({ length: 101 }, (_, index) => `arg-${index}`),
+        })
+      ).rejects.toThrow(
+        "MCP command args cannot contain more than 100 entries"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("rejects SSE URLs with unsupported protocols", async () => {
     const mcpClient = new MCPClient(false);
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
