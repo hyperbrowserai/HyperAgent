@@ -111,4 +111,33 @@ describe("writeAiActionDebug", () => {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("throws readable error when debug directory creation fails", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-debug-writer-")
+    );
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw { reason: "mkdir denied" };
+    });
+    const debugData: DebugData = {
+      instruction: "click login",
+      url: "https://example.com",
+      timestamp: new Date().toISOString(),
+      domElementCount: 5,
+      domTree: "dom tree",
+      success: true,
+    };
+
+    try {
+      await expect(writeAiActionDebug(debugData, tempDir)).rejects.toThrow(
+        '[debugWriter] Failed to create debug directory'
+      );
+      await expect(writeAiActionDebug(debugData, tempDir)).rejects.toThrow(
+        '{"reason":"mkdir denied"}'
+      );
+    } finally {
+      mkdirSpy.mockRestore();
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

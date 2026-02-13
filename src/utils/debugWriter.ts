@@ -130,7 +130,13 @@ export async function writeAiActionDebug(
   const debugDir = path.join(baseDir, session, `action-${actionNum}`);
 
   // Create debug directory
-  fs.mkdirSync(debugDir, { recursive: true });
+  try {
+    fs.mkdirSync(debugDir, { recursive: true });
+  } catch (error) {
+    throw new Error(
+      `[debugWriter] Failed to create debug directory "${debugDir}": ${formatUnknownError(error)}`
+    );
+  }
 
   // Write instruction and metadata
   const metadata = {
