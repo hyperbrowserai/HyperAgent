@@ -49,6 +49,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent integration panel shows live idempotency cache stats (entries/oldest/newest plus oldest/newest `cached_at`) with a clear-cache control
 - Agent integration panel lists paged cached request IDs/signature prefixes plus per-entry operation/result counts with prefix + age filtering, newer/older pagination, and inspect/replay/rerun/copy/copy-ops/single-entry remove controls
 - Cache age-filter control validates positive integer seconds inline
+- Prefix preview/remove actions are blocked while age-filter input is invalid
 - Cache list and detail inspector show when each request-id entry was cached (`cached_at`)
 - Cache timestamps also display relative age labels (e.g., `2m ago`) for quick freshness checks
 - Cache prefix filter offers one-click backend-derived suggestions with entry counts (scoped by age filter when applied)

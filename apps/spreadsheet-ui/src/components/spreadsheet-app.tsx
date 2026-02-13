@@ -1578,6 +1578,11 @@ export function SpreadsheetApp() {
     if (!workbook) {
       return;
     }
+    if (hasInvalidCacheEntriesMaxAgeInput) {
+      setUiError("older-than filter must be a positive integer (seconds).");
+      setUiErrorCode("INVALID_MAX_AGE_SECONDS");
+      return;
+    }
     const normalizedPrefix = cacheRequestIdPrefix.trim();
     if (!normalizedPrefix) {
       return;
@@ -1627,6 +1632,11 @@ export function SpreadsheetApp() {
 
   async function handlePreviewRemoveCacheEntriesByPrefix() {
     if (!workbook) {
+      return;
+    }
+    if (hasInvalidCacheEntriesMaxAgeInput) {
+      setUiError("older-than filter must be a positive integer (seconds).");
+      setUiErrorCode("INVALID_MAX_AGE_SECONDS");
       return;
     }
     const normalizedPrefix = cacheRequestIdPrefix.trim();
@@ -2666,7 +2676,9 @@ export function SpreadsheetApp() {
                     <button
                       onClick={handlePreviewRemoveCacheEntriesByPrefix}
                       disabled={
-                        isPreviewingCacheByPrefix || !cacheRequestIdPrefix.trim()
+                        isPreviewingCacheByPrefix
+                        || !cacheRequestIdPrefix.trim()
+                        || hasInvalidCacheEntriesMaxAgeInput
                       }
                       className="rounded border border-amber-700/70 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-900/40 disabled:opacity-50"
                     >
@@ -2688,6 +2700,7 @@ export function SpreadsheetApp() {
                       disabled={
                         isRemovingCacheByPrefix
                         || !cacheRequestIdPrefix.trim()
+                        || hasInvalidCacheEntriesMaxAgeInput
                         || (agentOpsCacheEntriesQuery.data?.total_entries ?? 0) === 0
                       }
                       className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
