@@ -39,10 +39,12 @@ function normalizeOptionalStringRecord(
     );
   }
 
-  const normalized: Record<string, string> = {};
+  const normalized: Record<string, string> = Object.create(null);
   for (const [rawKey, rawValue] of Object.entries(value)) {
     const key = rawKey.trim();
-    if (key.length === 0 || typeof rawValue !== "string") {
+    const isUnsafeKey =
+      key === "__proto__" || key === "prototype" || key === "constructor";
+    if (key.length === 0 || typeof rawValue !== "string" || isUnsafeKey) {
       throw new Error(
         `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
       );
