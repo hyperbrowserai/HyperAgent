@@ -149,6 +149,60 @@ describe("MCP lifecycle action registration", () => {
     expect(disconnectServerMock).not.toHaveBeenCalled();
   });
 
+  it("supports awaited MCP disconnect with async API", async () => {
+    const action = createAction("mcp_async_action", "async");
+    connectToServerMock.mockResolvedValue({
+      serverId: "server-async",
+      actions: [action],
+    });
+    const agent = new HyperAgent({ llm: createMockLLM() });
+    await agent.connectToMCPServer({ command: "echo" });
+
+    getServerIdsMock.mockReturnValue(["server-async"]);
+    const disconnected = await agent.disconnectFromMCPServerAsync(
+      "server-async"
+    );
+
+    expect(disconnected).toBe(true);
+    expect(disconnectServerMock).toHaveBeenCalledWith("server-async");
+    expect(
+      agent.pprintAction({ type: "mcp_async_action", params: {} } as ActionType)
+    ).toBe("");
+  });
+
+  it("returns false from async disconnect when transport cleanup fails", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    try {
+      const action = createAction("mcp_async_fail_action", "async-fail");
+      connectToServerMock.mockResolvedValue({
+        serverId: "server-async-fail",
+        actions: [action],
+      });
+      disconnectServerMock.mockRejectedValueOnce(new Error("disconnect failed"));
+
+      const agent = new HyperAgent({ llm: createMockLLM() });
+      await agent.connectToMCPServer({ command: "echo" });
+      getServerIdsMock.mockReturnValue(["server-async-fail"]);
+
+      const disconnected = await agent.disconnectFromMCPServerAsync(
+        "server-async-fail"
+      );
+
+      expect(disconnected).toBe(false);
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(
+        agent.pprintAction({
+          type: "mcp_async_fail_action",
+          params: {},
+        } as ActionType)
+      ).toBe("");
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it("reinitializing MCP client removes previous MCP action registrations", async () => {
     const actionA = createAction("mcp_action_a", "a");
     const actionB = createAction("mcp_action_b", "b");
@@ -180,5 +234,34 @@ describe("MCP lifecycle action registration", () => {
     expect(
       agent.pprintAction({ type: "mcp_action_b", params: {} } as ActionType)
     ).toBe("b");
+  });
+
+  it("closeAgent tolerates MCP disconnect failures and clears MCP actions", async () => {
+    const consoleWarnSpy = jest
+      .spyOn(console, "warn")
+      .mockImplementation(() => {});
+    try {
+      const action = createAction("mcp_close_action", "close");
+      connectToServerMock.mockResolvedValue({
+        serverId: "server-close",
+        actions: [action],
+      });
+      disconnectMock.mockRejectedValueOnce(new Error("close disconnect failed"));
+
+      const agent = new HyperAgent({ llm: createMockLLM() });
+      await agent.connectToMCPServer({ command: "echo" });
+      expect(
+        agent.pprintAction({ type: "mcp_close_action", params: {} } as ActionType)
+      ).toBe("close");
+
+      await expect(agent.closeAgent()).resolves.toBeUndefined();
+
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(
+        agent.pprintAction({ type: "mcp_close_action", params: {} } as ActionType)
+      ).toBe("");
+    } finally {
+      consoleWarnSpy.mockRestore();
+    }
   });
 });

@@ -289,20 +289,37 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     if (this.mcpClient) {
-      await this.mcpClient.disconnect();
-      this.mcpClient = undefined;
+      this.unregisterActionsByType(
+        Array.from(this.mcpActionTypesByServer.values()).flatMap(
+          (actionTypes) => Array.from(actionTypes)
+        )
+      );
+      this.mcpActionTypesByServer.clear();
+      try {
+        await this.mcpClient.disconnect();
+      } catch (error) {
+        console.warn("[HyperAgent] Failed to disconnect MCP client:", error);
+      } finally {
+        this.mcpClient = undefined;
+      }
+    } else {
+      this.unregisterActionsByType(
+        Array.from(this.mcpActionTypesByServer.values()).flatMap(
+          (actionTypes) => Array.from(actionTypes)
+        )
+      );
+      this.mcpActionTypesByServer.clear();
     }
-    this.unregisterActionsByType(
-      Array.from(this.mcpActionTypesByServer.values()).flatMap((actionTypes) =>
-        Array.from(actionTypes)
-      )
-    );
-    this.mcpActionTypesByServer.clear();
 
     if (this.browser) {
-      await this.browserProvider.close();
-      this.browser = null;
-      this.context = null;
+      try {
+        await this.browserProvider.close();
+      } catch (error) {
+        console.warn("[HyperAgent] Failed to close browser provider:", error);
+      } finally {
+        this.browser = null;
+        this.context = null;
+      }
     }
   }
 
@@ -1537,6 +1554,31 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       void this.mcpClient.disconnectServer(serverId).catch((error) => {
         console.error(`Failed to disconnect from MCP server ${serverId}:`, error);
       });
+      return true;
+    } catch (error) {
+      console.error(`Failed to disconnect from MCP server ${serverId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Disconnect from a specific MCP server and await transport cleanup.
+   * @param serverId ID of the server to disconnect from
+   * @returns Boolean indicating if disconnection was successful
+   */
+  public async disconnectFromMCPServerAsync(serverId: string): Promise<boolean> {
+    if (!this.mcpClient) {
+      return false;
+    }
+    const isConnected = this.mcpClient.getServerIds().includes(serverId);
+    if (!isConnected) {
+      this.unregisterMCPActionsForServer(serverId);
+      return false;
+    }
+
+    this.unregisterMCPActionsForServer(serverId);
+    try {
+      await this.mcpClient.disconnectServer(serverId);
       return true;
     } catch (error) {
       console.error(`Failed to disconnect from MCP server ${serverId}:`, error);
