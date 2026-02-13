@@ -11,6 +11,9 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Live chart preview with metadata sync endpoint
 - Dynamic sheet tabs + add-sheet controls
 - Agent batch execution + built-in preset runner
+- Built-in scenario runner (seed/export orchestration)
+- Wizard flow: optional XLSX upload + scenario execution in one action
+- Event stream viewer with per-event-type filtering
 
 ## Run
 
