@@ -1,5 +1,6 @@
 import {
   AgentOpsResponse,
+  AgentSchemaInfo,
   AgentPresetInfo,
   AgentPresetResponse,
   CellSnapshot,
@@ -176,6 +177,15 @@ export async function getAgentPresets(
   );
   const data = await parseJsonResponse<{ presets: AgentPresetInfo[] }>(response);
   return data.presets;
+}
+
+export async function getAgentSchema(
+  workbookId: string,
+): Promise<AgentSchemaInfo> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/schema`,
+  );
+  return parseJsonResponse<AgentSchemaInfo>(response);
 }
 
 export async function upsertChart(

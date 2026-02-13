@@ -57,3 +57,9 @@ export interface AgentPresetInfo {
   description: string;
   operations: string[];
 }
+
+export interface AgentSchemaInfo {
+  endpoint: string;
+  operation_payloads: Record<string, unknown>;
+  presets: AgentPresetInfo[];
+}

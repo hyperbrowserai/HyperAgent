@@ -11,6 +11,7 @@ import {
   createSheet,
   createWorkbook,
   exportWorkbook,
+  getAgentSchema,
   getAgentPresets,
   getCells,
   getWorkbook,
@@ -98,6 +99,12 @@ export function SpreadsheetApp() {
     queryFn: () => getAgentPresets(workbook!.id),
   });
 
+  const agentSchemaQuery = useQuery({
+    queryKey: ["agent-schema", workbook?.id],
+    enabled: Boolean(workbook?.id),
+    queryFn: () => getAgentSchema(workbook!.id),
+  });
+
   useEffect(() => {
     if (!workbook && !createWorkbookMutation.isPending) {
       createWorkbookMutation.mutate();
@@ -125,6 +132,7 @@ export function SpreadsheetApp() {
       queryClient.invalidateQueries({ queryKey: ["cells", workbook.id, activeSheet] });
       queryClient.invalidateQueries({ queryKey: ["workbook", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-presets", workbook.id] });
+      queryClient.invalidateQueries({ queryKey: ["agent-schema", workbook.id] });
     });
     return unsubscribe;
   }, [workbook?.id, activeSheet, queryClient, appendEvent]);
@@ -581,11 +589,26 @@ export function SpreadsheetApp() {
           </div>
         </section>
 
-        {lastAgentOps.length > 0 && (
+        {(agentSchemaQuery.data || lastAgentOps.length > 0) && (
           <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
-            <h2 className="mb-2 text-sm font-semibold text-slate-200">
-              Last Agent Operation Batch
-            </h2>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-slate-200">
+                Agent Integration Details
+              </h2>
+              {agentSchemaQuery.data ? (
+                <span className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-300">
+                  endpoint: {agentSchemaQuery.data.endpoint}
+                </span>
+              ) : null}
+            </div>
+            {agentSchemaQuery.data ? (
+              <p className="mb-2 text-xs text-slate-400">
+                Supported ops:{" "}
+                <span className="font-mono text-slate-200">
+                  {Object.keys(agentSchemaQuery.data.operation_payloads).join(", ")}
+                </span>
+              </p>
+            ) : null}
             {lastPreset && (
               <p className="mb-2 text-xs text-slate-400">
                 preset: <span className="font-mono text-slate-200">{lastPreset}</span>
@@ -597,42 +620,48 @@ export function SpreadsheetApp() {
                 <span className="font-mono text-slate-200">{lastAgentRequestId}</span>
               </p>
             )}
-            <div className="overflow-auto rounded-lg border border-slate-800 bg-slate-950">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-900 text-slate-300">
-                    <th className="px-2 py-2 text-left">#</th>
-                    <th className="px-2 py-2 text-left">Operation</th>
-                    <th className="px-2 py-2 text-left">Status</th>
-                    <th className="px-2 py-2 text-left">Data</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lastAgentOps.map((result) => (
-                    <tr key={`${result.op_index}-${result.op_type}`} className="border-t border-slate-800">
-                      <td className="px-2 py-2 font-mono text-slate-400">{result.op_index}</td>
-                      <td className="px-2 py-2 text-slate-200">{result.op_type}</td>
-                      <td className="px-2 py-2">
-                        <span
-                          className={`rounded-full px-2 py-0.5 ${
-                            result.ok
-                              ? "bg-emerald-500/20 text-emerald-200"
-                              : "bg-rose-500/20 text-rose-200"
-                          }`}
-                        >
-                          {result.ok ? "ok" : "error"}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2 text-slate-400">
-                        <pre className="whitespace-pre-wrap break-all">
-                          {JSON.stringify(result.data)}
-                        </pre>
-                      </td>
+            {lastAgentOps.length ? (
+              <div className="overflow-auto rounded-lg border border-slate-800 bg-slate-950">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900 text-slate-300">
+                      <th className="px-2 py-2 text-left">#</th>
+                      <th className="px-2 py-2 text-left">Operation</th>
+                      <th className="px-2 py-2 text-left">Status</th>
+                      <th className="px-2 py-2 text-left">Data</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {lastAgentOps.map((result) => (
+                      <tr key={`${result.op_index}-${result.op_type}`} className="border-t border-slate-800">
+                        <td className="px-2 py-2 font-mono text-slate-400">{result.op_index}</td>
+                        <td className="px-2 py-2 text-slate-200">{result.op_type}</td>
+                        <td className="px-2 py-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 ${
+                              result.ok
+                                ? "bg-emerald-500/20 text-emerald-200"
+                                : "bg-rose-500/20 text-rose-200"
+                            }`}
+                          >
+                            {result.ok ? "ok" : "error"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-slate-400">
+                          <pre className="whitespace-pre-wrap break-all">
+                            {JSON.stringify(result.data)}
+                          </pre>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-500">
+                Run an agent operation batch or preset to inspect execution details.
+              </p>
+            )}
           </section>
         )}
 
