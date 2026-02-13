@@ -1317,9 +1317,15 @@ function normalizeScrollPercent(target: unknown): number {
   }
   if (text.endsWith("%")) {
     const parsed = Number.parseFloat(text.slice(0, -1));
+    if (!Number.isFinite(parsed)) {
+      return 50;
+    }
     return clamp(Number.isNaN(parsed) ? 50 : parsed, 0, 100);
   }
   const num = Number.parseFloat(text);
+  if (!Number.isFinite(num)) {
+    return 50;
+  }
   return clamp(Number.isNaN(num) ? 50 : num, 0, 100);
 }
 
