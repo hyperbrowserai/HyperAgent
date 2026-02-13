@@ -140,6 +140,15 @@ pub fn parse_iferror_formula(formula: &str) -> Option<(String, String)> {
   Some((args[0].clone(), args[1].clone()))
 }
 
+pub fn parse_choose_formula(formula: &str) -> Option<(String, Vec<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "CHOOSE" || args.len() < 2 {
+    return None;
+  }
+
+  Some((args[0].clone(), args[1..].to_vec()))
+}
+
 pub fn parse_concat_formula(formula: &str) -> Option<Vec<String>> {
   let (function, args) = parse_function_arguments(formula)?;
   if (function != "CONCAT" && function != "CONCATENATE") || args.is_empty() {
@@ -585,7 +594,8 @@ mod tests {
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
-    parse_if_formula, parse_iferror_formula, parse_today_formula, parse_vlookup_formula,
+    parse_if_formula, parse_iferror_formula, parse_choose_formula,
+    parse_today_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
     parse_year_formula, parse_upper_formula, parse_trim_formula,
   };
@@ -624,6 +634,11 @@ mod tests {
         .expect("iferror should parse");
     assert_eq!(iferror.0, "VLOOKUP(A1,D1:E5,2,TRUE)");
     assert_eq!(iferror.1, r#""fallback""#);
+
+    let choose = parse_choose_formula(r#"=CHOOSE(2,"alpha","beta","gamma")"#)
+      .expect("choose should parse");
+    assert_eq!(choose.0, "2");
+    assert_eq!(choose.1, vec![r#""alpha""#, r#""beta""#, r#""gamma""#]);
   }
 
   #[test]

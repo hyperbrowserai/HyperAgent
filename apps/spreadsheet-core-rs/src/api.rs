@@ -61,6 +61,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "arithmetic expressions",
   "IF",
   "IFERROR",
+  "CHOOSE",
   "AND",
   "OR",
   "NOT",

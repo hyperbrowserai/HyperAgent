@@ -5,9 +5,10 @@ use crate::{
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
-    parse_left_formula, parse_index_formula, parse_isblank_formula,
-    parse_isnumber_formula, parse_istext_formula, parse_len_formula, parse_lower_formula,
-    parse_hlookup_formula, parse_match_formula, parse_month_formula, parse_not_formula,
+    parse_choose_formula, parse_left_formula, parse_index_formula,
+    parse_isblank_formula, parse_isnumber_formula, parse_istext_formula,
+    parse_len_formula, parse_lower_formula, parse_hlookup_formula,
+    parse_match_formula, parse_month_formula, parse_not_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_today_formula, parse_upper_formula, parse_vlookup_formula,
@@ -306,6 +307,19 @@ fn evaluate_formula(
       return Ok(Some(value));
     }
     return resolve_scalar_operand(connection, sheet, &fallback_expression).map(Some);
+  }
+
+  if let Some((selector_operand, options)) = parse_choose_formula(formula) {
+    let selector = parse_required_unsigned(connection, sheet, &selector_operand)?;
+    if selector == 0 {
+      return Ok(Some(String::new()));
+    }
+    let option_index = usize::try_from(selector.saturating_sub(1)).unwrap_or_default();
+    let selected = options.get(option_index).cloned().unwrap_or_default();
+    if let Some(value) = evaluate_formula_argument(connection, sheet, &selected)? {
+      return Ok(Some(value));
+    }
+    return Ok(Some(String::new()));
   }
 
   if let Some(concat_args) = parse_concat_formula(formula) {
@@ -1835,12 +1849,24 @@ mod tests {
         value: None,
         formula: Some(r#"=HLOOKUP("missing",E1:F2,2,FALSE)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 48,
+        value: None,
+        formula: Some(r#"=CHOOSE(2,"alpha",E2,"gamma")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 49,
+        value: None,
+        formula: Some(r#"=CHOOSE(5,"alpha","beta","gamma")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 45);
+    assert_eq!(updated_cells, 47);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -1854,7 +1880,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 47,
+        end_col: 49,
       },
     )
     .expect("cells should be fetched");
@@ -1930,6 +1956,8 @@ mod tests {
     assert_eq!(by_position(1, 45).evaluated_value.as_deref(), Some("120"));
     assert_eq!(by_position(1, 46).evaluated_value.as_deref(), Some("Southeast"));
     assert_eq!(by_position(1, 47).evaluated_value.as_deref(), Some(""));
+    assert_eq!(by_position(1, 48).evaluated_value.as_deref(), Some("south"));
+    assert_eq!(by_position(1, 49).evaluated_value.as_deref(), Some(""));
   }
 
   #[test]
