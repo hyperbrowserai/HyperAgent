@@ -793,10 +793,17 @@ export function normalizeMCPToolParams(
     return value;
   };
 
-  const sanitizeParamObject = (
-    value: Record<string, unknown>
-  ): Record<string, unknown> =>
-    sanitizeParamValue(value, new WeakSet<object>(), 0) as Record<string, unknown>;
+  const sanitizeParamInput = (value: unknown): Record<string, unknown> => {
+    const sanitized = sanitizeParamValue(value, new WeakSet<object>(), 0);
+    if (
+      typeof sanitized !== "object" ||
+      sanitized === null ||
+      Array.isArray(sanitized)
+    ) {
+      throw new Error("MCP tool params must be a JSON object at the root level");
+    }
+    return sanitized as Record<string, unknown>;
+  };
 
   if (typeof input === "string") {
     const trimmedInput = input.trim();
@@ -827,10 +834,10 @@ export function normalizeMCPToolParams(
         "MCP tool params must parse to a JSON object, not an array or primitive"
       );
     }
-    return sanitizeParamObject(parsed as Record<string, unknown>);
+    return sanitizeParamInput(parsed);
   }
 
-  return sanitizeParamObject(input);
+  return sanitizeParamInput(input);
 }
 
 class MCPClient {

@@ -193,6 +193,18 @@ describe("normalizeMCPToolParams", () => {
     );
   });
 
+  it("rejects non-object params at the root level for direct inputs", () => {
+    expect(() =>
+      normalizeMCPToolParams(42 as unknown as Record<string, unknown>)
+    ).toThrow("MCP tool params must be a JSON object at the root level");
+  });
+
+  it("rejects array params at the root level for direct inputs", () => {
+    expect(() =>
+      normalizeMCPToolParams([] as unknown as Record<string, unknown>)
+    ).toThrow("MCP tool params must be a JSON object at the root level");
+  });
+
   it("rejects oversized JSON string params before parsing", () => {
     const oversized = `{"data":"${"x".repeat(100_010)}"}`;
     expect(() => normalizeMCPToolParams(oversized)).toThrow(
