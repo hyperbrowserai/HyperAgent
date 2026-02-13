@@ -754,16 +754,19 @@ async function selectOption(
 ): Promise<void> {
   const { element } = ctx;
   const session = element.session;
-  const objectId = await ensureObjectHandle(element);
   const normalizedValue = stripControlChars(
     String(options.value ?? "")
   ).trim();
+  if (normalizedValue.length === 0) {
+    throw new Error("[CDP][Interactions] selectOption value must be non-empty");
+  }
   if (normalizedValue.length > MAX_SELECT_OPTION_INPUT_CHARS) {
     throw new Error(
       `[CDP][Interactions] selectOption value exceeds ${MAX_SELECT_OPTION_INPUT_CHARS} characters`
     );
   }
   const value = normalizedValue;
+  const objectId = await ensureObjectHandle(element);
 
   await ensureRuntimeEnabled(session);
   const result = await session.send<Protocol.Runtime.CallFunctionOnResponse>(

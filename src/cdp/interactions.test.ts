@@ -430,6 +430,26 @@ describe("dispatchCDPAction argument coercion", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("rejects empty selectOption values before dispatch", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return { result: { value: { status: "selected", value: "x" } } };
+    });
+
+    await expect(
+      dispatchCDPAction("selectOptionFromDropdown", ["   "], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow("[CDP][Interactions] selectOption value must be non-empty");
+    expect(calls).toHaveLength(0);
+  });
+
   it("still commits Enter for empty type action with commitEnter", async () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session = createSession(async (method, params) => {
