@@ -305,6 +305,28 @@ describe("normalizeOpenAIToolCalls", () => {
     );
   });
 
+  it("sanitizes and truncates oversized traversal diagnostics", () => {
+    const trappedArray = new Proxy([{}], {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.iterator) {
+          throw new Error(`iterator\u0000\n${"x".repeat(5_000)}`);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    try {
+      normalizeOpenAIToolCalls(trappedArray);
+      throw new Error("Expected normalizeOpenAIToolCalls to throw");
+    } catch (error) {
+      const message = String(error instanceof Error ? error.message : error);
+      expect(message).toContain("[truncated");
+      expect(message).not.toContain("\u0000");
+      expect(message).not.toContain("\n");
+      expect(message.length).toBeLessThan(2_500);
+    }
+  });
+
   it("normalizes non-string provider labels safely", () => {
     expect(() =>
       normalizeOpenAIToolCalls(

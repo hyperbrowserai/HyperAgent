@@ -72,13 +72,20 @@ function normalizeProviderLabel(providerLabel: unknown): string {
 }
 
 function formatToolCallDiagnostic(value: unknown): string {
-  const formatted = formatUnknownError(value);
-  if (formatted.length <= MAX_TOOL_CALL_DIAGNOSTIC_CHARS) {
-    return formatted;
+  const formatted = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = formatted.length > 0 ? formatted : "unknown error";
+  if (fallback.length <= MAX_TOOL_CALL_DIAGNOSTIC_CHARS) {
+    return fallback;
   }
 
-  const omitted = formatted.length - MAX_TOOL_CALL_DIAGNOSTIC_CHARS;
-  return `${formatted.slice(
+  const omitted = fallback.length - MAX_TOOL_CALL_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
     0,
     MAX_TOOL_CALL_DIAGNOSTIC_CHARS
   )}... [truncated ${omitted} chars]`;
