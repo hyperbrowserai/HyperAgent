@@ -84,11 +84,23 @@ export function normalizeMCPToolParams(
       seen.add(value);
       try {
         const sanitized: Record<string, unknown> = Object.create(null);
+        const seenKeys = new Set<string>();
         for (const [key, paramValue] of Object.entries(value)) {
-          if (UNSAFE_OBJECT_KEYS.has(normalizeParamKey(key))) {
+          const trimmedKey = key.trim();
+          if (trimmedKey.length === 0) {
+            throw new Error("MCP tool params cannot include empty keys");
+          }
+          const normalizedKey = normalizeParamKey(key);
+          if (UNSAFE_OBJECT_KEYS.has(normalizedKey)) {
             throw new Error(`MCP tool params cannot include reserved key "${key}"`);
           }
-          sanitized[key] = sanitizeParamValue(paramValue, seen, depth + 1);
+          if (seenKeys.has(trimmedKey)) {
+            throw new Error(
+              `MCP tool params cannot include duplicate key after trimming: "${trimmedKey}"`
+            );
+          }
+          seenKeys.add(trimmedKey);
+          sanitized[trimmedKey] = sanitizeParamValue(paramValue, seen, depth + 1);
         }
         return sanitized;
       } finally {

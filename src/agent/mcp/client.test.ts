@@ -14,6 +14,16 @@ describe("normalizeMCPToolParams", () => {
     expect(normalizeMCPToolParams(input)).toEqual(input);
   });
 
+  it("trims parameter keys before forwarding to tool execution", () => {
+    expect(
+      normalizeMCPToolParams({
+        "  query  ": "weather",
+      })
+    ).toEqual({
+      query: "weather",
+    });
+  });
+
   it("parses valid JSON object strings", () => {
     const json = "{\"query\":\"weather\",\"units\":\"metric\"}";
     expect(normalizeMCPToolParams(json)).toEqual({
@@ -84,6 +94,23 @@ describe("normalizeMCPToolParams", () => {
         "  Constructor  ": "bad",
       })
     ).toThrow('MCP tool params cannot include reserved key "  Constructor  "');
+  });
+
+  it("rejects empty keys after trimming", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        "   ": "bad",
+      })
+    ).toThrow("MCP tool params cannot include empty keys");
+  });
+
+  it("rejects duplicate keys after trimming", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        query: "weather",
+        " query ": "finance",
+      })
+    ).toThrow('MCP tool params cannot include duplicate key after trimming: "query"');
   });
 
   it("rejects params that exceed maximum nesting depth", () => {
