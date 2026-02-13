@@ -211,7 +211,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to attach task page listener: ${formatUnknownError(
+          `[HyperAgent] Failed to attach task page listener: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -225,7 +225,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } catch (error) {
         if (this.debug) {
           console.warn(
-            `[HyperAgent] Failed to detach task page listener: ${formatUnknownError(
+            `[HyperAgent] Failed to detach task page listener: ${this.formatLifecycleDiagnostic(
               error
             )}`
           );
@@ -431,7 +431,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to store action cache for task ${normalizedTaskId}: ${formatUnknownError(
+          `[HyperAgent] Failed to store action cache for task ${normalizedTaskId}: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -458,7 +458,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         } catch (error) {
           if (this.debug) {
             console.warn(
-              `[HyperAgent] Failed to evict action cache for task ${evictedTaskId}: ${formatUnknownError(
+              `[HyperAgent] Failed to evict action cache for task ${evictedTaskId}: ${this.formatLifecycleDiagnostic(
                 error
               )}`
             );
@@ -469,7 +469,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to update action-cache order for task ${normalizedTaskId}: ${formatUnknownError(
+          `[HyperAgent] Failed to update action-cache order for task ${normalizedTaskId}: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -494,7 +494,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to emit task error event: ${formatUnknownError(
+          `[HyperAgent] Failed to emit task error event: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -509,7 +509,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to clear task result for ${taskId}: ${formatUnknownError(
+          `[HyperAgent] Failed to clear task result for ${taskId}: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -520,7 +520,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to clear task state for ${taskId}: ${formatUnknownError(
+          `[HyperAgent] Failed to clear task state for ${taskId}: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -674,7 +674,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to track task result promise for ${taskId}: ${formatUnknownError(
+          `[HyperAgent] Failed to track task result promise for ${taskId}: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -688,7 +688,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to enumerate tasks during close: ${formatUnknownError(
+          `[HyperAgent] Failed to enumerate tasks during close: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -714,7 +714,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to read task state ${taskId}: ${formatUnknownError(
+          `[HyperAgent] Failed to read task state ${taskId}: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -842,7 +842,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to attach browser page listener: ${formatUnknownError(
+          `[HyperAgent] Failed to attach browser page listener: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );
@@ -1021,7 +1021,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         } catch (closeError) {
           if (this.debug) {
             console.warn(
-              `[HyperAgent] Failed to close browser provider after stale init: ${formatUnknownError(
+              `[HyperAgent] Failed to close browser provider after stale init: ${this.formatLifecycleDiagnostic(
                 closeError
               )}`
             );
@@ -1057,7 +1057,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         } catch (closeError) {
           if (this.debug) {
             console.warn(
-              `[HyperAgent] Failed to close browser provider after init failure: ${formatUnknownError(
+              `[HyperAgent] Failed to close browser provider after init failure: ${this.formatLifecycleDiagnostic(
                 closeError
               )}`
             );
@@ -1420,7 +1420,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } catch (emitError) {
         if (this.debug) {
           console.warn(
-            `[HyperAgent] Failed to emit task-scoped error for ${taskId}: ${formatUnknownError(
+            `[HyperAgent] Failed to emit task-scoped error for ${taskId}: ${this.formatLifecycleDiagnostic(
               emitError
             )}`
           );
@@ -1442,7 +1442,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to register task-scoped error listener for ${taskId}: ${formatUnknownError(
+          `[HyperAgent] Failed to register task-scoped error listener for ${taskId}: ${this.formatLifecycleDiagnostic(
             error
           )}`
         );

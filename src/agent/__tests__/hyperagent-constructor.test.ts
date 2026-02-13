@@ -2231,6 +2231,48 @@ describe("HyperAgent constructor and task controls", () => {
     });
   });
 
+  it("truncates oversized context-listener attach diagnostics", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      context: { on: (event: string, handler: unknown) => void } | null;
+    };
+    internalAgent.context = {
+      on: () => {
+        throw new Error("x".repeat(2_000));
+      },
+    };
+
+    const fakePage = {} as unknown as Page;
+    try {
+      const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.COMPLETED,
+      });
+      const warnedMessage = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warnedMessage).toContain("[truncated");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("executeTask tolerates context listener detach failures", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({
