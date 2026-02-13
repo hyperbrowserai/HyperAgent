@@ -53,6 +53,20 @@ describe("normalizeMCPToolParams", () => {
       })
     ).toThrow('MCP tool params cannot include reserved key "constructor"');
   });
+
+  it("rejects reserved object keys nested inside payloads", () => {
+    expect(() =>
+      normalizeMCPToolParams('{"outer":{"__proto__":{"x":1}}}')
+    ).toThrow('MCP tool params cannot include reserved key "__proto__"');
+  });
+
+  it("rejects circular references in direct object params", () => {
+    const circular: { self?: unknown } = {};
+    circular.self = circular;
+    expect(() => normalizeMCPToolParams(circular)).toThrow(
+      "MCP tool params cannot include circular references"
+    );
+  });
 });
 
 describe("stringifyMCPPayload", () => {
