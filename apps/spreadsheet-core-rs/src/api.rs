@@ -1169,6 +1169,7 @@ async fn get_agent_schema(
     "agent_ops_cache_remove_by_prefix_response_shape": {
       "request_id_prefix": "string",
       "max_age_seconds": "echoed age filter when provided",
+      "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "removed_entries": "number of removed cache entries matching prefix",
       "remaining_entries": "entries left in cache after removal"
     },
@@ -1180,6 +1181,7 @@ async fn get_agent_schema(
     "agent_ops_cache_remove_by_prefix_preview_response_shape": {
       "request_id_prefix": "string",
       "max_age_seconds": "echoed age filter when provided",
+      "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "matched_entries": "number of cache entries matching prefix",
       "sample_limit": "max sample request ids returned",
       "sample_request_ids": "newest-first sample matching request ids"
@@ -1840,6 +1842,7 @@ async fn remove_agent_ops_cache_entries_by_prefix(
   Ok(Json(RemoveAgentOpsCacheEntriesByPrefixResponse {
     request_id_prefix: request_id_prefix.to_string(),
     max_age_seconds: payload.max_age_seconds,
+    cutoff_timestamp,
     removed_entries,
     remaining_entries,
   }))
@@ -1909,6 +1912,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
   Ok(Json(PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
     request_id_prefix: request_id_prefix.to_string(),
     max_age_seconds: payload.max_age_seconds,
+    cutoff_timestamp,
     matched_entries,
     sample_limit,
     sample_request_ids,
@@ -2903,6 +2907,7 @@ mod tests {
     .expect("age-filtered prefix remove should succeed")
     .0;
     assert_eq!(age_filtered_remove.max_age_seconds, Some(86_400));
+    assert!(age_filtered_remove.cutoff_timestamp.is_some());
     assert_eq!(age_filtered_remove.removed_entries, 0);
     assert_eq!(age_filtered_remove.remaining_entries, 3);
 
@@ -2919,6 +2924,7 @@ mod tests {
     .0;
     assert_eq!(remove_response.request_id_prefix, "scenario-");
     assert_eq!(remove_response.max_age_seconds, None);
+    assert!(remove_response.cutoff_timestamp.is_none());
     assert_eq!(remove_response.removed_entries, 2);
     assert_eq!(remove_response.remaining_entries, 1);
 
@@ -2979,6 +2985,7 @@ mod tests {
     .0;
     assert_eq!(preview.request_id_prefix, "scenario-");
     assert_eq!(preview.max_age_seconds, None);
+    assert!(preview.cutoff_timestamp.is_none());
     assert_eq!(preview.matched_entries, 2);
     assert_eq!(preview.sample_limit, 1);
     assert_eq!(preview.sample_request_ids.len(), 1);
@@ -2997,6 +3004,7 @@ mod tests {
     .expect("age-filtered preview should succeed")
     .0;
     assert_eq!(age_filtered_preview.max_age_seconds, Some(86_400));
+    assert!(age_filtered_preview.cutoff_timestamp.is_some());
     assert_eq!(age_filtered_preview.matched_entries, 0);
     assert!(age_filtered_preview.sample_request_ids.is_empty());
 

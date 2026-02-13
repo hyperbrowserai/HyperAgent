@@ -106,8 +106,8 @@ Cache helpers:
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay` with `{ "request_id": "..." }` (returns `{ cached_response, operations }` where `operations` are the original cached ops payload)
 - `POST /v1/workbooks/{id}/agent/ops/cache/reexecute` with `{ "request_id": "...", "new_request_id": "..." }` (reexecutes cached operations as fresh `agent/ops`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
-- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix` with `{ "request_id_prefix": "scenario-", "max_age_seconds": 3600 }` (`max_age_seconds` optional for stale-only prefix cleanup)
-- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview` with `{ "request_id_prefix": "scenario-", "max_age_seconds": 3600, "sample_limit": 10 }` (optional sample_limit clamped to `1..100`; optional age filter; reports matched count + sample IDs before deletion)
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix` with `{ "request_id_prefix": "scenario-", "max_age_seconds": 3600 }` (`max_age_seconds` optional for stale-only prefix cleanup; response includes `cutoff_timestamp` when age filter is applied)
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview` with `{ "request_id_prefix": "scenario-", "max_age_seconds": 3600, "sample_limit": 10 }` (optional sample_limit clamped to `1..100`; optional age filter; reports matched count + sample IDs before deletion and includes scoped `cutoff_timestamp`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-stale` with `{ "max_age_seconds": 3600, "dry_run": true, "sample_limit": 10 }` (`dry_run` previews stale matches based on `cached_at` cutoff and returns sample IDs; sample_limit clamped to `1..100`)
 
 Supported `op_type` values:

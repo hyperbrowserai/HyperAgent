@@ -161,6 +161,7 @@ export function SpreadsheetApp() {
   const [cachePrefixRemovalPreview, setCachePrefixRemovalPreview] = useState<{
     requestIdPrefix: string;
     maxAgeSeconds: number | null;
+    cutoffTimestamp: string | null;
     matchedEntries: number;
     sampleLimit: number;
     sampleRequestIds: string[];
@@ -1633,6 +1634,10 @@ export function SpreadsheetApp() {
           typeof response.max_age_seconds === "number"
             ? ` (older than ${response.max_age_seconds}s)`
             : ""
+        }${
+          response.cutoff_timestamp
+            ? ` cutoff ${formatIsoTimestamp(response.cutoff_timestamp)}`
+            : ""
         }.`,
       );
       await Promise.all([
@@ -1687,6 +1692,7 @@ export function SpreadsheetApp() {
       setCachePrefixRemovalPreview({
         requestIdPrefix: preview.request_id_prefix,
         maxAgeSeconds: preview.max_age_seconds,
+        cutoffTimestamp: preview.cutoff_timestamp,
         matchedEntries: preview.matched_entries,
         sampleLimit: preview.sample_limit,
         sampleRequestIds: preview.sample_request_ids,
@@ -1697,6 +1703,10 @@ export function SpreadsheetApp() {
         } for prefix ${preview.request_id_prefix}${
           typeof preview.max_age_seconds === "number"
             ? ` (older than ${preview.max_age_seconds}s)`
+            : ""
+        }${
+          preview.cutoff_timestamp
+            ? ` cutoff ${formatIsoTimestamp(preview.cutoff_timestamp)}`
             : ""
         }.`,
       );
@@ -2861,6 +2871,14 @@ export function SpreadsheetApp() {
                             older than{" "}
                             <span className="font-mono">
                               {cachePrefixRemovalPreview.maxAgeSeconds}s
+                            </span>{" "}
+                          </>
+                        ) : null}
+                        {cachePrefixRemovalPreview.cutoffTimestamp ? (
+                          <>
+                            cutoff{" "}
+                            <span className="font-mono">
+                              {formatIsoTimestamp(cachePrefixRemovalPreview.cutoffTimestamp)}
                             </span>{" "}
                           </>
                         ) : null}
