@@ -500,6 +500,30 @@ describe("MCPClient.executeTool server selection", () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
+  it("trims provided serverId before server lookup", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn().mockResolvedValue({ content: [] });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.executeTool("search", { query: "weather" }, "  server-1  ");
+
+    expect(callTool).toHaveBeenCalledWith({
+      name: "search",
+      arguments: { query: "weather" },
+    });
+  });
+
   it("finds matching server by tool name when multiple are connected", async () => {
     const mcpClient = new MCPClient(false);
     const searchCallTool = jest.fn().mockResolvedValue({ content: [] });
@@ -553,9 +577,23 @@ describe("MCPClient.executeTool server selection", () => {
     ).rejects.toThrow("No valid server found for tool search");
   });
 
+  it("rejects empty tool names before server lookup", async () => {
+    const mcpClient = new MCPClient(false);
+    await expect(
+      mcpClient.executeTool("   ", { query: "missing" }, "unknown-server")
+    ).rejects.toThrow("MCP tool name must be a non-empty string");
+  });
+
+  it("rejects tool names with control characters", async () => {
+    const mcpClient = new MCPClient(false);
+    await expect(
+      mcpClient.executeTool("sea\nrch", { query: "missing" }, "unknown-server")
+    ).rejects.toThrow("MCP tool name contains unsupported control characters");
+  });
+
   it("sanitizes tool identifiers in missing-server errors", async () => {
     const mcpClient = new MCPClient(false);
-    const noisyToolName = `bad\n${"x".repeat(200)}`;
+    const noisyToolName = `bad-${"x".repeat(200)}`;
     expect.assertions(3);
     try {
       await mcpClient.executeTool(
@@ -610,11 +648,20 @@ describe("MCPClient.executeTool server selection", () => {
       ])
     );
 
-    await expect(
-      mcpClient.executeTool("search\ntool", { query: "missing" }, "server-a")
-    ).rejects.toThrow(
-      'Tool "search tool" is not registered on server "server-a"'
-    );
+    expect.assertions(4);
+    try {
+      await mcpClient.executeTool(
+        `search-${"x".repeat(200)}`,
+        { query: "missing" },
+        "server-a"
+      );
+      throw new Error("Expected executeTool to throw");
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain('Tool "search-');
+      expect(message).toContain('[truncated]" is not registered on server "server-a"');
+      expect(message).not.toContain("\n");
+    }
     expect(callTool).not.toHaveBeenCalled();
   });
 

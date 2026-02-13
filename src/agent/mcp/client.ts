@@ -25,6 +25,7 @@ const MAX_MCP_PARAM_STRING_CHARS = 20_000;
 const MAX_MCP_PARAM_KEY_CHARS = 256;
 const MAX_MCP_PARAM_COLLECTION_SIZE = 500;
 const MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS = 128;
+const MAX_MCP_TOOL_NAME_CHARS = 256;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -74,6 +75,38 @@ function formatMCPIdentifier(value: unknown, fallback: string): string {
     0,
     MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS
   )}... [truncated]`;
+}
+
+function normalizeMCPExecutionToolName(toolName: string): string {
+  const normalized = toolName.trim();
+  if (normalized.length === 0) {
+    throw new Error("MCP tool name must be a non-empty string");
+  }
+  if (hasAnyControlChars(normalized)) {
+    throw new Error("MCP tool name contains unsupported control characters");
+  }
+  if (normalized.length > MAX_MCP_TOOL_NAME_CHARS) {
+    throw new Error(
+      `MCP tool name exceeds ${MAX_MCP_TOOL_NAME_CHARS} characters`
+    );
+  }
+  return normalized;
+}
+
+function normalizeMCPExecutionServerId(
+  serverId?: string
+): string | undefined {
+  if (typeof serverId !== "string") {
+    return undefined;
+  }
+  const normalized = serverId.trim();
+  if (normalized.length === 0) {
+    return undefined;
+  }
+  if (hasAnyControlChars(normalized)) {
+    throw new Error("MCP serverId contains unsupported control characters");
+  }
+  return normalized;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -492,23 +525,27 @@ class MCPClient {
     parameters: Record<string, unknown>,
     serverId?: string
   ): Promise<MCPToolResult> {
-    const safeToolName = formatMCPIdentifier(toolName, "unknown-tool");
+    const normalizedToolName = normalizeMCPExecutionToolName(toolName);
+    const normalizedServerId = normalizeMCPExecutionServerId(serverId);
+    const safeToolName = formatMCPIdentifier(normalizedToolName, "unknown-tool");
     const safeServerId = (): string =>
       formatMCPIdentifier(serverId, "unknown-server");
 
     // If no server ID provided and only one server exists, use that one
-    if (!serverId && this.servers.size === 1) {
+    if (!normalizedServerId && this.servers.size === 1) {
       serverId = [...this.servers.keys()][0];
     }
 
     // If no server ID provided and multiple servers exist, try to find one with the tool
-    if (!serverId && this.servers.size > 1) {
+    if (!normalizedServerId && this.servers.size > 1) {
       for (const [id, server] of this.servers.entries()) {
-        if (server.tools.has(toolName)) {
+        if (server.tools.has(normalizedToolName)) {
           serverId = id;
           break;
         }
       }
+    } else if (normalizedServerId) {
+      serverId = normalizedServerId;
     }
 
     if (!serverId || !this.servers.has(serverId)) {
@@ -519,7 +556,7 @@ class MCPClient {
     if (!server) {
       throw new Error(`Server with ID ${safeServerId()} not found`);
     }
-    if (!server.tools.has(toolName)) {
+    if (!server.tools.has(normalizedToolName)) {
       throw new Error(
         `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
       );
@@ -527,7 +564,7 @@ class MCPClient {
 
     try {
       const result = await server.client.callTool({
-        name: toolName,
+        name: normalizedToolName,
         arguments: parameters,
       });
 
