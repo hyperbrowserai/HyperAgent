@@ -105,7 +105,9 @@ export async function setCellBatch(
 }
 
 interface AgentOpsRequest {
+  request_id?: string;
   actor?: string;
+  stop_on_error?: boolean;
   operations: Array<Record<string, unknown>>;
 }
 

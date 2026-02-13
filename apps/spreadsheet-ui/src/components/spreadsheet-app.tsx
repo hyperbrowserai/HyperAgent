@@ -44,6 +44,7 @@ export function SpreadsheetApp() {
   const [formulaInput, setFormulaInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningAgentFlow, setIsRunningAgentFlow] = useState(false);
+  const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
 
   const createWorkbookMutation = useMutation({
@@ -140,8 +141,10 @@ export function SpreadsheetApp() {
     setIsSaving(true);
     try {
       const isFormula = formulaInput.trim().startsWith("=");
-      await runAgentOps(workbook.id, {
+      const response = await runAgentOps(workbook.id, {
+        request_id: `formula-${Date.now()}`,
         actor: "ui-formula-bar",
+        stop_on_error: true,
         operations: [
           {
             op_type: "set_cells",
@@ -168,6 +171,8 @@ export function SpreadsheetApp() {
           },
         ],
       });
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastAgentOps(response.results);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
@@ -210,7 +215,9 @@ export function SpreadsheetApp() {
     setIsRunningAgentFlow(true);
     try {
       const response = await runAgentOps(workbook.id, {
+        request_id: `agent-demo-${Date.now()}`,
         actor: "ui-agent-demo",
+        stop_on_error: true,
         operations: [
           {
             op_type: "set_cells",
@@ -240,6 +247,7 @@ export function SpreadsheetApp() {
           { op_type: "export_workbook", include_file_base64: false },
         ],
       });
+      setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
@@ -392,6 +400,12 @@ export function SpreadsheetApp() {
             <h2 className="mb-2 text-sm font-semibold text-slate-200">
               Last Agent Operation Batch
             </h2>
+            {lastAgentRequestId && (
+              <p className="mb-2 text-xs text-slate-400">
+                request_id:{" "}
+                <span className="font-mono text-slate-200">{lastAgentRequestId}</span>
+              </p>
+            )}
             <div className="overflow-auto rounded-lg border border-slate-800 bg-slate-950">
               <table className="w-full border-collapse text-xs">
                 <thead>

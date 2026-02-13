@@ -42,5 +42,6 @@ export interface AgentOperationResult {
 }
 
 export interface AgentOpsResponse {
+  request_id?: string;
   results: AgentOperationResult[];
 }
