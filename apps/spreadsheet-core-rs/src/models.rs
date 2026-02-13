@@ -112,7 +112,9 @@ pub struct QueryRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsRequest {
+  pub request_id: Option<String>,
   pub actor: Option<String>,
+  pub stop_on_error: Option<bool>,
   pub operations: Vec<AgentOperation>,
 }
 
@@ -148,6 +150,7 @@ pub struct AgentOperationResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsResponse {
+  pub request_id: Option<String>,
   pub results: Vec<AgentOperationResult>,
 }
 

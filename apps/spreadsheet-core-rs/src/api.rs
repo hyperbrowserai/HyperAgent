@@ -286,7 +286,9 @@ async fn agent_ops(
   Path(workbook_id): Path<Uuid>,
   Json(payload): Json<AgentOpsRequest>,
 ) -> Result<Json<AgentOpsResponse>, ApiError> {
+  let request_id = payload.request_id.clone();
   let actor = payload.actor.unwrap_or_else(|| "agent".to_string());
+  let stop_on_error = payload.stop_on_error.unwrap_or(false);
   let mut results = Vec::new();
 
   for (op_index, operation) in payload.operations.into_iter().enumerate() {
@@ -396,9 +398,13 @@ async fn agent_ops(
         }),
       }),
     }
+
+    if stop_on_error && results.last().map(|entry| entry.ok == false).unwrap_or(false) {
+      break;
+    }
   }
 
-  Ok(Json(AgentOpsResponse { results }))
+  Ok(Json(AgentOpsResponse { request_id, results }))
 }
 
 async fn duckdb_query(

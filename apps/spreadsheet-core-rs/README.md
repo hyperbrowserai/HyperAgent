@@ -42,6 +42,11 @@ Server defaults to `http://localhost:8787`.
 
 `POST /v1/workbooks/{id}/agent/ops` executes a list of typed operations in order and returns per-operation results.
 
+Request options:
+- `request_id` (optional): caller correlation ID echoed in response.
+- `actor` (optional): appears in emitted workbook events.
+- `stop_on_error` (optional, default `false`): stop processing remaining operations after first failure.
+
 Supported `op_type` values:
 - `get_workbook`
 - `list_sheets`
