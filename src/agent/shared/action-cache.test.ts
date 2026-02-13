@@ -322,6 +322,27 @@ describe("action cache helpers", () => {
     expect(script).toContain("waitForTimeout(1000)");
   });
 
+  it("caps oversized wait durations in generated script", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 9,
+      instruction: "wait oversized",
+      elementId: null,
+      method: null,
+      arguments: ["999999"],
+      actionType: "wait",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain("waitForTimeout(120000)");
+  });
+
   it("renders waitForLoadState script with timeout when provided", () => {
     const waitEntry: ActionCacheEntry = {
       stepIndex: 12,
@@ -454,6 +475,27 @@ describe("action cache helpers", () => {
 
     expect(script).toContain('await page.waitForLoadState("networkidle");');
     expect(script).not.toContain("timeout: -10");
+  });
+
+  it("caps oversized waitForLoadState timeout in generated script", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 17,
+      instruction: "wait oversized timeout",
+      elementId: null,
+      method: null,
+      arguments: ["load", "999999"],
+      actionType: "waitForLoadState",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain('await page.waitForLoadState("load", { timeout: 120000 });');
   });
 
   it("skips helper generation when xpath is missing", () => {
@@ -639,5 +681,35 @@ describe("action cache helpers", () => {
     expect(idx0).toBeGreaterThan(-1);
     expect(idx2).toBeGreaterThan(idx0);
     expect(idxNaN).toBeGreaterThan(idx2);
+  });
+
+  it("handles trap-prone step getters without crashing script generation", () => {
+    const trappedStep = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (
+            prop === "stepIndex" ||
+            prop === "actionType" ||
+            prop === "instruction" ||
+            prop === "method" ||
+            prop === "xpath" ||
+            prop === "arguments" ||
+            prop === "actionParams" ||
+            prop === "frameIndex"
+          ) {
+            throw new Error("step getter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as ActionCacheEntry;
+
+    const script = createScriptFromActionCache({
+      steps: [trappedStep],
+    });
+
+    expect(script).toContain("// Step -1");
+    expect(script).toContain("unsupported actionType=unknown");
   });
 });

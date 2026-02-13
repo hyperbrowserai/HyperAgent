@@ -8,6 +8,9 @@ interface CreateScriptFromActionCacheParams {
 const getSortStepIndex = (value: number): number =>
   Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
 
+const MAX_SCRIPT_WAIT_MS = 120_000;
+const MAX_SCRIPT_TIMEOUT_MS = 120_000;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -33,12 +36,37 @@ const asNumber = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const safeReadStepField = (
+  step: ActionCacheEntry,
+  field: keyof ActionCacheEntry
+): unknown => {
+  try {
+    return (step as unknown as Record<string, unknown>)[field];
+  } catch {
+    return undefined;
+  }
+};
+
+const safeReadArrayIndex = (value: unknown, index: number): unknown => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  try {
+    return value[index];
+  } catch {
+    return undefined;
+  }
+};
+
 const normalizeWaitMs = (value: unknown): number => {
   const parsed = asNumber(value);
   if (parsed === undefined) {
     return 1000;
   }
-  return parsed >= 0 ? parsed : 1000;
+  if (parsed < 0) {
+    return 1000;
+  }
+  return Math.min(parsed, MAX_SCRIPT_WAIT_MS);
 };
 
 const normalizeWaitUntil = (value: unknown): "domcontentloaded" | "load" | "networkidle" => {
@@ -54,7 +82,10 @@ const normalizeOptionalTimeoutMs = (value: unknown): number | undefined => {
   if (parsed === undefined) {
     return undefined;
   }
-  return parsed >= 0 ? parsed : undefined;
+  if (parsed < 0) {
+    return undefined;
+  }
+  return Math.min(parsed, MAX_SCRIPT_TIMEOUT_MS);
 };
 
 export function createScriptFromActionCache(
@@ -103,17 +134,32 @@ export function createScriptFromActionCache(
   const formatCall = (step: ActionCacheEntry): string => {
     const indent = "  ";
     const argIndent = `${indent}  `;
-    const safeStepIndex = Number.isFinite(step.stepIndex) ? step.stepIndex : -1;
+    const stepIndexValue = safeReadStepField(step, "stepIndex");
+    const actionTypeValue = safeReadStepField(step, "actionType");
+    const instructionValue = safeReadStepField(step, "instruction");
+    const methodValue = safeReadStepField(step, "method");
+    const xpathValue = safeReadStepField(step, "xpath");
+    const frameIndexValue = safeReadStepField(step, "frameIndex");
+    const argumentsValue = safeReadStepField(step, "arguments");
+    const actionParamsValue = safeReadStepField(step, "actionParams");
+    const safeStepIndex =
+      typeof stepIndexValue === "number" && Number.isFinite(stepIndexValue)
+        ? stepIndexValue
+        : -1;
+    const actionType = isNonEmptyString(actionTypeValue)
+      ? actionTypeValue
+      : "unknown";
 
-    if (step.actionType === "complete") {
+    if (actionType === "complete") {
       return `${indent}// Step ${safeStepIndex} (complete skipped in script)`;
     }
 
-    if (step.actionType === "goToUrl") {
-      const actionParams = isRecord(step.actionParams)
-        ? step.actionParams
+    if (actionType === "goToUrl") {
+      const actionParams = isRecord(actionParamsValue)
+        ? actionParamsValue
         : undefined;
-      const argumentUrl = asNonEmptyTrimmedString(step.arguments?.[0]) ?? "";
+      const argumentUrl =
+        asNonEmptyTrimmedString(safeReadArrayIndex(argumentsValue, 0)) ?? "";
       const urlArg =
         argumentUrl ||
         (asNonEmptyTrimmedString(actionParams?.url) ?? "") ||
@@ -125,29 +171,31 @@ ${argIndent}{ waitUntil: "domcontentloaded" }
 ${indent});`;
     }
 
-    if (step.actionType === "refreshPage") {
+    if (actionType === "refreshPage") {
       return `${indent}// Step ${safeStepIndex}
 ${indent}await page.reload({ waitUntil: "domcontentloaded" });`;
     }
 
-    if (step.actionType === "wait") {
-      const actionParams = isRecord(step.actionParams)
-        ? step.actionParams
+    if (actionType === "wait") {
+      const actionParams = isRecord(actionParamsValue)
+        ? actionParamsValue
         : undefined;
-      const waitMs = normalizeWaitMs(step.arguments?.[0] ?? actionParams?.duration);
+      const waitMs = normalizeWaitMs(
+        safeReadArrayIndex(argumentsValue, 0) ?? actionParams?.duration
+      );
       return `${indent}// Step ${safeStepIndex}
 ${indent}await page.waitForTimeout(${waitMs});`;
     }
 
-    if (step.actionType === "waitForLoadState") {
-      const actionParams = isRecord(step.actionParams)
-        ? step.actionParams
+    if (actionType === "waitForLoadState") {
+      const actionParams = isRecord(actionParamsValue)
+        ? actionParamsValue
         : undefined;
       const waitUntil = normalizeWaitUntil(
-        step.arguments?.[0] ?? actionParams?.waitUntil
+        safeReadArrayIndex(argumentsValue, 0) ?? actionParams?.waitUntil
       );
       const timeoutMs = normalizeOptionalTimeoutMs(
-        step.arguments?.[1] ?? actionParams?.timeout
+        safeReadArrayIndex(argumentsValue, 1) ?? actionParams?.timeout
       );
       if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs)) {
         return `${indent}// Step ${safeStepIndex}
@@ -157,8 +205,8 @@ ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)}, { timeout: ${
 ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)});`;
     }
 
-    if (step.actionType === "extract") {
-      const extractInstruction = asNonEmptyTrimmedString(step.instruction);
+    if (actionType === "extract") {
+      const extractInstruction = asNonEmptyTrimmedString(instructionValue);
       if (!extractInstruction) {
         return `${indent}// Step ${safeStepIndex} (extract skipped: missing instruction)`;
       }
@@ -166,24 +214,26 @@ ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)});`;
 ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
     }
 
-    const normalizedMethod = normalizeHelperMethod(step.method);
+    const normalizedMethod = normalizeHelperMethod(
+      typeof methodValue === "string" ? methodValue : null
+    );
     const call = normalizedMethod ? METHOD_TO_CALL[normalizedMethod] : undefined;
     if (call) {
-      const normalizedXPath = asNonEmptyTrimmedString(step.xpath);
+      const normalizedXPath = asNonEmptyTrimmedString(xpathValue);
       if (!normalizedXPath) {
-        return `${indent}// Step ${safeStepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"}, reason=missing xpath)`;
+        return `${indent}// Step ${safeStepIndex} (unsupported actionType=${actionType}, method=${typeof methodValue === "string" ? methodValue : "N/A"}, reason=missing xpath)`;
       }
       const options: Record<string, unknown> = {};
-      const performInstruction = asNonEmptyTrimmedString(step.instruction);
+      const performInstruction = asNonEmptyTrimmedString(instructionValue);
       if (performInstruction) {
         options.performInstruction = performInstruction;
       }
       if (
-        step.frameIndex !== null &&
-        step.frameIndex !== undefined &&
-        step.frameIndex !== 0
+        typeof frameIndexValue === "number" &&
+        Number.isFinite(frameIndexValue) &&
+        frameIndexValue !== 0
       ) {
-        options.frameIndex = step.frameIndex;
+        options.frameIndex = frameIndexValue;
       }
 
       const optionEntries = Object.entries(options).map(
@@ -197,7 +247,7 @@ ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
       const callArgs = [
         `${argIndent}${JSON.stringify(normalizedXPath)},`,
         call.needsValue
-          ? `${argIndent}${JSON.stringify(step.arguments?.[0] ?? "")},`
+          ? `${argIndent}${JSON.stringify(safeReadArrayIndex(argumentsValue, 0) ?? "")},`
           : null,
         optionsBlock ? `${optionsBlock},` : null,
       ]
@@ -210,7 +260,7 @@ ${callArgs}
 ${indent});`;
     }
 
-    return `${indent}// Step ${safeStepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"})`;
+    return `${indent}// Step ${safeStepIndex} (unsupported actionType=${actionType}, method=${typeof methodValue === "string" ? methodValue : "N/A"})`;
   };
 
   const stepSnippets = [...steps]
