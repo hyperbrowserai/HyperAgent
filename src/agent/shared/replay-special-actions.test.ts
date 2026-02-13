@@ -26,6 +26,7 @@ function createPage(overrides?: Record<string, unknown>) {
     goto: jest.fn().mockResolvedValue(undefined),
     reload: jest.fn().mockResolvedValue(undefined),
     waitForTimeout: jest.fn().mockResolvedValue(undefined),
+    waitForLoadState: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -142,6 +143,43 @@ describe("executeReplaySpecialAction", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it("replays waitForLoadState with timeout argument", async () => {
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-loadstate",
+      actionType: "waitForLoadState",
+      arguments: ["networkidle", 2500],
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForLoadState).toHaveBeenCalledWith("networkidle", {
+      timeout: 2500,
+    });
+    expect(markDomSnapshotDirty).toHaveBeenCalledWith(page);
+    expect(result?.status).toBe("completed");
+    expect(result?.output).toBe("Waited for load state: networkidle");
+  });
+
+  it("fails extract replay when extracted object cannot be serialized", async () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const extract = jest.fn().mockResolvedValue(circular);
+    const page = createPage({
+      extract,
+    });
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-circular-extract",
+      actionType: "extract",
+      instruction: "extract circular object",
+      page: page as unknown as Page,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.output).toContain("could not serialize extracted output");
   });
 
   it("honors explicit retry metadata value", async () => {

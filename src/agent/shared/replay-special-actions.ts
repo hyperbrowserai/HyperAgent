@@ -18,6 +18,7 @@ export const REPLAY_SPECIAL_ACTION_TYPES: ReadonlySet<string> = new Set([
   "complete",
   "refreshPage",
   "wait",
+  "waitForLoadState",
   "extract",
   "analyzePdf",
 ]);
@@ -53,6 +54,10 @@ function asNumber(value: unknown): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function normalizeWaitMs(value: unknown): number {
@@ -163,14 +168,28 @@ export async function executeReplaySpecialAction(
     }
     try {
       const extracted = await extractPage.extract(extractInstruction);
+      let serializedExtracted = "";
+      if (typeof extracted === "string") {
+        serializedExtracted = extracted;
+      } else {
+        try {
+          serializedExtracted = JSON.stringify(extracted);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return {
+            taskId,
+            status: TaskStatus.FAILED,
+            steps: [],
+            output: `Extract failed: could not serialize extracted output (${message})`,
+            replayStepMeta: createReplayMeta(retries),
+          };
+        }
+      }
       return {
         taskId,
         status: TaskStatus.COMPLETED,
         steps: [],
-        output:
-          typeof extracted === "string"
-            ? extracted
-            : JSON.stringify(extracted),
+        output: serializedExtracted,
         replayStepMeta: createReplayMeta(retries),
       };
     } catch (error) {
@@ -191,6 +210,25 @@ export async function executeReplaySpecialAction(
       status: TaskStatus.FAILED,
       steps: [],
       output: "analyzePdf replay is not supported in runFromActionCache.",
+      replayStepMeta: createReplayMeta(retries),
+    };
+  }
+
+  if (actionType === "waitForLoadState") {
+    const waitUntil = asNonEmptyTrimmedString(actionArgs?.[0]) ?? "domcontentloaded";
+    const timeoutMs = asFiniteNumber(actionArgs?.[1]);
+    const options =
+      timeoutMs !== undefined ? { timeout: timeoutMs } : undefined;
+    await page.waitForLoadState(
+      waitUntil as "domcontentloaded" | "load" | "networkidle",
+      options
+    );
+    markDomSnapshotDirty(page);
+    return {
+      taskId,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: `Waited for load state: ${waitUntil}`,
       replayStepMeta: createReplayMeta(retries),
     };
   }
