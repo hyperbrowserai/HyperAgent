@@ -48,6 +48,7 @@ const MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS = 4;
 const MAX_STRUCTURED_DIAGNOSTIC_PARSE_CHARS = 100_000;
 const MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS = 4_000;
 const MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS = 8_000;
+const MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS = 120;
 const MAX_SCHEMA_ERROR_SUMMARY_CHARS = 3_000;
 const MAX_SCHEMA_ERROR_HISTORY = 20;
 
@@ -58,6 +59,21 @@ function truncateDiagnosticText(value: string, maxChars: number): string {
 
   const omittedChars = value.length - maxChars;
   return `${value.slice(0, maxChars)}... [truncated ${omittedChars} chars]`;
+}
+
+function formatDiagnosticIdentifier(value: unknown, fallback: string): string {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = raw
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncateDiagnosticText(
+    normalized,
+    MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS
+  );
 }
 
 function safeJsonStringify(value: unknown, spacing: number = 2): string {
@@ -572,8 +588,14 @@ export const runAgentTask = async (
             return structuredResult.parsed;
           }
 
-          const providerId = ctx.llm?.getProviderId?.() ?? "unknown-provider";
-          const modelId = ctx.llm?.getModelId?.() ?? "unknown-model";
+          const providerId = formatDiagnosticIdentifier(
+            ctx.llm?.getProviderId?.(),
+            "unknown-provider"
+          );
+          const modelId = formatDiagnosticIdentifier(
+            ctx.llm?.getModelId?.(),
+            "unknown-model"
+          );
 
           // Try to get detailed Zod validation error
           let validationError = "Unknown validation error";

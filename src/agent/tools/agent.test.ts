@@ -210,7 +210,11 @@ function createThrowingObjectCtx(): AgentCtx {
   };
 }
 
-function createSchemaRetryCtx(rawText: string): AgentCtx {
+function createSchemaRetryCtx(
+  rawText: string,
+  providerId = "mock",
+  modelId = "mock-model"
+): AgentCtx {
   const parsedAction = {
     thoughts: "done",
     memory: "done",
@@ -240,8 +244,8 @@ function createSchemaRetryCtx(rawText: string): AgentCtx {
       content: "ok",
     }),
     invokeStructured,
-    getProviderId: () => "mock",
-    getModelId: () => "mock-model",
+    getProviderId: () => providerId,
+    getModelId: () => modelId,
     getCapabilities: () => ({
       multimodal: false,
       toolCalling: true,
@@ -729,6 +733,32 @@ describe("runAgentTask completion behavior", () => {
       expect(retryLogLine).toBe(
         '[LLM][StructuredOutput] Retry error Retry Attempt 1/3: {"reason":"temporary llm failure"}'
       );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("sanitizes structured-output provider diagnostics in logs", async () => {
+    const page = createMockPage();
+    const noisyProviderId = `provider\n${"x".repeat(200)}`;
+    const noisyModelId = `model\t${"y".repeat(200)}`;
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createSchemaRetryCtx("{}", noisyProviderId, noisyModelId);
+
+    try {
+      await runAgentTask(ctx, createTaskState(page));
+
+      const structuredLogLine = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) =>
+          line.includes("[LLM][StructuredOutput] Failed to parse response")
+        );
+      expect(structuredLogLine).toBeDefined();
+      expect(structuredLogLine).toContain("provider ");
+      expect(structuredLogLine).toContain("model ");
+      expect(structuredLogLine).toContain("[truncated");
+      expect(structuredLogLine).not.toContain("\n");
+      expect(structuredLogLine).not.toContain("\t");
     } finally {
       errorSpy.mockRestore();
     }
