@@ -6,6 +6,8 @@ import {
   stringifyMCPPayload,
 } from "@/agent/mcp/client";
 import { MCPServerConfig } from "@/types/config";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Tool } from "@modelcontextprotocol/sdk/types";
 
 function setServersForClient(client: MCPClient, servers: Map<string, unknown>): void {
@@ -568,6 +570,34 @@ describe("stringifyMCPPayload", () => {
 });
 
 describe("MCPClient.connectToServer validation", () => {
+  it("closes pending transport when connection fails after connect", async () => {
+    const connectSpy = jest
+      .spyOn(Client.prototype, "connect")
+      .mockResolvedValue(undefined);
+    const listToolsSpy = jest
+      .spyOn(Client.prototype, "listTools")
+      .mockRejectedValue(new Error("listTools failed"));
+    const closeSpy = jest
+      .spyOn(StdioClientTransport.prototype, "close")
+      .mockResolvedValue(undefined);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const mcpClient = new MCPClient(false);
+
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+        })
+      ).rejects.toThrow("listTools failed");
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      connectSpy.mockRestore();
+      listToolsSpy.mockRestore();
+      closeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("rejects non-object server configs", async () => {
     const mcpClient = new MCPClient(false);
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});

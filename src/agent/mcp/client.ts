@@ -862,6 +862,8 @@ class MCPClient {
   async connectToServer(
     serverConfig: MCPServerConfig
   ): Promise<{ serverId: string; actions: AgentActionDefinition[] }> {
+    let pendingTransport: StdioClientTransport | SSEClientTransport | undefined;
+    let pendingServerId: string | undefined;
     try {
       if (!isMCPServerConfig(serverConfig)) {
         throw new Error("MCP server config must be an object");
@@ -871,6 +873,7 @@ class MCPClient {
         serverConfig.id
       );
       const serverId = normalizedConfigServerId || uuidv4();
+      pendingServerId = serverId;
       const existingServerId = findConnectedServerId(this.servers, serverId);
       if (existingServerId) {
         throw new Error(
@@ -937,6 +940,7 @@ class MCPClient {
           stderr: this.debug ? "inherit" : "ignore",
         });
       }
+      pendingTransport = transport;
 
       const client = new Client({
         name: `hyperagent-mcp-client-${serverId}`,
@@ -1007,6 +1011,22 @@ class MCPClient {
       }
       return { serverId, actions };
     } catch (error) {
+      if (
+        pendingTransport &&
+        (!pendingServerId || !this.servers.has(pendingServerId))
+      ) {
+        try {
+          await pendingTransport.close();
+        } catch (cleanupError) {
+          if (this.debug) {
+            console.warn(
+              `Failed to clean up MCP transport after connect failure: ${formatUnknownError(
+                cleanupError
+              )}`
+            );
+          }
+        }
+      }
       console.error(
         `Failed to connect to MCP server: ${formatUnknownError(error)}`
       );
