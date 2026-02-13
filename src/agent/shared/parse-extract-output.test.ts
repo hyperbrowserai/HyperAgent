@@ -37,6 +37,14 @@ describe("parseExtractOutput", () => {
     });
   });
 
+  it("parses structured output with BOM-prefixed JSON", () => {
+    const schema = z.object({
+      total: z.number(),
+    });
+    const parsed = parseExtractOutput("\uFEFF{\"total\":42}", "completed", schema);
+    expect(parsed).toEqual({ total: 42 });
+  });
+
   it("throws clear error for invalid JSON structured output", () => {
     const schema = z.object({
       total: z.number(),

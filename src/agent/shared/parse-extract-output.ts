@@ -36,9 +36,11 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
     );
   }
 
+  const normalizedOutput = rawOutput.replace(/^\uFEFF/, "");
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(rawOutput);
+    parsed = JSON.parse(normalizedOutput);
   } catch (error) {
     const message = formatUnknownError(error);
     throw new Error(
