@@ -56,6 +56,7 @@ export function SpreadsheetApp() {
   const [isRunningScenario, setIsRunningScenario] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
+  const [eventFilter, setEventFilter] = useState<string>("all");
   const [uiError, setUiError] = useState<string | null>(null);
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
@@ -176,6 +177,18 @@ export function SpreadsheetApp() {
       };
     });
   }, [cellsByAddress]);
+
+  const eventTypeOptions = useMemo(() => {
+    const unique = Array.from(new Set(eventLog.map((event) => event.event_type)));
+    return ["all", ...unique];
+  }, [eventLog]);
+
+  const filteredEvents = useMemo(() => {
+    if (eventFilter === "all") {
+      return eventLog;
+    }
+    return eventLog.filter((event) => event.event_type === eventFilter);
+  }, [eventFilter, eventLog]);
 
   const statusText =
     createWorkbookMutation.isPending || importMutation.isPending
@@ -748,17 +761,38 @@ export function SpreadsheetApp() {
           </div>
 
           <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
-            <h2 className="mb-2 text-sm font-semibold text-slate-200">
-              Realtime Event Stream
-            </h2>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-slate-200">
+                Realtime Event Stream
+              </h2>
+              <div className="flex items-center gap-2 text-xs">
+                <label htmlFor="event-filter" className="text-slate-400">
+                  Filter
+                </label>
+                <select
+                  id="event-filter"
+                  value={eventFilter}
+                  onChange={(event) => setEventFilter(event.target.value)}
+                  className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
+                >
+                  {eventTypeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div className="h-72 overflow-auto rounded-lg border border-slate-800 bg-slate-950">
-              {eventLog.length === 0 ? (
+              {filteredEvents.length === 0 ? (
                 <p className="px-3 py-4 text-xs text-slate-500">
-                  Waiting for workbook events...
+                  {eventLog.length === 0
+                    ? "Waiting for workbook events..."
+                    : "No events match current filter."}
                 </p>
               ) : (
                 <ul className="divide-y divide-slate-800 text-xs">
-                  {eventLog.map((event) => (
+                  {filteredEvents.map((event) => (
                     <li key={`${event.seq}-${event.timestamp}`} className="px-3 py-2">
                       <div className="mb-1 flex items-center justify-between gap-2">
                         <span className="rounded-full border border-indigo-400/40 bg-indigo-500/15 px-2 py-0.5 font-medium text-indigo-200">
