@@ -67,6 +67,19 @@ describe("normalizeMCPToolParams", () => {
       "MCP tool params cannot include circular references"
     );
   });
+
+  it("allows repeated shared object references across sibling fields", () => {
+    const shared = { query: "weather" };
+    expect(
+      normalizeMCPToolParams({
+        first: shared,
+        second: shared,
+      })
+    ).toEqual({
+      first: { query: "weather" },
+      second: { query: "weather" },
+    });
+  });
 });
 
 describe("stringifyMCPPayload", () => {

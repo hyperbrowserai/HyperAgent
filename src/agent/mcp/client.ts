@@ -57,21 +57,29 @@ export function normalizeMCPToolParams(
     seen: WeakSet<object>
   ): unknown => {
     if (Array.isArray(value)) {
-      return value.map((entry) => sanitizeParamValue(entry, seen));
+      try {
+        return value.map((entry) => sanitizeParamValue(entry, seen));
+      } finally {
+        seen.delete(value);
+      }
     }
     if (typeof value === "object" && value !== null) {
       if (seen.has(value)) {
         throw new Error("MCP tool params cannot include circular references");
       }
       seen.add(value);
-      const sanitized: Record<string, unknown> = Object.create(null);
-      for (const [key, paramValue] of Object.entries(value)) {
-        if (UNSAFE_OBJECT_KEYS.has(key)) {
-          throw new Error(`MCP tool params cannot include reserved key "${key}"`);
+      try {
+        const sanitized: Record<string, unknown> = Object.create(null);
+        for (const [key, paramValue] of Object.entries(value)) {
+          if (UNSAFE_OBJECT_KEYS.has(key)) {
+            throw new Error(`MCP tool params cannot include reserved key "${key}"`);
+          }
+          sanitized[key] = sanitizeParamValue(paramValue, seen);
         }
-        sanitized[key] = sanitizeParamValue(paramValue, seen);
+        return sanitized;
+      } finally {
+        seen.delete(value);
       }
-      return sanitized;
     }
     return value;
   };
