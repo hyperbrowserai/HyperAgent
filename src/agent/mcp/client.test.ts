@@ -101,6 +101,14 @@ describe("normalizeMCPToolParams", () => {
     ).toThrow("MCP tool params cannot include keys with control characters");
   });
 
+  it("rejects keys with newline characters", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        "bad\nkey": "value",
+      })
+    ).toThrow("MCP tool params cannot include keys with control characters");
+  });
+
   it("rejects keys that exceed maximum length", () => {
     expect(() =>
       normalizeMCPToolParams({
@@ -253,6 +261,15 @@ describe("normalizeMCPToolParams", () => {
     ).toThrow(
       'MCP tool params cannot include duplicate key after trimming: "user id"'
     );
+  });
+
+  it("rejects map keys with newline characters", () => {
+    const map = new Map<unknown, unknown>([["bad\nkey", "value"]]);
+    expect(() =>
+      normalizeMCPToolParams({
+        metadata: map as unknown as Record<string, unknown>,
+      })
+    ).toThrow("MCP tool params cannot include keys with control characters");
   });
 
   it("rejects map keys that exceed maximum length", () => {
