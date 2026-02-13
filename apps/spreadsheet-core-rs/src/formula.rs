@@ -524,6 +524,22 @@ pub fn parse_second_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_iseven_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ISEVEN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_isodd_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ISODD" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_countif_formula(formula: &str) -> Option<((u32, u32), (u32, u32), String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "COUNTIF" || args.len() != 2 {
@@ -748,6 +764,7 @@ mod tests {
     parse_exact_formula,
     parse_hour_formula, parse_minute_formula, parse_second_formula,
     parse_index_formula, parse_int_formula, parse_isblank_formula,
+    parse_iseven_formula, parse_isodd_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_lower_formula, parse_match_formula, parse_maxifs_formula,
     parse_minifs_formula,
@@ -941,6 +958,14 @@ mod tests {
     );
     assert_eq!(
       parse_istext_formula("=ISTEXT(A1)").as_deref(),
+      Some("A1"),
+    );
+    assert_eq!(
+      parse_iseven_formula("=ISEVEN(A1)").as_deref(),
+      Some("A1"),
+    );
+    assert_eq!(
+      parse_isodd_formula("=ISODD(A1)").as_deref(),
       Some("A1"),
     );
 

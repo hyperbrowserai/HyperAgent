@@ -92,6 +92,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "ISBLANK",
   "ISNUMBER",
   "ISTEXT",
+  "ISEVEN",
+  "ISODD",
   "TODAY",
   "NOW",
   "DATE",

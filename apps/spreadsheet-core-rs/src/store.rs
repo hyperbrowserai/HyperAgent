@@ -8,7 +8,8 @@ use crate::{
     parse_abs_formula, parse_choose_formula, parse_left_formula,
     parse_ceiling_formula, parse_exact_formula, parse_floor_formula,
     parse_index_formula,
-    parse_int_formula, parse_isblank_formula, parse_isnumber_formula,
+    parse_int_formula, parse_isblank_formula, parse_iseven_formula,
+    parse_isnumber_formula, parse_isodd_formula,
     parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
     parse_match_formula, parse_maxifs_formula, parse_minifs_formula,
@@ -449,6 +450,24 @@ fn evaluate_formula(
     let value = resolve_scalar_operand(connection, sheet, &is_text_arg)?;
     let is_text = !value.is_empty() && value.trim().parse::<f64>().is_err();
     return Ok(Some(is_text.to_string()));
+  }
+
+  if let Some(is_even_arg) = parse_iseven_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &is_even_arg)?;
+    let Some(number) = value.trim().parse::<f64>().ok() else {
+      return Ok(None);
+    };
+    let integer_value = number.trunc() as i64;
+    return Ok(Some((integer_value.abs() % 2 == 0).to_string()));
+  }
+
+  if let Some(is_odd_arg) = parse_isodd_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &is_odd_arg)?;
+    let Some(number) = value.trim().parse::<f64>().ok() else {
+      return Ok(None);
+    };
+    let integer_value = number.trunc() as i64;
+    return Ok(Some((integer_value.abs() % 2 == 1).to_string()));
   }
 
   if let Some(abs_arg) = parse_abs_formula(formula) {
@@ -2323,12 +2342,24 @@ mod tests {
         value: None,
         formula: Some(r#"=SECOND("2026-02-13T14:25:36+00:00")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 72,
+        value: None,
+        formula: Some("=ISEVEN(A1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 73,
+        value: None,
+        formula: Some("=ISODD(A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 69);
+    assert_eq!(updated_cells, 71);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2342,7 +2373,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 71,
+        end_col: 73,
       },
     )
     .expect("cells should be fetched");
@@ -2449,6 +2480,8 @@ mod tests {
     assert_eq!(by_position(1, 69).evaluated_value.as_deref(), Some("14"));
     assert_eq!(by_position(1, 70).evaluated_value.as_deref(), Some("25"));
     assert_eq!(by_position(1, 71).evaluated_value.as_deref(), Some("36"));
+    assert_eq!(by_position(1, 72).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 73).evaluated_value.as_deref(), Some("false"));
   }
 
   #[test]
@@ -2559,6 +2592,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=MOD(10,0)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_isodd_text_input_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=ISODD("north")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=ISODD("north")"#.to_string()]);
   }
 
   #[test]
