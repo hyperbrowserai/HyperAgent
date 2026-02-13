@@ -2268,3 +2268,64 @@ describe("MCPClient.hasTool", () => {
     expect(mcpClient.hasTool("search")).toEqual({ exists: false });
   });
 });
+
+describe("MCPClient server metadata accessors", () => {
+  it("returns server ids and info for connected servers", () => {
+    const mcpClient = new MCPClient(false);
+    setServersForClient(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([
+              ["search", {}],
+              ["notes", {}],
+            ]),
+          },
+        ],
+      ])
+    );
+
+    expect(mcpClient.getServerIds()).toEqual(["server-a"]);
+    expect(mcpClient.getServerInfo()).toEqual([
+      {
+        id: "server-a",
+        toolCount: 2,
+        toolNames: ["search", "notes"],
+      },
+    ]);
+    expect(mcpClient.hasConnections()).toBe(true);
+  });
+
+  it("returns safe defaults when server map key iteration traps throw", () => {
+    const mcpClient = new MCPClient(false);
+    const throwingMap = new Proxy(new Map(), {
+      get(target, prop, receiver): unknown {
+        if (prop === "keys") {
+          throw new Error("keys trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
+
+    expect(mcpClient.getServerIds()).toEqual([]);
+    expect(mcpClient.hasConnections()).toBe(false);
+  });
+
+  it("returns safe defaults when server map entry iteration traps throw", () => {
+    const mcpClient = new MCPClient(false);
+    const throwingMap = new Proxy(new Map(), {
+      get(target, prop, receiver): unknown {
+        if (prop === "entries") {
+          throw new Error("entries trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
+
+    expect(mcpClient.getServerInfo()).toEqual([]);
+  });
+});

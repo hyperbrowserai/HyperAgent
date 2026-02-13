@@ -657,6 +657,26 @@ function resolveConnectedServerIdForManagement(
   }
 }
 
+function safeGetConnectedServerIds(
+  servers: Map<string, ServerConnection>
+): string[] {
+  try {
+    return Array.from(servers.keys());
+  } catch {
+    return [];
+  }
+}
+
+function safeGetConnectedServerEntries(
+  servers: Map<string, ServerConnection>
+): Array<[string, ServerConnection]> {
+  try {
+    return Array.from(servers.entries());
+  } catch {
+    return [];
+  }
+}
+
 function resolveMCPToolNameOnServer(
   tools: Map<string, Tool>,
   requestedToolName: string
@@ -1322,7 +1342,7 @@ class MCPClient {
    * @returns Array of server IDs
    */
   getServerIds(): string[] {
-    return [...this.servers.keys()];
+    return safeGetConnectedServerIds(this.servers);
   }
 
   /**
@@ -1360,7 +1380,7 @@ class MCPClient {
    * Disconnect from all servers
    */
   async disconnect(): Promise<void> {
-    for (const serverId of Array.from(this.servers.keys())) {
+    for (const serverId of safeGetConnectedServerIds(this.servers)) {
       try {
         await this.disconnectServer(serverId);
       } catch (error) {
@@ -1429,7 +1449,7 @@ class MCPClient {
     toolCount: number;
     toolNames: string[];
   }> {
-    return Array.from(this.servers.entries()).map(([id, server]) => ({
+    return safeGetConnectedServerEntries(this.servers).map(([id, server]) => ({
       id,
       toolCount: server.tools.size,
       toolNames: Array.from(server.tools.keys()),
@@ -1441,7 +1461,7 @@ class MCPClient {
    * @returns Boolean indicating if any servers are connected
    */
   hasConnections(): boolean {
-    return this.servers.size > 0;
+    return this.getServerIds().length > 0;
   }
 }
 
