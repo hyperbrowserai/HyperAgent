@@ -62,7 +62,7 @@ Request options:
 - `request_id` (optional): caller correlation ID echoed in response.
 - `actor` (optional): appears in emitted workbook events.
 - `stop_on_error` (optional, default `false`): stop processing remaining operations after first failure.
-- `expected_operations_signature` (optional): verify operation payload integrity before execution.
+- `expected_operations_signature` (optional): verify operation payload integrity before execution. Must be a 64-character hexadecimal string.
 - `operations` must be a non-empty array.
 
 Response includes:

@@ -150,6 +150,12 @@ fn validate_expected_operations_signature(
   if expected.is_empty() {
     return Ok(());
   }
+  if expected.len() != 64 || !expected.chars().all(|ch| ch.is_ascii_hexdigit()) {
+    return Err(ApiError::BadRequest(
+      "Expected operations signature must be a 64-character hexadecimal string."
+        .to_string(),
+    ));
+  }
   if expected == actual_signature {
     return Ok(());
   }
@@ -1527,6 +1533,11 @@ mod tests {
       validate_expected_operations_signature(Some("mismatch"), signature.as_str())
         .is_err(),
       "mismatching signature should fail",
+    );
+    assert!(
+      validate_expected_operations_signature(Some("xyz"), signature.as_str())
+        .is_err(),
+      "invalid signature format should fail",
     );
   }
 
