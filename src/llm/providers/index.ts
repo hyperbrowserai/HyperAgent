@@ -62,6 +62,29 @@ function normalizeBaseURL(value: unknown): string | undefined {
     return undefined;
   }
   const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`Invalid LLM baseURL: ${trimmed}`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Invalid LLM baseURL protocol: ${parsed.protocol}`);
+  }
+
+  return parsed.toString().replace(/\/$/, "");
+}
+
+function normalizeApiKey(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
@@ -71,11 +94,12 @@ export function createLLMClient(config: LLMConfig): HyperAgentLLM {
   const temperature = normalizeTemperature(config.temperature);
   const maxTokens = normalizeMaxTokens(config.maxTokens);
   const baseURL = normalizeBaseURL(config.baseURL);
+  const apiKey = normalizeApiKey(config.apiKey);
 
   switch (provider) {
     case "openai":
       return createOpenAIClient({
-        apiKey: config.apiKey,
+        apiKey,
         model,
         temperature,
         maxTokens,
@@ -84,7 +108,7 @@ export function createLLMClient(config: LLMConfig): HyperAgentLLM {
 
     case "anthropic":
       return createAnthropicClient({
-        apiKey: config.apiKey,
+        apiKey,
         model,
         temperature,
         maxTokens,
@@ -92,7 +116,7 @@ export function createLLMClient(config: LLMConfig): HyperAgentLLM {
 
     case "gemini":
       return createGeminiClient({
-        apiKey: config.apiKey,
+        apiKey,
         model,
         temperature,
         maxTokens,
@@ -100,7 +124,7 @@ export function createLLMClient(config: LLMConfig): HyperAgentLLM {
 
     case "deepseek":
       return createDeepSeekClient({
-        apiKey: config.apiKey,
+        apiKey,
         model,
         temperature,
         maxTokens,

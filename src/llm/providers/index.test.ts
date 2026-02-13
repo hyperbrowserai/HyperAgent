@@ -54,6 +54,23 @@ describe("createLLMClient", () => {
     });
   });
 
+  it("normalizes apiKey and trims trailing baseURL slash", () => {
+    createLLMClient({
+      provider: "openai",
+      apiKey: "  key-123  ",
+      model: "model",
+      baseURL: "https://example.com/v1/",
+    });
+
+    expect(createOpenAIClientMock).toHaveBeenCalledWith({
+      apiKey: "key-123",
+      model: "model",
+      temperature: undefined,
+      maxTokens: undefined,
+      baseURL: "https://example.com/v1",
+    });
+  });
+
   it("normalizes deepseek config and drops invalid maxTokens", () => {
     const client = createLLMClient({
       provider: "deepseek",
@@ -88,5 +105,25 @@ describe("createLLMClient", () => {
         model: "   ",
       })
     ).toThrow("LLM model must be a non-empty string");
+  });
+
+  it("rejects invalid baseURL values", () => {
+    expect(() =>
+      createLLMClient({
+        provider: "openai",
+        model: "model",
+        baseURL: "not-a-url",
+      })
+    ).toThrow("Invalid LLM baseURL: not-a-url");
+  });
+
+  it("rejects unsupported baseURL protocols", () => {
+    expect(() =>
+      createLLMClient({
+        provider: "openai",
+        model: "model",
+        baseURL: "ftp://example.com/path",
+      })
+    ).toThrow("Invalid LLM baseURL protocol: ftp:");
   });
 });
