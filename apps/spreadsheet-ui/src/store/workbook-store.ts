@@ -9,6 +9,7 @@ interface WorkbookStoreState {
   eventLog: WorkbookEvent[];
   cellsByAddress: Record<string, CellSnapshot>;
   setWorkbook: (workbook: WorkbookSummary) => void;
+  setActiveSheet: (sheet: string) => void;
   setCells: (cells: CellSnapshot[]) => void;
   setSelectedAddress: (address: string) => void;
   setEventSeq: (seq: number) => void;
@@ -23,12 +24,19 @@ export const useWorkbookStore = create<WorkbookStoreState>((set) => ({
   eventLog: [],
   cellsByAddress: {},
   setWorkbook: (workbook) =>
-    set(() => ({
-      workbook,
-      activeSheet: workbook.sheets[0] ?? "Sheet1",
-      eventLog: [],
-      eventSeq: 0,
-    })),
+    set((state) => {
+      const isSameWorkbook = state.workbook?.id === workbook.id;
+      const hasActiveSheet = workbook.sheets.includes(state.activeSheet);
+      return {
+        workbook,
+        activeSheet: hasActiveSheet
+          ? state.activeSheet
+          : workbook.sheets[0] ?? "Sheet1",
+        eventLog: isSameWorkbook ? state.eventLog : [],
+        eventSeq: isSameWorkbook ? state.eventSeq : 0,
+      };
+    }),
+  setActiveSheet: (activeSheet) => set(() => ({ activeSheet })),
   setCells: (cells) =>
     set(() => ({
       cellsByAddress: Object.fromEntries(

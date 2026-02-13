@@ -59,6 +59,23 @@ export async function getWorkbook(workbookId: string): Promise<WorkbookSummary> 
   return data.workbook;
 }
 
+export async function createSheet(
+  workbookId: string,
+  sheet: string,
+): Promise<{ sheet: string; created: boolean; sheets: string[] }> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/sheets`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sheet, actor: "ui" }),
+    },
+  );
+  return parseJsonResponse<{ sheet: string; created: boolean; sheets: string[] }>(
+    response,
+  );
+}
+
 export async function getCells(
   workbookId: string,
   sheet: string,

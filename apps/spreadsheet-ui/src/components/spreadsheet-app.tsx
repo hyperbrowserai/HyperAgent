@@ -8,10 +8,12 @@ import {
 } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import {
+  createSheet,
   createWorkbook,
   exportWorkbook,
   getAgentPresets,
   getCells,
+  getWorkbook,
   importWorkbook,
   runAgentOps,
   runAgentPreset,
@@ -39,6 +41,7 @@ export function SpreadsheetApp() {
     eventLog,
     cellsByAddress,
     setWorkbook,
+    setActiveSheet,
     setCells,
     setSelectedAddress,
     appendEvent,
@@ -47,6 +50,8 @@ export function SpreadsheetApp() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningAgentFlow, setIsRunningAgentFlow] = useState(false);
   const [isRunningPreset, setIsRunningPreset] = useState(false);
+  const [isCreatingSheet, setIsCreatingSheet] = useState(false);
+  const [newSheetName, setNewSheetName] = useState("Sheet2");
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
@@ -72,6 +77,12 @@ export function SpreadsheetApp() {
     queryFn: () => getCells(workbook!.id, activeSheet),
   });
 
+  const workbookQuery = useQuery({
+    queryKey: ["workbook", workbook?.id],
+    enabled: Boolean(workbook?.id),
+    queryFn: () => getWorkbook(workbook!.id),
+  });
+
   const presetsQuery = useQuery({
     queryKey: ["agent-presets", workbook?.id],
     enabled: Boolean(workbook?.id),
@@ -83,6 +94,12 @@ export function SpreadsheetApp() {
       createWorkbookMutation.mutate();
     }
   }, [workbook, createWorkbookMutation]);
+
+  useEffect(() => {
+    if (workbookQuery.data) {
+      setWorkbook(workbookQuery.data);
+    }
+  }, [workbookQuery.data, setWorkbook]);
 
   useEffect(() => {
     if (cellsQuery.data) {
@@ -97,6 +114,8 @@ export function SpreadsheetApp() {
     const unsubscribe = subscribeToWorkbookEvents(workbook.id, (event) => {
       appendEvent(event);
       queryClient.invalidateQueries({ queryKey: ["cells", workbook.id, activeSheet] });
+      queryClient.invalidateQueries({ queryKey: ["workbook", workbook.id] });
+      queryClient.invalidateQueries({ queryKey: ["agent-presets", workbook.id] });
     });
     return unsubscribe;
   }, [workbook?.id, activeSheet, queryClient, appendEvent]);
@@ -290,6 +309,27 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCreateSheet() {
+    if (!workbook) {
+      return;
+    }
+    const trimmed = newSheetName.trim();
+    if (!trimmed) {
+      return;
+    }
+    setIsCreatingSheet(true);
+    try {
+      await createSheet(workbook.id, trimmed);
+      setActiveSheet(trimmed);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workbook", workbook.id] }),
+        queryClient.invalidateQueries({ queryKey: ["cells", workbook.id, trimmed] }),
+      ]);
+    } finally {
+      setIsCreatingSheet(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4">
@@ -368,6 +408,36 @@ export function SpreadsheetApp() {
             </div>
             <div className="rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
               Stream Seq: <span className="font-semibold">{eventSeq}</span>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {(workbook?.sheets ?? []).map((sheet) => (
+              <button
+                key={sheet}
+                onClick={() => setActiveSheet(sheet)}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
+                  sheet === activeSheet
+                    ? "border-indigo-300 bg-indigo-500/25 text-indigo-100"
+                    : "border-slate-700 bg-slate-950/60 text-slate-300 hover:bg-slate-800"
+                }`}
+              >
+                {sheet}
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <input
+                value={newSheetName}
+                onChange={(event) => setNewSheetName(event.target.value)}
+                className="w-28 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-400"
+                placeholder="New sheet name"
+              />
+              <button
+                onClick={handleCreateSheet}
+                disabled={!workbook || isCreatingSheet}
+                className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-600 disabled:opacity-40"
+              >
+                {isCreatingSheet ? "Adding..." : "Add Sheet"}
+              </button>
             </div>
           </div>
         </header>
