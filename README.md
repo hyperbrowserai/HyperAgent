@@ -124,6 +124,11 @@ task.resume();
 // Await final outcome at any time
 const final = await task.result;
 console.log(final.status, final.output);
+
+// Task failures reject with HyperagentTaskError (includes taskId + cause)
+task.result.catch((error) => {
+  console.error(error.taskId, error.cause?.message);
+});
 ```
 
 ## Two Modes of Operation
