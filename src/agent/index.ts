@@ -2390,7 +2390,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           availableElements,
           llmResponse: params.llmResponse,
           error: {
-            message: formatUnknownError(params.error),
+            message: this.formatHelperDiagnostic(params.error),
             stack:
               params.error instanceof Error ? params.error.stack : undefined,
           },

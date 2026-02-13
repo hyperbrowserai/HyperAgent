@@ -217,6 +217,40 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     }
   });
 
+  it("truncates oversized failure payloads written to aiAction debug artifacts", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+      screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
+    } as unknown as Page;
+    performAction.mockRejectedValue(new Error("x".repeat(2_000)));
+    writeAiActionDebug.mockResolvedValue(undefined);
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await expect(
+        agent.executeSingleAction("click login", page, {
+          maxElementRetries: 1,
+        })
+      ).rejects.toThrow(/\[truncated/);
+
+      expect(writeAiActionDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            message: expect.stringContaining("[truncated"),
+          }),
+        })
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
   it("formats non-Error aiAction debug writer failures", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
