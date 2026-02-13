@@ -852,11 +852,21 @@ export function SpreadsheetApp() {
   }
 
   async function handleCopyPresetRunPayload() {
-    if (!wizardPresetPreview || !wizardPresetOpsSignature) {
+    if (!wizardPresetPreview) {
       return;
     }
     setIsCopyingPresetRunPayload(true);
     try {
+      const plan = workbook
+        ? await getAgentPresetOperations(
+            workbook.id,
+            wizardPresetPreview,
+            wizardIncludeFileBase64,
+          )
+        : await getWizardPresetOperations(
+            wizardPresetPreview,
+            wizardIncludeFileBase64,
+          );
       await navigator.clipboard.writeText(
         JSON.stringify(
           {
@@ -864,7 +874,7 @@ export function SpreadsheetApp() {
             actor: "agent",
             stop_on_error: true,
             include_file_base64: wizardIncludeFileBase64,
-            expected_operations_signature: wizardPresetOpsSignature,
+            expected_operations_signature: plan.operations_signature,
           },
           null,
           2,
@@ -879,11 +889,21 @@ export function SpreadsheetApp() {
   }
 
   async function handleCopyScenarioRunPayload() {
-    if (!wizardScenario || !wizardScenarioOpsSignature) {
+    if (!wizardScenario) {
       return;
     }
     setIsCopyingScenarioRunPayload(true);
     try {
+      const plan = workbook
+        ? await getAgentScenarioOperations(
+            workbook.id,
+            wizardScenario,
+            wizardIncludeFileBase64,
+          )
+        : await getWizardScenarioOperations(
+            wizardScenario,
+            wizardIncludeFileBase64,
+          );
       await navigator.clipboard.writeText(
         JSON.stringify(
           {
@@ -891,7 +911,7 @@ export function SpreadsheetApp() {
             actor: "agent",
             stop_on_error: true,
             include_file_base64: wizardIncludeFileBase64,
-            expected_operations_signature: wizardScenarioOpsSignature,
+            expected_operations_signature: plan.operations_signature,
           },
           null,
           2,
@@ -1384,7 +1404,7 @@ export function SpreadsheetApp() {
                   <button
                     onClick={handleCopyPresetRunPayload}
                     disabled={
-                      isCopyingPresetRunPayload || !wizardPresetOpsSignature
+                      isCopyingPresetRunPayload || !wizardPresetPreview
                     }
                     className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                   >
@@ -1505,7 +1525,7 @@ export function SpreadsheetApp() {
                   <button
                     onClick={handleCopyScenarioRunPayload}
                     disabled={
-                      isCopyingScenarioRunPayload || !wizardScenarioOpsSignature
+                      isCopyingScenarioRunPayload || !wizardScenario
                     }
                     className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                   >
