@@ -114,6 +114,7 @@ export async function executeReplaySpecialAction(
   if (actionType === "wait") {
     const waitMs = normalizeWaitMs(actionArgs?.[0] ?? actionParams?.duration);
     await page.waitForTimeout(waitMs);
+    markDomSnapshotDirty(page);
     return {
       taskId,
       status: TaskStatus.COMPLETED,

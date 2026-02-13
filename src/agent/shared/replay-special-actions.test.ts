@@ -66,6 +66,7 @@ describe("executeReplaySpecialAction", () => {
     });
 
     expect(page.waitForTimeout).toHaveBeenCalledWith(1500);
+    expect(markDomSnapshotDirty).toHaveBeenCalledWith(page);
     expect(result?.output).toBe("Waited 1500ms");
   });
 
