@@ -336,6 +336,46 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toContain('Extract failed: {"reason":"bad extract"}');
   });
 
+  it("truncates oversized extract failure diagnostics", async () => {
+    const extract = jest
+      .fn()
+      .mockRejectedValue(new Error(`x${"y".repeat(2_000)}\nextract failed`));
+    const page = createPage({
+      extract,
+    });
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-oversized-extract-error",
+      actionType: "extract",
+      instruction: "extract info",
+      page: page as unknown as Page,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.output).toContain("[truncated");
+    expect(result?.output).not.toContain("\n");
+  });
+
+  it("truncates oversized extract outputs", async () => {
+    const extract = jest
+      .fn()
+      .mockResolvedValue(`x${"y".repeat(5_000)}\nextract output`);
+    const page = createPage({
+      extract,
+    });
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-oversized-extract-output",
+      actionType: "extract",
+      instruction: "extract info",
+      page: page as unknown as Page,
+    });
+
+    expect(result?.status).toBe("completed");
+    expect(result?.output).toContain("[truncated");
+    expect(result?.output).not.toContain("\n");
+  });
+
   it("honors explicit retry metadata value", async () => {
     const page = createPage();
 
@@ -382,6 +422,28 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.status).toBe("failed");
     expect(result?.output).toContain("Invalid replay input: taskId trap");
     expect(result?.taskId).toBe("unknown-replay-task");
+  });
+
+  it("truncates oversized top-level input trap diagnostics", async () => {
+    const params = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "taskId") {
+            throw new Error(`x${"y".repeat(2_000)}\ntrap`);
+          }
+          return undefined;
+        },
+      }
+    );
+
+    const result = await executeReplaySpecialAction(
+      params as unknown as Parameters<typeof executeReplaySpecialAction>[0]
+    );
+
+    expect(result?.status).toBe("failed");
+    expect(result?.output).toContain("[truncated");
+    expect(result?.output).not.toContain("\n");
   });
 
   it("falls back to actionParams URL when goToUrl argument access traps throw", async () => {

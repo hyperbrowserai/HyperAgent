@@ -16,6 +16,9 @@ interface ReplaySpecialActionInput {
 
 const MAX_REPLAY_WAIT_MS = 120_000;
 const MAX_REPLAY_TIMEOUT_MS = 120_000;
+const MAX_REPLAY_SPECIAL_OUTPUT_CHARS = 4_000;
+const MAX_REPLAY_SPECIAL_DIAGNOSTIC_CHARS = 400;
+const MAX_REPLAY_SPECIAL_IDENTIFIER_CHARS = 128;
 
 export const REPLAY_SPECIAL_ACTION_TYPES: ReadonlySet<string> = new Set([
   "goToUrl",
@@ -58,6 +61,71 @@ function asNumber(value: unknown): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function sanitizeReplaySpecialText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateReplaySpecialText(
+  value: string,
+  maxChars: number
+): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omitted = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omitted} chars]`;
+}
+
+function formatReplaySpecialDiagnostic(value: unknown): string {
+  const normalized = sanitizeReplaySpecialText(formatUnknownError(value));
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  return truncateReplaySpecialText(
+    fallback,
+    MAX_REPLAY_SPECIAL_DIAGNOSTIC_CHARS
+  );
+}
+
+function normalizeReplaySpecialOutput(
+  value: unknown,
+  fallback: string
+): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  if (value.length === 0) {
+    return value;
+  }
+  const normalized = sanitizeReplaySpecialText(value);
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncateReplaySpecialText(normalized, MAX_REPLAY_SPECIAL_OUTPUT_CHARS);
+}
+
+function normalizeReplaySpecialIdentifier(
+  value: unknown,
+  fallback: string
+): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = sanitizeReplaySpecialText(value);
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncateReplaySpecialText(
+    normalized,
+    MAX_REPLAY_SPECIAL_IDENTIFIER_CHARS
+  );
 }
 
 function safeReadArrayIndex(
@@ -157,12 +225,15 @@ export async function executeReplaySpecialAction(
       taskId: "unknown-replay-task",
       status: TaskStatus.FAILED,
       steps: [],
-      output: `Invalid replay input: ${formatUnknownError(error)}`,
+      output: `Invalid replay input: ${formatReplaySpecialDiagnostic(error)}`,
       replayStepMeta: createReplayMeta(1),
     };
   }
 
-  const normalizedTaskId = asNonEmptyTrimmedString(taskId) ?? "unknown-replay-task";
+  const normalizedTaskId = normalizeReplaySpecialIdentifier(
+    taskId,
+    "unknown-replay-task"
+  );
   const normalizedActionType = asNonEmptyTrimmedString(actionType);
   const normalizedRetries = normalizeRetryCount(retries);
   const normalizedInstruction = asString(instruction);
@@ -193,7 +264,7 @@ export async function executeReplaySpecialAction(
       taskId: normalizedTaskId,
       status: TaskStatus.COMPLETED,
       steps: [],
-      output: `Navigated to ${url}`,
+      output: `Navigated to ${normalizeReplaySpecialOutput(url, "about:blank")}`,
       replayStepMeta: createReplayMeta(normalizedRetries),
     };
   }
@@ -268,7 +339,7 @@ export async function executeReplaySpecialAction(
         try {
           serializedExtracted = serializeUnknown(extracted);
         } catch (error) {
-          const message = formatUnknownError(error);
+          const message = formatReplaySpecialDiagnostic(error);
           return {
             taskId: normalizedTaskId,
             status: TaskStatus.FAILED,
@@ -282,11 +353,14 @@ export async function executeReplaySpecialAction(
         taskId: normalizedTaskId,
         status: TaskStatus.COMPLETED,
         steps: [],
-        output: serializedExtracted,
+        output: normalizeReplaySpecialOutput(
+          serializedExtracted,
+          "Extract completed."
+        ),
         replayStepMeta: createReplayMeta(normalizedRetries),
       };
     } catch (error) {
-      const message = formatUnknownError(error);
+      const message = formatReplaySpecialDiagnostic(error);
       return {
         taskId: normalizedTaskId,
         status: TaskStatus.FAILED,
