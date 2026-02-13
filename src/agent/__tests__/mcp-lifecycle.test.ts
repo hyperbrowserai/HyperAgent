@@ -442,6 +442,59 @@ describe("MCP lifecycle action registration", () => {
     }
   });
 
+  it("returns early when MCP client construction fails during initialize", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const { MCPClient } = jest.requireMock("@/agent/mcp/client") as {
+      MCPClient: jest.Mock;
+    };
+    MCPClient.mockImplementationOnce(() => {
+      throw new Error("client constructor trap");
+    });
+    const agent = new HyperAgent({ llm: createMockLLM() });
+
+    try {
+      await expect(
+        agent.initializeMCPClient({
+          servers: [{ id: "server-1", command: "echo" }],
+        })
+      ).resolves.toBeUndefined();
+      expect(connectToServerMock).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        "Failed to initialize MCP client: client constructor trap"
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it("returns null when MCP client construction fails during connect", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const { MCPClient } = jest.requireMock("@/agent/mcp/client") as {
+      MCPClient: jest.Mock;
+    };
+    MCPClient.mockImplementationOnce(() => {
+      throw new Error("connect constructor trap");
+    });
+    const agent = new HyperAgent({ llm: createMockLLM() });
+
+    try {
+      const serverId = await agent.connectToMCPServer({
+        command: "echo",
+      });
+      expect(serverId).toBeNull();
+      expect(connectToServerMock).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        "Failed to connect to MCP server: connect constructor trap"
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it("connects MCP actions with trap-prone type getters when first read succeeds", async () => {
     let typeReads = 0;
     const flakyTypeAction = {

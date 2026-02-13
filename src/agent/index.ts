@@ -2900,7 +2900,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return;
     }
     await this.resetMCPClient();
-    this.mcpClient = new MCPClient(this.debug);
+    try {
+      this.mcpClient = new MCPClient(this.debug);
+    } catch (error) {
+      console.error(
+        `Failed to initialize MCP client: ${this.formatMCPDiagnostic(error)}`
+      );
+      this.mcpClient = undefined;
+      return;
+    }
     try {
       for (const serverConfig of servers) {
         try {
@@ -2953,7 +2961,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return null;
     }
     if (!this.mcpClient) {
-      this.mcpClient = new MCPClient(this.debug);
+      try {
+        this.mcpClient = new MCPClient(this.debug);
+      } catch (error) {
+        console.error(
+          `Failed to connect to MCP server: ${this.formatMCPDiagnostic(error)}`
+        );
+        this.mcpClient = undefined;
+        return null;
+      }
     }
 
     try {
