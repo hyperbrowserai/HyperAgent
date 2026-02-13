@@ -220,6 +220,34 @@ describe("ExtractActionDefinition.run", () => {
     }
   });
 
+  it("truncates oversized debug directory diagnostics", async () => {
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw new Error(`mkdir\n${"x".repeat(10_000)}`);
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createContext(undefined, { debugDir: "debug", debug: true });
+
+    try {
+      const result = await ExtractActionDefinition.run(ctx, {
+        objective: "Extract title",
+      });
+
+      expect(result.success).toBe(true);
+      const debugError = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) =>
+          line.includes('[extract] Failed to prepare debug directory')
+        );
+      expect(debugError).toBeDefined();
+      expect(debugError).toContain("[truncated");
+      expect(debugError).not.toContain("\n");
+      expect(debugError?.length ?? 0).toBeLessThan(700);
+    } finally {
+      mkdirSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("formats non-Error debug write failures", async () => {
     const mkdirSpy = jest
       .spyOn(fs, "mkdirSync")
@@ -375,6 +403,26 @@ describe("ExtractActionDefinition.run", () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toContain("page content unavailable");
+  });
+
+  it("truncates oversized root extraction errors", async () => {
+    const pageContent = jest
+      .fn()
+      .mockRejectedValue(new Error(`boom\n${"x".repeat(10_000)}`));
+    const ctx = createContext(undefined, {
+      page: {
+        content: pageContent,
+      } as unknown as ActionContext["page"],
+    });
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "Extract content",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("[truncated");
+    expect(result.message).not.toContain("\n");
+    expect(result.message.length).toBeLessThan(700);
   });
 
   it("applies markdown token budget based on overall token limit", async () => {

@@ -21,6 +21,35 @@ const MAX_EXTRACT_OBJECTIVE_CHARS = 1_000;
 const MAX_EXTRACT_RESPONSE_CHARS = 12_000;
 const EXTRACT_RESPONSE_TRUNCATION_NOTICE = "\n[Extraction output truncated]";
 const MAX_EXTRACT_HTML_CHARS = 1_000_000;
+const MAX_EXTRACT_DIAGNOSTIC_CHARS = 400;
+
+function truncateExtractDiagnostic(value: string): string {
+  if (value.length <= MAX_EXTRACT_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  const omittedChars = value.length - MAX_EXTRACT_DIAGNOSTIC_CHARS;
+  return `${value.slice(0, MAX_EXTRACT_DIAGNOSTIC_CHARS)}... [truncated ${omittedChars} chars]`;
+}
+
+function sanitizeExtractDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function formatExtractDiagnostic(value: unknown): string {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = sanitizeExtractDiagnostic(raw);
+  if (normalized.length === 0) {
+    return "unknown error";
+  }
+  return truncateExtractDiagnostic(normalized);
+}
 
 export function estimateTextTokenCount(text: string): number {
   if (text.trim().length === 0) {
@@ -80,7 +109,9 @@ function writeDebugFileSafe(
   } catch (error) {
     if (debug) {
       console.error(
-        `[extract] Failed to write debug file "${filePath}": ${formatUnknownError(error)}`
+        `[extract] Failed to write debug file "${filePath}": ${formatExtractDiagnostic(
+          error
+        )}`
       );
     }
   }
@@ -93,7 +124,9 @@ function ensureDebugDirSafe(debugDir: string, debug?: boolean): string | null {
   } catch (error) {
     if (debug) {
       console.error(
-        `[extract] Failed to prepare debug directory "${debugDir}": ${formatUnknownError(error)}`
+        `[extract] Failed to prepare debug directory "${debugDir}": ${formatExtractDiagnostic(
+          error
+        )}`
       );
     }
     return null;
@@ -220,7 +253,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       } catch (error) {
         return {
           success: false,
-          message: `Failed to extract content: unable to access page content method (${formatUnknownError(
+          message: `Failed to extract content: unable to access page content method (${formatExtractDiagnostic(
             error
           )})`,
         };
@@ -249,7 +282,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         if (ctx.debug) {
           console.warn(
             "[extract] Markdown conversion failed, falling back to HTML text extraction:",
-            formatUnknownError(error)
+            formatExtractDiagnostic(error)
           );
         }
         markdown = fallbackMarkdownFromHtml(content);
@@ -279,7 +312,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           if (ctx.debug) {
             console.warn(
               "[extract] Screenshot capture unavailable, falling back to markdown-only extraction:",
-              formatUnknownError(error)
+              formatExtractDiagnostic(error)
             );
           }
         }
@@ -353,7 +386,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     } catch (error) {
       return {
         success: false,
-        message: `Failed to extract content: ${formatUnknownError(error)}`,
+        message: `Failed to extract content: ${formatExtractDiagnostic(error)}`,
       };
     }
   },
