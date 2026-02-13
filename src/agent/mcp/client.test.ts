@@ -1777,6 +1777,27 @@ describe("MCPClient disconnect lifecycle", () => {
     expect(mcpClient.hasConnections()).toBe(false);
   });
 
+  it("disconnectServer wraps non-Error close failures", async () => {
+    const mcpClient = new MCPClient(false);
+    const close = jest.fn().mockRejectedValue({ reason: "close object failed" });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            transport: { close },
+          },
+        ],
+      ])
+    );
+
+    await expect(mcpClient.disconnectServer("server-1")).rejects.toThrow(
+      '{"reason":"close object failed"}'
+    );
+    expect(mcpClient.hasConnections()).toBe(false);
+  });
+
   it("disconnect continues closing remaining servers on failure", async () => {
     const mcpClient = new MCPClient(false);
     const closeA = jest.fn().mockRejectedValue(new Error("close A failed"));

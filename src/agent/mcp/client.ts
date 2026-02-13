@@ -1210,7 +1210,7 @@ class MCPClient {
         this.servers.delete(resolvedServerId);
       }
       if (closeError) {
-        throw closeError;
+        throw new Error(formatUnknownError(closeError));
       }
       if (this.debug) {
         console.log(`Disconnected from MCP server with ID: ${resolvedServerId}`);
