@@ -59,4 +59,18 @@ describe("normalizeOpenAIToolCalls", () => {
       "[LLM][OpenAI] Unknown tool call payload: null"
     );
   });
+
+  it("supports provider-specific labels in error messages", () => {
+    expect(() =>
+      normalizeOpenAIToolCalls(
+        [
+          {
+            id: "x",
+            type: "mystery",
+          },
+        ],
+        "DeepSeek"
+      )
+    ).toThrow('[LLM][DeepSeek] Unknown tool call type: {"id":"x","type":"mystery"}');
+  });
 });

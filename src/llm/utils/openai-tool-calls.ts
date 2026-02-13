@@ -12,7 +12,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function normalizeOpenAIToolCalls(
-  toolCalls: unknown
+  toolCalls: unknown,
+  providerLabel = "OpenAI"
 ): Array<NormalizedOpenAIToolCall> | undefined {
   if (!Array.isArray(toolCalls)) {
     return undefined;
@@ -21,7 +22,7 @@ export function normalizeOpenAIToolCalls(
   return toolCalls.map((toolCall) => {
     if (!isRecord(toolCall)) {
       throw new Error(
-        `[LLM][OpenAI] Unknown tool call payload: ${formatUnknownError(toolCall)}`
+        `[LLM][${providerLabel}] Unknown tool call payload: ${formatUnknownError(toolCall)}`
       );
     }
 
@@ -44,7 +45,7 @@ export function normalizeOpenAIToolCalls(
     }
 
     throw new Error(
-      `[LLM][OpenAI] Unknown tool call type: ${formatUnknownError(toolCall)}`
+      `[LLM][${providerLabel}] Unknown tool call type: ${formatUnknownError(toolCall)}`
     );
   });
 }

@@ -80,7 +80,10 @@ export class DeepSeekClient implements HyperAgentLLM {
     }
 
     const content = normalizeOpenAICompatibleContent(choice.message.content);
-    const toolCalls = normalizeOpenAIToolCalls(choice.message.tool_calls);
+    const toolCalls = normalizeOpenAIToolCalls(
+      choice.message.tool_calls,
+      "DeepSeek"
+    );
 
     return {
       role: "assistant",

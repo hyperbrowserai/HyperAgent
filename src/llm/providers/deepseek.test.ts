@@ -112,7 +112,7 @@ describe("DeepSeekClient", () => {
     await expect(
       client.invoke([{ role: "user", content: "hello" }])
     ).rejects.toThrow(
-      '[LLM][OpenAI] Unknown tool call type: {"id":"tc-1","type":"mystery","data":{"reason":"unknown type"}}'
+      '[LLM][DeepSeek] Unknown tool call type: {"id":"tc-1","type":"mystery","data":{"reason":"unknown type"}}'
     );
   });
 });
