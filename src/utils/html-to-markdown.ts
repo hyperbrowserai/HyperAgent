@@ -1,4 +1,5 @@
 import TurndownService from "turndown";
+import { formatUnknownError } from "./format-unknown-error";
 // TODO: Add gfm plugin
 // import { gfm } from "joplin-turndown-plugin-gfm";
 
@@ -77,7 +78,9 @@ export async function parseMarkdown(
     markdownContent = removeSkipToContentLinks(markdownContent);
     return markdownContent;
   } catch (error) {
-    console.error("Error converting HTML to Markdown", { error });
+    console.error(
+      `Error converting HTML to Markdown: ${formatUnknownError(error)}`
+    );
     return ""; // Optionally return an empty string or handle the error as needed
   }
 }
