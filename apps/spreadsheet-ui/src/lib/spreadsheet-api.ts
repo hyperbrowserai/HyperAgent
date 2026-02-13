@@ -5,6 +5,7 @@ import {
   AgentPresetResponse,
   AgentScenarioInfo,
   AgentScenarioResponse,
+  AgentWizardSchemaInfo,
   AgentWizardRunResponse,
   CellSnapshot,
   ChartSpec,
@@ -209,6 +210,19 @@ export async function getWizardScenarios(): Promise<AgentScenarioInfo[]> {
     response,
   );
   return data.scenarios;
+}
+
+export async function getWizardPresets(): Promise<AgentPresetInfo[]> {
+  const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/presets`);
+  const data = await parseJsonResponse<{ presets: AgentPresetInfo[] }>(
+    response,
+  );
+  return data.presets;
+}
+
+export async function getWizardSchema(): Promise<AgentWizardSchemaInfo> {
+  const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/schema`);
+  return parseJsonResponse<AgentWizardSchemaInfo>(response);
 }
 
 interface AgentScenarioRequest {

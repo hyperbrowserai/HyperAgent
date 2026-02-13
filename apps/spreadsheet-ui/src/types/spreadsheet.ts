@@ -89,3 +89,14 @@ export interface AgentWizardRunResponse {
   results: AgentOperationResult[];
   import: AgentWizardImportResult | null;
 }
+
+export interface AgentWizardSchemaInfo {
+  endpoint: string;
+  json_endpoint?: string;
+  presets_endpoint?: string;
+  scenarios_endpoint?: string;
+  request_multipart_fields?: string[];
+  request_json_fields?: Record<string, string>;
+  presets: AgentPresetInfo[];
+  scenarios: AgentScenarioInfo[];
+}

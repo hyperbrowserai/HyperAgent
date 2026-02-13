@@ -14,6 +14,8 @@ import {
   getAgentSchema,
   getAgentPresets,
   getAgentScenarios,
+  getWizardPresets,
+  getWizardSchema,
   getWizardScenarios,
   getCells,
   getWorkbook,
@@ -130,6 +132,16 @@ export function SpreadsheetApp() {
   const wizardScenariosQuery = useQuery({
     queryKey: ["wizard-scenarios"],
     queryFn: getWizardScenarios,
+  });
+
+  const wizardPresetsQuery = useQuery({
+    queryKey: ["wizard-presets"],
+    queryFn: getWizardPresets,
+  });
+
+  const wizardSchemaQuery = useQuery({
+    queryKey: ["wizard-schema"],
+    queryFn: getWizardSchema,
   });
 
   useEffect(() => {
@@ -675,6 +687,17 @@ export function SpreadsheetApp() {
                 Optional import + scenario execution
               </span>
             </div>
+            {wizardSchemaQuery.data ? (
+              <div className="mb-2 text-[11px] text-slate-500">
+                endpoints:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.endpoint}
+                  {wizardSchemaQuery.data.json_endpoint
+                    ? ` · ${wizardSchemaQuery.data.json_endpoint}`
+                    : ""}
+                </span>
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={wizardScenario}
@@ -723,6 +746,19 @@ export function SpreadsheetApp() {
                 {isRunningWizard ? "Running wizard..." : "Run Wizard"}
               </button>
             </div>
+            {(wizardPresetsQuery.data ?? []).length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {(wizardPresetsQuery.data ?? []).map((presetInfo) => (
+                  <span
+                    key={presetInfo.preset}
+                    className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-300"
+                    title={presetInfo.description}
+                  >
+                    preset: {presetInfo.preset}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
         </header>
 
