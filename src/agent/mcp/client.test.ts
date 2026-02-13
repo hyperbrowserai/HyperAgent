@@ -793,6 +793,39 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("sanitizes control characters in connect failure diagnostics", async () => {
+    const connectSpy = jest.spyOn(Client.prototype, "connect").mockRejectedValue(
+      new Error(`connect\u0000\n${"x".repeat(2_000)}`)
+    );
+    const closeSpy = jest
+      .spyOn(StdioClientTransport.prototype, "close")
+      .mockResolvedValue(undefined);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const mcpClient = new MCPClient(false);
+
+    try {
+      await mcpClient
+        .connectToServer({
+          command: "npx",
+        })
+        .then(() => {
+          throw new Error("expected connectToServer to reject");
+        })
+        .catch((error) => {
+          const message = String(error instanceof Error ? error.message : error);
+          expect(message).toContain("[truncated");
+          expect(message).not.toContain("\u0000");
+          expect(message).not.toContain("\n");
+          expect(message.length).toBeLessThan(700);
+        });
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      connectSpy.mockRestore();
+      closeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("stores normalized stdio config values for connected servers", async () => {
     const connectSpy = jest
       .spyOn(Client.prototype, "connect")
