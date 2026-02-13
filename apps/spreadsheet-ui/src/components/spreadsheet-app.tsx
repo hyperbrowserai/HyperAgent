@@ -87,6 +87,11 @@ export function SpreadsheetApp() {
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastScenario, setLastScenario] = useState<string | null>(null);
   const [lastOperationsSignature, setLastOperationsSignature] = useState<string | null>(null);
+  const [lastExecutedOperations, setLastExecutedOperations] = useState<
+    AgentOperationPreview[]
+  >([]);
+  const [isCopyingLastExecutionPayload, setIsCopyingLastExecutionPayload] =
+    useState(false);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -99,6 +104,13 @@ export function SpreadsheetApp() {
     onSuccess: (createdWorkbook) => {
       setUiError(null);
       setWorkbook(createdWorkbook);
+      setLastAgentRequestId(null);
+      setLastPreset(null);
+      setLastScenario(null);
+      setLastOperationsSignature(null);
+      setLastExecutedOperations([]);
+      setLastAgentOps([]);
+      setLastWizardImportSummary(null);
     },
     onError: (error) => {
       setUiError(error.message);
@@ -110,6 +122,13 @@ export function SpreadsheetApp() {
     onSuccess: (importedWorkbook) => {
       setUiError(null);
       setWorkbook(importedWorkbook);
+      setLastAgentRequestId(null);
+      setLastPreset(null);
+      setLastScenario(null);
+      setLastOperationsSignature(null);
+      setLastExecutedOperations([]);
+      setLastAgentOps([]);
+      setLastWizardImportSummary(null);
       queryClient.invalidateQueries({ queryKey: ["cells", importedWorkbook.id] });
     },
     onError: (error) => {
@@ -391,6 +410,31 @@ export function SpreadsheetApp() {
           },
         ],
       });
+      setLastExecutedOperations([
+        {
+          op_type: "set_cells",
+          sheet: activeSheet,
+          cells: [
+            {
+              row,
+              col,
+              ...(isFormula
+                ? { formula: formulaInput.trim() }
+                : { value: formulaInput }),
+            },
+          ],
+        },
+        {
+          op_type: "get_cells",
+          sheet: activeSheet,
+          range: {
+            start_row: row,
+            end_row: row,
+            start_col: col,
+            end_col: col,
+          },
+        },
+      ]);
       setLastAgentRequestId(response.request_id ?? null);
       setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentOps(response.results);
@@ -491,6 +535,34 @@ export function SpreadsheetApp() {
           { op_type: "export_workbook", include_file_base64: false },
         ],
       });
+      setLastExecutedOperations([
+        {
+          op_type: "set_cells",
+          sheet: activeSheet,
+          cells: [
+            { row: 1, col: 1, value: "North" },
+            { row: 2, col: 1, value: "South" },
+            { row: 3, col: 1, value: "West" },
+            { row: 1, col: 2, value: 120 },
+            { row: 2, col: 2, value: 90 },
+            { row: 3, col: 2, value: 75 },
+            { row: 4, col: 2, formula: "=SUM(B1:B3)" },
+          ],
+        },
+        { op_type: "recalculate" },
+        {
+          op_type: "upsert_chart",
+          chart: {
+            id: "chart-agent-demo",
+            sheet: activeSheet,
+            chart_type: "bar",
+            title: "Regional Totals",
+            categories_range: `${activeSheet}!$A$1:$A$3`,
+            values_range: `${activeSheet}!$B$1:$B$3`,
+          },
+        },
+        { op_type: "export_workbook", include_file_base64: false },
+      ]);
       setLastAgentRequestId(response.request_id ?? null);
       setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentOps(response.results);
@@ -532,6 +604,7 @@ export function SpreadsheetApp() {
       setLastPreset(response.preset);
       setLastScenario(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastExecutedOperations(presetPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -575,6 +648,7 @@ export function SpreadsheetApp() {
       setLastScenario(response.scenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastExecutedOperations(scenarioPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -615,6 +689,7 @@ export function SpreadsheetApp() {
       setLastScenario(response.scenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastExecutedOperations(wizardScenarioOps);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -656,6 +731,7 @@ export function SpreadsheetApp() {
       setLastScenario(wizardScenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastExecutedOperations(signedPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -696,6 +772,7 @@ export function SpreadsheetApp() {
       setLastPreset(response.preset);
       setLastScenario(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastExecutedOperations(wizardPresetOps);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -737,6 +814,7 @@ export function SpreadsheetApp() {
       setLastPreset(wizardPresetPreview);
       setLastScenario(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastExecutedOperations(signedPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -932,6 +1010,34 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyLastExecutionOpsPayload() {
+    if (!workbook || lastExecutedOperations.length === 0) {
+      return;
+    }
+    setIsCopyingLastExecutionPayload(true);
+    try {
+      const preview = await previewAgentOps(workbook.id, lastExecutedOperations);
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            request_id: "replace-with-request-id",
+            actor: "agent",
+            stop_on_error: true,
+            expected_operations_signature: preview.operations_signature,
+            operations: preview.operations,
+          },
+          null,
+          2,
+        ),
+      );
+      setUiError(null);
+    } catch {
+      setUiError("Failed to copy payload from last execution plan.");
+    } finally {
+      setIsCopyingLastExecutionPayload(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -954,6 +1060,7 @@ export function SpreadsheetApp() {
       setLastScenario(response.scenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastExecutedOperations(wizardScenarioOps);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(
@@ -1642,6 +1749,25 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             )}
+            {lastExecutedOperations.length > 0 ? (
+              <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-400">
+                <span>
+                  last execution plan ops:{" "}
+                  <span className="font-mono text-slate-200">
+                    {lastExecutedOperations.length}
+                  </span>
+                </span>
+                <button
+                  onClick={handleCopyLastExecutionOpsPayload}
+                  disabled={isCopyingLastExecutionPayload || !workbook}
+                  className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                >
+                  {isCopyingLastExecutionPayload
+                    ? "Copying..."
+                    : "Copy Last Plan as agent/ops"}
+                </button>
+              </div>
+            ) : null}
             {lastAgentOps.length ? (
               <div className="overflow-auto rounded-lg border border-slate-800 bg-slate-950">
                 <table className="w-full border-collapse text-xs">

@@ -30,6 +30,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent integration panel surfaces discovered `agent/ops/preview` endpoint metadata
 - Top-level preset/scenario run buttons also prefetch signatures before execution
 - Preview panels show signature sync status (`in-sync` / `stale`) against latest execution
+- Agent details panel can copy the most recent executed plan as a re-signed `agent/ops` payload
 - Event stream viewer with per-event-type filtering
 
 ## Run
