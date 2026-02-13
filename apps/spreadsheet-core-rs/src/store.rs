@@ -5,11 +5,13 @@ use crate::{
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
-    parse_choose_formula, parse_left_formula, parse_index_formula,
+    parse_abs_formula, parse_choose_formula, parse_left_formula,
+    parse_index_formula,
     parse_isblank_formula, parse_isnumber_formula, parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
     parse_match_formula, parse_month_formula, parse_not_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
+    parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_today_formula, parse_upper_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_year_formula, ConditionalAggregateFormula,
@@ -413,6 +415,45 @@ fn evaluate_formula(
     let value = resolve_scalar_operand(connection, sheet, &is_text_arg)?;
     let is_text = !value.is_empty() && value.trim().parse::<f64>().is_err();
     return Ok(Some(is_text.to_string()));
+  }
+
+  if let Some(abs_arg) = parse_abs_formula(formula) {
+    let value = parse_required_float(connection, sheet, &abs_arg)?;
+    return Ok(Some(value.abs().to_string()));
+  }
+
+  if let Some((value_arg, digits_arg)) = parse_round_formula(formula) {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let digits = parse_required_integer(connection, sheet, &digits_arg)?;
+    let factor = 10f64.powi(digits);
+    let rounded = (value * factor).round() / factor;
+    return Ok(Some(rounded.to_string()));
+  }
+
+  if let Some((value_arg, digits_arg)) = parse_roundup_formula(formula) {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let digits = parse_required_integer(connection, sheet, &digits_arg)?;
+    let factor = 10f64.powi(digits);
+    let scaled = value * factor;
+    let rounded = if scaled.is_sign_negative() {
+      scaled.floor()
+    } else {
+      scaled.ceil()
+    } / factor;
+    return Ok(Some(rounded.to_string()));
+  }
+
+  if let Some((value_arg, digits_arg)) = parse_rounddown_formula(formula) {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let digits = parse_required_integer(connection, sheet, &digits_arg)?;
+    let factor = 10f64.powi(digits);
+    let scaled = value * factor;
+    let rounded = if scaled.is_sign_negative() {
+      scaled.ceil()
+    } else {
+      scaled.floor()
+    } / factor;
+    return Ok(Some(rounded.to_string()));
   }
 
   if let Some((text_arg, count_arg)) = parse_left_formula(formula) {
@@ -1149,6 +1190,15 @@ fn parse_required_integer(
   Ok(value)
 }
 
+fn parse_required_float(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<f64, ApiError> {
+  let resolved = resolve_scalar_operand(connection, sheet, operand)?;
+  Ok(resolved.trim().parse::<f64>().unwrap_or_default())
+}
+
 fn parse_required_unsigned(
   connection: &Connection,
   sheet: &str,
@@ -1861,12 +1911,36 @@ mod tests {
         value: None,
         formula: Some(r#"=CHOOSE(5,"alpha","beta","gamma")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 50,
+        value: None,
+        formula: Some("=ABS(-12.5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 51,
+        value: None,
+        formula: Some("=ROUND(12.345,2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 52,
+        value: None,
+        formula: Some("=ROUNDUP(12.301,1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 53,
+        value: None,
+        formula: Some("=ROUNDDOWN(-12.399,1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 47);
+    assert_eq!(updated_cells, 51);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -1880,7 +1954,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 49,
+        end_col: 53,
       },
     )
     .expect("cells should be fetched");
@@ -1958,6 +2032,10 @@ mod tests {
     assert_eq!(by_position(1, 47).evaluated_value.as_deref(), Some(""));
     assert_eq!(by_position(1, 48).evaluated_value.as_deref(), Some("south"));
     assert_eq!(by_position(1, 49).evaluated_value.as_deref(), Some(""));
+    assert_eq!(by_position(1, 50).evaluated_value.as_deref(), Some("12.5"));
+    assert_eq!(by_position(1, 51).evaluated_value.as_deref(), Some("12.35"));
+    assert_eq!(by_position(1, 52).evaluated_value.as_deref(), Some("12.4"));
+    assert_eq!(by_position(1, 53).evaluated_value.as_deref(), Some("-12.3"));
   }
 
   #[test]

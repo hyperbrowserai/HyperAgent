@@ -308,6 +308,38 @@ pub fn parse_trim_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_abs_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ABS" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_round_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ROUND" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_roundup_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ROUNDUP" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_rounddown_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ROUNDDOWN" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_isblank_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ISBLANK" && args.len() == 1 {
@@ -587,12 +619,13 @@ mod tests {
   use super::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
-    parse_concat_formula, parse_date_formula, parse_day_formula,
+    parse_abs_formula, parse_concat_formula, parse_date_formula, parse_day_formula,
     parse_index_formula, parse_isblank_formula, parse_isnumber_formula,
     parse_istext_formula, parse_left_formula, parse_len_formula,
     parse_lower_formula, parse_match_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
+    parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_vlookup_formula,
@@ -712,6 +745,21 @@ mod tests {
     let trim_arg =
       parse_trim_formula(r#"=TRIM("  spaced text   ")"#).expect("trim should parse");
     assert_eq!(trim_arg, r#""  spaced text   ""#);
+    assert_eq!(
+      parse_abs_formula("=ABS(-12.5)").as_deref(),
+      Some("-12.5"),
+    );
+    let round = parse_round_formula("=ROUND(12.345, 2)").expect("round should parse");
+    assert_eq!(round.0, "12.345");
+    assert_eq!(round.1, "2");
+    let roundup =
+      parse_roundup_formula("=ROUNDUP(12.301, 1)").expect("roundup should parse");
+    assert_eq!(roundup.0, "12.301");
+    assert_eq!(roundup.1, "1");
+    let rounddown = parse_rounddown_formula("=ROUNDDOWN(-12.399, 1)")
+      .expect("rounddown should parse");
+    assert_eq!(rounddown.0, "-12.399");
+    assert_eq!(rounddown.1, "1");
     assert_eq!(
       parse_isblank_formula("=ISBLANK(A1)").as_deref(),
       Some("A1"),
