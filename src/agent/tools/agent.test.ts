@@ -210,6 +210,111 @@ function createThrowingObjectCtx(): AgentCtx {
   };
 }
 
+function createCompleteFormatterThrowCtx(): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "unused",
+      },
+    },
+  };
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured: async () => ({
+      rawText: "{}",
+      parsed: parsedAction,
+    }),
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [
+      {
+        type: "complete",
+        actionParams: z.object({
+          success: z.boolean(),
+          text: z.string().optional(),
+        }),
+        run: async () => ({ success: true, message: "task complete" }),
+        completeAction: async () => {
+          throw new Error("formatter failed");
+        },
+      },
+    ],
+    tokenLimit: 10000,
+    debug: true,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
+function createCompleteFormatterObjectOutputCtx(): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "unused",
+      },
+    },
+  };
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured: async () => ({
+      rawText: "{}",
+      parsed: parsedAction,
+    }),
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [
+      {
+        type: "complete",
+        actionParams: z.object({
+          success: z.boolean(),
+          text: z.string().optional(),
+        }),
+        run: async () => ({ success: true, message: "task complete" }),
+        completeAction: async () =>
+          ({ foo: "bar" } as unknown as string),
+      },
+    ],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
 function createMissingRunHandlerCtx(): AgentCtx {
   const parsedAction = {
     thoughts: "done",
@@ -611,6 +716,50 @@ describe("runAgentTask completion behavior", () => {
 
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.output).toContain('Action complete failed: {"reason":"object failure"}');
+  });
+
+  it("falls back to action message when complete formatter throws", async () => {
+    const page = createMockPage();
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const result = await runAgentTask(
+        createCompleteFormatterThrowCtx(),
+        createTaskState(page)
+      );
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(result.output).toBe("task complete");
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[Agent] completeAction formatter failed: formatter failed"
+      );
+    } finally {
+      warnSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  it("normalizes non-string complete formatter output", async () => {
+    const page = createMockPage();
+    const result = await runAgentTask(
+      createCompleteFormatterObjectOutputCtx(),
+      createTaskState(page)
+    );
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toContain('{"foo":"bar"}');
+  });
+
+  it("truncates oversized complete formatter outputs", async () => {
+    const page = createMockPage();
+    const result = await runAgentTask(
+      createAgentCtx({ success: true, text: "x".repeat(30_000) }),
+      createTaskState(page)
+    );
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toContain("[truncated");
+    expect((result.output ?? "").length).toBeLessThan(20_500);
   });
 
   it("surfaces missing action handler implementations as failures", async () => {

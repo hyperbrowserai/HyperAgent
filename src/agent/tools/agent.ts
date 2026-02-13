@@ -54,6 +54,7 @@ const MAX_SCHEMA_ERROR_HISTORY = 20;
 const MAX_RUNTIME_ACTION_TYPE_CHARS = 120;
 const MAX_RUNTIME_ACTION_MESSAGE_CHARS = 4_000;
 const MAX_RUNTIME_URL_CHARS = 1_000;
+const MAX_RUNTIME_TASK_OUTPUT_CHARS = 20_000;
 
 function truncateDiagnosticText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -106,6 +107,20 @@ function normalizeRuntimeActionMessage(value: unknown): string {
     return "Action failed without an error message.";
   }
   return truncateDiagnosticText(normalized, MAX_RUNTIME_ACTION_MESSAGE_CHARS);
+}
+
+function normalizeTaskOutputText(value: unknown, fallback: string): string {
+  const raw =
+    typeof value === "string"
+      ? value
+      : value == null
+        ? fallback
+        : formatUnknownError(value);
+  const normalized = raw.replace(/\r\n?/g, "\n").trim();
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncateDiagnosticText(normalized, MAX_RUNTIME_TASK_OUTPUT_CHARS);
 }
 
 function safeGetPageUrl(page: Page): string {
@@ -186,6 +201,27 @@ function normalizeActionOutput(
     ...(extract !== undefined ? { extract: extract as object } : {}),
     ...(debug !== undefined ? { debug } : {}),
   };
+}
+
+function resolveCompleteActionFormatter(
+  actions: Array<AgentActionDefinition>
+):
+  | ((params: unknown) => Promise<string> | string)
+  | null {
+  for (const actionDefinition of actions) {
+    if (
+      normalizeRuntimeActionType(safeReadRecordField(actionDefinition, "type")) !==
+      "complete"
+    ) {
+      continue;
+    }
+    const completeAction = safeReadRecordField(actionDefinition, "completeAction");
+    if (typeof completeAction === "function") {
+      return completeAction as (params: unknown) => Promise<string> | string;
+    }
+    return null;
+  }
+  return null;
 }
 
 function getContextVariables(ctx: AgentCtx): ActionContext["variables"] {
@@ -973,17 +1009,38 @@ export const runAgentTask = async (
 
       if (actionType === "complete") {
         if (actionOutput.success) {
-          const actionDefinition = ctx.actions.find(
-            (actionDefinition) => actionDefinition.type === "complete"
+          const completeFormatter = resolveCompleteActionFormatter(ctx.actions);
+          const fallbackCompleteOutput = normalizeTaskOutputText(
+            actionOutput.message,
+            "Task Complete"
           );
-          output =
-            (await actionDefinition?.completeAction?.(actionParams)) ??
-            "Task Complete";
+          if (completeFormatter) {
+            try {
+              output = normalizeTaskOutputText(
+                await completeFormatter(actionParams),
+                fallbackCompleteOutput
+              );
+            } catch (error) {
+              if (ctx.debug) {
+                console.warn(
+                  `[Agent] completeAction formatter failed: ${normalizeRuntimeActionMessage(
+                    error
+                  )}`
+                );
+              }
+              output = fallbackCompleteOutput;
+            }
+          } else {
+            output = fallbackCompleteOutput;
+          }
           taskState.status = TaskStatus.COMPLETED;
         } else {
           taskState.status = TaskStatus.FAILED;
-          taskState.error = actionOutput.message;
-          output = actionOutput.message;
+          taskState.error = normalizeTaskOutputText(
+            actionOutput.message,
+            "Task failed"
+          );
+          output = taskState.error;
         }
 
         const step: AgentStep = {
@@ -1018,7 +1075,10 @@ export const runAgentTask = async (
           MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS
         ) {
           taskState.status = TaskStatus.FAILED;
-          taskState.error = `Agent appears stuck: repeated the same successful action ${MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS} times without visible progress.`;
+          taskState.error = normalizeTaskOutputText(
+            `Agent appears stuck: repeated the same successful action ${MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS} times without visible progress.`,
+            "Agent appears stuck after repeated actions."
+          );
 
           const step: AgentStep = {
             idx: currStep,
@@ -1041,7 +1101,10 @@ export const runAgentTask = async (
 
         if (consecutiveFailuresOrWaits >= MAX_CONSECUTIVE_FAILURES_OR_WAITS) {
           taskState.status = TaskStatus.FAILED;
-          taskState.error = `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress.`;
+          taskState.error = normalizeTaskOutputText(
+            `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress.`,
+            "Agent is stuck after repeated waits."
+          );
 
           const step: AgentStep = {
             idx: currStep,
@@ -1064,7 +1127,10 @@ export const runAgentTask = async (
 
         if (consecutiveFailuresOrWaits >= MAX_CONSECUTIVE_FAILURES_OR_WAITS) {
           taskState.status = TaskStatus.FAILED;
-          taskState.error = `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress. Last error: ${actionOutput.message}`;
+          taskState.error = normalizeTaskOutputText(
+            `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress. Last error: ${actionOutput.message}`,
+            "Agent is stuck after repeated failures."
+          );
 
           const step: AgentStep = {
             idx: currStep,
