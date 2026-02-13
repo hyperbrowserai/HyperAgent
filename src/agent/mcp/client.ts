@@ -46,6 +46,7 @@ const MAX_MCP_CONFIG_RECORD_ENTRIES = 200;
 const MAX_MCP_CONFIG_RECORD_KEY_CHARS = 256;
 const MAX_MCP_CONFIG_RECORD_VALUE_CHARS = 4_000;
 const MAX_MCP_DISCOVERED_TOOLS = 500;
+const MAX_MCP_TOOL_DESCRIPTION_CHARS = 2_000;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const UNSAFE_MCP_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
@@ -641,6 +642,24 @@ export function stringifyMCPPayload(value: unknown): string {
   }
 }
 
+export function normalizeMCPToolDescription(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const normalized = value
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length <= MAX_MCP_TOOL_DESCRIPTION_CHARS) {
+    return normalized;
+  }
+  const omitted = normalized.length - MAX_MCP_TOOL_DESCRIPTION_CHARS;
+  return `${normalized.slice(
+    0,
+    MAX_MCP_TOOL_DESCRIPTION_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
+
 export function normalizeMCPToolParams(
   input: MCPToolActionInput["params"]
 ): Record<string, unknown> {
@@ -974,6 +993,13 @@ class MCPClient {
 
       // Create actions for each tool
       const actions = discoveredTools.map(({ tool, normalizedName }) => {
+          const normalizedToolDescription = normalizeMCPToolDescription(
+            tool.description
+          );
+          const descriptionPrefix =
+            normalizedToolDescription.length > 0
+              ? `${normalizedToolDescription} `
+              : "";
           // Store tool reference for later use
           toolsMap.set(normalizedName, tool);
 
@@ -981,7 +1007,7 @@ class MCPClient {
           return {
             type: normalizedName,
             actionParams: MCPToolActionParams.describe(
-              `${tool.description ?? ""} Tool input schema: ${stringifyMCPPayload(tool.inputSchema)}`
+              `${descriptionPrefix}Tool input schema: ${stringifyMCPPayload(tool.inputSchema)}`
             ),
             run: async (
               ctx: ActionContext,

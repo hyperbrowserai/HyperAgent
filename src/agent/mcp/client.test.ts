@@ -2,6 +2,7 @@ import {
   MCPClient,
   normalizeDiscoveredMCPTools,
   normalizeMCPListToolsPayload,
+  normalizeMCPToolDescription,
   normalizeMCPToolParams,
   stringifyMCPPayload,
 } from "@/agent/mcp/client";
@@ -577,6 +578,25 @@ describe("stringifyMCPPayload", () => {
     const output = stringifyMCPPayload(payload);
     expect(output).toContain("[truncated]");
     expect(output.length).toBeLessThanOrEqual(4016);
+  });
+});
+
+describe("normalizeMCPToolDescription", () => {
+  it("returns empty description for non-string values", () => {
+    expect(normalizeMCPToolDescription(undefined)).toBe("");
+    expect(normalizeMCPToolDescription(42)).toBe("");
+  });
+
+  it("sanitizes control characters and collapses whitespace", () => {
+    expect(normalizeMCPToolDescription(" hello\n\tworld\u0007 ")).toBe(
+      "hello world"
+    );
+  });
+
+  it("truncates oversized tool descriptions", () => {
+    const normalized = normalizeMCPToolDescription(`tool ${"x".repeat(2_100)}`);
+    expect(normalized).toContain("[truncated");
+    expect(normalized.length).toBeLessThan(2_100);
   });
 });
 
