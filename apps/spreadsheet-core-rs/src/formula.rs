@@ -340,6 +340,22 @@ pub fn parse_rounddown_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_ceiling_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "CEILING" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_floor_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "FLOOR" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_sqrt_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "SQRT" && args.len() == 1 {
@@ -636,6 +652,7 @@ mod tests {
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
     parse_abs_formula, parse_concat_formula, parse_date_formula, parse_day_formula,
+    parse_ceiling_formula, parse_floor_formula,
     parse_index_formula, parse_isblank_formula, parse_isnumber_formula,
     parse_istext_formula, parse_left_formula, parse_len_formula,
     parse_lower_formula, parse_match_formula,
@@ -778,6 +795,14 @@ mod tests {
       .expect("rounddown should parse");
     assert_eq!(rounddown.0, "-12.399");
     assert_eq!(rounddown.1, "1");
+    let ceiling =
+      parse_ceiling_formula("=CEILING(12.31, 0.25)").expect("ceiling should parse");
+    assert_eq!(ceiling.0, "12.31");
+    assert_eq!(ceiling.1, "0.25");
+    let floor = parse_floor_formula("=FLOOR(-12.31, 0.25)")
+      .expect("floor should parse");
+    assert_eq!(floor.0, "-12.31");
+    assert_eq!(floor.1, "0.25");
     assert_eq!(
       parse_sqrt_formula("=SQRT(81)").as_deref(),
       Some("81"),

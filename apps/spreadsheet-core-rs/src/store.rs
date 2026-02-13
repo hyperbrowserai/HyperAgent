@@ -6,7 +6,7 @@ use crate::{
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_choose_formula, parse_left_formula,
-    parse_index_formula,
+    parse_ceiling_formula, parse_floor_formula, parse_index_formula,
     parse_isblank_formula, parse_isnumber_formula, parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
     parse_match_formula, parse_month_formula, parse_not_formula,
@@ -455,6 +455,36 @@ fn evaluate_formula(
     } else {
       scaled.floor()
     } / factor;
+    return Ok(Some(rounded.to_string()));
+  }
+
+  if let Some((value_arg, significance_arg)) = parse_ceiling_formula(formula) {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let significance = parse_required_float(connection, sheet, &significance_arg)?;
+    if significance == 0.0 {
+      return Ok(Some("0".to_string()));
+    }
+    let quotient = value / significance;
+    let rounded = if quotient.is_sign_negative() {
+      quotient.floor()
+    } else {
+      quotient.ceil()
+    } * significance;
+    return Ok(Some(rounded.to_string()));
+  }
+
+  if let Some((value_arg, significance_arg)) = parse_floor_formula(formula) {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let significance = parse_required_float(connection, sheet, &significance_arg)?;
+    if significance == 0.0 {
+      return Ok(Some("0".to_string()));
+    }
+    let quotient = value / significance;
+    let rounded = if quotient.is_sign_negative() {
+      quotient.ceil()
+    } else {
+      quotient.floor()
+    } * significance;
     return Ok(Some(rounded.to_string()));
   }
 
@@ -1969,12 +1999,24 @@ mod tests {
         value: None,
         formula: Some("=SQRT(A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 57,
+        value: None,
+        formula: Some("=CEILING(12.31,0.25)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 58,
+        value: None,
+        formula: Some("=FLOOR(-12.31,0.25)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 54);
+    assert_eq!(updated_cells, 56);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -1988,7 +2030,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 56,
+        end_col: 58,
       },
     )
     .expect("cells should be fetched");
@@ -2073,6 +2115,8 @@ mod tests {
     assert_eq!(by_position(1, 54).evaluated_value.as_deref(), Some("9"));
     assert_eq!(by_position(1, 55).evaluated_value.as_deref(), Some("81"));
     assert_eq!(by_position(1, 56).evaluated_value.as_deref(), Some("8.94427190999916"));
+    assert_eq!(by_position(1, 57).evaluated_value.as_deref(), Some("12.5"));
+    assert_eq!(by_position(1, 58).evaluated_value.as_deref(), Some("-12.25"));
   }
 
   #[test]
