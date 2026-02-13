@@ -213,6 +213,28 @@ describe("action cache helpers", () => {
     expect(script).toContain('await page.waitForLoadState("domcontentloaded");');
   });
 
+  it("normalizes unsupported waitForLoadState targets to domcontentloaded", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 14,
+      instruction: "wait unsupported",
+      elementId: null,
+      method: null,
+      arguments: ["interactive"],
+      actionType: "waitForLoadState",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain('await page.waitForLoadState("domcontentloaded");');
+    expect(script).not.toContain('await page.waitForLoadState("interactive");');
+  });
+
   it("skips helper generation when xpath is missing", () => {
     const actElementEntry: ActionCacheEntry = {
       stepIndex: 3,

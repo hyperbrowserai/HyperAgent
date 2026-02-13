@@ -38,6 +38,14 @@ const normalizeWaitMs = (value: unknown): number => {
   return parsed >= 0 ? parsed : 1000;
 };
 
+const normalizeWaitUntil = (value: unknown): "domcontentloaded" | "load" | "networkidle" => {
+  const parsed = asNonEmptyTrimmedString(value);
+  if (parsed === "load" || parsed === "networkidle") {
+    return parsed;
+  }
+  return "domcontentloaded";
+};
+
 export function createScriptFromActionCache(
   params: CreateScriptFromActionCacheParams
 ): string {
@@ -111,8 +119,7 @@ ${indent}await page.waitForTimeout(${waitMs});`;
       const actionParams = isRecord(step.actionParams)
         ? step.actionParams
         : undefined;
-      const waitUntil =
-        asNonEmptyTrimmedString(step.arguments?.[0]) ?? "domcontentloaded";
+      const waitUntil = normalizeWaitUntil(step.arguments?.[0]);
       const timeoutMs = asNumber(step.arguments?.[1] ?? actionParams?.timeout);
       if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs)) {
         return `${indent}// Step ${step.stepIndex}
