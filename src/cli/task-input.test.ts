@@ -30,6 +30,17 @@ describe("normalizeTaskDescription", () => {
     );
   });
 
+  it("throws when task description input is not a string", () => {
+    expect(() =>
+      normalizeTaskDescription(
+        42 as unknown as string,
+        "Task description from --command"
+      )
+    ).toThrow(
+      "Task description from --command must be a string. Please provide plain text."
+    );
+  });
+
   it("throws when task descriptions exceed the allowed size", () => {
     expect(() =>
       normalizeTaskDescription(

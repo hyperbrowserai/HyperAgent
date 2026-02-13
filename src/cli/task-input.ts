@@ -15,6 +15,11 @@ export function normalizeTaskDescription(
   value: string,
   sourceLabel: string
 ): string {
+  if (typeof value !== "string") {
+    throw new Error(
+      `${sourceLabel} must be a string. Please provide plain text.`
+    );
+  }
   const trimmed = value.replace(/^\uFEFF/, "").trim();
   if (trimmed.includes("\u0000")) {
     throw new Error(
