@@ -3080,6 +3080,17 @@ export function SpreadsheetApp() {
                         </button>
                       ))}
                     </div>
+                  ) : agentOpsCachePrefixesQuery.data && hasActiveCacheScopeFilters ? (
+                    <div className="mb-2 text-[10px] text-slate-500">
+                      No prefix suggestions match the current scope
+                      {cacheRequestIdPrefix.trim() ? (
+                        <> (prefix {cacheRequestIdPrefix.trim()})</>
+                      ) : null}
+                      {typeof normalizedCacheEntriesMaxAgeSeconds === "number" ? (
+                        <> (older than {normalizedCacheEntriesMaxAgeSeconds}s)</>
+                      ) : null}
+                      .
+                    </div>
                   ) : null}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-[11px] text-slate-500">
