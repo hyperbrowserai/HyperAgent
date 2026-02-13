@@ -482,7 +482,7 @@ describe("action cache helpers", () => {
 
     const idx0 = script.indexOf("// Step 0");
     const idx2 = script.indexOf("// Step 2");
-    const idxNaN = script.indexOf("// Step NaN");
+    const idxNaN = script.indexOf("// Step -1");
     expect(idx0).toBeGreaterThan(-1);
     expect(idx2).toBeGreaterThan(idx0);
     expect(idxNaN).toBeGreaterThan(idx2);

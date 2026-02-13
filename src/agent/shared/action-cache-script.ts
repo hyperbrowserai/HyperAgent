@@ -103,9 +103,10 @@ export function createScriptFromActionCache(
   const formatCall = (step: ActionCacheEntry): string => {
     const indent = "  ";
     const argIndent = `${indent}  `;
+    const safeStepIndex = Number.isFinite(step.stepIndex) ? step.stepIndex : -1;
 
     if (step.actionType === "complete") {
-      return `${indent}// Step ${step.stepIndex} (complete skipped in script)`;
+      return `${indent}// Step ${safeStepIndex} (complete skipped in script)`;
     }
 
     if (step.actionType === "goToUrl") {
@@ -117,7 +118,7 @@ export function createScriptFromActionCache(
         argumentUrl ||
         (asNonEmptyTrimmedString(actionParams?.url) ?? "") ||
         "https://example.com";
-      return `${indent}// Step ${step.stepIndex}
+      return `${indent}// Step ${safeStepIndex}
 ${indent}await page.goto(
 ${argIndent}${JSON.stringify(urlArg)},
 ${argIndent}{ waitUntil: "domcontentloaded" }
@@ -125,7 +126,7 @@ ${indent});`;
     }
 
     if (step.actionType === "refreshPage") {
-      return `${indent}// Step ${step.stepIndex}
+      return `${indent}// Step ${safeStepIndex}
 ${indent}await page.reload({ waitUntil: "domcontentloaded" });`;
     }
 
@@ -134,7 +135,7 @@ ${indent}await page.reload({ waitUntil: "domcontentloaded" });`;
         ? step.actionParams
         : undefined;
       const waitMs = normalizeWaitMs(step.arguments?.[0] ?? actionParams?.duration);
-      return `${indent}// Step ${step.stepIndex}
+      return `${indent}// Step ${safeStepIndex}
 ${indent}await page.waitForTimeout(${waitMs});`;
     }
 
@@ -149,19 +150,19 @@ ${indent}await page.waitForTimeout(${waitMs});`;
         step.arguments?.[1] ?? actionParams?.timeout
       );
       if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs)) {
-        return `${indent}// Step ${step.stepIndex}
+        return `${indent}// Step ${safeStepIndex}
 ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)}, { timeout: ${timeoutMs} });`;
       }
-      return `${indent}// Step ${step.stepIndex}
+      return `${indent}// Step ${safeStepIndex}
 ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)});`;
     }
 
     if (step.actionType === "extract") {
       const extractInstruction = asNonEmptyTrimmedString(step.instruction);
       if (!extractInstruction) {
-        return `${indent}// Step ${step.stepIndex} (extract skipped: missing instruction)`;
+        return `${indent}// Step ${safeStepIndex} (extract skipped: missing instruction)`;
       }
-      return `${indent}// Step ${step.stepIndex}
+      return `${indent}// Step ${safeStepIndex}
 ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
     }
 
@@ -170,7 +171,7 @@ ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
     if (call) {
       const normalizedXPath = asNonEmptyTrimmedString(step.xpath);
       if (!normalizedXPath) {
-        return `${indent}// Step ${step.stepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"}, reason=missing xpath)`;
+        return `${indent}// Step ${safeStepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"}, reason=missing xpath)`;
       }
       const options: Record<string, unknown> = {};
       const performInstruction = asNonEmptyTrimmedString(step.instruction);
@@ -203,13 +204,13 @@ ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
         .filter(Boolean)
         .join("\n");
 
-      return `${indent}// Step ${step.stepIndex}
+      return `${indent}// Step ${safeStepIndex}
 ${indent}await page.${call.fn}(
 ${callArgs}
 ${indent});`;
     }
 
-    return `${indent}// Step ${step.stepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"})`;
+    return `${indent}// Step ${safeStepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"})`;
   };
 
   const stepSnippets = [...steps]
