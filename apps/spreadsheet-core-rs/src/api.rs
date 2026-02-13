@@ -1549,11 +1549,25 @@ mod tests {
         .is_err(),
       "mismatching signature should fail",
     );
-    assert!(
+    let invalid_format_error =
       validate_expected_operations_signature(Some("xyz"), signature.as_str())
-        .is_err(),
-      "invalid signature format should fail",
-    );
+        .expect_err("invalid signature format should fail");
+    match invalid_format_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_SIGNATURE_FORMAT");
+      }
+      _ => panic!("expected bad request with custom error code"),
+    }
+
+    let mismatch_error =
+      validate_expected_operations_signature(Some("a".repeat(64).as_str()), signature.as_str())
+        .expect_err("mismatch should fail");
+    match mismatch_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "OPERATION_SIGNATURE_MISMATCH");
+      }
+      _ => panic!("expected bad request with custom error code"),
+    }
   }
 
   #[test]
@@ -1587,10 +1601,14 @@ mod tests {
 
   #[test]
   fn should_reject_empty_operation_lists() {
-    assert!(
-      ensure_non_empty_operations(&[]).is_err(),
-      "empty operation arrays should fail validation",
-    );
+    let empty_error = ensure_non_empty_operations(&[])
+      .expect_err("empty operation arrays should fail validation");
+    match empty_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "EMPTY_OPERATION_LIST");
+      }
+      _ => panic!("expected bad request with custom error code"),
+    }
 
     let operations = build_preset_operations("export_snapshot", Some(false))
       .expect("preset operations should build");
