@@ -1,4 +1,9 @@
-import { convertToOpenAIMessages } from "@/llm/utils/message-converter";
+import {
+  convertToAnthropicMessages,
+  convertToGeminiMessages,
+  convertToOpenAIMessages,
+  extractImageDataFromUrl,
+} from "@/llm/utils/message-converter";
 import { HyperAgentMessage } from "@/llm/types";
 
 describe("convertToOpenAIMessages", () => {
@@ -79,5 +84,62 @@ describe("convertToOpenAIMessages", () => {
     )[0]?.function.arguments;
 
     expect(serialized).toBe("{}");
+  });
+});
+
+describe("image payload conversion", () => {
+  it("returns empty payload for malformed data URL in Anthropic messages", () => {
+    const { messages } = convertToAnthropicMessages([
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            url: "data:image/png;base64",
+          },
+        ],
+      },
+    ]);
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/png",
+          data: "",
+        },
+      },
+    ]);
+  });
+
+  it("returns empty payload for malformed data URL in Gemini messages", () => {
+    const { messages } = convertToGeminiMessages([
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            url: "data:image/png;base64",
+          },
+        ],
+      },
+    ]);
+
+    expect(messages[0]?.parts).toEqual([
+      {
+        inlineData: {
+          mimeType: "image/png",
+          data: "",
+        },
+      },
+    ]);
+  });
+
+  it("extractImageDataFromUrl tolerates malformed data URLs", () => {
+    expect(extractImageDataFromUrl("data:image/png;base64")).toEqual({
+      mimeType: "image/png",
+      data: "",
+    });
   });
 });

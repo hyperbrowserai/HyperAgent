@@ -38,6 +38,18 @@ function stringifyToolArguments(value: unknown): string {
   }
 }
 
+function extractBase64Payload(url: string): string {
+  if (!url.startsWith("data:")) {
+    return url;
+  }
+
+  const commaIndex = url.indexOf(",");
+  if (commaIndex < 0) {
+    return "";
+  }
+  return url.slice(commaIndex + 1);
+}
+
 export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
   return messages.map((msg) => {
     const openAIMessage: Record<string, unknown> = {
@@ -108,9 +120,7 @@ export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
           const textBlock: TextBlockParam = { type: "text", text: part.text };
           blocks.push(textBlock);
         } else if (part.type === "image") {
-          const base64Data = part.url.startsWith("data:")
-            ? part.url.split(",")[1]
-            : part.url;
+          const base64Data = extractBase64Payload(part.url);
           const mediaType = normalizeImageMimeType(part.mimeType);
           const imageBlock: ImageBlockParam = {
             type: "image",
@@ -176,10 +186,7 @@ export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
         if (part.type === "text") {
           return { text: part.text };
         } else if (part.type === "image") {
-          // Extract base64 data from data URL
-          const base64Data = part.url.startsWith("data:")
-            ? part.url.split(",")[1]
-            : part.url;
+          const base64Data = extractBase64Payload(part.url);
           return {
             inlineData: {
               mimeType: part.mimeType || "image/png",
@@ -202,7 +209,9 @@ export function extractImageDataFromUrl(url: string): {
   data: string;
 } {
   if (url.startsWith("data:")) {
-    const [header, data] = url.split(",");
+    const commaIndex = url.indexOf(",");
+    const header = commaIndex >= 0 ? url.slice(0, commaIndex) : url;
+    const data = commaIndex >= 0 ? url.slice(commaIndex + 1) : "";
     const mimeType = header.match(/data:([^;]+)/)?.[1] || "image/png";
     return { mimeType, data };
   }
