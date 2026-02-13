@@ -60,7 +60,11 @@ import { setDebugOptions } from "@/debug/options";
 import { initializeRuntimeContext } from "./shared/runtime-context";
 import { performAction } from "./actions/shared/perform-action";
 import { createScriptFromActionCache } from "./shared/action-cache-script";
-import { attachCachedActionHelpers } from "./shared/action-cache-exec";
+import {
+  attachCachedActionHelpers,
+  dispatchPerformHelper,
+  isPageActionMethod,
+} from "./shared/action-cache-exec";
 import { AgentDeps } from "@/types/agent/types";
 import { parseExtractOutput } from "./shared/parse-extract-output";
 import { executeReplaySpecialAction } from "./shared/replay-special-actions";
@@ -603,66 +607,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return finalSuccess;
     };
 
-    /**
-     * Type-safe dispatch for HyperPage perform* methods.
-     * Explicitly routes to the correct method with proper typing.
-     *
-     * Methods that require a value argument (second param): type, fill, press, selectOptionFromDropdown, scrollToPercentage
-     * Methods with only xpath and options: click, hover, check, uncheck, scrollToElement, nextChunk, prevChunk
-     */
-    const dispatchPerformHelper = (
-      hp: HyperPage,
-      method: string,
-      xpath: string,
-      value: string | undefined,
-      options: PerformOptions
-    ): Promise<TaskOutput> => {
-      switch (method) {
-        case "click":
-          return hp.performClick(xpath, options);
-        case "hover":
-          return hp.performHover(xpath, options);
-        case "type":
-          return hp.performType(xpath, value ?? "", options);
-        case "fill":
-          return hp.performFill(xpath, value ?? "", options);
-        case "press":
-          return hp.performPress(xpath, value ?? "", options);
-        case "selectOptionFromDropdown":
-          return hp.performSelectOption(xpath, value ?? "", options);
-        case "check":
-          return hp.performCheck(xpath, options);
-        case "uncheck":
-          return hp.performUncheck(xpath, options);
-        case "scrollToElement":
-          return hp.performScrollToElement(xpath, options);
-        case "scrollToPercentage":
-          return hp.performScrollToPercentage(xpath, value ?? "", options);
-        case "nextChunk":
-          return hp.performNextChunk(xpath, options);
-        case "prevChunk":
-          return hp.performPrevChunk(xpath, options);
-        default:
-          throw new Error(`Unknown perform helper method: ${method}`);
-      }
-    };
-
-    /** Set of valid method names that can be dispatched */
-    const validHelperMethods = new Set([
-      "click",
-      "fill",
-      "type",
-      "press",
-      "selectOptionFromDropdown",
-      "check",
-      "uncheck",
-      "hover",
-      "scrollToElement",
-      "scrollToPercentage",
-      "nextChunk",
-      "prevChunk",
-    ]);
-
     for (const step of [...cache.steps].sort(
       (a, b) => a.stepIndex - b.stepIndex
     )) {
@@ -682,7 +626,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         result = replaySpecialResult;
       } else {
         const method = step.method;
-        if (method && validHelperMethods.has(method)) {
+        if (method && isPageActionMethod(method)) {
           const xpath = step.xpath;
           const hasXPath =
             typeof xpath === "string" && xpath.trim().length > 0;

@@ -1,26 +1,77 @@
-import { AgentDeps, HyperPage, TaskOutput } from "@/types/agent/types";
+import {
+  AgentDeps,
+  HyperPage,
+  PerformOptions,
+  TaskOutput,
+} from "@/types/agent/types";
 import * as cachedRunner from "./run-cached-action";
 
 const DEFAULT_MAX_STEPS = 3;
 
-type PageAction =
-  | "click"
-  | "fill"
-  | "type"
-  | "press"
-  | "selectOptionFromDropdown"
-  | "check"
-  | "uncheck"
-  | "hover"
-  | "scrollToElement"
-  | "scrollToPercentage"
-  | "nextChunk"
-  | "prevChunk";
+export const PAGE_ACTION_METHODS = [
+  "click",
+  "fill",
+  "type",
+  "press",
+  "selectOptionFromDropdown",
+  "check",
+  "uncheck",
+  "hover",
+  "scrollToElement",
+  "scrollToPercentage",
+  "nextChunk",
+  "prevChunk",
+] as const;
 
-interface PerformOptions {
-  frameIndex?: number | null;
-  performInstruction?: string | null;
-  maxSteps?: number;
+type Includes<T extends readonly string[]> = (
+  haystack: readonly string[],
+  needle: string
+) => needle is T[number];
+
+const includes = ((haystack: readonly string[], needle: string): boolean =>
+  haystack.includes(needle)) as Includes<typeof PAGE_ACTION_METHODS>;
+
+export type PageAction = (typeof PAGE_ACTION_METHODS)[number];
+
+export function isPageActionMethod(method: string): method is PageAction {
+  return includes(PAGE_ACTION_METHODS, method);
+}
+
+export function dispatchPerformHelper(
+  hp: HyperPage,
+  method: PageAction,
+  xpath: string,
+  value: string | undefined,
+  options: PerformOptions
+): Promise<TaskOutput> {
+  switch (method) {
+    case "click":
+      return hp.performClick(xpath, options);
+    case "hover":
+      return hp.performHover(xpath, options);
+    case "type":
+      return hp.performType(xpath, value ?? "", options);
+    case "fill":
+      return hp.performFill(xpath, value ?? "", options);
+    case "press":
+      return hp.performPress(xpath, value ?? "", options);
+    case "selectOptionFromDropdown":
+      return hp.performSelectOption(xpath, value ?? "", options);
+    case "check":
+      return hp.performCheck(xpath, options);
+    case "uncheck":
+      return hp.performUncheck(xpath, options);
+    case "scrollToElement":
+      return hp.performScrollToElement(xpath, options);
+    case "scrollToPercentage":
+      return hp.performScrollToPercentage(xpath, value ?? "", options);
+    case "nextChunk":
+      return hp.performNextChunk(xpath, options);
+    case "prevChunk":
+      return hp.performPrevChunk(xpath, options);
+    default:
+      throw new Error(`Unknown perform helper method: ${method}`);
+  }
 }
 
 function runCachedAction(
