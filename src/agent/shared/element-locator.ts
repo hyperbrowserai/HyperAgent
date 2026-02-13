@@ -10,6 +10,7 @@ import {
   resolveFrameByXPath,
 } from "../../context-providers/a11y-dom";
 import { HyperagentError } from "../error";
+import { formatUnknownError } from "@/utils";
 
 /**
  * Get a Playwright locator for an element by its encoded ID
@@ -31,16 +32,40 @@ export async function getElementLocator(
   frameMap?: Map<number, IframeInfo>,
   debug = false
 ): Promise<{ locator: ReturnType<Page["locator"]>; xpath: string }> {
-  // Convert elementId to EncodedId format for xpath lookup
-  const encodedId = toEncodedId(elementId);
-  const rawXpath = xpathMap[encodedId];
+  const normalizedElementId =
+    typeof elementId === "string" ? elementId.trim() : "";
+  if (normalizedElementId.length === 0) {
+    throw new HyperagentError("Element ID must be a non-empty string", 400);
+  }
 
-  if (!rawXpath) {
-    const errorMsg = `Element ${elementId} not found in xpath map`;
+  // Convert elementId to EncodedId format for xpath lookup
+  let encodedId: string;
+  try {
+    encodedId = toEncodedId(normalizedElementId);
+  } catch (error) {
+    throw new HyperagentError(
+      `Failed to normalize element ID "${normalizedElementId}": ${formatUnknownError(
+        error
+      )}`,
+      400
+    );
+  }
+  let rawXpath: unknown;
+  try {
+    rawXpath = xpathMap[encodedId];
+  } catch (error) {
+    throw new HyperagentError(
+      `Element lookup failed for ${normalizedElementId}: ${formatUnknownError(error)}`,
+      500
+    );
+  }
+
+  if (typeof rawXpath !== "string" || rawXpath.trim().length === 0) {
+    const errorMsg = `Element ${normalizedElementId} not found in xpath map`;
     if (debug) {
       console.error(`[getElementLocator] ${errorMsg}`);
       console.error(
-        `[getElementLocator] Looking for element with ID: ${elementId} (type: ${typeof elementId})`
+        `[getElementLocator] Looking for element with ID: ${normalizedElementId} (type: ${typeof normalizedElementId})`
       );
       console.error(
         `[getElementLocator] Direct lookup result:`,
@@ -51,18 +76,39 @@ export async function getElementLocator(
   }
 
   // Trim trailing text nodes from xpath
-  const xpath = rawXpath.replace(/\/text\(\)(\[\d+\])?$/iu, "");
+  const xpath = rawXpath
+    .trim()
+    .replace(/\/text\(\)(\[\d+\])?$/iu, "")
+    .trim();
 
   // Extract frameIndex from encodedId (format: "frameIndex-nodeIndex")
   const [frameIndexStr] = encodedId.split("-");
   const frameIndex = parseInt(frameIndexStr!, 10);
+  if (!Number.isFinite(frameIndex) || frameIndex < 0) {
+    throw new HyperagentError(
+      `Invalid frame index in encoded element ID "${encodedId}"`,
+      400
+    );
+  }
 
   // Main frame (frameIndex 0) - use page.locator()
   if (frameIndex === 0) {
     return { locator: page.locator(`xpath=${xpath}`), xpath };
   }
 
-  if (!frameMap || !frameMap.has(frameIndex)) {
+  let hasFrameMetadata = false;
+  try {
+    hasFrameMetadata = Boolean(frameMap?.has(frameIndex));
+  } catch (error) {
+    throw new HyperagentError(
+      `Frame metadata lookup failed for frame ${frameIndex}: ${formatUnknownError(
+        error
+      )}`,
+      500
+    );
+  }
+
+  if (!frameMap || !hasFrameMetadata) {
     const errorMsg = `Frame metadata not found for frame ${frameIndex}`;
     if (debug) {
       console.error(`[getElementLocator] ${errorMsg}`);
@@ -70,18 +116,45 @@ export async function getElementLocator(
     throw new HyperagentError(errorMsg, 404);
   }
 
-  const iframeInfo = frameMap.get(frameIndex)!;
+  let iframeInfo: IframeInfo | undefined;
+  try {
+    iframeInfo = frameMap.get(frameIndex) ?? undefined;
+  } catch (error) {
+    throw new HyperagentError(
+      `Frame metadata retrieval failed for frame ${frameIndex}: ${formatUnknownError(
+        error
+      )}`,
+      500
+    );
+  }
+  if (!iframeInfo) {
+    throw new HyperagentError(
+      `Frame metadata not found for frame ${frameIndex}`,
+      404
+    );
+  }
 
   if (debug) {
     console.log(
       `[getElementLocator] Resolving frame ${frameIndex} via XPath/URL metadata`
     );
   }
-  const targetFrame =
-    (await resolveFrameByXPath(page, frameMap, frameIndex)) ?? undefined;
+  let targetFrame:
+    | Awaited<ReturnType<typeof resolveFrameByXPath>>
+    | undefined;
+  try {
+    targetFrame = (await resolveFrameByXPath(page, frameMap, frameIndex)) ?? undefined;
+  } catch (error) {
+    throw new HyperagentError(
+      `Could not resolve frame for element ${normalizedElementId} (frameIndex: ${frameIndex}): ${formatUnknownError(
+        error
+      )}`,
+      500
+    );
+  }
 
   if (!targetFrame) {
-    const errorMsg = `Could not resolve frame for element ${elementId} (frameIndex: ${frameIndex})`;
+    const errorMsg = `Could not resolve frame for element ${normalizedElementId} (frameIndex: ${frameIndex})`;
     if (debug) {
       console.error(`[getElementLocator] ${errorMsg}`);
       console.error(`[getElementLocator] Frame info:`, {
@@ -92,7 +165,9 @@ export async function getElementLocator(
       });
       console.error(
         `[getElementLocator] Available frames:`,
-        page.frames().map((f) => ({ url: f.url(), name: f.name() }))
+        page
+          .frames()
+          .map((f) => ({ url: f.url(), name: f.name() }))
       );
     }
     throw new HyperagentError(errorMsg, 404);
@@ -118,7 +193,7 @@ export async function getElementLocator(
 
   if (debug) {
     console.log(
-      `[getElementLocator] Using frame ${frameIndex} locator for element ${elementId}`
+      `[getElementLocator] Using frame ${frameIndex} locator for element ${normalizedElementId}`
     );
     console.log(
       `[getElementLocator] Frame URL: ${targetFrame.url()}, Name: ${targetFrame.name()}`
