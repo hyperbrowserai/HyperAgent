@@ -17,7 +17,7 @@ use crate::{
     parse_not_formula,
     parse_power_formula,
     parse_or_formula, parse_rept_formula, parse_right_formula,
-    parse_replace_formula, parse_search_formula,
+    parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_find_formula,
     parse_single_ref_formula,
     parse_xor_formula,
@@ -669,6 +669,33 @@ fn evaluate_formula(
     let suffix_start = start_index.saturating_add(replace_count).min(old_chars.len());
     let suffix = old_chars[suffix_start..].iter().collect::<String>();
     return Ok(Some(format!("{prefix}{new_text}{suffix}")));
+  }
+
+  if let Some((text_arg, old_text_arg, new_text_arg, instance_arg)) =
+    parse_substitute_formula(formula)
+  {
+    let text = resolve_scalar_operand(connection, sheet, &text_arg)?;
+    let old_text = resolve_scalar_operand(connection, sheet, &old_text_arg)?;
+    let new_text = resolve_scalar_operand(connection, sheet, &new_text_arg)?;
+    if old_text.is_empty() {
+      return Ok(Some(text));
+    }
+
+    if let Some(raw_instance) = instance_arg {
+      let instance = parse_required_integer(connection, sheet, &raw_instance)?;
+      if instance <= 0 {
+        return Ok(None);
+      }
+      let replaced = replace_nth_occurrence(
+        &text,
+        &old_text,
+        &new_text,
+        usize::try_from(instance).unwrap_or(0),
+      );
+      return Ok(Some(replaced));
+    }
+
+    return Ok(Some(text.replace(&old_text, &new_text)));
   }
 
   if let Some((find_text_arg, within_text_arg, start_num_arg)) =
@@ -1532,6 +1559,33 @@ fn matches_lookup_value(
       .unwrap_or(false);
   }
   candidate.trim().eq_ignore_ascii_case(lookup_value.trim())
+}
+
+fn replace_nth_occurrence(
+  text: &str,
+  from: &str,
+  to: &str,
+  instance: usize,
+) -> String {
+  if instance == 0 {
+    return text.to_string();
+  }
+
+  let mut seen = 0usize;
+  for (byte_index, matched) in text.match_indices(from) {
+    if matched.is_empty() {
+      continue;
+    }
+    seen += 1;
+    if seen == instance {
+      let prefix = &text[..byte_index];
+      let suffix_start = byte_index + matched.len();
+      let suffix = &text[suffix_start..];
+      return format!("{prefix}{to}{suffix}");
+    }
+  }
+
+  text.to_string()
 }
 
 fn parse_optional_char_count(
@@ -2507,12 +2561,26 @@ mod tests {
         value: None,
         formula: Some(r#"=REPLACE("spreadsheet",1,6,"work")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 81,
+        value: None,
+        formula: Some(r#"=SUBSTITUTE("north-north","north","south")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 82,
+        value: None,
+        formula: Some(
+          r#"=SUBSTITUTE("north-north-north","north","south",2)"#.to_string(),
+        ),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 78);
+    assert_eq!(updated_cells, 80);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2526,7 +2594,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 80,
+        end_col: 82,
       },
     )
     .expect("cells should be fetched");
@@ -2642,6 +2710,14 @@ mod tests {
     assert_eq!(by_position(1, 78).evaluated_value.as_deref(), Some("7"));
     assert_eq!(by_position(1, 79).evaluated_value.as_deref(), Some("6"));
     assert_eq!(by_position(1, 80).evaluated_value.as_deref(), Some("worksheet"));
+    assert_eq!(
+      by_position(1, 81).evaluated_value.as_deref(),
+      Some("south-south"),
+    );
+    assert_eq!(
+      by_position(1, 82).evaluated_value.as_deref(),
+      Some("north-south-north"),
+    );
   }
 
   #[test]
@@ -2834,6 +2910,25 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=REPLACE("spreadsheet",0,2,"x")"#.to_string()]
+    );
+  }
+
+  #[test]
+  fn should_leave_substitute_invalid_instance_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=SUBSTITUTE("north-north","north","south",0)"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=SUBSTITUTE("north-north","north","south",0)"#.to_string()]
     );
   }
 

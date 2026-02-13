@@ -499,6 +499,21 @@ pub fn parse_replace_formula(
   None
 }
 
+pub fn parse_substitute_formula(
+  formula: &str,
+) -> Option<(String, String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SUBSTITUTE" || !(args.len() == 3 || args.len() == 4) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args.get(3).cloned(),
+  ))
+}
+
 pub fn parse_search_formula(
   formula: &str,
 ) -> Option<(String, String, Option<String>)> {
@@ -822,7 +837,7 @@ mod tests {
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
     parse_find_formula, parse_mid_formula, parse_rept_formula,
-    parse_replace_formula, parse_search_formula,
+    parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
@@ -1049,6 +1064,15 @@ mod tests {
     assert_eq!(replace_args.1, "1");
     assert_eq!(replace_args.2, "6");
     assert_eq!(replace_args.3, r#""work""#);
+
+    let substitute_args = parse_substitute_formula(
+      r#"=SUBSTITUTE("north-north","north","south",2)"#,
+    )
+    .expect("substitute should parse");
+    assert_eq!(substitute_args.0, r#""north-north""#);
+    assert_eq!(substitute_args.1, r#""north""#);
+    assert_eq!(substitute_args.2, r#""south""#);
+    assert_eq!(substitute_args.3.as_deref(), Some("2"));
 
     let search_args = parse_search_formula(r#"=SEARCH("sheet","spreadsheet",2)"#)
       .expect("search should parse");
