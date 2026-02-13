@@ -348,4 +348,45 @@ describe("MCP lifecycle action registration", () => {
       consoleErrorSpy.mockRestore();
     }
   });
+
+  it("truncates oversized MCP connection diagnostics", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    try {
+      connectToServerMock.mockRejectedValueOnce(new Error("x".repeat(2_000)));
+      const agent = new HyperAgent({ llm: createMockLLM() });
+
+      const serverId = await agent.connectToMCPServer({
+        command: "echo",
+      });
+
+      expect(serverId).toBeNull();
+      const errorMessage = String(consoleErrorSpy.mock.calls[0]?.[0] ?? "");
+      expect(errorMessage).toContain("[truncated");
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it("truncates oversized MCP initialize-server diagnostics", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    try {
+      connectToServerMock.mockRejectedValueOnce(new Error("x".repeat(2_000)));
+      const agent = new HyperAgent({ llm: createMockLLM() });
+
+      await expect(
+        agent.initializeMCPClient({
+          servers: [{ id: "server-a", command: "echo" }],
+        })
+      ).resolves.toBeUndefined();
+
+      const errorMessage = String(consoleErrorSpy.mock.calls[0]?.[0] ?? "");
+      expect(errorMessage).toContain("[truncated");
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
 });

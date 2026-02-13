@@ -167,6 +167,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     )}... [truncated ${omitted} chars]`;
   }
 
+  private formatMCPDiagnostic(value: unknown): string {
+    return this.formatHelperDiagnostic(value);
+  }
+
   private readTaskStatus(
     taskState: TaskState,
     fallback: TaskStatus = TaskStatus.FAILED
@@ -2837,7 +2841,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       await this.mcpClient.disconnect().catch((error) => {
         if (this.debug) {
           console.warn(
-            `Failed to reset existing MCP client: ${formatUnknownError(error)}`
+            `Failed to reset existing MCP client: ${this.formatMCPDiagnostic(
+              error
+            )}`
           );
         }
       });
@@ -2881,7 +2887,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             (serverConfig as { id?: unknown })?.id
           );
           console.error(
-            `Failed to initialize MCP server ${serverLabel ?? "unknown"}: ${formatUnknownError(error)}`
+            `Failed to initialize MCP server ${serverLabel ?? "unknown"}: ${this.formatMCPDiagnostic(
+              error
+            )}`
           );
         }
       }
@@ -2894,7 +2902,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     } catch (error) {
       console.error(
-        `Failed to initialize MCP client: ${formatUnknownError(error)}`
+        `Failed to initialize MCP client: ${this.formatMCPDiagnostic(error)}`
       );
       this.mcpClient = undefined;
     }
@@ -2930,7 +2938,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       return serverId;
     } catch (error) {
-      console.error(`Failed to connect to MCP server: ${formatUnknownError(error)}`);
+      console.error(
+        `Failed to connect to MCP server: ${this.formatMCPDiagnostic(error)}`
+      );
       return null;
     }
   }
@@ -2959,13 +2969,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.unregisterMCPActionsForServer(normalizedServerId);
       void this.mcpClient.disconnectServer(normalizedServerId).catch((error) => {
         console.error(
-          `Failed to disconnect from MCP server ${normalizedServerId}: ${formatUnknownError(error)}`
+          `Failed to disconnect from MCP server ${normalizedServerId}: ${this.formatMCPDiagnostic(
+            error
+          )}`
         );
       });
       return true;
     } catch (error) {
       console.error(
-        `Failed to disconnect from MCP server ${normalizedServerId}: ${formatUnknownError(error)}`
+        `Failed to disconnect from MCP server ${normalizedServerId}: ${this.formatMCPDiagnostic(
+          error
+        )}`
       );
       return false;
     }
@@ -2996,7 +3010,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return true;
     } catch (error) {
       console.error(
-        `Failed to disconnect from MCP server ${normalizedServerId}: ${formatUnknownError(error)}`
+        `Failed to disconnect from MCP server ${normalizedServerId}: ${this.formatMCPDiagnostic(
+          error
+        )}`
       );
       return false;
     }
