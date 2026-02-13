@@ -435,4 +435,56 @@ describe("action cache helpers", () => {
     expect(script).toContain('"//button[1]"');
     expect(script).not.toContain('"  //button[1]  "');
   });
+
+  it("sorts generated script steps by finite step index", () => {
+    const unorderedSteps: ActionCacheEntry[] = [
+      {
+        stepIndex: Number.NaN,
+        instruction: "nan step",
+        elementId: null,
+        method: null,
+        arguments: [],
+        actionType: "wait",
+        success: true,
+        message: "ok",
+        frameIndex: null,
+        xpath: null,
+      },
+      {
+        stepIndex: 2,
+        instruction: "third step",
+        elementId: null,
+        method: null,
+        arguments: ["300"],
+        actionType: "wait",
+        success: true,
+        message: "ok",
+        frameIndex: null,
+        xpath: null,
+      },
+      {
+        stepIndex: 0,
+        instruction: "first step",
+        elementId: null,
+        method: null,
+        arguments: ["100"],
+        actionType: "wait",
+        success: true,
+        message: "ok",
+        frameIndex: null,
+        xpath: null,
+      },
+    ];
+
+    const script = createScriptFromActionCache({
+      steps: unorderedSteps,
+    });
+
+    const idx0 = script.indexOf("// Step 0");
+    const idx2 = script.indexOf("// Step 2");
+    const idxNaN = script.indexOf("// Step NaN");
+    expect(idx0).toBeGreaterThan(-1);
+    expect(idx2).toBeGreaterThan(idx0);
+    expect(idxNaN).toBeGreaterThan(idx2);
+  });
 });

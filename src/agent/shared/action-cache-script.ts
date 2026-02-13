@@ -5,6 +5,9 @@ interface CreateScriptFromActionCacheParams {
   steps: ActionCacheEntry[];
 }
 
+const getSortStepIndex = (value: number): number =>
+  Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -197,7 +200,10 @@ ${indent});`;
     return `${indent}// Step ${step.stepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"})`;
   };
 
-  const stepSnippets = steps.map((step) => formatCall(step)).join("\n\n");
+  const stepSnippets = [...steps]
+    .sort((a, b) => getSortStepIndex(a.stepIndex) - getSortStepIndex(b.stepIndex))
+    .map((step) => formatCall(step))
+    .join("\n\n");
 
   const script = `import { HyperAgent } from "@hyperbrowser/agent";
 async function main() {
