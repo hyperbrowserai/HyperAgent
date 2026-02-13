@@ -1319,6 +1319,9 @@ function getKeyEventData(inputKey: string): KeyEventData {
     arrowright: { key: "ArrowRight", code: "ArrowRight", keyCode: 39 },
     pageup: { key: "PageUp", code: "PageUp", keyCode: 33 },
     pagedown: { key: "PageDown", code: "PageDown", keyCode: 34 },
+    pgup: { key: "PageUp", code: "PageUp", keyCode: 33 },
+    pgdn: { key: "PageDown", code: "PageDown", keyCode: 34 },
+    pagedn: { key: "PageDown", code: "PageDown", keyCode: 34 },
     home: { key: "Home", code: "Home", keyCode: 36 },
     end: { key: "End", code: "End", keyCode: 35 },
   };

@@ -202,6 +202,32 @@ describe("dispatchCDPAction press key normalization", () => {
     expect(keyDownCalls[1]?.params?.windowsVirtualKeyCode).toBe(32);
   });
 
+  it("supports page-down shorthand aliases", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+
+    await dispatchCDPAction("press", ["pgdn"], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const keyDown = calls.find(
+      (call) =>
+        call.method === "Input.dispatchKeyEvent" &&
+        call.params?.type === "keyDown"
+    );
+    expect(keyDown?.params?.key).toBe("PageDown");
+    expect(keyDown?.params?.code).toBe("PageDown");
+    expect(keyDown?.params?.windowsVirtualKeyCode).toBe(34);
+  });
+
   it("bounds oversized custom key strings before dispatch", async () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session = createSession(async (method, params) => {
