@@ -441,6 +441,26 @@ export function SpreadsheetApp() {
     };
   }
 
+  async function refreshWorkbookRunQueries(
+    workbookId: string,
+    sheetName: string,
+    includeAgentOpsCache: boolean = true,
+  ): Promise<void> {
+    const tasks: Array<Promise<unknown>> = [
+      queryClient.invalidateQueries({
+        queryKey: ["cells", workbookId, sheetName],
+      }),
+    ];
+    if (includeAgentOpsCache) {
+      tasks.push(
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbookId],
+        }),
+      );
+    }
+    await Promise.all(tasks);
+  }
+
   async function handleSaveFormula() {
     if (!workbook) {
       return;
@@ -497,14 +517,7 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastScenario(null);
       setLastWizardImportSummary(null);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["cells", workbook.id, activeSheet],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-      ]);
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -606,14 +619,7 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastScenario(null);
       setLastWizardImportSummary(null);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["cells", workbook.id, activeSheet],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-      ]);
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -656,14 +662,7 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["cells", workbook.id, activeSheet],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-      ]);
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -704,14 +703,7 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["cells", workbook.id, activeSheet],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-      ]);
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -752,9 +744,7 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["cells", workbook.id, activeSheet],
-      });
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -791,14 +781,7 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["cells", workbook.id, activeSheet],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-      ]);
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -839,9 +822,7 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["cells", workbook.id, activeSheet],
-      });
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -878,14 +859,7 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["cells", workbook.id, activeSheet],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["agent-ops-cache", workbook.id],
-        }),
-      ]);
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
         error instanceof Error &&
