@@ -52,6 +52,47 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
+function safeHasOwnProperty(
+  value: Record<string, unknown>,
+  key: string,
+  index: number
+): boolean {
+  try {
+    return Object.prototype.hasOwnProperty.call(value, key);
+  } catch {
+    throw new Error(
+      `MCP server entry at index ${index} has inaccessible "${key}" value.`
+    );
+  }
+}
+
+function safeReadRecordField(
+  value: Record<string, unknown>,
+  key: string,
+  index: number
+): unknown {
+  try {
+    return value[key];
+  } catch {
+    throw new Error(
+      `MCP server entry at index ${index} has inaccessible "${key}" value.`
+    );
+  }
+}
+
+function safeCloneRecord(
+  value: Record<string, unknown>,
+  index: number
+): Record<string, unknown> {
+  try {
+    return { ...value };
+  } catch {
+    throw new Error(
+      `MCP server entry at index ${index} has unreadable fields.`
+    );
+  }
+}
+
 function normalizeOptionalArgs(value: unknown, index: number): string[] | undefined {
   if (typeof value === "undefined") {
     return undefined;
@@ -61,17 +102,25 @@ function normalizeOptionalArgs(value: unknown, index: number): string[] | undefi
       `MCP server entry at index ${index} must provide "args" as an array of strings.`
     );
   }
-  if (!value.every((entry) => typeof entry === "string")) {
+  let entries: unknown[];
+  try {
+    entries = Array.from(value);
+  } catch {
     throw new Error(
       `MCP server entry at index ${index} must provide "args" as an array of strings.`
     );
   }
-  if (value.length > MAX_MCP_ARGS_PER_SERVER) {
+  if (!entries.every((entry) => typeof entry === "string")) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "args" as an array of strings.`
+    );
+  }
+  if (entries.length > MAX_MCP_ARGS_PER_SERVER) {
     throw new Error(
       `MCP server entry at index ${index} must provide no more than ${MAX_MCP_ARGS_PER_SERVER} "args" entries.`
     );
   }
-  const normalized = (value as string[]).map((entry) => entry.trim());
+  const normalized = (entries as string[]).map((entry) => entry.trim());
   if (
     normalized.some(
       (entry) =>
@@ -100,7 +149,14 @@ function normalizeOptionalStringRecord(
       `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
     );
   }
-  const entries = Object.entries(value);
+  let entries: [string, unknown][];
+  try {
+    entries = Object.entries(value);
+  } catch {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
+    );
+  }
   if (entries.length > MAX_MCP_RECORD_ENTRIES) {
     throw new Error(
       `MCP server entry at index ${index} must provide no more than ${MAX_MCP_RECORD_ENTRIES} "${field}" entries.`
@@ -205,17 +261,25 @@ function normalizeOptionalStringArray(
       `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
     );
   }
-  if (value.length > MAX_MCP_TOOL_LIST_ENTRIES) {
+  let entries: unknown[];
+  try {
+    entries = Array.from(value);
+  } catch {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
+    );
+  }
+  if (entries.length > MAX_MCP_TOOL_LIST_ENTRIES) {
     throw new Error(
       `MCP server entry at index ${index} must provide no more than ${MAX_MCP_TOOL_LIST_ENTRIES} "${field}" entries.`
     );
   }
-  const trimmedValues = value
+  const trimmedValues = entries
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 
-  if (trimmedValues.length !== value.length) {
+  if (trimmedValues.length !== entries.length) {
     throw new Error(
       `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
     );
@@ -254,24 +318,43 @@ function normalizeOptionalStringArray(
 
 function normalizeServersPayload(payload: unknown): unknown[] {
   const ensureNonEmpty = (servers: unknown[]): unknown[] => {
-    if (servers.length === 0) {
+    let normalizedServers: unknown[];
+    try {
+      normalizedServers = Array.from(servers);
+    } catch {
+      throw new Error(
+        'MCP config must be a JSON array or an object with a "servers" array.'
+      );
+    }
+
+    if (normalizedServers.length === 0) {
       throw new Error(
         "MCP config must include at least one server entry."
       );
     }
-    if (servers.length > MAX_MCP_SERVER_ENTRIES) {
+    if (normalizedServers.length > MAX_MCP_SERVER_ENTRIES) {
       throw new Error(
         `MCP config must include no more than ${MAX_MCP_SERVER_ENTRIES} server entries.`
       );
     }
-    return servers;
+    return normalizedServers;
   };
 
   if (Array.isArray(payload)) {
     return ensureNonEmpty(payload);
   }
-  if (isRecord(payload) && Array.isArray(payload.servers)) {
-    return ensureNonEmpty(payload.servers);
+  if (isRecord(payload)) {
+    let servers: unknown;
+    try {
+      servers = payload.servers;
+    } catch {
+      throw new Error(
+        'MCP config must be a JSON array or an object with a "servers" array.'
+      );
+    }
+    if (Array.isArray(servers)) {
+      return ensureNonEmpty(servers);
+    }
   }
   throw new Error(
     'MCP config must be a JSON array or an object with a "servers" array.'
@@ -318,38 +401,47 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     if (!isRecord(entry)) {
       throw new Error(`MCP server entry at index ${i} must be an object.`);
     }
+    const idValue = safeReadRecordField(entry, "id", i);
+    const connectionTypeValue = safeReadRecordField(entry, "connectionType", i);
+    const argsValue = safeReadRecordField(entry, "args", i);
+    const envValue = safeReadRecordField(entry, "env", i);
+    const sseHeadersValue = safeReadRecordField(entry, "sseHeaders", i);
+    const includeToolsValue = safeReadRecordField(entry, "includeTools", i);
+    const excludeToolsValue = safeReadRecordField(entry, "excludeTools", i);
+    const commandValue = safeReadRecordField(entry, "command", i);
+    const sseUrlValue = safeReadRecordField(entry, "sseUrl", i);
     if (
-      Object.prototype.hasOwnProperty.call(entry, "id") &&
-      typeof entry.id !== "string"
+      safeHasOwnProperty(entry, "id", i) &&
+      typeof idValue !== "string"
     ) {
       throw new Error(
         `MCP server entry at index ${i} must provide "id" as a string when specified.`
       );
     }
     if (
-      Object.prototype.hasOwnProperty.call(entry, "connectionType") &&
-      typeof entry.connectionType !== "string"
+      safeHasOwnProperty(entry, "connectionType", i) &&
+      typeof connectionTypeValue !== "string"
     ) {
       throw new Error(
         `MCP server entry at index ${i} must provide "connectionType" as a string when specified.`
       );
     }
-    const normalizedEntry = { ...entry } as Record<string, unknown>;
-    const args = normalizeOptionalArgs(entry.args, i);
-    const env = normalizeOptionalStringRecord("env", entry.env, i);
+    const normalizedEntry = safeCloneRecord(entry, i);
+    const args = normalizeOptionalArgs(argsValue, i);
+    const env = normalizeOptionalStringRecord("env", envValue, i);
     const sseHeaders = normalizeOptionalStringRecord(
       "sseHeaders",
-      entry.sseHeaders,
+      sseHeadersValue,
       i
     );
     const includeTools = normalizeOptionalStringArray(
       "includeTools",
-      entry.includeTools,
+      includeToolsValue,
       i
     );
     const excludeTools = normalizeOptionalStringArray(
       "excludeTools",
-      entry.excludeTools,
+      excludeToolsValue,
       i
     );
     if (includeTools) {
@@ -385,7 +477,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       }
     }
 
-    const normalizedId = isNonEmptyString(entry.id) ? entry.id.trim() : "";
+    const normalizedId = isNonEmptyString(idValue) ? idValue.trim() : "";
     if (normalizedId.length > 0) {
       if (hasAnyControlChars(normalizedId)) {
         throw new Error(
@@ -409,8 +501,8 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       delete normalizedEntry.id;
     }
 
-    const rawConnectionType = isNonEmptyString(entry.connectionType)
-      ? entry.connectionType.trim().toLowerCase()
+    const rawConnectionType = isNonEmptyString(connectionTypeValue)
+      ? connectionTypeValue.trim().toLowerCase()
       : undefined;
     if (
       typeof rawConnectionType === "string" &&
@@ -418,7 +510,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     ) {
       throw new Error(
         `MCP server entry at index ${i} has unsupported connectionType "${formatMCPConfigDiagnostic(
-          entry.connectionType
+          connectionTypeValue
         )}". Supported values are "stdio" and "sse".`
       );
     }
@@ -429,12 +521,12 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     ) {
       throw new Error(
         `MCP server entry at index ${i} has unsupported connectionType "${formatMCPConfigDiagnostic(
-          entry.connectionType
+          connectionTypeValue
         )}". Supported values are "stdio" and "sse".`
       );
     }
-    const hasCommand = isNonEmptyString(entry.command);
-    const hasSseUrl = isNonEmptyString(entry.sseUrl);
+    const hasCommand = isNonEmptyString(commandValue);
+    const hasSseUrl = isNonEmptyString(sseUrlValue);
     if (!rawConnectionType && hasCommand && hasSseUrl) {
       throw new Error(
         `MCP server entry at index ${i} is ambiguous: provide either "command" (stdio) or "sseUrl" (sse), or set explicit "connectionType".`
@@ -454,7 +546,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
           `MCP server entry at index ${i} configured as sse cannot define stdio fields ("command", "args", or "env").`
         );
       }
-      const sseUrl = normalizeSSEUrl(entry.sseUrl, i);
+      const sseUrl = normalizeSSEUrl(sseUrlValue, i);
       normalizedEntry.sseUrl = sseUrl;
       normalizedServers.push(normalizedEntry as MCPServerConfig);
       continue;
@@ -466,7 +558,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       );
     }
 
-    const command = isNonEmptyString(entry.command) ? entry.command.trim() : "";
+    const command = isNonEmptyString(commandValue) ? commandValue.trim() : "";
     if (command.length === 0) {
       throw new Error(
         `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`

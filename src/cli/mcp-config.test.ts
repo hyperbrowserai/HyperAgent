@@ -113,6 +113,79 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("throws clear message when top-level servers field is unreadable", () => {
+    const parseSpy = jest.spyOn(JSON, "parse").mockImplementation(() =>
+      new Proxy(
+        {},
+        {
+          get: (_target, prop) => {
+            if (prop === "servers") {
+              throw new Error("servers getter trap");
+            }
+            return undefined;
+          },
+        }
+      ) as unknown
+    );
+
+    try {
+      expect(() => parseMCPServersConfig('{"servers":[{"command":"npx"}]}')).toThrow(
+        'MCP config must be a JSON array or an object with a "servers" array.'
+      );
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it("throws clear message when server field getters throw", () => {
+    const parseSpy = jest.spyOn(JSON, "parse").mockImplementation(() => [
+      new Proxy(
+        { command: "npx" },
+        {
+          get: (target, prop, receiver) => {
+            if (prop === "id") {
+              throw new Error("id getter trap");
+            }
+            return Reflect.get(target, prop, receiver);
+          },
+        }
+      ),
+    ] as unknown);
+
+    try {
+      expect(() => parseMCPServersConfig('[{"command":"npx"}]')).toThrow(
+        'MCP server entry at index 0 has inaccessible "id" value.'
+      );
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it("rejects args arrays when proxy traps block iteration", () => {
+    const trappedArgs = new Proxy(["-y", "server"], {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.iterator) {
+          throw new Error("iterator trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const parseSpy = jest.spyOn(JSON, "parse").mockImplementation(() => [
+      {
+        command: "npx",
+        args: trappedArgs,
+      },
+    ] as unknown);
+
+    try {
+      expect(() => parseMCPServersConfig('[{"command":"npx","args":["-y"]}]')).toThrow(
+        'MCP server entry at index 0 must provide "args" as an array of strings.'
+      );
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
   it("throws when stdio server command is missing or blank", () => {
     expect(() => parseMCPServersConfig('[{"connectionType":"stdio"}]')).toThrow(
       'MCP server entry at index 0 must include a non-empty "command" for stdio connections.'
