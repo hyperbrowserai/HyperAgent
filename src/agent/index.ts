@@ -98,6 +98,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private actionCacheByTaskId: Record<string, ActionCacheOutput> = {};
   private taskResults: Record<string, Promise<AgentTaskOutput>> = {};
   private mcpActionTypesByServer: Map<string, Set<string>> = new Map();
+  private lifecycleGeneration = 0;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -477,6 +478,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       return [];
     }
+  }
+
+  private isTaskLifecycleGenerationActive(generation: number): boolean {
+    return generation === this.lifecycleGeneration;
   }
 
   private attachBrowserPageListener(context: BrowserContext): void {
@@ -871,6 +876,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Close the agent and all associated resources
    */
   public async closeAgent(): Promise<void> {
+    this.lifecycleGeneration += 1;
     await disposeAllCDPClients().catch((error) => {
       console.warn(
         `[HyperAgent] Failed to dispose CDP clients: ${formatUnknownError(error)}`
@@ -1087,6 +1093,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   ): Promise<Task> {
     const normalizedTask = this.normalizeSingleActionInstruction(task);
     const taskId = uuidv4();
+    const taskLifecycleGeneration = this.lifecycleGeneration;
     let activeTaskPage = initPage || (await this.getCurrentPage());
 
     // Follow new tabs opened by the current active page
@@ -1135,7 +1142,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mergedParams
       )
         .then((result) => {
-          this.storeTaskActionCache(taskId, result.actionCache);
+          if (this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+            this.storeTaskActionCache(taskId, result.actionCache);
+          }
           cleanup();
           return result;
         })
@@ -1165,10 +1174,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               this.emitTaskErrorSafely(taskFailureError);
             }
           } else {
-            // Fallback if task state somehow doesn't exist
-            console.error(
-              `Task state ${taskId} not found during error handling.`
-            );
+            if (this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+              if (this.debug) {
+                console.warn(
+                  `[HyperAgent] Task state ${taskId} not found during error handling.`
+                );
+              }
+            }
           }
           throw taskFailureError;
         })
@@ -1204,6 +1216,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   ): Promise<AgentTaskOutput> {
     const normalizedTask = this.normalizeSingleActionInstruction(task);
     const taskId = uuidv4();
+    const taskLifecycleGeneration = this.lifecycleGeneration;
     let activeTaskPage = initPage || (await this.getCurrentPage());
 
     // Follow new tabs opened by the current active page
@@ -1251,7 +1264,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mergedParams
       );
       cleanup();
-      this.storeTaskActionCache(taskId, result.actionCache);
+      if (this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+        this.storeTaskActionCache(taskId, result.actionCache);
+      }
       this.cleanupTaskLifecycle(taskId);
       return result;
     } catch (error) {

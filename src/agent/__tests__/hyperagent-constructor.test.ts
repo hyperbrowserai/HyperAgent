@@ -1770,4 +1770,71 @@ describe("HyperAgent constructor and task controls", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("closeAgent prevents in-flight async tasks from repopulating action cache", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("long running", undefined, fakePage);
+    const internalAgent = agent as unknown as {
+      actionCacheByTaskId: Record<string, unknown>;
+    };
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    resolveTask({
+      taskId: task.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.COMPLETED,
+    });
+    expect(internalAgent.actionCacheByTaskId).toEqual({});
+  });
+
+  it("closeAgent avoids noisy missing-task logs for late async failures", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let rejectTask!: (error: unknown) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((_, reject) => {
+          rejectTask = reject;
+        })
+    );
+
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("late failure", undefined, fakePage);
+
+    try {
+      await expect(agent.closeAgent()).resolves.toBeUndefined();
+      rejectTask(new Error("late boom"));
+      await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+      expect(errorSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("Task state")
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
