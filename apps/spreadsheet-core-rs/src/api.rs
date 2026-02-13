@@ -1163,7 +1163,7 @@ async fn get_agent_schema(
     },
     "agent_ops_cache_remove_by_prefix_preview_request_shape": {
       "request_id_prefix": "string (required)",
-      "sample_limit": "optional number (default 20, max 100)"
+      "sample_limit": "optional number (default 20, min 1, max 100)"
     },
     "agent_ops_cache_remove_by_prefix_preview_response_shape": {
       "request_id_prefix": "string",
@@ -1174,7 +1174,7 @@ async fn get_agent_schema(
     "agent_ops_cache_remove_stale_request_shape": {
       "max_age_seconds": "number > 0 (required)",
       "dry_run": "optional boolean (default false)",
-      "sample_limit": "optional number (default 20, max 100)"
+      "sample_limit": "optional number (default 20, min 1, max 100)"
     },
     "agent_ops_cache_remove_stale_response_shape": {
       "max_age_seconds": "requested max age threshold",
@@ -1831,6 +1831,17 @@ const MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT: usize = 100;
 const DEFAULT_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT: usize = 20;
 const MAX_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT: usize = 100;
 
+fn normalize_sample_limit(
+  sample_limit: Option<usize>,
+  default_limit: usize,
+  max_limit: usize,
+) -> usize {
+  sample_limit
+    .unwrap_or(default_limit)
+    .max(1)
+    .min(max_limit)
+}
+
 async fn preview_remove_agent_ops_cache_entries_by_prefix(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
@@ -1844,10 +1855,11 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
       "request_id_prefix is required to preview cache removal by prefix.",
     ));
   }
-  let sample_limit = payload
-    .sample_limit
-    .unwrap_or(DEFAULT_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT)
-    .min(MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT);
+  let sample_limit = normalize_sample_limit(
+    payload.sample_limit,
+    DEFAULT_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
+    MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
+  );
   let (matched_entries, entries) = state
     .agent_ops_cache_entries(
       workbook_id,
@@ -1882,10 +1894,11 @@ async fn remove_stale_agent_ops_cache_entries(
     ));
   }
   let dry_run = payload.dry_run.unwrap_or(false);
-  let sample_limit = payload
-    .sample_limit
-    .unwrap_or(DEFAULT_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT)
-    .min(MAX_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT);
+  let sample_limit = normalize_sample_limit(
+    payload.sample_limit,
+    DEFAULT_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT,
+    MAX_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT,
+  );
   let cutoff_timestamp =
     Utc::now() - ChronoDuration::seconds(payload.max_age_seconds);
   let (
@@ -2833,7 +2846,7 @@ mod tests {
     }
 
     let preview = preview_remove_agent_ops_cache_entries_by_prefix(
-      State(state),
+      State(state.clone()),
       Path(workbook.id),
       Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
         request_id_prefix: "scenario-".to_string(),
@@ -2848,6 +2861,20 @@ mod tests {
     assert_eq!(preview.sample_limit, 1);
     assert_eq!(preview.sample_request_ids.len(), 1);
     assert_eq!(preview.sample_request_ids[0], "scenario-b");
+
+    let clamped_preview = preview_remove_agent_ops_cache_entries_by_prefix(
+      State(state),
+      Path(workbook.id),
+      Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
+        request_id_prefix: "scenario-".to_string(),
+        sample_limit: Some(0),
+      }),
+    )
+    .await
+    .expect("zero sample limit should clamp to one")
+    .0;
+    assert_eq!(clamped_preview.sample_limit, 1);
+    assert_eq!(clamped_preview.sample_request_ids.len(), 1);
   }
 
   #[tokio::test]
@@ -2950,6 +2977,21 @@ mod tests {
     assert_eq!(preview.matched_entries, 2);
     assert_eq!(preview.sample_limit, 1);
     assert_eq!(preview.sample_request_ids.len(), 1);
+
+    let clamped_preview = remove_stale_agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        max_age_seconds: 1,
+        dry_run: Some(true),
+        sample_limit: Some(0),
+      }),
+    )
+    .await
+    .expect("zero sample limit should clamp to one")
+    .0;
+    assert_eq!(clamped_preview.sample_limit, 1);
+    assert_eq!(clamped_preview.sample_request_ids.len(), 1);
 
     let remove = remove_stale_agent_ops_cache_entries(
       State(state.clone()),

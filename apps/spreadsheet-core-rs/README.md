@@ -107,8 +107,8 @@ Cache helpers:
 - `POST /v1/workbooks/{id}/agent/ops/cache/reexecute` with `{ "request_id": "...", "new_request_id": "..." }` (reexecutes cached operations as fresh `agent/ops`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix` with `{ "request_id_prefix": "scenario-" }`
-- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview` with `{ "request_id_prefix": "scenario-", "sample_limit": 10 }` (optional sample_limit, reports matched count + sample IDs before deletion)
-- `POST /v1/workbooks/{id}/agent/ops/cache/remove-stale` with `{ "max_age_seconds": 3600, "dry_run": true, "sample_limit": 10 }` (`dry_run` previews stale matches based on `cached_at` cutoff and returns sample IDs)
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview` with `{ "request_id_prefix": "scenario-", "sample_limit": 10 }` (optional sample_limit, clamped to `1..100`, reports matched count + sample IDs before deletion)
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-stale` with `{ "max_age_seconds": 3600, "dry_run": true, "sample_limit": 10 }` (`dry_run` previews stale matches based on `cached_at` cutoff and returns sample IDs; sample_limit clamped to `1..100`)
 
 Supported `op_type` values:
 - `get_workbook`

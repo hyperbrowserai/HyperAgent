@@ -369,12 +369,21 @@ export async function removeStaleAgentOpsCacheEntries(
   workbookId: string,
   payload: RemoveStaleAgentOpsCacheEntriesRequest,
 ): Promise<RemoveStaleAgentOpsCacheEntriesResponse> {
+  const safeSampleLimit =
+    typeof payload.sample_limit === "number"
+      ? Math.max(1, Math.min(Math.floor(payload.sample_limit), 100))
+      : undefined;
+  const safeMaxAgeSeconds = Math.max(1, Math.floor(payload.max_age_seconds));
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove-stale`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        max_age_seconds: safeMaxAgeSeconds,
+        sample_limit: safeSampleLimit,
+      }),
     },
   );
   return parseJsonResponse<RemoveStaleAgentOpsCacheEntriesResponse>(response);
