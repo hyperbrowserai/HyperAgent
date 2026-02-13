@@ -149,6 +149,13 @@ describe("runCachedStep", () => {
 
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.output).toBe("Unsupported cached action");
+    expect(result.replayStepMeta).toEqual(
+      expect.objectContaining({
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 1,
+      })
+    );
   });
 
   it("treats whitespace xpath or method as unsupported cached action", async () => {

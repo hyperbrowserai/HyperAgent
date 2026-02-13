@@ -125,6 +125,14 @@ export async function runCachedStep(
       status: TaskStatus.FAILED,
       steps: [],
       output: "Unsupported cached action",
+      replayStepMeta: {
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 1,
+        cachedXPath: normalizedXPath ?? null,
+        fallbackXPath: null,
+        fallbackElementId: null,
+      },
     };
   }
 
