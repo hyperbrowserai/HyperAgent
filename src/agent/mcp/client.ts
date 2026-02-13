@@ -542,6 +542,26 @@ function findConnectedServerId(
   return undefined;
 }
 
+function resolveMCPToolNameOnServer(
+  tools: Map<string, Tool>,
+  requestedToolName: string
+): { toolName?: string; ambiguousMatches?: string[] } {
+  if (tools.has(requestedToolName)) {
+    return { toolName: requestedToolName };
+  }
+  const requestedLookup = requestedToolName.toLowerCase();
+  const caseInsensitiveMatches = Array.from(tools.keys()).filter(
+    (toolName) => toolName.toLowerCase() === requestedLookup
+  );
+  if (caseInsensitiveMatches.length === 1) {
+    return { toolName: caseInsensitiveMatches[0] };
+  }
+  if (caseInsensitiveMatches.length > 1) {
+    return { ambiguousMatches: caseInsensitiveMatches };
+  }
+  return {};
+}
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -966,6 +986,7 @@ class MCPClient {
     const safeToolName = formatMCPIdentifier(normalizedToolName, "unknown-tool");
     const safeServerId = (): string =>
       formatMCPIdentifier(serverId, "unknown-server");
+    let resolvedToolNameForServer: string | undefined;
 
     // If no server ID provided and only one server exists, use that one
     if (!normalizedServerId && this.servers.size === 1) {
@@ -974,19 +995,37 @@ class MCPClient {
 
     // If no server ID provided and multiple servers exist, try to find one with the tool
     if (!normalizedServerId && this.servers.size > 1) {
-      const matchingServerIds: string[] = [];
+      const matchingServers: Array<{ serverId: string; toolName: string }> = [];
       for (const [id, server] of this.servers.entries()) {
-        if (server.tools.has(normalizedToolName)) {
-          matchingServerIds.push(id);
+        const resolvedTool = resolveMCPToolNameOnServer(
+          server.tools,
+          normalizedToolName
+        );
+        if (resolvedTool.ambiguousMatches) {
+          throw new Error(
+            `Tool "${safeToolName}" matches multiple tools on server "${formatMCPIdentifier(
+              id,
+              "unknown-server"
+            )}" (${summarizeMCPToolNames(
+              resolvedTool.ambiguousMatches
+            )}). Use exact tool name.`
+          );
+        }
+        if (resolvedTool.toolName) {
+          matchingServers.push({
+            serverId: id,
+            toolName: resolvedTool.toolName,
+          });
         }
       }
-      if (matchingServerIds.length === 1) {
-        serverId = matchingServerIds[0];
+      if (matchingServers.length === 1) {
+        serverId = matchingServers[0].serverId;
+        resolvedToolNameForServer = matchingServers[0].toolName;
       }
-      if (matchingServerIds.length > 1) {
+      if (matchingServers.length > 1) {
         throw new Error(
           `Tool "${safeToolName}" is registered on multiple servers (${summarizeMCPServerIds(
-            matchingServerIds
+            matchingServers.map((entry) => entry.serverId)
           )}). Provide serverId explicitly.`
         );
       }
@@ -1002,7 +1041,23 @@ class MCPClient {
     if (!server) {
       throw new Error(`Server with ID ${safeServerId()} not found`);
     }
-    const registeredTool = server.tools.get(normalizedToolName);
+    const resolvedTool = resolvedToolNameForServer
+      ? { toolName: resolvedToolNameForServer }
+      : resolveMCPToolNameOnServer(server.tools, normalizedToolName);
+    if (resolvedTool.ambiguousMatches) {
+      throw new Error(
+        `Tool "${safeToolName}" matches multiple tools on server "${safeServerId()}" (${summarizeMCPToolNames(
+          resolvedTool.ambiguousMatches
+        )}). Use exact tool name.`
+      );
+    }
+    const resolvedToolName = resolvedTool.toolName;
+    if (!resolvedToolName) {
+      throw new Error(
+        `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
+      );
+    }
+    const registeredTool = server.tools.get(resolvedToolName);
     if (!registeredTool) {
       throw new Error(
         `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
@@ -1109,21 +1164,29 @@ class MCPClient {
       return { exists: false };
     }
     const matchingServerIds: string[] = [];
+    const ambiguousServerIds: string[] = [];
     for (const [serverId, server] of this.servers.entries()) {
-      if (server.tools.has(normalizedToolName)) {
+      const resolvedTool = resolveMCPToolNameOnServer(
+        server.tools,
+        normalizedToolName
+      );
+      if (resolvedTool.ambiguousMatches) {
+        ambiguousServerIds.push(serverId);
+      } else if (resolvedTool.toolName) {
         matchingServerIds.push(serverId);
       }
     }
-    if (matchingServerIds.length === 0) {
+    const allMatchedServerIds = [...matchingServerIds, ...ambiguousServerIds];
+    if (allMatchedServerIds.length === 0) {
       return { exists: false };
     }
-    if (matchingServerIds.length === 1) {
-      return { exists: true, serverId: matchingServerIds[0] };
+    if (allMatchedServerIds.length === 1 && ambiguousServerIds.length === 0) {
+      return { exists: true, serverId: allMatchedServerIds[0] };
     }
     return {
       exists: true,
-      serverId: matchingServerIds[0],
-      serverIds: matchingServerIds,
+      serverId: allMatchedServerIds[0],
+      serverIds: allMatchedServerIds,
       isAmbiguous: true,
     };
   }

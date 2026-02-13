@@ -1187,6 +1187,57 @@ describe("MCPClient.executeTool server selection", () => {
     expect(notesCallTool).not.toHaveBeenCalled();
   });
 
+  it("matches tool names case-insensitively within a server", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn().mockResolvedValue({ content: [] });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["Search", createTool("Search")]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.executeTool("search", { query: "coffee" }, "server-a");
+
+    expect(callTool).toHaveBeenCalledWith({
+      name: "Search",
+      arguments: { query: "coffee" },
+    });
+  });
+
+  it("rejects case-insensitive tool lookups that are ambiguous on a server", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn();
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([
+              ["Search", createTool("Search")],
+              ["search", createTool("search")],
+            ]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await expect(
+      mcpClient.executeTool("SEARCH", { query: "coffee" }, "server-a")
+    ).rejects.toThrow(
+      'Tool "SEARCH" matches multiple tools on server "server-a" (Search, search). Use exact tool name.'
+    );
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
   it("uses original discovered tool name when calling MCP server", async () => {
     const mcpClient = new MCPClient(false);
     const callTool = jest.fn().mockResolvedValue({ content: [] });
@@ -1611,6 +1662,26 @@ describe("MCPClient.hasTool", () => {
     });
   });
 
+  it("matches tool names case-insensitively for lookup", () => {
+    const mcpClient = new MCPClient(false);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["Search", {}]]),
+          },
+        ],
+      ])
+    );
+
+    expect(mcpClient.hasTool("search")).toEqual({
+      exists: true,
+      serverId: "server-a",
+    });
+  });
+
   it("returns ambiguity details when multiple servers expose same tool", () => {
     const mcpClient = new MCPClient(false);
     setServers(
@@ -1635,6 +1706,31 @@ describe("MCPClient.hasTool", () => {
       exists: true,
       serverId: "server-a",
       serverIds: ["server-a", "server-b"],
+      isAmbiguous: true,
+    });
+  });
+
+  it("returns ambiguity details for case-insensitive collisions on one server", () => {
+    const mcpClient = new MCPClient(false);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([
+              ["Search", {}],
+              ["search", {}],
+            ]),
+          },
+        ],
+      ])
+    );
+
+    expect(mcpClient.hasTool("SEARCH")).toEqual({
+      exists: true,
+      serverId: "server-a",
+      serverIds: ["server-a"],
       isAmbiguous: true,
     });
   });
