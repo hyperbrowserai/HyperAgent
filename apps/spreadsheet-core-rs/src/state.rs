@@ -272,6 +272,7 @@ mod tests {
     let response = AgentOpsResponse {
       request_id: Some("req-1".to_string()),
       operations_signature: Some("abc".to_string()),
+      served_from_cache: false,
       results: vec![AgentOperationResult {
         op_index: 0,
         op_type: "recalculate".to_string(),
@@ -310,6 +311,7 @@ mod tests {
       let response = AgentOpsResponse {
         request_id: Some(request_id.clone()),
         operations_signature: Some(request_id.clone()),
+        served_from_cache: false,
         results: Vec::new(),
       };
       state

@@ -228,6 +228,7 @@ pub struct AgentOperationResult {
 pub struct AgentOpsResponse {
   pub request_id: Option<String>,
   pub operations_signature: Option<String>,
+  pub served_from_cache: bool,
   pub results: Vec<AgentOperationResult>,
 }
 

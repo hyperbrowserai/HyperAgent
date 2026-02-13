@@ -44,6 +44,7 @@ export interface AgentOperationResult {
 export interface AgentOpsResponse {
   request_id?: string;
   operations_signature?: string;
+  served_from_cache?: boolean;
   results: AgentOperationResult[];
 }
 

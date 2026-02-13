@@ -67,6 +67,7 @@ Request options:
 
 Response includes:
 - `operations_signature` — sha256 signature over submitted operations.
+- `served_from_cache` — indicates whether response was reused from request-id idempotency cache.
 - Signature-related validation error codes:
   - `INVALID_SIGNATURE_FORMAT`
   - `OPERATION_SIGNATURE_MISMATCH`

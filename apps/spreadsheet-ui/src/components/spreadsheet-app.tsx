@@ -89,6 +89,7 @@ export function SpreadsheetApp() {
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastScenario, setLastScenario] = useState<string | null>(null);
   const [lastOperationsSignature, setLastOperationsSignature] = useState<string | null>(null);
+  const [lastServedFromCache, setLastServedFromCache] = useState<boolean | null>(null);
   const [lastExecutedOperations, setLastExecutedOperations] = useState<
     AgentOperationPreview[]
   >([]);
@@ -110,6 +111,7 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastScenario(null);
       setLastOperationsSignature(null);
+      setLastServedFromCache(null);
       setLastExecutedOperations([]);
       setLastAgentOps([]);
       setLastWizardImportSummary(null);
@@ -128,6 +130,7 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastScenario(null);
       setLastOperationsSignature(null);
+      setLastServedFromCache(null);
       setLastExecutedOperations([]);
       setLastAgentOps([]);
       setLastWizardImportSummary(null);
@@ -462,6 +465,7 @@ export function SpreadsheetApp() {
       setLastExecutedOperations(signedPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(response.served_from_cache ?? null);
       setLastAgentOps(response.results);
       setLastPreset(null);
       setLastScenario(null);
@@ -565,6 +569,7 @@ export function SpreadsheetApp() {
       setLastExecutedOperations(signedPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(response.served_from_cache ?? null);
       setLastAgentOps(response.results);
       setLastPreset(null);
       setLastScenario(null);
@@ -609,6 +614,7 @@ export function SpreadsheetApp() {
       setLastPreset(response.preset);
       setLastScenario(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(null);
       setLastExecutedOperations(presetPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
@@ -651,6 +657,7 @@ export function SpreadsheetApp() {
       setLastScenario(response.scenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(null);
       setLastExecutedOperations(scenarioPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
@@ -693,6 +700,7 @@ export function SpreadsheetApp() {
       setLastScenario(response.scenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(null);
       setLastExecutedOperations(scenarioPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
@@ -731,6 +739,7 @@ export function SpreadsheetApp() {
       setLastScenario(wizardScenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(response.served_from_cache ?? null);
       setLastExecutedOperations(signedPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
@@ -773,6 +782,7 @@ export function SpreadsheetApp() {
       setLastPreset(response.preset);
       setLastScenario(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(null);
       setLastExecutedOperations(presetPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
@@ -811,6 +821,7 @@ export function SpreadsheetApp() {
       setLastPreset(wizardPresetPreview);
       setLastScenario(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(response.served_from_cache ?? null);
       setLastExecutedOperations(signedPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
@@ -1080,6 +1091,7 @@ export function SpreadsheetApp() {
       setLastScenario(response.scenario);
       setLastPreset(null);
       setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(null);
       setLastExecutedOperations(scenarioPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
@@ -1788,6 +1800,20 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             )}
+            {lastServedFromCache !== null ? (
+              <p className="mb-2 text-xs text-slate-400">
+                served_from_cache:{" "}
+                <span
+                  className={`rounded px-1.5 py-0.5 font-mono ${
+                    lastServedFromCache
+                      ? "bg-amber-500/20 text-amber-200"
+                      : "bg-emerald-500/20 text-emerald-200"
+                  }`}
+                >
+                  {String(lastServedFromCache)}
+                </span>
+              </p>
+            ) : null}
             {lastExecutedOperations.length > 0 ? (
               <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-400">
                 <span>

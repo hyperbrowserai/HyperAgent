@@ -35,6 +35,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Formula and demo signed runs participate in signature-mismatch recovery refresh flow
 - Preview panels show signature sync status (`in-sync` / `stale`) against latest execution
 - Agent details panel can copy the most recent executed plan as a re-signed `agent/ops` payload
+- Agent details panel surfaces `served_from_cache` when `agent/ops` responses are replayed by request id
 - API client error handling preserves backend error codes in thrown messages (e.g. `OPERATION_SIGNATURE_MISMATCH: ...`)
 - Signature-related validation codes (`OPERATION_SIGNATURE_MISMATCH`, `INVALID_SIGNATURE_FORMAT`, `EMPTY_OPERATION_LIST`) map to recovery messaging in UI actions
 - Signature recovery uses structured API error codes (not substring-only matching)

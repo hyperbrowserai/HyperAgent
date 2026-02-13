@@ -972,6 +972,7 @@ async fn get_agent_schema(
     "agent_ops_response_shape": {
       "request_id": "optional string",
       "operations_signature": "sha256 signature over submitted operations",
+      "served_from_cache": "boolean; true when response reused by request_id idempotency cache",
       "results": "array of operation results"
     },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
@@ -1205,10 +1206,11 @@ async fn agent_ops(
   ensure_non_empty_operations(&payload.operations)?;
   let request_id = payload.request_id.clone();
   if let Some(existing_request_id) = request_id.as_deref() {
-    if let Some(cached_response) = state
+    if let Some(mut cached_response) = state
       .get_cached_agent_ops_response(workbook_id, existing_request_id)
       .await?
     {
+      cached_response.served_from_cache = true;
       return Ok(Json(cached_response));
     }
   }
@@ -1231,6 +1233,7 @@ async fn agent_ops(
   let response = AgentOpsResponse {
     request_id,
     operations_signature: Some(operation_signature),
+    served_from_cache: false,
     results,
   };
   if let Some(existing_request_id) = response.request_id.as_ref() {
