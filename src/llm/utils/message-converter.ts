@@ -12,6 +12,7 @@ import type {
  */
 
 const MAX_CONVERTER_DIAGNOSTIC_CHARS = 2_000;
+const MAX_TOOL_ARGUMENT_JSON_CHARS = 100_000;
 
 function stringifyToolArguments(value: unknown): string {
   if (typeof value === "undefined") {
@@ -35,7 +36,15 @@ function stringifyToolArguments(value: unknown): string {
       return candidate;
     });
 
-    return typeof serialized === "string" ? serialized : "{}";
+    if (typeof serialized !== "string") {
+      return "{}";
+    }
+
+    if (serialized.length > MAX_TOOL_ARGUMENT_JSON_CHARS) {
+      return "{}";
+    }
+
+    return serialized;
   } catch {
     return "{}";
   }

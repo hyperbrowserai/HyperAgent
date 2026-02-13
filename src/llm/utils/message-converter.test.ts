@@ -86,6 +86,57 @@ describe("convertToOpenAIMessages", () => {
     expect(serialized).toBe("{}");
   });
 
+  it("falls back to empty object string for oversized assistant tool-call arguments", () => {
+    const messages: HyperAgentMessage[] = [
+      {
+        role: "assistant",
+        content: "done",
+        toolCalls: [
+          {
+            id: "call-1",
+            name: "tool-1",
+            arguments: {
+              payload: "x".repeat(120_000),
+            },
+          },
+        ],
+      },
+    ];
+
+    const result = convertToOpenAIMessages(messages);
+    const serialized = (
+      result[0]?.tool_calls as Array<{
+        function: { arguments: string };
+      }>
+    )[0]?.function.arguments;
+
+    expect(serialized).toBe("{}");
+  });
+
+  it("falls back to empty object string for oversized content tool_call arguments", () => {
+    const messages: HyperAgentMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_call",
+            toolName: "tool-1",
+            arguments: {
+              payload: "x".repeat(120_000),
+            },
+          },
+        ],
+      },
+    ];
+
+    const result = convertToOpenAIMessages(messages);
+    const serialized = (
+      result[0]?.content as Array<{ function: { arguments: string } }>
+    )[0]?.function.arguments;
+
+    expect(serialized).toBe("{}");
+  });
+
   it("normalizes unknown content parts to text payloads", () => {
     const circularPart: Record<string, unknown> = { type: "mystery" };
     circularPart.self = circularPart;
