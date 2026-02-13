@@ -1275,10 +1275,12 @@ function getKeyEventData(inputKey: string): KeyEventData {
     { key: string; code: string; keyCode: number; text?: string }
   > = {
     enter: { key: "Enter", code: "Enter", keyCode: 13 },
+    return: { key: "Enter", code: "Enter", keyCode: 13 },
     tab: { key: "Tab", code: "Tab", keyCode: 9 },
     escape: { key: "Escape", code: "Escape", keyCode: 27 },
     esc: { key: "Escape", code: "Escape", keyCode: 27 },
     space: { key: " ", code: "Space", keyCode: 32, text: " " },
+    spacebar: { key: " ", code: "Space", keyCode: 32, text: " " },
     backspace: { key: "Backspace", code: "Backspace", keyCode: 8 },
     delete: { key: "Delete", code: "Delete", keyCode: 46 },
     arrowup: { key: "ArrowUp", code: "ArrowUp", keyCode: 38 },

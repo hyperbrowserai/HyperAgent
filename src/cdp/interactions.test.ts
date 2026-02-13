@@ -164,6 +164,43 @@ describe("dispatchCDPAction press key normalization", () => {
     expect(keyDownCalls[1]?.params?.key).toBe("PageDown");
     expect(keyDownCalls[1]?.params?.windowsVirtualKeyCode).toBe(34);
   });
+
+  it("supports return and spacebar key aliases", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+
+    await dispatchCDPAction("press", ["return"], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+    await dispatchCDPAction("press", ["spacebar"], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const keyDownCalls = calls.filter(
+      (call) =>
+        call.method === "Input.dispatchKeyEvent" &&
+        call.params?.type === "keyDown"
+    );
+    expect(keyDownCalls[0]?.params?.key).toBe("Enter");
+    expect(keyDownCalls[0]?.params?.windowsVirtualKeyCode).toBe(13);
+    expect(keyDownCalls[1]?.params?.key).toBe(" ");
+    expect(keyDownCalls[1]?.params?.code).toBe("Space");
+    expect(keyDownCalls[1]?.params?.text).toBe(" ");
+    expect(keyDownCalls[1]?.params?.windowsVirtualKeyCode).toBe(32);
+  });
 });
 
 describe("dispatchCDPAction argument coercion", () => {
