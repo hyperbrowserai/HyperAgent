@@ -29,12 +29,28 @@ describe("normalizeDiscoveredMCPTools", () => {
     expect(normalized.map((entry) => entry.normalizedName)).toEqual(["search"]);
   });
 
+  it("applies include filtering case-insensitively", () => {
+    const normalized = normalizeDiscoveredMCPTools(
+      [createTool("search"), createTool("notes")],
+      { includeTools: ["Search"] }
+    );
+    expect(normalized.map((entry) => entry.normalizedName)).toEqual(["search"]);
+  });
+
   it("applies exclude filtering after normalization", () => {
     const normalized = normalizeDiscoveredMCPTools(
       [createTool("search"), createTool(" notes ")],
       { excludeTools: ["notes"] }
     );
     expect(normalized.map((entry) => entry.normalizedName)).toEqual(["search"]);
+  });
+
+  it("applies exclude filtering case-insensitively", () => {
+    const normalized = normalizeDiscoveredMCPTools(
+      [createTool("Search"), createTool("notes")],
+      { excludeTools: ["search"] }
+    );
+    expect(normalized.map((entry) => entry.normalizedName)).toEqual(["notes"]);
   });
 
   it("rejects duplicate discovered tool names after normalization", () => {

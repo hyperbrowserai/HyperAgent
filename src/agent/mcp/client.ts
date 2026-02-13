@@ -457,12 +457,15 @@ export function normalizeDiscoveredMCPTools(
     options.excludeTools,
     "excludeTools"
   );
+  const includeLookup = includeSet
+    ? new Set(Array.from(includeSet).map((name) => name.toLowerCase()))
+    : undefined;
+  const excludeLookup = excludeSet
+    ? new Set(Array.from(excludeSet).map((name) => name.toLowerCase()))
+    : undefined;
   if (includeSet && excludeSet) {
-    const includeLookup = new Set(
-      Array.from(includeSet).map((name) => name.toLowerCase())
-    );
     const overlap = Array.from(excludeSet).filter((name) =>
-      includeLookup.has(name.toLowerCase())
+      includeLookup?.has(name.toLowerCase())
     );
     if (overlap.length > 0) {
       throw new Error(
@@ -477,6 +480,7 @@ export function normalizeDiscoveredMCPTools(
 
   for (const tool of tools) {
     const normalizedName = normalizeMCPExecutionToolName(tool.name);
+    const normalizedLookup = normalizedName.toLowerCase();
     if (seenToolNames.has(normalizedName)) {
       throw new Error(
         `MCP server returned duplicate tool name "${formatMCPIdentifier(
@@ -487,10 +491,10 @@ export function normalizeDiscoveredMCPTools(
     }
     seenToolNames.add(normalizedName);
 
-    if (includeSet && !includeSet.has(normalizedName)) {
+    if (includeLookup && !includeLookup.has(normalizedLookup)) {
       continue;
     }
-    if (excludeSet && excludeSet.has(normalizedName)) {
+    if (excludeLookup && excludeLookup.has(normalizedLookup)) {
       continue;
     }
 
