@@ -644,6 +644,7 @@ impl AppState {
       right
         .1
         .cmp(&left.1)
+        .then_with(|| right.3.cmp(&left.3))
         .then_with(|| left.0.cmp(&right.0))
     });
     prefixes.truncate(limit);
@@ -693,10 +694,11 @@ fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
 
 #[cfg(test)]
 mod tests {
-  use chrono::{Duration as ChronoDuration, Utc};
   use super::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES};
+  use chrono::{Duration as ChronoDuration, Utc};
   use crate::models::{AgentOperation, AgentOperationResult, AgentOpsResponse};
   use serde_json::json;
+  use std::time::Duration;
   use tempfile::tempdir;
 
   #[tokio::test]
@@ -1148,6 +1150,43 @@ mod tests {
     assert_eq!(min_filtered_prefixes.len(), 1);
     assert_eq!(min_filtered_prefixes[0].0, "preset-");
     assert_eq!(min_filtered_prefixes[0].1, 3);
+  }
+
+  #[tokio::test]
+  async fn should_sort_equal_prefix_counts_by_newest_cached_at() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-prefix-order".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["alpha-1", "beta-1"] {
+      state
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id.to_string(),
+          vec![AgentOperation::Recalculate],
+          AgentOpsResponse {
+            request_id: Some(request_id.to_string()),
+            operations_signature: Some(format!("sig-{request_id}")),
+            served_from_cache: false,
+            results: Vec::new(),
+          },
+        )
+        .await
+        .expect("cache update should succeed");
+      tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+
+    let (_, _, prefixes) = state
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, 5)
+      .await
+      .expect("prefix suggestions should load");
+    assert_eq!(prefixes.len(), 2);
+    assert_eq!(prefixes[0].0, "beta-");
+    assert_eq!(prefixes[1].0, "alpha-");
   }
 
   #[tokio::test]
