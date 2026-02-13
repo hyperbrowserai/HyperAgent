@@ -46,7 +46,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard and agent integration panels display discovered signature error-code lists from schema endpoints
 - Agent integration panel displays discovered request-id idempotency cache size metadata
 - Agent integration panel displays discovered cache stats/clear endpoint metadata from schema
-- Agent integration panel shows live idempotency cache stats (entries/oldest/newest plus oldest/newest `cached_at`) with a clear-cache control, scoped by active age filter when provided
+- Agent integration panel shows live idempotency cache stats (`scoped/total/max` entries plus oldest/newest `cached_at`) with a clear-cache control, scoped by active age/prefix filters when provided
 - Cache stats scope follows active prefix + age filters for consistent cache triage context
 - Clear-cache action stays globally available under scoped filters (even when scoped entry count is zero)
 - Clear-cache notices explicitly indicate global-scope clearing when filters are active

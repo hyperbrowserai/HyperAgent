@@ -146,6 +146,7 @@ pub struct AgentOpsPreviewResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsCacheStatsResponse {
   pub entries: usize,
+  pub unscoped_entries: usize,
   pub max_entries: usize,
   pub request_id_prefix: Option<String>,
   pub max_age_seconds: Option<i64>,

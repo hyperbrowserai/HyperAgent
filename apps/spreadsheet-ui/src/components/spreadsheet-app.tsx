@@ -2642,8 +2642,10 @@ export function SpreadsheetApp() {
                     cache usage:{" "}
                     <span className="font-mono text-slate-200">
                       {agentOpsCacheQuery.data.entries}/
+                      {agentOpsCacheQuery.data.unscoped_entries}/
                       {agentOpsCacheQuery.data.max_entries}
                     </span>
+                    <span className="ml-1 text-slate-500">(scoped/total/max)</span>
                     {typeof agentOpsCacheQuery.data.max_age_seconds === "number" ? (
                       <span className="ml-1 text-slate-500">
                         (older than {agentOpsCacheQuery.data.max_age_seconds}s)

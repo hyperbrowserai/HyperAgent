@@ -1086,6 +1086,7 @@ async fn get_agent_schema(
     },
     "agent_ops_cache_stats_response_shape": {
       "entries": "current cache entries",
+      "unscoped_entries": "total cache entries without prefix/age filters",
       "max_entries": "maximum cache size",
       "request_id_prefix": "echoed filter prefix when provided",
       "max_age_seconds": "echoed age filter when provided",
@@ -1533,6 +1534,7 @@ async fn agent_ops_cache_stats(
   let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let (
     entries,
+    unscoped_entries,
     oldest_request_id,
     newest_request_id,
     oldest_cached_at,
@@ -1546,6 +1548,7 @@ async fn agent_ops_cache_stats(
     .await?;
   Ok(Json(AgentOpsCacheStatsResponse {
     entries,
+    unscoped_entries,
     max_entries: AGENT_OPS_CACHE_MAX_ENTRIES,
     request_id_prefix: normalized_prefix,
     max_age_seconds: query.max_age_seconds,
@@ -2504,6 +2507,7 @@ mod tests {
     .expect("stats should load")
     .0;
     assert_eq!(stats.entries, 1);
+    assert_eq!(stats.unscoped_entries, 1);
     assert_eq!(stats.request_id_prefix, None);
     assert_eq!(stats.max_age_seconds, None);
     assert!(stats.cutoff_timestamp.is_none());
@@ -2528,6 +2532,7 @@ mod tests {
       Some("handler-"),
     );
     assert_eq!(prefix_scoped_stats.entries, 1);
+    assert_eq!(prefix_scoped_stats.unscoped_entries, 1);
 
     let scoped_stats = agent_ops_cache_stats(
       State(state.clone()),
@@ -2544,6 +2549,7 @@ mod tests {
     assert_eq!(scoped_stats.max_age_seconds, Some(86_400));
     assert!(scoped_stats.cutoff_timestamp.is_some());
     assert_eq!(scoped_stats.entries, 0);
+    assert_eq!(scoped_stats.unscoped_entries, 1);
 
     let cleared = clear_agent_ops_cache(
       State(state.clone()),
@@ -2566,6 +2572,7 @@ mod tests {
     .expect("stats should load")
     .0;
     assert_eq!(stats_after_clear.entries, 0);
+    assert_eq!(stats_after_clear.unscoped_entries, 0);
     assert!(stats_after_clear.cutoff_timestamp.is_none());
     assert!(stats_after_clear.oldest_request_id.is_none());
     assert!(stats_after_clear.newest_request_id.is_none());
@@ -3688,6 +3695,13 @@ mod tests {
         .and_then(|value| value.get("request_id_prefix"))
         .and_then(serde_json::Value::as_str),
       Some("optional string filter (prefix match)"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_stats_response_shape")
+        .and_then(|value| value.get("unscoped_entries"))
+        .and_then(serde_json::Value::as_str),
+      Some("total cache entries without prefix/age filters"),
     );
     assert_eq!(
       schema

@@ -271,6 +271,7 @@ impl AppState {
   ) -> Result<
     (
       usize,
+      usize,
       Option<String>,
       Option<String>,
       Option<DateTime<Utc>>,
@@ -316,6 +317,7 @@ impl AppState {
       .and_then(|request_id| record.agent_ops_cache_timestamps.get(request_id).cloned());
     Ok((
       scoped_request_ids.len(),
+      record.agent_ops_cache_order.len(),
       oldest_request_id,
       newest_request_id,
       oldest_cached_at,
@@ -743,11 +745,12 @@ mod tests {
       .await
       .expect("cache update should succeed");
 
-    let (entries, oldest, newest, oldest_cached_at, newest_cached_at) = state
+    let (entries, unscoped_entries, oldest, newest, oldest_cached_at, newest_cached_at) = state
       .agent_ops_cache_stats(workbook.id, None, None)
       .await
       .expect("cache stats should load");
     assert_eq!(entries, 1);
+    assert_eq!(unscoped_entries, 1);
     assert_eq!(oldest.as_deref(), Some("req-1"));
     assert_eq!(newest.as_deref(), Some("req-1"));
     assert!(oldest_cached_at.is_some());
@@ -758,8 +761,9 @@ mod tests {
       .await
       .expect("prefix-scoped cache stats should load");
     assert_eq!(prefix_stats.0, 1);
-    assert_eq!(prefix_stats.1.as_deref(), Some("req-1"));
+    assert_eq!(prefix_stats.1, 1);
     assert_eq!(prefix_stats.2.as_deref(), Some("req-1"));
+    assert_eq!(prefix_stats.3.as_deref(), Some("req-1"));
 
     let cleared = state
       .clear_agent_ops_cache(workbook.id)
@@ -776,11 +780,13 @@ mod tests {
       .await
       .expect("age-scoped cache stats should load");
     assert_eq!(scoped_stats.0, 0);
-    assert!(scoped_stats.1.is_none());
+    assert_eq!(scoped_stats.1, 0);
     assert!(scoped_stats.2.is_none());
+    assert!(scoped_stats.3.is_none());
 
     let (
       entries_after,
+      unscoped_entries_after,
       oldest_after,
       newest_after,
       oldest_cached_at_after,
@@ -790,6 +796,7 @@ mod tests {
       .await
       .expect("cache stats should load");
     assert_eq!(entries_after, 0);
+    assert_eq!(unscoped_entries_after, 0);
     assert!(oldest_after.is_none());
     assert!(newest_after.is_none());
     assert!(oldest_cached_at_after.is_none());
