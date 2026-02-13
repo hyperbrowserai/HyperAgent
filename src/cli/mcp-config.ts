@@ -15,6 +15,7 @@ const MAX_MCP_RECORD_ENTRIES = 200;
 const MAX_MCP_RECORD_KEY_CHARS = 256;
 const MAX_MCP_RECORD_VALUE_CHARS = 4_000;
 const MAX_MCP_OVERLAP_ERROR_ITEMS = 10;
+const MAX_MCP_CONFIG_DIAGNOSTIC_CHARS = 200;
 const UNSAFE_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
 
@@ -33,6 +34,16 @@ function hasAnyControlChars(value: string): boolean {
     const code = char.charCodeAt(0);
     return (code >= 0 && code < 32) || code === 127;
   });
+}
+
+function formatMCPConfigDiagnostic(value: unknown): string {
+  const normalized =
+    typeof value === "string" ? value : formatUnknownError(value);
+  if (normalized.length <= MAX_MCP_CONFIG_DIAGNOSTIC_CHARS) {
+    return normalized;
+  }
+  const omitted = normalized.length - MAX_MCP_CONFIG_DIAGNOSTIC_CHARS;
+  return `${normalized.slice(0, MAX_MCP_CONFIG_DIAGNOSTIC_CHARS)}... [truncated ${omitted} chars]`;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -157,12 +168,12 @@ function normalizeSSEUrl(value: unknown, index: number): string {
   }
   if (hasAnyControlChars(raw)) {
     throw new Error(
-      `MCP server entry at index ${index} has invalid "sseUrl" value "${raw}".`
+      `MCP server entry at index ${index} has invalid "sseUrl" value "${formatMCPConfigDiagnostic(raw)}".`
     );
   }
   if (raw.length > MAX_MCP_SSE_URL_CHARS) {
     throw new Error(
-      `MCP server entry at index ${index} has invalid "sseUrl" value "${raw}".`
+      `MCP server entry at index ${index} has invalid "sseUrl" value "${formatMCPConfigDiagnostic(raw)}".`
     );
   }
   let url: URL;
@@ -170,7 +181,7 @@ function normalizeSSEUrl(value: unknown, index: number): string {
     url = new URL(raw);
   } catch {
     throw new Error(
-      `MCP server entry at index ${index} has invalid "sseUrl" value "${raw}".`
+      `MCP server entry at index ${index} has invalid "sseUrl" value "${formatMCPConfigDiagnostic(raw)}".`
     );
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -400,7 +411,9 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       hasAnyControlChars(rawConnectionType)
     ) {
       throw new Error(
-        `MCP server entry at index ${i} has unsupported connectionType "${entry.connectionType}". Supported values are "stdio" and "sse".`
+        `MCP server entry at index ${i} has unsupported connectionType "${formatMCPConfigDiagnostic(
+          entry.connectionType
+        )}". Supported values are "stdio" and "sse".`
       );
     }
     if (
@@ -409,7 +422,9 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       rawConnectionType !== "sse"
     ) {
       throw new Error(
-        `MCP server entry at index ${i} has unsupported connectionType "${entry.connectionType}". Supported values are "stdio" and "sse".`
+        `MCP server entry at index ${i} has unsupported connectionType "${formatMCPConfigDiagnostic(
+          entry.connectionType
+        )}". Supported values are "stdio" and "sse".`
       );
     }
     const hasCommand = isNonEmptyString(entry.command);

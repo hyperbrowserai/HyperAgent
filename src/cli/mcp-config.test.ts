@@ -311,6 +311,13 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 has unsupported connectionType "websocket". Supported values are "stdio" and "sse".'
     );
+
+    const hugeConnectionType = `x${"y".repeat(500)}`;
+    expect(() =>
+      parseMCPServersConfig(
+        `[{"connectionType":"${hugeConnectionType}","command":"npx"}]`
+      )
+    ).toThrow(/\[truncated \d+ chars\]/);
   });
 
   it("infers SSE connectionType when only sseUrl is provided", () => {
@@ -529,6 +536,13 @@ describe("parseMCPServersConfig", () => {
         )}"}]`
       )
     ).toThrow(/invalid "sseUrl" value/);
+    expect(() =>
+      parseMCPServersConfig(
+        `[{"connectionType":"sse","sseUrl":"https://example.com/${"x".repeat(
+          3990
+        )}"}]`
+      )
+    ).toThrow(/\[truncated \d+ chars\]/);
   });
 
   it("rejects ambiguous or mixed stdio/sse field combinations", () => {
