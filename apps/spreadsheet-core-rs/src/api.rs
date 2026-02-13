@@ -1055,12 +1055,16 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
-    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8",
+    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8&max_age_seconds=3600",
     "agent_ops_cache_entries_query_shape": {
       "request_id_prefix": "optional string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter to entries older than or equal to this age)",
       "offset": "optional number, default 0",
       "limit": "optional number, default 20, max 200"
+    },
+    "agent_ops_cache_prefixes_query_shape": {
+      "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
+      "limit": "optional number, default 8, max 100"
     },
     "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
     "agent_ops_cache_replay_endpoint": "/v1/workbooks/{id}/agent/ops/cache/replay",
@@ -1103,6 +1107,7 @@ async fn get_agent_schema(
     "agent_ops_cache_prefixes_response_shape": {
       "total_prefixes": "total distinct prefix suggestions available",
       "returned_prefixes": "number of prefixes returned",
+      "max_age_seconds": "echoed age filter when provided",
       "limit": "applied limit (default 8, max 100)",
       "prefixes": [{ "prefix": "string", "entry_count": "number of matching cache entries" }]
     },
@@ -1485,6 +1490,7 @@ struct AgentOpsCacheEntriesQuery {
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct AgentOpsCachePrefixesQuery {
+  max_age_seconds: Option<i64>,
   limit: Option<usize>,
 }
 
@@ -1622,12 +1628,24 @@ async fn agent_ops_cache_prefixes(
   Query(query): Query<AgentOpsCachePrefixesQuery>,
 ) -> Result<Json<AgentOpsCachePrefixesResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
+  if query
+    .max_age_seconds
+    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
+  {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MAX_AGE_SECONDS",
+      "max_age_seconds must be greater than 0.",
+    ));
+  }
+  let cutoff_timestamp = query
+    .max_age_seconds
+    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
     .min(MAX_AGENT_OPS_CACHE_PREFIXES_LIMIT);
   let (total_prefixes, prefixes) = state
-    .agent_ops_cache_prefixes(workbook_id, limit)
+    .agent_ops_cache_prefixes(workbook_id, cutoff_timestamp, limit)
     .await?;
   let mapped_prefixes = prefixes
     .into_iter()
@@ -1639,6 +1657,7 @@ async fn agent_ops_cache_prefixes(
   Ok(Json(AgentOpsCachePrefixesResponse {
     total_prefixes,
     returned_prefixes: mapped_prefixes.len(),
+    max_age_seconds: query.max_age_seconds,
     limit,
     prefixes: mapped_prefixes,
   }))
@@ -2626,9 +2645,12 @@ mod tests {
     }
 
     let prefixes = agent_ops_cache_prefixes(
-      State(state),
+      State(state.clone()),
       Path(workbook.id),
-      Query(AgentOpsCachePrefixesQuery { limit: Some(10) }),
+      Query(AgentOpsCachePrefixesQuery {
+        max_age_seconds: None,
+        limit: Some(10),
+      }),
     )
     .await
     .expect("prefixes should load")
@@ -2636,10 +2658,43 @@ mod tests {
 
     assert_eq!(prefixes.total_prefixes, 2);
     assert_eq!(prefixes.returned_prefixes, 2);
+    assert_eq!(prefixes.max_age_seconds, None);
     assert_eq!(prefixes.prefixes[0].prefix, "scenario-");
     assert_eq!(prefixes.prefixes[0].entry_count, 2);
     assert_eq!(prefixes.prefixes[1].prefix, "preset-");
     assert_eq!(prefixes.prefixes[1].entry_count, 1);
+
+    let age_filtered = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        max_age_seconds: Some(86_400),
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect("age-filtered prefixes should load")
+    .0;
+    assert_eq!(age_filtered.max_age_seconds, Some(86_400));
+    assert_eq!(age_filtered.total_prefixes, 0);
+    assert!(age_filtered.prefixes.is_empty());
+
+    let invalid_error = agent_ops_cache_prefixes(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        max_age_seconds: Some(0),
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect_err("non-positive max age should fail");
+    match invalid_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_MAX_AGE_SECONDS");
+      }
+      _ => panic!("expected invalid max age to use custom error code"),
+    }
   }
 
   #[tokio::test]
@@ -3362,7 +3417,7 @@ mod tests {
       schema
         .get("agent_ops_cache_prefixes_endpoint")
         .and_then(serde_json::Value::as_str),
-      Some("/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8"),
+      Some("/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8&max_age_seconds=3600"),
     );
     assert_eq!(
       schema

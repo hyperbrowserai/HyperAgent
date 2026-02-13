@@ -101,7 +101,7 @@ Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache`
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&max_age_seconds=3600&offset=0&limit=20` (newest-first paged request-id summaries, optional prefix filter, optional age filter for stale-only browsing, max `limit=200`, includes operation/result counts and `cached_at`)
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries/{request_id}` (full cached detail: response + operations + counts + `cached_at`)
-- `GET /v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8` (prefix suggestions with counts for filter UX)
+- `GET /v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8&max_age_seconds=3600` (prefix suggestions with counts for filter UX; optional age filter for stale-only views)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay` with `{ "request_id": "..." }` (returns `{ cached_response, operations }` where `operations` are the original cached ops payload)
 - `POST /v1/workbooks/{id}/agent/ops/cache/reexecute` with `{ "request_id": "...", "new_request_id": "..." }` (reexecutes cached operations as fresh `agent/ops`)

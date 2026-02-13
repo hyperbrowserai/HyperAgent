@@ -287,6 +287,7 @@ pub struct AgentOpsCachePrefix {
 pub struct AgentOpsCachePrefixesResponse {
   pub total_prefixes: usize,
   pub returned_prefixes: usize,
+  pub max_age_seconds: Option<i64>,
   pub limit: usize,
   pub prefixes: Vec<AgentOpsCachePrefix>,
 }

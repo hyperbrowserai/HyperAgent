@@ -248,10 +248,21 @@ export async function getAgentOpsCacheEntryDetail(
 export async function getAgentOpsCachePrefixes(
   workbookId: string,
   limit: number = 8,
+  maxAgeSeconds?: number,
 ): Promise<AgentOpsCachePrefixesResponse> {
   const safeLimit = Math.max(1, Math.min(limit, 100));
+  const params = new URLSearchParams({
+    limit: String(safeLimit),
+  });
+  const normalizedMaxAgeSeconds =
+    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
+      ? Math.floor(maxAgeSeconds)
+      : undefined;
+  if (normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0) {
+    params.set("max_age_seconds", String(normalizedMaxAgeSeconds));
+  }
   const response = await fetch(
-    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/prefixes?limit=${safeLimit}`,
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/prefixes?${params.toString()}`,
   );
   return parseJsonResponse<AgentOpsCachePrefixesResponse>(response);
 }

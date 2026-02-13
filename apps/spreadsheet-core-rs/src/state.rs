@@ -472,6 +472,7 @@ impl AppState {
   pub async fn agent_ops_cache_prefixes(
     &self,
     workbook_id: Uuid,
+    cutoff_timestamp: Option<DateTime<Utc>>,
     limit: usize,
   ) -> Result<(usize, Vec<(String, usize)>), ApiError> {
     let guard = self.workbooks.read().await;
@@ -481,6 +482,18 @@ impl AppState {
 
     let mut prefix_counts: HashMap<String, usize> = HashMap::new();
     for request_id in &record.agent_ops_cache_order {
+      if cutoff_timestamp
+        .as_ref()
+        .is_some_and(|cutoff| {
+          record
+            .agent_ops_cache_timestamps
+            .get(request_id)
+            .map(|cached_at| cached_at > cutoff)
+            .unwrap_or(true)
+        })
+      {
+        continue;
+      }
       let Some(delimiter_index) = request_id.find('-') else {
         continue;
       };
@@ -907,13 +920,21 @@ mod tests {
     }
 
     let (total_prefixes, prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, 5)
       .await
       .expect("prefix suggestions should load");
     assert_eq!(total_prefixes, 2);
     assert_eq!(prefixes.len(), 2);
     assert_eq!(prefixes[0], ("preset-".to_string(), 3));
     assert_eq!(prefixes[1], ("scenario-".to_string(), 2));
+
+    let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
+    let (filtered_total_prefixes, filtered_prefixes) = state
+      .agent_ops_cache_prefixes(workbook.id, Some(cutoff_timestamp), 5)
+      .await
+      .expect("age-filtered prefixes should load");
+    assert_eq!(filtered_total_prefixes, 0);
+    assert!(filtered_prefixes.is_empty());
   }
 
   #[tokio::test]

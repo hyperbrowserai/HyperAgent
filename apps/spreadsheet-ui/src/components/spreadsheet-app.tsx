@@ -293,9 +293,18 @@ export function SpreadsheetApp() {
   });
 
   const agentOpsCachePrefixesQuery = useQuery({
-    queryKey: ["agent-ops-cache-prefixes", workbook?.id],
+    queryKey: [
+      "agent-ops-cache-prefixes",
+      workbook?.id,
+      normalizedCacheEntriesMaxAgeSeconds,
+    ],
     enabled: Boolean(workbook?.id),
-    queryFn: () => getAgentOpsCachePrefixes(workbook!.id, 12),
+    queryFn: () =>
+      getAgentOpsCachePrefixes(
+        workbook!.id,
+        12,
+        normalizedCacheEntriesMaxAgeSeconds,
+      ),
   });
 
   const wizardScenarioOpsQuery = useQuery({
@@ -2817,6 +2826,11 @@ export function SpreadsheetApp() {
                   {cachePrefixSuggestions.length > 0 ? (
                     <div className="mb-2 flex flex-wrap items-center gap-1">
                       <span className="text-[10px] text-slate-500">suggestions:</span>
+                      {typeof agentOpsCachePrefixesQuery.data?.max_age_seconds === "number" ? (
+                        <span className="text-[10px] text-slate-500">
+                          (older than {agentOpsCachePrefixesQuery.data.max_age_seconds}s)
+                        </span>
+                      ) : null}
                       {cachePrefixSuggestions.map((suggestion) => (
                         <button
                           key={suggestion.prefix}
