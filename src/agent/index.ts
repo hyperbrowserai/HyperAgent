@@ -62,6 +62,7 @@ import { performAction } from "./actions/shared/perform-action";
 import { createScriptFromActionCache } from "./shared/action-cache-script";
 import { attachCachedActionHelpers } from "./shared/action-cache-exec";
 import { AgentDeps } from "@/types/agent/types";
+import { parseExtractOutput } from "./shared/parse-extract-output";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -1671,7 +1672,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     hyperPage.aiAsync = (task: string, params?: TaskParams) =>
       this.executeTaskAsync(task, params, getActivePage());
 
-    hyperPage.extract = async (task, outputSchema, params) => {
+    hyperPage.extract = async <
+      T extends z.ZodType<unknown> | undefined = undefined,
+    >(
+      task?: string,
+      outputSchema?: T,
+      params?: Omit<TaskParams, "outputSchema">
+    ): Promise<T extends z.ZodType<unknown> ? z.infer<T> : string> => {
       if (!task && !outputSchema) {
         throw new HyperagentError(
           "No task description or output schema specified",
@@ -1689,34 +1696,33 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           taskParams,
           getActivePage()
         );
-        if (outputSchema) {
-          const outputText = res.output;
-          if (typeof outputText !== "string" || outputText === "") {
-            throw new Error(
-              `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
-            );
-          }
-          return JSON.parse(outputText);
+        if (!outputSchema) {
+          return parseExtractOutput(res.output, res.status) as T extends z.ZodType<unknown>
+            ? z.infer<T>
+            : string;
         }
-        const outputText = res.output;
-        if (typeof outputText !== "string" || outputText === "") {
-          throw new Error(
-            `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
-          );
-        }
-        return outputText;
+        return parseExtractOutput(
+          res.output,
+          res.status,
+          outputSchema as z.ZodType<unknown>
+        ) as T extends z.ZodType<unknown> ? z.infer<T> : string;
       } else {
         const res = await this.executeTask(
           "You have to perform a data extraction on the current page. Make sure your final response only contains the extracted content",
           taskParams,
           getActivePage()
         );
-        if (typeof res.output !== "string" || res.output === "") {
-          throw new Error(
-            `Extract failed: Agent did not complete with output. Task status: ${res.status}. Check debug output for details.`
+        if (!outputSchema) {
+          throw new HyperagentError(
+            "No output schema provided for schema-only extraction",
+            400
           );
         }
-        return JSON.parse(res.output);
+        return parseExtractOutput(
+          res.output,
+          res.status,
+          outputSchema
+        ) as T extends z.ZodType<unknown> ? z.infer<T> : string;
       }
     };
     return hyperPage;
