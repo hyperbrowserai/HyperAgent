@@ -298,6 +298,46 @@ describe("buildAgentStepMessages", () => {
     expect(joined).not.toContain("[20] https://example.com/20");
   });
 
+  it("keeps open-tab summary when a tab URL lookup throws", async () => {
+    const currentTab = { url: () => "https://example.com/current" };
+    const badTab = {
+      url: () => {
+        throw new Error("tab url failure");
+      },
+    };
+    const page = {
+      url: () => "https://example.com/current",
+      context: () =>
+        ({
+          pages: () => [currentTab, badTab],
+        } as unknown as ReturnType<Page["context"]>),
+    } as unknown as Page;
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[0] https://example.com/current");
+    expect(joined).toContain("[1] about:blank (url unavailable)");
+  });
+
   it("truncates oversized tab URLs in open-tab summary", async () => {
     const longUrl = `https://example.com/${"x".repeat(2000)}`;
     const page = createFakePage(longUrl, [longUrl]);

@@ -61,7 +61,14 @@ function getOpenTabsSummary(page: Page): string {
     const hiddenCount = Math.max(0, pages.length - visibleTabs.length);
     const tabLines = visibleTabs.map((openPage, index) => {
       const currentMarker = openPage === page ? " (current)" : "";
-      return `[${index}] ${truncateTabUrl(openPage.url() || "about:blank")}${currentMarker}`;
+      const tabUrl = (() => {
+        try {
+          return truncateTabUrl(openPage.url() || "about:blank");
+        } catch {
+          return "about:blank (url unavailable)";
+        }
+      })();
+      return `[${index}] ${tabUrl}${currentMarker}`;
     });
     if (hiddenCount > 0) {
       tabLines.push(`... ${hiddenCount} more tabs omitted`);
