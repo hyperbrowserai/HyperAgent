@@ -299,15 +299,23 @@ export async function dispatchCDPAction(
       await hoverElement(ctx);
       return;
     case "type":
-      await typeText(ctx, (args[0] as string) ?? "", args[1] as TypeOptions);
+      await typeText(
+        ctx,
+        coerceActionStringArg(args[0]),
+        args[1] as TypeOptions
+      );
       return;
     case "fill":
-      await fillElement(ctx, (args[0] as string) ?? "", args[1] as FillOptions);
+      await fillElement(
+        ctx,
+        coerceActionStringArg(args[0]),
+        args[1] as FillOptions
+      );
       return;
     case "press":
       await pressKey(
         ctx,
-        (args[0] as string) ?? "Enter",
+        coerceActionStringArg(args[0], "Enter"),
         args[1] as PressOptions
       );
       return;
@@ -319,7 +327,7 @@ export async function dispatchCDPAction(
       return;
     case "selectOptionFromDropdown":
       await selectOption(ctx, {
-        value: (args[0] as string) ?? "",
+        value: coerceActionStringArg(args[0]),
       });
       return;
     case "scrollToElement": {
@@ -359,6 +367,13 @@ export async function dispatchCDPAction(
         `[CDP][Interactions] Unsupported action method: ${method}`
       );
   }
+}
+
+function coerceActionStringArg(value: unknown, fallback = ""): string {
+  if (value == null) {
+    return fallback;
+  }
+  return typeof value === "string" ? value : String(value);
 }
 
 async function clickElement(

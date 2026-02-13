@@ -130,3 +130,68 @@ describe("dispatchCDPAction press key normalization", () => {
     expect(keyDown?.params?.windowsVirtualKeyCode).toBe(9);
   });
 });
+
+describe("dispatchCDPAction argument coercion", () => {
+  it("preserves numeric zero values for type and fill actions", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+    const ctx = {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    };
+
+    await dispatchCDPAction("type", [0], ctx);
+    await dispatchCDPAction("fill", [0], ctx);
+
+    const insertTextCall = calls.find(
+      (call) => call.method === "Input.insertText"
+    );
+    expect(insertTextCall?.params?.text).toBe("0");
+
+    const fillCall = calls.find(
+      (call) =>
+        call.method === "Runtime.callFunctionOn" &&
+        typeof call.params?.functionDeclaration === "string" &&
+        (call.params.functionDeclaration as string).includes("function(rawValue)")
+    );
+    const fillArgs = fillCall?.params?.arguments as
+      | Array<{ value?: unknown }>
+      | undefined;
+    expect(fillArgs?.[0]?.value).toBe("0");
+  });
+
+  it("preserves numeric zero values for selectOption action", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return { result: { value: { status: "selected", value: "0" } } };
+    });
+
+    await dispatchCDPAction("selectOptionFromDropdown", [0], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const selectCall = calls.find(
+      (call) =>
+        call.method === "Runtime.callFunctionOn" &&
+        typeof call.params?.functionDeclaration === "string" &&
+        (call.params.functionDeclaration as string).includes("function(rawValue)")
+    );
+    const selectArgs = selectCall?.params?.arguments as
+      | Array<{ value?: unknown }>
+      | undefined;
+    expect(selectArgs?.[0]?.value).toBe("0");
+  });
+});
