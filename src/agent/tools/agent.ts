@@ -45,6 +45,18 @@ import { buildActionCacheEntry } from "../shared/action-cache";
 
 const READ_ONLY_ACTIONS = new Set(["wait", "extract", "complete"]);
 const MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS = 4;
+const MAX_STRUCTURED_DIAGNOSTIC_PARSE_CHARS = 100_000;
+const MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS = 4_000;
+const MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS = 8_000;
+
+function truncateDiagnosticText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+
+  const omittedChars = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omittedChars} chars]`;
+}
 
 const writeFrameGraphSnapshot = async (
   page: Page,
@@ -522,28 +534,52 @@ export const runAgentTask = async (
           let validationError = "Unknown validation error";
           if (structuredResult.rawText) {
             try {
+              if (
+                structuredResult.rawText.length >
+                MAX_STRUCTURED_DIAGNOSTIC_PARSE_CHARS
+              ) {
+                validationError = `Response exceeded ${MAX_STRUCTURED_DIAGNOSTIC_PARSE_CHARS} characters and was skipped for validation diagnostics`;
+                throw new Error(validationError);
+              }
+
               const parsed = JSON.parse(structuredResult.rawText);
               AgentOutputFn(actionSchema).parse(parsed);
             } catch (zodError) {
               if (zodError instanceof z.ZodError) {
                 validationError = JSON.stringify(zodError.issues, null, 2);
+              } else if (
+                zodError instanceof Error &&
+                zodError.message === validationError
+              ) {
+                validationError = zodError.message;
               } else {
                 validationError = String(zodError);
               }
             }
           }
 
+          const rawResponseForLog = truncateDiagnosticText(
+            structuredResult.rawText?.trim() || "<empty>",
+            MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS
+          );
+
           console.error(
             `[LLM][StructuredOutput] Failed to parse response from ${providerId} (${modelId}). Raw response: ${
-              structuredResult.rawText?.trim() || "<empty>"
+              rawResponseForLog
             } (attempt ${attempt + 1}/${maxAttempts})`
           );
 
           // Store error for cross-step learning
           ctx.schemaErrors?.push({
             stepIndex: currStep,
-            error: validationError,
-            rawResponse: structuredResult.rawText || "",
+            error: truncateDiagnosticText(
+              validationError,
+              MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS
+            ),
+            rawResponse: truncateDiagnosticText(
+              structuredResult.rawText || "",
+              MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS
+            ),
           });
 
           // Append error feedback for next retry

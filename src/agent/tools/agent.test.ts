@@ -210,6 +210,55 @@ function createThrowingObjectCtx(): AgentCtx {
   };
 }
 
+function createSchemaRetryCtx(rawText: string): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "final answer",
+      },
+    },
+  };
+
+  const invokeStructured = jest
+    .fn()
+    .mockResolvedValueOnce({
+      rawText,
+      parsed: null,
+    })
+    .mockResolvedValue({
+      rawText: JSON.stringify(parsedAction),
+      parsed: parsedAction,
+    });
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured,
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [createCompleteActionDefinition()],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
 function createTaskState(page: Page): TaskState {
   return {
     id: "task-1",
@@ -413,6 +462,35 @@ describe("runAgentTask completion behavior", () => {
       expect(result.output).toBe("final answer");
     } finally {
       getCDPClientSpy.mockRestore();
+    }
+  });
+
+  it("truncates oversized structured-output diagnostics", async () => {
+    const page = createMockPage();
+    const hugeRaw = "x".repeat(120_000);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createSchemaRetryCtx(hugeRaw);
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page));
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(ctx.schemaErrors).toBeDefined();
+      const firstSchemaError = ctx.schemaErrors?.[0];
+      expect(firstSchemaError).toBeDefined();
+      expect(firstSchemaError?.error).toContain(
+        "was skipped for validation diagnostics"
+      );
+      expect(firstSchemaError?.rawResponse).toContain("[truncated");
+      expect(firstSchemaError?.rawResponse.length ?? 0).toBeLessThan(8_300);
+
+      const structuredLogLine = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes("[LLM][StructuredOutput]"));
+      expect(structuredLogLine).toBeDefined();
+      expect(structuredLogLine).toContain("[truncated");
+      expect(structuredLogLine).not.toContain(hugeRaw);
+    } finally {
+      errorSpy.mockRestore();
     }
   });
 });
