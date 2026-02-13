@@ -111,6 +111,27 @@ describe("findElementWithInstruction", () => {
     expect(captureDOMState).toHaveBeenCalledTimes(1);
   });
 
+  it("truncates oversized fallback diagnostics on capture errors", async () => {
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as import("playwright-core").Page;
+    captureDOMState.mockRejectedValue(new Error(`x${"y".repeat(2_000)}\ncapture failed`));
+
+    const result = await findElementWithInstruction(
+      "click login",
+      page,
+      createMockLLM(),
+      {
+        maxRetries: 1,
+        retryDelayMs: 0,
+      }
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.domState.domState).toContain("[truncated");
+    expect(result.domState.domState).not.toContain("\n");
+  });
+
   it("uses fallback page URL when page.url() getter throws", async () => {
     const page = {
       url: () => {
@@ -134,5 +155,32 @@ describe("findElementWithInstruction", () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it("truncates oversized debug retry diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as import("playwright-core").Page;
+    captureDOMState.mockRejectedValue(new Error(`x${"y".repeat(2_000)}\ncapture failed`));
+
+    try {
+      await findElementWithInstruction(
+        "click login",
+        page,
+        createMockLLM(),
+        {
+          maxRetries: 1,
+          retryDelayMs: 0,
+          debug: true,
+        }
+      );
+
+      const warnMessage = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warnMessage).toContain("[truncated");
+      expect(warnMessage).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

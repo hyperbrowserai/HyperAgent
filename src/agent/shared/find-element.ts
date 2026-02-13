@@ -41,6 +41,26 @@ export interface FindElementResult {
 const DEFAULT_MAX_RETRIES = 1;
 const MAX_FIND_ELEMENT_RETRIES = 20;
 const MAX_RETRY_DELAY_MS = 30_000;
+const MAX_FIND_ELEMENT_DIAGNOSTIC_CHARS = 400;
+
+function formatFindElementDiagnostic(value: unknown): string {
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_FIND_ELEMENT_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_FIND_ELEMENT_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_FIND_ELEMENT_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
 
 function normalizeMaxRetries(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -182,7 +202,9 @@ export async function findElementWithInstruction(
       lastError = error;
       if (debug) {
         console.warn(
-          `[findElement] Attempt ${attempt + 1} failed: ${formatUnknownError(error)}`
+          `[findElement] Attempt ${attempt + 1} failed: ${formatFindElementDiagnostic(
+            error
+          )}`
         );
       }
     }
@@ -202,7 +224,7 @@ export async function findElementWithInstruction(
   // Max retries reached - return failure with last attempt's data
   const fallbackMessage =
     lastError != null
-      ? `Element search failed: ${formatUnknownError(lastError)}`
+      ? `Element search failed: ${formatFindElementDiagnostic(lastError)}`
       : "Element search failed: no matching element found.";
   return {
     success: false,
