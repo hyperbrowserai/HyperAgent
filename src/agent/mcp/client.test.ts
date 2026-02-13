@@ -2270,6 +2270,34 @@ describe("MCPClient.hasTool", () => {
 });
 
 describe("MCPClient server metadata accessors", () => {
+  it("returns all registered actions across connected servers", () => {
+    const mcpClient = new MCPClient(false);
+    setServersForClient(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            actions: [{ type: "search" }],
+            tools: new Map([["search", {}]]),
+          },
+        ],
+        [
+          "server-b",
+          {
+            actions: [{ type: "notes" }],
+            tools: new Map([["notes", {}]]),
+          },
+        ],
+      ])
+    );
+
+    expect(mcpClient.getAllActions().map((action) => action.type)).toEqual([
+      "search",
+      "notes",
+    ]);
+  });
+
   it("returns server ids and info for connected servers", () => {
     const mcpClient = new MCPClient(false);
     setServersForClient(
@@ -2327,5 +2355,6 @@ describe("MCPClient server metadata accessors", () => {
     setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
 
     expect(mcpClient.getServerInfo()).toEqual([]);
+    expect(mcpClient.getAllActions()).toEqual([]);
   });
 });

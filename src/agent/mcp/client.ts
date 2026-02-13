@@ -1331,7 +1331,7 @@ class MCPClient {
    */
   getAllActions(): AgentActionDefinition[] {
     const allActions: AgentActionDefinition[] = [];
-    for (const server of this.servers.values()) {
+    for (const [, server] of safeGetConnectedServerEntries(this.servers)) {
       allActions.push(...server.actions);
     }
     return allActions;
