@@ -3,6 +3,7 @@ import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { parseMarkdown } from "@/utils/html-to-markdown";
 import fs from "fs";
 import { getCDPClient } from "@/cdp";
+import type { HyperAgentContentPart } from "@/llm/types";
 
 export const ExtractAction = z
   .object({
@@ -13,6 +14,67 @@ export const ExtractAction = z
   );
 
 export type ExtractActionType = z.infer<typeof ExtractAction>;
+
+const EXTRACT_TRUNCATION_NOTICE = "\n[Content truncated due to token limit]";
+
+export function estimateTextTokenCount(text: string): number {
+  const wordCount = text.match(/[A-Za-z0-9_]+/g)?.length ?? 0;
+  const cjkCount =
+    text.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g)
+      ?.length ?? 0;
+  const symbolCount = text.match(/[^\sA-Za-z0-9_]/g)?.length ?? 0;
+  const characterEstimate = Math.ceil(text.length / 3.8);
+  const lexicalEstimate = Math.ceil(
+    wordCount * 1.1 + cjkCount + symbolCount * 0.3
+  );
+  return Math.max(1, characterEstimate, lexicalEstimate);
+}
+
+export function trimMarkdownToTokenLimit(
+  markdown: string,
+  tokenLimit: number
+): string {
+  if (estimateTextTokenCount(markdown) <= tokenLimit) {
+    return markdown;
+  }
+
+  const suffixTokens = estimateTextTokenCount(EXTRACT_TRUNCATION_NOTICE);
+  if (tokenLimit <= suffixTokens) {
+    return EXTRACT_TRUNCATION_NOTICE;
+  }
+
+  const targetPrefixTokens = tokenLimit - suffixTokens;
+  let low = 0;
+  let high = markdown.length;
+  let best = 0;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const prefix = markdown.slice(0, mid);
+    if (estimateTextTokenCount(prefix) <= targetPrefixTokens) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return markdown.slice(0, best) + EXTRACT_TRUNCATION_NOTICE;
+}
+
+function writeDebugFileSafe(
+  filePath: string,
+  content: Buffer | string,
+  debug?: boolean
+): void {
+  try {
+    fs.writeFileSync(filePath, content);
+  } catch (error) {
+    if (debug) {
+      console.error(`[extract] Failed to write debug file "${filePath}":`, error);
+    }
+  }
+}
 
 export const ExtractActionDefinition: AgentActionDefinition = {
   type: "extract" as const,
@@ -26,50 +88,63 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       const markdown = await parseMarkdown(content);
       const objective = action.objective;
 
-      // Take a screenshot of the page
-      const cdpClient = await getCDPClient(ctx.page);
-      const cdpSession = await cdpClient.acquireSession("screenshot");
-      const screenshot = await cdpSession.send<{ data: string }>(
-        "Page.captureScreenshot"
-      );
+      // Try to take a screenshot of the page; continue with text-only extraction if unavailable
+      let screenshotData: string | null = null;
+      try {
+        const cdpClient = await getCDPClient(ctx.page);
+        const cdpSession = await cdpClient.acquireSession("screenshot");
+        const screenshot = await cdpSession.send<{ data: string }>(
+          "Page.captureScreenshot"
+        );
+        screenshotData = screenshot.data;
+      } catch (error) {
+        if (ctx.debug) {
+          console.warn(
+            "[extract] Screenshot capture unavailable, falling back to markdown-only extraction:",
+            error
+          );
+        }
+      }
 
       // Save screenshot to debug dir if exists
-      if (ctx.debugDir) {
-        fs.writeFileSync(
+      if (ctx.debugDir && screenshotData) {
+        writeDebugFileSafe(
           `${ctx.debugDir}/extract-screenshot.png`,
-          Buffer.from(screenshot.data, "base64")
+          Buffer.from(screenshotData, "base64"),
+          ctx.debug
         );
       }
 
-      // Trim markdown to stay within token limit
-      // TODO: this is a hack, we should use a better token counting method
-      const avgTokensPerChar = 0.75; // Conservative estimate of tokens per character
-      const maxChars = Math.floor(ctx.tokenLimit / avgTokensPerChar);
-      const trimmedMarkdown =
-        markdown.length > maxChars
-          ? markdown.slice(0, maxChars) + "\n[Content truncated due to length]"
-          : markdown;
+      const trimmedMarkdown = trimMarkdownToTokenLimit(markdown, ctx.tokenLimit);
       if (ctx.debugDir) {
-        fs.writeFileSync(
+        writeDebugFileSafe(
           `${ctx.debugDir}/extract-markdown-content.md`,
-          trimmedMarkdown
+          trimmedMarkdown,
+          ctx.debug
         );
+      }
+
+      const textPrompt = screenshotData
+        ? `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nHere is a screenshot of the page:\n`
+        : `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nNo screenshot was available. Use the page content to extract the answer.`;
+      const contentParts: HyperAgentContentPart[] = [
+        {
+          type: "text",
+          text: textPrompt,
+        },
+      ];
+      if (screenshotData) {
+        contentParts.push({
+          type: "image",
+          url: `data:image/png;base64,${screenshotData}`,
+          mimeType: "image/png",
+        });
       }
 
       const response = await ctx.llm.invoke([
         {
           role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nHere is a screenshot of the page:\n`,
-            },
-            {
-              type: "image",
-              url: `data:image/png;base64,${screenshot.data}`,
-              mimeType: "image/png",
-            },
-          ],
+          content: contentParts,
         },
       ]);
       // Handle both string and HyperAgentContentPart[] responses
