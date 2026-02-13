@@ -11,6 +11,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const UNSAFE_OPTION_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const MAX_PROVIDER_OPTIONS_DEPTH = 20;
 
 function normalizeOptionKey(key: string): string {
   return key.trim();
@@ -22,8 +23,13 @@ function toComparableOptionKey(key: string): string {
 
 function sanitizeOptionValue(
   value: unknown,
-  seen: WeakSet<object>
+  seen: WeakSet<object>,
+  depth: number
 ): unknown {
+  if (depth >= MAX_PROVIDER_OPTIONS_DEPTH) {
+    return "[MaxDepthExceeded]";
+  }
+
   if (typeof value === "object" && value !== null) {
     if (seen.has(value)) {
       return "[Circular]";
@@ -32,7 +38,9 @@ function sanitizeOptionValue(
   }
 
   if (Array.isArray(value)) {
-    const sanitizedArray = value.map((entry) => sanitizeOptionValue(entry, seen));
+    const sanitizedArray = value.map((entry) =>
+      sanitizeOptionValue(entry, seen, depth + 1)
+    );
     seen.delete(value);
     return sanitizedArray;
   }
@@ -48,7 +56,10 @@ function sanitizeOptionValue(
       if (UNSAFE_OPTION_KEYS.has(comparableKey)) {
         continue;
       }
-      sanitizedEntries.set(normalizedKey, sanitizeOptionValue(entry, seen));
+      sanitizedEntries.set(
+        normalizedKey,
+        sanitizeOptionValue(entry, seen, depth + 1)
+      );
     }
     const sanitized = Object.fromEntries(sanitizedEntries);
     seen.delete(value);
@@ -100,7 +111,7 @@ export function sanitizeProviderOptions(
     ) {
       continue;
     }
-    sanitizedEntries.set(normalizedKey, sanitizeOptionValue(value, seen));
+    sanitizedEntries.set(normalizedKey, sanitizeOptionValue(value, seen, 0));
   }
 
   if (sanitizedEntries.size === 0) {

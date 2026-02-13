@@ -202,4 +202,28 @@ describe("sanitizeProviderOptions", () => {
       functionValue: "[Function sampleFunction]",
     });
   });
+
+  it("caps excessive provider-option nesting depth", () => {
+    const deeplyNested: Record<string, unknown> = {};
+    let cursor: Record<string, unknown> = deeplyNested;
+    for (let depth = 0; depth < 30; depth += 1) {
+      cursor.child = {};
+      cursor = cursor.child as Record<string, unknown>;
+    }
+
+    const result = sanitizeProviderOptions(
+      {
+        metadata: deeplyNested,
+      },
+      reserved
+    ) as Record<string, unknown>;
+
+    let current = result.metadata as Record<string, unknown>;
+    for (let depth = 0; depth < 19; depth += 1) {
+      current = current.child as Record<string, unknown>;
+      expect(typeof current).toBe("object");
+    }
+
+    expect(current.child).toBe("[MaxDepthExceeded]");
+  });
 });
