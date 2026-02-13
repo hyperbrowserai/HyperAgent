@@ -73,5 +73,24 @@ describe("createScriptFromActionCache hardening", () => {
     expect(script).toContain("[truncated");
     expect(script).not.toContain("\\nunsafe");
   });
+
+  it("handles trap-prone stepIndex getters when sorting script steps", () => {
+    const trapStep = new Proxy(createStep(99, { actionType: "complete" }), {
+      get(target, prop, receiver): unknown {
+        if (prop === "stepIndex") {
+          throw new Error("stepIndex trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const script = createScriptFromActionCache({
+      taskId: "task-4",
+      steps: [trapStep as unknown as ActionCacheEntry, createStep(1, { actionType: "complete" })],
+    });
+
+    expect(script).toContain("// Step 1 (complete skipped in script)");
+    expect(script).toContain("// Step -1 (complete skipped in script)");
+  });
 });
 

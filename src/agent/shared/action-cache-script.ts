@@ -102,6 +102,13 @@ const safeReadArrayIndex = (value: unknown, index: number): unknown => {
   }
 };
 
+const getSortStepIndexFromEntry = (step: ActionCacheEntry): number => {
+  const rawStepIndex = safeReadStepField(step, "stepIndex");
+  return typeof rawStepIndex === "number"
+    ? getSortStepIndex(rawStepIndex)
+    : Number.MAX_SAFE_INTEGER;
+};
+
 const normalizeWaitMs = (value: unknown): number => {
   const parsed = asNumber(value);
   if (parsed === undefined) {
@@ -311,7 +318,7 @@ ${indent});`;
 
   let omittedSteps = 0;
   const sortedSteps = [...steps].sort(
-    (a, b) => getSortStepIndex(a.stepIndex) - getSortStepIndex(b.stepIndex)
+    (a, b) => getSortStepIndexFromEntry(a) - getSortStepIndexFromEntry(b)
   );
   if (sortedSteps.length > MAX_SCRIPT_STEPS) {
     omittedSteps = sortedSteps.length - MAX_SCRIPT_STEPS;
