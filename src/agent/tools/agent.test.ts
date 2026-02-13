@@ -249,6 +249,7 @@ describe("runAgentTask completion behavior", () => {
 
       expect(result.status).toBe(TaskStatus.COMPLETED);
       expect(errorSpy).toHaveBeenCalled();
+      expect(writeSpy).not.toHaveBeenCalled();
     } finally {
       mkdirSpy.mockRestore();
       writeSpy.mockRestore();

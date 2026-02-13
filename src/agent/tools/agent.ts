@@ -249,9 +249,13 @@ export const runAgentTask = async (
   const taskStart = performance.now();
   const taskId = taskState.id;
   const debugDir = params?.debugDir || `debug/${taskId}`;
+  let debugArtifactsEnabled = Boolean(ctx.debug);
 
   if (ctx.debug) {
     console.log(`Debugging task ${taskId} in ${debugDir}`);
+  }
+  if (debugArtifactsEnabled) {
+    debugArtifactsEnabled = ensureDirectorySafe(debugDir, ctx.debug);
   }
   if (!taskState) {
     throw new HyperagentError(`Task ${taskId} not found`);
@@ -347,7 +351,7 @@ export const runAgentTask = async (
       const stepMetrics: Record<string, unknown> = {
         stepIndex: currStep,
       };
-      if (ctx.debug) {
+      if (debugArtifactsEnabled) {
         ensureDirectorySafe(debugStepDir, ctx.debug);
       }
 
@@ -361,7 +365,7 @@ export const runAgentTask = async (
           useCache: useDomCache,
           debug: ctx.debug,
           enableVisualMode: params?.enableVisualMode ?? false,
-          debugStepDir: ctx.debug ? debugStepDir : undefined,
+          debugStepDir: debugArtifactsEnabled ? debugStepDir : undefined,
           enableStreaming: enableDomStreaming,
           onFrameChunk: enableDomStreaming
             ? () => {
@@ -407,7 +411,7 @@ export const runAgentTask = async (
       }
 
       // Store Dom State for Debugging
-      if (ctx.debug) {
+      if (debugArtifactsEnabled) {
         ensureDirectorySafe(debugDir, ctx.debug);
         writeDebugFileSafe(`${debugStepDir}/elems.txt`, domState.domState, ctx.debug);
         if (trimmedScreenshot) {
@@ -447,7 +451,7 @@ export const runAgentTask = async (
       }
 
       // Store Agent Step Messages for Debugging
-      if (ctx.debug) {
+      if (debugArtifactsEnabled) {
         writeDebugFileSafe(
           `${debugStepDir}/msgs.json`,
           JSON.stringify(msgs, null, 2),
@@ -732,7 +736,7 @@ export const runAgentTask = async (
       );
       stepMetrics.totalMs = Math.round(totalDuration);
 
-      if (ctx.debug) {
+      if (debugArtifactsEnabled) {
         await writeFrameGraphSnapshot(page, debugStepDir, ctx.debug);
         writeDebugFileSafe(
           `${debugStepDir}/stepOutput.json`,
@@ -758,7 +762,7 @@ export const runAgentTask = async (
     status: taskState.status,
     steps: actionCacheSteps,
   };
-  if (ctx.debug) {
+  if (debugArtifactsEnabled) {
     ensureDirectorySafe(debugDir, ctx.debug);
     writeDebugFileSafe(
       `${debugDir}/action-cache.json`,
@@ -774,7 +778,7 @@ export const runAgentTask = async (
     output,
     actionCache,
   };
-  if (ctx.debug) {
+  if (debugArtifactsEnabled) {
     writeDebugFileSafe(
       `${debugDir}/taskOutput.json`,
       JSON.stringify(taskOutput, null, 2),
