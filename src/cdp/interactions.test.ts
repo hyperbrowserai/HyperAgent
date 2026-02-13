@@ -407,6 +407,29 @@ describe("dispatchCDPAction argument coercion", () => {
     }
   });
 
+  it("rejects oversized selectOption values before dispatch", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return { result: { value: { status: "selected", value: "x" } } };
+    });
+    const oversizedValue = "x".repeat(2_001);
+
+    await expect(
+      dispatchCDPAction("selectOptionFromDropdown", [oversizedValue], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow(
+      "[CDP][Interactions] selectOption value exceeds 2000 characters"
+    );
+    expect(calls).toHaveLength(0);
+  });
+
   it("still commits Enter for empty type action with commitEnter", async () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session = createSession(async (method, params) => {

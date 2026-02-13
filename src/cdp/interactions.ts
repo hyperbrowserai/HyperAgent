@@ -95,6 +95,7 @@ type SelectOptionResult =
   | { status: "selected"; value: string }
   | { status: "notfound" };
 const MAX_INTERACTION_DIAGNOSTIC_CHARS = 200;
+const MAX_SELECT_OPTION_INPUT_CHARS = 2_000;
 
 interface ScrollDebugMetrics {
   targetTagName: string | null;
@@ -754,7 +755,15 @@ async function selectOption(
   const { element } = ctx;
   const session = element.session;
   const objectId = await ensureObjectHandle(element);
-  const value = options.value;
+  const normalizedValue = stripControlChars(
+    String(options.value ?? "")
+  ).trim();
+  if (normalizedValue.length > MAX_SELECT_OPTION_INPUT_CHARS) {
+    throw new Error(
+      `[CDP][Interactions] selectOption value exceeds ${MAX_SELECT_OPTION_INPUT_CHARS} characters`
+    );
+  }
+  const value = normalizedValue;
 
   await ensureRuntimeEnabled(session);
   const result = await session.send<Protocol.Runtime.CallFunctionOnResponse>(
