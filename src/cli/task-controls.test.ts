@@ -202,4 +202,30 @@ describe("task-controls helpers", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("sanitizes and truncates oversized task-control diagnostics", () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const oversizedError = new Error(`status\u0000\n${"x".repeat(10_000)}`);
+    try {
+      expect(
+        pauseTaskIfRunning({
+          getStatus: () => {
+            throw oversizedError;
+          },
+          pause: jest.fn(),
+        })
+      ).toBe(false);
+
+      const warning = warnSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes("Failed to read task status for pause"));
+      expect(warning).toBeDefined();
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+      expect(warning?.length ?? 0).toBeLessThan(2_500);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

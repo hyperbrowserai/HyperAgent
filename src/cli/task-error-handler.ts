@@ -1,5 +1,5 @@
 import type { Task } from "@/types";
-import { formatUnknownError } from "@/utils";
+import { formatCliError } from "./format-cli-error";
 
 export type TaskErrorHandler = (error: unknown) => void;
 
@@ -11,7 +11,7 @@ function safeReadTaskField(
     return (task as unknown as Record<string, unknown>)[field];
   } catch (error) {
     console.error(
-      `[CLI] Failed to access task ${field}: ${formatUnknownError(error)}`
+      `[CLI] Failed to access task ${field}: ${formatCliError(error)}`
     );
     return undefined;
   }
@@ -51,7 +51,7 @@ export function attachTaskErrorHandler(
           cancel.call(task);
         } catch (cancelError) {
           console.error(
-            `[CLI] Failed to cancel task after error: ${formatUnknownError(cancelError)}`
+            `[CLI] Failed to cancel task after error: ${formatCliError(cancelError)}`
           );
         }
       }
@@ -59,13 +59,13 @@ export function attachTaskErrorHandler(
         onError(error);
       } catch (handlerError) {
         console.error(
-          `[CLI] Task error handler failed: ${formatUnknownError(handlerError)}`
+          `[CLI] Task error handler failed: ${formatCliError(handlerError)}`
         );
       }
     });
   } catch (error) {
     console.error(
-      `[CLI] Failed to attach task error listener: ${formatUnknownError(error)}`
+      `[CLI] Failed to attach task error listener: ${formatCliError(error)}`
     );
   }
 }

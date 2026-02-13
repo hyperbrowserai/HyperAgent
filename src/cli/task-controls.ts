@@ -1,5 +1,5 @@
 import { TaskStatus } from "@/types";
-import { formatUnknownError } from "@/utils";
+import { formatCliError } from "./format-cli-error";
 
 type PauseableTask = {
   getStatus: () => TaskStatus;
@@ -22,9 +22,7 @@ function readTaskMethod<T extends "getStatus" | "pause" | "resume">(
   try {
     value = (task as Record<string, unknown>)[method];
   } catch (error) {
-    throw new Error(
-      `task.${method} is inaccessible (${formatUnknownError(error)})`
-    );
+    throw new Error(`task.${method} is inaccessible (${formatCliError(error)})`);
   }
   if (typeof value !== "function") {
     throw new Error(`task.${method} is not callable`);
@@ -41,7 +39,7 @@ export function pauseTaskIfRunning(task?: PauseableTask): boolean {
     status = readTaskMethod(task, "getStatus")() as TaskStatus;
   } catch (error) {
     console.warn(
-      `[CLI] Failed to read task status for pause: ${formatUnknownError(error)}`
+      `[CLI] Failed to read task status for pause: ${formatCliError(error)}`
     );
     return false;
   }
@@ -52,7 +50,7 @@ export function pauseTaskIfRunning(task?: PauseableTask): boolean {
     readTaskMethod(task, "pause")();
   } catch (error) {
     console.warn(
-      `[CLI] Failed to pause task: ${formatUnknownError(error)}`
+      `[CLI] Failed to pause task: ${formatCliError(error)}`
     );
     return false;
   }
@@ -68,7 +66,7 @@ export function resumeTaskIfPaused(task?: ResumableTask): boolean {
     status = readTaskMethod(task, "getStatus")() as TaskStatus;
   } catch (error) {
     console.warn(
-      `[CLI] Failed to read task status for resume: ${formatUnknownError(error)}`
+      `[CLI] Failed to read task status for resume: ${formatCliError(error)}`
     );
     return false;
   }
@@ -79,7 +77,7 @@ export function resumeTaskIfPaused(task?: ResumableTask): boolean {
     readTaskMethod(task, "resume")();
   } catch (error) {
     console.warn(
-      `[CLI] Failed to resume task: ${formatUnknownError(error)}`
+      `[CLI] Failed to resume task: ${formatCliError(error)}`
     );
     return false;
   }

@@ -158,4 +158,29 @@ describe("attachTaskErrorHandler", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("sanitizes and truncates oversized listener attachment diagnostics", () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const task = {
+      cancel: jest.fn(),
+      emitter: {
+        addListener: () => {
+          throw new Error(`listener\u0000\n${"x".repeat(10_000)}`);
+        },
+      },
+    } as unknown as Task;
+    try {
+      attachTaskErrorHandler(task, jest.fn());
+      const message = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes("Failed to attach task error listener"));
+      expect(message).toBeDefined();
+      expect(message).toContain("[truncated");
+      expect(message).not.toContain("\u0000");
+      expect(message).not.toContain("\n");
+      expect(message?.length ?? 0).toBeLessThan(2_500);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
