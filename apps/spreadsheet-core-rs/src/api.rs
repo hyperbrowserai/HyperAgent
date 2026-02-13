@@ -82,6 +82,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "SIGN",
   "INT",
   "TRUNC",
+  "EXACT",
   "LEFT",
   "RIGHT",
   "UPPER",

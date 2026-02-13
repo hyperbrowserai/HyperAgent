@@ -6,7 +6,8 @@ use crate::{
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_choose_formula, parse_left_formula,
-    parse_ceiling_formula, parse_floor_formula, parse_index_formula,
+    parse_ceiling_formula, parse_exact_formula, parse_floor_formula,
+    parse_index_formula,
     parse_int_formula, parse_isblank_formula, parse_isnumber_formula,
     parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
@@ -556,6 +557,12 @@ fn evaluate_formula(
       scaled.floor()
     } / factor;
     return Ok(Some(truncated.to_string()));
+  }
+
+  if let Some((left_arg, right_arg)) = parse_exact_formula(formula) {
+    let left = resolve_scalar_operand(connection, sheet, &left_arg)?;
+    let right = resolve_scalar_operand(connection, sheet, &right_arg)?;
+    return Ok(Some((left == right).to_string()));
   }
 
   if let Some((text_arg, count_arg)) = parse_left_formula(formula) {
@@ -2189,12 +2196,24 @@ mod tests {
         value: None,
         formula: Some("=TRUNC(12.345,2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 65,
+        value: None,
+        formula: Some(r#"=EXACT("North","north")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 66,
+        value: None,
+        formula: Some(r#"=EXACT("north","north")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 62);
+    assert_eq!(updated_cells, 64);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2208,7 +2227,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 64,
+        end_col: 66,
       },
     )
     .expect("cells should be fetched");
@@ -2301,6 +2320,8 @@ mod tests {
     assert_eq!(by_position(1, 62).evaluated_value.as_deref(), Some("80"));
     assert_eq!(by_position(1, 63).evaluated_value.as_deref(), Some("-13"));
     assert_eq!(by_position(1, 64).evaluated_value.as_deref(), Some("12.34"));
+    assert_eq!(by_position(1, 65).evaluated_value.as_deref(), Some("false"));
+    assert_eq!(by_position(1, 66).evaluated_value.as_deref(), Some("true"));
   }
 
   #[test]

@@ -404,6 +404,14 @@ pub fn parse_trunc_formula(formula: &str) -> Option<(String, Option<String>)> {
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_exact_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "EXACT" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_isblank_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ISBLANK" && args.len() == 1 {
@@ -697,6 +705,7 @@ mod tests {
     parse_averageif_formula, parse_averageifs_formula,
     parse_abs_formula, parse_concat_formula, parse_date_formula, parse_day_formula,
     parse_ceiling_formula, parse_floor_formula,
+    parse_exact_formula,
     parse_index_formula, parse_int_formula, parse_isblank_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_lower_formula, parse_match_formula, parse_maxifs_formula,
@@ -871,6 +880,10 @@ mod tests {
     let trunc = parse_trunc_formula("=TRUNC(12.345,2)").expect("trunc should parse");
     assert_eq!(trunc.0, "12.345");
     assert_eq!(trunc.1.as_deref(), Some("2"));
+    let exact = parse_exact_formula(r#"=EXACT("North","north")"#)
+      .expect("exact should parse");
+    assert_eq!(exact.0, r#""North""#);
+    assert_eq!(exact.1, r#""north""#);
     assert_eq!(
       parse_isblank_formula("=ISBLANK(A1)").as_deref(),
       Some("A1"),
