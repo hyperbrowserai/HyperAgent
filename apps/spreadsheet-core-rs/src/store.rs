@@ -6,7 +6,8 @@ use crate::{
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
-    parse_log_formula, parse_fact_formula, parse_combin_formula, parse_pi_formula,
+    parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
+    parse_lcm_formula, parse_pi_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_sinh_formula,
     parse_cosh_formula, parse_tanh_formula, parse_asin_formula, parse_acos_formula,
     parse_atan_formula, parse_atan2_formula,
@@ -632,6 +633,38 @@ fn evaluate_formula(
       step += 1;
     }
     return Ok(Some(result.round().to_string()));
+  }
+
+  if let Some(gcd_args) = parse_gcd_formula(formula) {
+    let mut values = Vec::new();
+    for argument in gcd_args {
+      let resolved = resolve_scalar_operand(connection, sheet, &argument)?;
+      let Some(parsed) = resolved.trim().parse::<f64>().ok() else {
+        return Ok(None);
+      };
+      values.push(parsed.abs().trunc() as u64);
+    }
+    let mut result = values[0];
+    for value in values.into_iter().skip(1) {
+      result = gcd_u64(result, value);
+    }
+    return Ok(Some(result.to_string()));
+  }
+
+  if let Some(lcm_args) = parse_lcm_formula(formula) {
+    let mut values = Vec::new();
+    for argument in lcm_args {
+      let resolved = resolve_scalar_operand(connection, sheet, &argument)?;
+      let Some(parsed) = resolved.trim().parse::<f64>().ok() else {
+        return Ok(None);
+      };
+      values.push(parsed.abs().trunc() as u64);
+    }
+    let mut result = values[0];
+    for value in values.into_iter().skip(1) {
+      result = lcm_u64(result, value)?;
+    }
+    return Ok(Some(result.to_string()));
   }
 
   if let Some(sin_arg) = parse_sin_formula(formula) {
@@ -1816,6 +1849,26 @@ fn replace_nth_occurrence(
   text.to_string()
 }
 
+fn gcd_u64(mut left: u64, mut right: u64) -> u64 {
+  while right != 0 {
+    let remainder = left % right;
+    left = right;
+    right = remainder;
+  }
+  left
+}
+
+fn lcm_u64(left: u64, right: u64) -> Result<u64, ApiError> {
+  if left == 0 || right == 0 {
+    return Ok(0);
+  }
+  let divisor = gcd_u64(left, right);
+  let scaled = left / divisor;
+  scaled
+    .checked_mul(right)
+    .ok_or_else(|| ApiError::internal("LCM overflow".to_string()))
+}
+
 fn parse_optional_char_count(
   connection: &Connection,
   sheet: &str,
@@ -2983,12 +3036,24 @@ mod tests {
         value: None,
         formula: Some("=COMBIN(5,2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 113,
+        value: None,
+        formula: Some("=GCD(24,36)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 114,
+        value: None,
+        formula: Some("=LCM(12,18)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 110);
+    assert_eq!(updated_cells, 112);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3002,7 +3067,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 112,
+        end_col: 114,
       },
     )
     .expect("cells should be fetched");
@@ -3171,6 +3236,8 @@ mod tests {
     assert_eq!(by_position(1, 110).evaluated_value.as_deref(), Some("0"));
     assert_eq!(by_position(1, 111).evaluated_value.as_deref(), Some("120"));
     assert_eq!(by_position(1, 112).evaluated_value.as_deref(), Some("10"));
+    assert_eq!(by_position(1, 113).evaluated_value.as_deref(), Some("12"));
+    assert_eq!(by_position(1, 114).evaluated_value.as_deref(), Some("36"));
   }
 
   #[test]
@@ -3362,6 +3429,22 @@ mod tests {
       unsupported_formulas,
       vec!["=FACT(-1)".to_string(), "=COMBIN(5,7)".to_string()],
     );
+  }
+
+  #[test]
+  fn should_leave_non_numeric_lcm_input_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=LCM("north",6)"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=LCM("north",6)"#.to_string()]);
   }
 
   #[test]

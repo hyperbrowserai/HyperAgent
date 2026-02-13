@@ -404,6 +404,22 @@ pub fn parse_combin_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_gcd_formula(formula: &str) -> Option<Vec<String>> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "GCD" && !args.is_empty() {
+    return Some(args);
+  }
+  None
+}
+
+pub fn parse_lcm_formula(formula: &str) -> Option<Vec<String>> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "LCM" && !args.is_empty() {
+    return Some(args);
+  }
+  None
+}
+
 pub fn parse_sin_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "SIN" && args.len() == 1 {
@@ -1057,7 +1073,8 @@ mod tests {
     parse_iseven_formula, parse_isodd_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
-    parse_log_formula, parse_fact_formula, parse_combin_formula,
+    parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
+    parse_lcm_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula,
     parse_sinh_formula, parse_cosh_formula, parse_tanh_formula, parse_asin_formula,
     parse_acos_formula, parse_atan_formula, parse_atan2_formula, parse_degrees_formula,
@@ -1222,6 +1239,10 @@ mod tests {
       parse_combin_formula("=COMBIN(A1,B1)").expect("combin should parse");
     assert_eq!(combin_args.0, "A1");
     assert_eq!(combin_args.1, "B1");
+    let gcd_args = parse_gcd_formula("=GCD(A1,B1,C1)").expect("gcd should parse");
+    assert_eq!(gcd_args, vec!["A1", "B1", "C1"]);
+    let lcm_args = parse_lcm_formula("=LCM(A1,B1,C1)").expect("lcm should parse");
+    assert_eq!(lcm_args, vec!["A1", "B1", "C1"]);
     assert_eq!(parse_sin_formula("=SIN(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_cos_formula("=COS(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_tan_formula("=TAN(A1)").as_deref(), Some("A1"));
