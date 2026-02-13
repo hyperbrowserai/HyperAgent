@@ -3,6 +3,7 @@ use crate::{
   models::{
     AgentOperation, AgentOperationResult, AgentOpsRequest, AgentOpsResponse,
     AgentPresetRunRequest, AgentScenarioRunRequest,
+    AgentWizardImportResult, AgentWizardRunResponse,
     CellMutation, CreateSheetRequest, CreateSheetResponse, CreateWorkbookRequest,
     CreateWorkbookResponse, ExportResponse, GetCellsRequest,
     GetCellsResponse, QueryRequest, RecalculateResponse, SetCellsRequest,
@@ -32,6 +33,7 @@ pub fn create_router(state: AppState) -> Router {
   Router::new()
     .route("/health", get(health))
     .route("/v1/openapi", get(openapi))
+    .route("/v1/agent/wizard/run", post(run_agent_wizard))
     .route("/v1/workbooks", post(create_workbook))
     .route("/v1/workbooks/import", post(import_workbook))
     .route("/v1/workbooks/{id}", get(get_workbook))
@@ -87,6 +89,59 @@ async fn create_workbook(
   Ok(Json(CreateWorkbookResponse { workbook }))
 }
 
+fn parse_optional_bool(
+  raw: Option<String>,
+  field: &str,
+) -> Result<Option<bool>, ApiError> {
+  match raw {
+    Some(value) => {
+      let normalized = value.trim().to_lowercase();
+      match normalized.as_str() {
+        "true" | "1" | "yes" => Ok(Some(true)),
+        "false" | "0" | "no" => Ok(Some(false)),
+        _ => Err(ApiError::BadRequest(format!(
+          "Field '{field}' must be a boolean-like value (true/false/1/0/yes/no).",
+        ))),
+      }
+    }
+    None => Ok(None),
+  }
+}
+
+async fn import_bytes_into_workbook(
+  state: &AppState,
+  workbook_id: Uuid,
+  bytes: &[u8],
+  actor: &str,
+) -> Result<AgentWizardImportResult, ApiError> {
+  let db_path = state.db_path(workbook_id).await?;
+  let import_result = import_xlsx(&db_path, bytes)?;
+  for sheet_name in &import_result.sheet_names {
+    let _ = state.register_sheet_if_missing(workbook_id, sheet_name).await?;
+  }
+  for warning in &import_result.warnings {
+    state.add_warning(workbook_id, warning.clone()).await?;
+  }
+  state
+    .emit_event(
+      workbook_id,
+      "workbook.imported",
+      actor,
+      json!({
+        "sheets_imported": import_result.sheets_imported,
+        "cells_imported": import_result.cells_imported,
+        "warnings": import_result.warnings,
+      }),
+    )
+    .await?;
+
+  Ok(AgentWizardImportResult {
+    sheets_imported: import_result.sheets_imported,
+    cells_imported: import_result.cells_imported,
+    warnings: import_result.warnings,
+  })
+}
+
 async fn import_workbook(
   State(state): State<AppState>,
   mut multipart: Multipart,
@@ -107,28 +162,8 @@ async fn import_workbook(
   let bytes = maybe_bytes
     .ok_or_else(|| ApiError::BadRequest("No XLSX file was provided.".to_string()))?;
   let workbook = state.create_workbook(maybe_file_name.clone()).await?;
-  let db_path = state.db_path(workbook.id).await?;
-  let import_result = import_xlsx(&db_path, &bytes)?;
-
-  for sheet_name in &import_result.sheet_names {
-    let _ = state.register_sheet_if_missing(workbook.id, sheet_name).await?;
-  }
-  for warning in &import_result.warnings {
-    state.add_warning(workbook.id, warning.clone()).await?;
-  }
-
-  state
-    .emit_event(
-      workbook.id,
-      "workbook.imported",
-      "import",
-      json!({
-        "sheets_imported": import_result.sheets_imported,
-        "cells_imported": import_result.cells_imported,
-        "warnings": import_result.warnings,
-      }),
-    )
-    .await?;
+  let import_result =
+    import_bytes_into_workbook(&state, workbook.id, &bytes, "import").await?;
 
   let refreshed = state.get_workbook(workbook.id).await?;
   Ok(Json(json!({
@@ -139,6 +174,99 @@ async fn import_workbook(
       "warnings": import_result.warnings
     }
   })))
+}
+
+async fn run_agent_wizard(
+  State(state): State<AppState>,
+  mut multipart: Multipart,
+) -> Result<Json<AgentWizardRunResponse>, ApiError> {
+  let mut scenario: Option<String> = None;
+  let mut request_id: Option<String> = None;
+  let mut actor: Option<String> = None;
+  let mut stop_on_error_raw: Option<String> = None;
+  let mut include_file_base64_raw: Option<String> = None;
+  let mut workbook_name: Option<String> = None;
+  let mut maybe_file_name: Option<String> = None;
+  let mut maybe_file_bytes: Option<Vec<u8>> = None;
+
+  while let Some(field) = multipart.next_field().await.map_err(ApiError::internal)? {
+    let name = field.name().unwrap_or_default().to_string();
+    match name.as_str() {
+      "file" => {
+        let file_name = field.file_name().map(|value| value.to_string());
+        let bytes = field.bytes().await.map_err(ApiError::internal)?;
+        if !bytes.is_empty() {
+          maybe_file_name = file_name;
+          maybe_file_bytes = Some(bytes.to_vec());
+        }
+      }
+      "scenario" => {
+        scenario = Some(field.text().await.map_err(ApiError::internal)?);
+      }
+      "request_id" => {
+        request_id = Some(field.text().await.map_err(ApiError::internal)?);
+      }
+      "actor" => {
+        actor = Some(field.text().await.map_err(ApiError::internal)?);
+      }
+      "stop_on_error" => {
+        stop_on_error_raw = Some(field.text().await.map_err(ApiError::internal)?);
+      }
+      "include_file_base64" => {
+        include_file_base64_raw = Some(field.text().await.map_err(ApiError::internal)?);
+      }
+      "workbook_name" => {
+        workbook_name = Some(field.text().await.map_err(ApiError::internal)?);
+      }
+      _ => {}
+    }
+  }
+
+  let scenario = scenario
+    .map(|value| value.trim().to_string())
+    .filter(|value| !value.is_empty())
+    .ok_or_else(|| ApiError::BadRequest("Field 'scenario' is required.".to_string()))?;
+  let stop_on_error = parse_optional_bool(stop_on_error_raw, "stop_on_error")?
+    .unwrap_or(true);
+  let include_file_base64 =
+    parse_optional_bool(include_file_base64_raw, "include_file_base64")?
+      .unwrap_or(false);
+  let actor = actor.unwrap_or_else(|| "wizard".to_string());
+  let workbook_name = workbook_name
+    .map(|value| value.trim().to_string())
+    .filter(|value| !value.is_empty())
+    .or(maybe_file_name);
+
+  let workbook = state.create_workbook(workbook_name).await?;
+  let import_result = match maybe_file_bytes {
+    Some(bytes) => Some(
+      import_bytes_into_workbook(&state, workbook.id, &bytes, actor.as_str())
+        .await?,
+    ),
+    None => None,
+  };
+  let operations = build_scenario_operations(
+    scenario.as_str(),
+    Some(include_file_base64),
+  )?;
+
+  let results = execute_agent_operations(
+    &state,
+    workbook.id,
+    actor.as_str(),
+    stop_on_error,
+    operations,
+  )
+  .await;
+  let refreshed = state.get_workbook(workbook.id).await?;
+
+  Ok(Json(AgentWizardRunResponse {
+    workbook: refreshed,
+    scenario,
+    request_id,
+    results,
+    import: import_result,
+  }))
 }
 
 async fn get_workbook(
@@ -568,7 +696,17 @@ async fn get_agent_schema(
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
     "presets": preset_catalog(),
     "scenario_endpoint": "/v1/workbooks/{id}/agent/scenarios/{scenario}",
-    "scenarios": scenario_catalog()
+    "scenarios": scenario_catalog(),
+    "wizard_endpoint": "/v1/agent/wizard/run",
+    "wizard_request_multipart_fields": [
+      "scenario (required)",
+      "file (optional .xlsx)",
+      "workbook_name (optional)",
+      "request_id (optional)",
+      "actor (optional)",
+      "stop_on_error (optional boolean)",
+      "include_file_base64 (optional boolean)"
+    ]
   })))
 }
 
@@ -897,6 +1035,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "version": "1.0.0"
     },
     "paths": {
+      "/v1/agent/wizard/run": {"post": {"summary": "Wizard endpoint: optional import + scenario execution + optional export payload"}},
       "/v1/workbooks": {"post": {"summary": "Create workbook"}},
       "/v1/workbooks/import": {"post": {"summary": "Import .xlsx"}},
       "/v1/workbooks/{id}": {"get": {"summary": "Get workbook"}},

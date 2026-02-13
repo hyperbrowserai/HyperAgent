@@ -23,6 +23,7 @@ Server defaults to `http://localhost:8787`.
 
 ## Key Endpoints
 
+- `POST /v1/agent/wizard/run`
 - `POST /v1/workbooks`
 - `POST /v1/workbooks/import`
 - `GET /v1/workbooks/{id}`
@@ -79,6 +80,19 @@ Supported `scenario` values:
 - `seed_then_export` — executes `seed_sales_demo`, then `export_snapshot`.
 - `refresh_and_export` — executes `export_snapshot`.
 
+### AI Agent wizard endpoint
+
+`POST /v1/agent/wizard/run` creates a workbook, optionally imports an `.xlsx`, then runs a selected scenario.
+
+Multipart fields:
+- `scenario` (required)
+- `file` (optional `.xlsx`)
+- `workbook_name` (optional)
+- `request_id` (optional)
+- `actor` (optional)
+- `stop_on_error` (optional boolean)
+- `include_file_base64` (optional boolean)
+
 ### Example: run an agent operation batch
 
 ```bash
@@ -119,6 +133,16 @@ curl "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/presets"
 curl -X POST "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/presets/seed_sales_demo" \
   -H "content-type: application/json" \
   -d '{ "request_id": "preset-seed-1", "actor": "demo-agent", "stop_on_error": true }'
+```
+
+### Example: run wizard (import + scenario)
+
+```bash
+curl -X POST "http://localhost:8787/v1/agent/wizard/run" \
+  -F "scenario=seed_then_export" \
+  -F "file=@./a.xlsx" \
+  -F "request_id=wizard-1" \
+  -F "include_file_base64=false"
 ```
 
 ## Testing

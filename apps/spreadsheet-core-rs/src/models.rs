@@ -148,6 +148,22 @@ pub struct AgentScenarioRunRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentWizardImportResult {
+  pub sheets_imported: usize,
+  pub cells_imported: usize,
+  pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentWizardRunResponse {
+  pub workbook: WorkbookSummary,
+  pub scenario: String,
+  pub request_id: Option<String>,
+  pub results: Vec<AgentOperationResult>,
+  pub import: Option<AgentWizardImportResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "op_type", rename_all = "snake_case")]
 pub enum AgentOperation {
   GetWorkbook,
