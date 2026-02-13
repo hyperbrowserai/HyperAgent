@@ -570,10 +570,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private normalizeLifecycleCancelledResult(
     result: AgentTaskOutput
   ): AgentTaskOutput {
+    return this.normalizeCancelledTaskResult(
+      result,
+      "Task cancelled because agent was closed"
+    );
+  }
+
+  private normalizeCancelledTaskResult(
+    result: AgentTaskOutput,
+    output: string
+  ): AgentTaskOutput {
     return {
       ...result,
       status: TaskStatus.CANCELLED,
-      output: "Task cancelled because agent was closed",
+      output,
     };
   }
 
@@ -1327,12 +1337,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       )
         .then((result) => {
           cleanup();
-          if (this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
-            this.storeTaskActionCache(taskId, result.actionCache);
-            return result;
+          if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+            this.writeTaskStatus(taskState, TaskStatus.CANCELLED, TaskStatus.CANCELLED);
+            return this.normalizeLifecycleCancelledResult(result);
           }
-          this.writeTaskStatus(taskState, TaskStatus.CANCELLED, TaskStatus.CANCELLED);
-          return this.normalizeLifecycleCancelledResult(result);
+          const currentStatus = this.readTaskStatus(taskState, TaskStatus.FAILED);
+          if (currentStatus === TaskStatus.CANCELLED) {
+            return this.normalizeCancelledTaskResult(
+              result,
+              "Task was cancelled"
+            );
+          }
+          this.storeTaskActionCache(taskId, result.actionCache);
+          return result;
         })
         .catch((error: unknown) => {
           cleanup();
@@ -1462,12 +1479,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mergedParams
       );
       cleanup();
-      if (this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
-        this.storeTaskActionCache(taskId, result.actionCache);
-      } else {
+      if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
         this.writeTaskStatus(taskState, TaskStatus.CANCELLED, TaskStatus.CANCELLED);
         result = this.normalizeLifecycleCancelledResult(result);
+        this.cleanupTaskLifecycle(taskId);
+        return result;
       }
+      const currentStatus = this.readTaskStatus(taskState, TaskStatus.FAILED);
+      if (currentStatus === TaskStatus.CANCELLED) {
+        result = this.normalizeCancelledTaskResult(result, "Task was cancelled");
+        this.cleanupTaskLifecycle(taskId);
+        return result;
+      }
+      this.storeTaskActionCache(taskId, result.actionCache);
       this.cleanupTaskLifecycle(taskId);
       return result;
     } catch (error) {

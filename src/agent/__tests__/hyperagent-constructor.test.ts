@@ -532,6 +532,83 @@ describe("HyperAgent constructor and task controls", () => {
     expect(activeTaskState.status).toBe(TaskStatus.CANCELLED);
   });
 
+  it("returns cancelled output when async task resolves after manual cancel", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("cancel me", undefined, fakePage);
+
+    expect(task.cancel()).toBe(TaskStatus.CANCELLED);
+    resolveTask({
+      taskId: task.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.CANCELLED,
+      output: "Task was cancelled",
+    });
+  });
+
+  it("returns cancelled output when sync task resolves after manual cancellation", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const execution = agent.executeTask("sync cancel", undefined, fakePage);
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, TaskState>;
+    };
+    const activeTaskState = Object.values(internalAgent.tasks)[0];
+    expect(activeTaskState).toBeDefined();
+    activeTaskState.status = TaskStatus.CANCELLED;
+
+    resolveTask({
+      taskId: "sync-cancel",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "sync-cancel",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    await expect(execution).resolves.toMatchObject({
+      status: TaskStatus.CANCELLED,
+      output: "Task was cancelled",
+    });
+  });
+
   it("cleans internal task state after synchronous executeTask completion", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({
