@@ -36,6 +36,26 @@ export class GeminiClient implements HyperAgentLLM {
     this.maxTokens = config.maxTokens;
   }
 
+  private buildGeminiConfig(
+    options?: {
+      temperature?: number;
+      maxTokens?: number;
+      providerOptions?: Record<string, unknown>;
+    },
+    systemInstruction?: string
+  ): Record<string, unknown> {
+    const resolvedMaxTokens = options?.maxTokens ?? this.maxTokens;
+
+    return {
+      ...(options?.providerOptions ?? {}),
+      temperature: options?.temperature ?? this.temperature,
+      ...(typeof resolvedMaxTokens === "number"
+        ? { maxOutputTokens: resolvedMaxTokens }
+        : {}),
+      ...(systemInstruction ? { systemInstruction } : {}),
+    };
+  }
+
   async invoke(
     messages: HyperAgentMessage[],
     options?: {
@@ -49,11 +69,13 @@ export class GeminiClient implements HyperAgentLLM {
     toolCalls?: Array<{ id?: string; name: string; arguments: unknown }>;
     usage?: { inputTokens?: number; outputTokens?: number };
   }> {
-    const { messages: geminiMessages } = convertToGeminiMessages(messages);
+    const { messages: geminiMessages, systemInstruction } =
+      convertToGeminiMessages(messages);
 
     const response = await this.client.models.generateContent({
       model: this.model,
       contents: geminiMessages as any,
+      config: this.buildGeminiConfig(options, systemInstruction),
     });
 
     const text = response.text;
@@ -75,15 +97,15 @@ export class GeminiClient implements HyperAgentLLM {
     request: StructuredOutputRequest<TSchema>,
     messages: HyperAgentMessage[]
   ): Promise<HyperAgentStructuredResult<TSchema>> {
-    const { messages: geminiMessages } = convertToGeminiMessages(messages);
+    const { messages: geminiMessages, systemInstruction } =
+      convertToGeminiMessages(messages);
     const responseSchema = convertToGeminiResponseSchema(request.schema);
 
     const response = await this.client.models.generateContent({
       model: this.model,
       contents: geminiMessages as any,
       config: {
-        temperature: request.options?.temperature ?? this.temperature,
-        maxOutputTokens: request.options?.maxTokens ?? this.maxTokens,
+        ...this.buildGeminiConfig(request.options, systemInstruction),
         responseMimeType: "application/json",
         responseSchema: responseSchema,
       },
