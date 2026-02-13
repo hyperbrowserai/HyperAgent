@@ -77,10 +77,12 @@ function runCachedAction(
   args: Array<string | number>,
   options?: PerformOptions
 ): Promise<TaskOutput> {
+  const normalizedPerformInstruction = options?.performInstruction?.trim();
+  const normalizedDefaultInstruction = instruction.trim();
   const runInstruction =
-    options?.performInstruction && options.performInstruction.length > 0
-      ? options.performInstruction
-      : instruction;
+    normalizedPerformInstruction && normalizedPerformInstruction.length > 0
+      ? normalizedPerformInstruction
+      : normalizedDefaultInstruction || "Execute cached action";
   const cachedAction = {
     actionType: "actElement",
     method,
@@ -115,7 +117,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Click element",
+      "Click element",
       "click",
       xpath,
       [],
@@ -126,7 +128,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Hover element",
+      "Hover element",
       "hover",
       xpath,
       [],
@@ -137,7 +139,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Type text",
+      "Type text",
       "type",
       xpath,
       [text],
@@ -148,7 +150,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Fill input",
+      "Fill input",
       "fill",
       xpath,
       [text],
@@ -159,7 +161,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Press key",
+      "Press key",
       "press",
       xpath,
       [key],
@@ -174,7 +176,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Select option",
+      "Select option",
       "selectOptionFromDropdown",
       xpath,
       [option],
@@ -185,7 +187,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Check element",
+      "Check element",
       "check",
       xpath,
       [],
@@ -196,7 +198,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Uncheck element",
+      "Uncheck element",
       "uncheck",
       xpath,
       [],
@@ -207,7 +209,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Scroll to element",
+      "Scroll to element",
       "scrollToElement",
       xpath,
       [],
@@ -222,7 +224,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Scroll to percentage",
+      "Scroll to percentage",
       "scrollToPercentage",
       xpath,
       [position],
@@ -233,7 +235,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Scroll next chunk",
+      "Scroll next chunk",
       "nextChunk",
       xpath,
       [],
@@ -244,7 +246,7 @@ export function attachCachedActionHelpers(
     runCachedAction(
       agent,
       page,
-      options?.performInstruction || "Scroll previous chunk",
+      "Scroll previous chunk",
       "prevChunk",
       xpath,
       [],

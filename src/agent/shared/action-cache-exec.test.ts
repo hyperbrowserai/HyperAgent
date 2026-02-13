@@ -1,8 +1,23 @@
 import {
+  attachCachedActionHelpers,
   dispatchPerformHelper,
   isPageActionMethod,
 } from "@/agent/shared/action-cache-exec";
-import type { HyperPage } from "@/types/agent/types";
+import type { AgentDeps, HyperPage } from "@/types/agent/types";
+import type { HyperAgentLLM } from "@/llm/types";
+
+jest.mock("@/agent/shared/run-cached-action", () => ({
+  runCachedStep: jest.fn().mockResolvedValue({
+    taskId: "task-id",
+    status: "completed",
+    steps: [],
+    output: "ok",
+  }),
+}));
+
+const { runCachedStep } = jest.requireMock("@/agent/shared/run-cached-action") as {
+  runCachedStep: jest.Mock;
+};
 
 function createMockHyperPage(): HyperPage {
   const ok = Promise.resolve({
@@ -27,7 +42,25 @@ function createMockHyperPage(): HyperPage {
   } as unknown as HyperPage;
 }
 
+function createMockLLM(): HyperAgentLLM {
+  return {
+    invoke: async () => ({ role: "assistant", content: "ok" }),
+    invokeStructured: async () => ({ rawText: "{}", parsed: null }),
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  };
+}
+
 describe("action-cache perform helper dispatch", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("validates known page action methods", () => {
     expect(isPageActionMethod("click")).toBe(true);
     expect(isPageActionMethod("not-a-method")).toBe(false);
@@ -53,5 +86,27 @@ describe("action-cache perform helper dispatch", () => {
     expect(page.performClick).toHaveBeenCalledWith("//button[1]", {
       maxSteps: 1,
     });
+  });
+
+  it("trims whitespace performInstruction when attaching helpers", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+
+    await page.performClick("//button[1]", {
+      performInstruction: "   ",
+    });
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: "Click element",
+      })
+    );
   });
 });
