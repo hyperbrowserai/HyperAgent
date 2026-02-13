@@ -332,7 +332,14 @@ impl AppState {
     cutoff_timestamp: Option<DateTime<Utc>>,
     offset: usize,
     limit: usize,
-  ) -> Result<(usize, Vec<(String, Option<String>, usize, usize, DateTime<Utc>)>), ApiError> {
+  ) -> Result<
+    (
+      usize,
+      usize,
+      Vec<(String, Option<String>, usize, usize, DateTime<Utc>)>,
+    ),
+    ApiError,
+  > {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
@@ -362,6 +369,7 @@ impl AppState {
       })
       .cloned()
       .collect::<Vec<_>>();
+    let unscoped_total_entries = record.agent_ops_cache_order.len();
     let total_entries = filtered_request_ids.len();
     let entries = filtered_request_ids
       .into_iter()
@@ -380,7 +388,7 @@ impl AppState {
         ))
       })
       .collect::<Vec<_>>();
-    Ok((total_entries, entries))
+    Ok((total_entries, unscoped_total_entries, entries))
   }
 
   pub async fn clear_agent_ops_cache(
@@ -831,11 +839,12 @@ mod tests {
         .expect("cache update should succeed");
     }
 
-    let (total_entries, entries) = state
+    let (total_entries, unscoped_total_entries, entries) = state
       .agent_ops_cache_entries(workbook.id, None, None, 0, 2)
       .await
       .expect("cache entries should load");
     assert_eq!(total_entries, 3);
+    assert_eq!(unscoped_total_entries, 3);
     assert_eq!(entries.len(), 2);
     assert_eq!(entries[0].0, "req-3");
     assert_eq!(entries[1].0, "req-2");
@@ -844,24 +853,25 @@ mod tests {
     assert_eq!(entries[0].3, 0);
     assert!(entries[0].4 <= Utc::now());
 
-    let (_, paged_entries) = state
+    let (_, _, paged_entries) = state
       .agent_ops_cache_entries(workbook.id, None, None, 2, 2)
       .await
       .expect("cache entries should load");
     assert_eq!(paged_entries.len(), 1);
     assert_eq!(paged_entries[0].0, "req-1");
 
-    let (filtered_total, filtered_entries) = state
+    let (filtered_total, filtered_unscoped_total, filtered_entries) = state
       .agent_ops_cache_entries(workbook.id, Some("req-2"), None, 0, 5)
       .await
       .expect("filtered cache entries should load");
     assert_eq!(filtered_total, 1);
+    assert_eq!(filtered_unscoped_total, 3);
     assert_eq!(filtered_entries.len(), 1);
     assert_eq!(filtered_entries[0].0, "req-2");
     assert_eq!(filtered_entries[0].2, 1);
 
     let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
-    let (age_filtered_total, age_filtered_entries) = state
+    let (age_filtered_total, age_filtered_unscoped_total, age_filtered_entries) = state
       .agent_ops_cache_entries(
         workbook.id,
         None,
@@ -872,6 +882,7 @@ mod tests {
       .await
       .expect("age-filtered cache entries should load");
     assert_eq!(age_filtered_total, 0);
+    assert_eq!(age_filtered_unscoped_total, 3);
     assert!(age_filtered_entries.is_empty());
   }
 

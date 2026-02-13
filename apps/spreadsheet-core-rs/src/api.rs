@@ -1098,6 +1098,7 @@ async fn get_agent_schema(
     },
     "agent_ops_cache_entries_response_shape": {
       "total_entries": "total cache entries available",
+      "unscoped_total_entries": "total cache entries without prefix/age filters",
       "returned_entries": "number of entries returned in this response",
       "request_id_prefix": "echoed filter prefix when provided",
       "max_age_seconds": "echoed age filter when provided",
@@ -1574,7 +1575,7 @@ async fn agent_ops_cache_entries(
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_ENTRIES_LIMIT)
     .min(MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT);
-  let (total_entries, entries) = state
+  let (total_entries, unscoped_total_entries, entries) = state
     .agent_ops_cache_entries(
       workbook_id,
       normalized_prefix.as_deref(),
@@ -1604,6 +1605,7 @@ async fn agent_ops_cache_entries(
   let has_more = offset + mapped_entries.len() < total_entries;
   Ok(Json(AgentOpsCacheEntriesResponse {
     total_entries,
+    unscoped_total_entries,
     returned_entries: mapped_entries.len(),
     request_id_prefix: normalized_prefix,
     max_age_seconds: query.max_age_seconds,
@@ -1929,7 +1931,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
     MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
   );
   let cutoff_timestamp = max_age_cutoff_timestamp(payload.max_age_seconds)?;
-  let (matched_entries, entries) = state
+  let (matched_entries, _, entries) = state
     .agent_ops_cache_entries(
       workbook_id,
       Some(request_id_prefix.as_str()),
@@ -2639,6 +2641,7 @@ mod tests {
     .0;
 
     assert_eq!(entries_response.total_entries, 3);
+    assert_eq!(entries_response.unscoped_total_entries, 3);
     assert_eq!(entries_response.returned_entries, 2);
     assert_eq!(entries_response.request_id_prefix, None);
     assert!(entries_response.cutoff_timestamp.is_none());
@@ -2664,6 +2667,7 @@ mod tests {
     .expect("entries should load")
     .0;
     assert_eq!(capped_response.total_entries, 3);
+    assert_eq!(capped_response.unscoped_total_entries, 3);
     assert_eq!(capped_response.returned_entries, 1);
     assert_eq!(capped_response.offset, 2);
     assert_eq!(capped_response.limit, MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT);
@@ -2684,6 +2688,7 @@ mod tests {
     .expect("filtered entries should load")
     .0;
     assert_eq!(filtered_response.total_entries, 1);
+    assert_eq!(filtered_response.unscoped_total_entries, 3);
     assert_eq!(filtered_response.returned_entries, 1);
     assert_eq!(
       filtered_response.request_id_prefix.as_deref(),
@@ -2711,6 +2716,7 @@ mod tests {
     assert_eq!(age_filtered_response.max_age_seconds, Some(86_400));
     assert!(age_filtered_response.cutoff_timestamp.is_some());
     assert_eq!(age_filtered_response.total_entries, 0);
+    assert_eq!(age_filtered_response.unscoped_total_entries, 3);
     assert!(age_filtered_response.entries.is_empty());
   }
 
@@ -3700,6 +3706,13 @@ mod tests {
       schema
         .get("agent_ops_cache_stats_response_shape")
         .and_then(|value| value.get("unscoped_entries"))
+        .and_then(serde_json::Value::as_str),
+      Some("total cache entries without prefix/age filters"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_entries_response_shape")
+        .and_then(|value| value.get("unscoped_total_entries"))
         .and_then(serde_json::Value::as_str),
       Some("total cache entries without prefix/age filters"),
     );

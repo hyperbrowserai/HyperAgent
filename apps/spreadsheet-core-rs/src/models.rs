@@ -280,6 +280,7 @@ pub struct AgentOpsCacheEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsCacheEntriesResponse {
   pub total_entries: usize,
+  pub unscoped_total_entries: usize,
   pub returned_entries: usize,
   pub request_id_prefix: Option<String>,
   pub max_age_seconds: Option<i64>,

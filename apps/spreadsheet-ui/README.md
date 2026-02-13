@@ -54,6 +54,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Scoped cutoff timestamps also show relative-age labels for quick recency checks
 - Stale preview/remove notices include scoped cutoff timestamp + relative age context
 - Agent integration panel lists paged cached request IDs/signature prefixes plus per-entry operation/result counts with prefix + age filtering, newer/older pagination, and inspect/replay/rerun/copy/copy-ops/single-entry remove controls
+- Cache entries pager shows scoped totals and global totals when filters narrow results
 - Cache age-filter control validates positive integer seconds inline
 - Prefix preview/remove actions are blocked while age-filter input is invalid
 - Cache entries/prefix suggestion queries pause while age-filter input is invalid

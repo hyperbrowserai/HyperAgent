@@ -3064,6 +3064,16 @@ export function SpreadsheetApp() {
                       <span className="font-mono text-slate-300">
                         {cacheEntriesData.total_entries}
                       </span>
+                      {cacheEntriesData.total_entries !== cacheEntriesData.unscoped_total_entries ? (
+                        <>
+                          {" "}
+                          (global{" "}
+                          <span className="font-mono text-slate-300">
+                            {cacheEntriesData.unscoped_total_entries}
+                          </span>
+                          )
+                        </>
+                      ) : null}
                       {cacheEntriesData.request_id_prefix ? (
                         <>
                           {" "}
