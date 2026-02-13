@@ -688,6 +688,35 @@ function safeGetConnectedServerEntries(
   }
 }
 
+function safeGetServerActions(server: ServerConnection): AgentActionDefinition[] {
+  try {
+    const actions = (server as { actions?: unknown }).actions;
+    if (!Array.isArray(actions)) {
+      return [];
+    }
+    return actions.filter(
+      (action): action is AgentActionDefinition =>
+        typeof action === "object" && action !== null
+    );
+  } catch {
+    return [];
+  }
+}
+
+function safeGetServerToolNames(server: ServerConnection): string[] {
+  try {
+    const tools = (server as { tools?: unknown }).tools;
+    if (!tools || typeof tools !== "object") {
+      return [];
+    }
+    return Array.from((tools as Map<string, Tool>).keys()).filter(
+      (name): name is string => typeof name === "string"
+    );
+  } catch {
+    return [];
+  }
+}
+
 function safeGetConnectedServerCount(
   servers: Map<string, ServerConnection>
 ): number {
@@ -1412,7 +1441,7 @@ class MCPClient {
   getAllActions(): AgentActionDefinition[] {
     const allActions: AgentActionDefinition[] = [];
     for (const [, server] of safeGetConnectedServerEntries(this.servers)) {
-      allActions.push(...server.actions);
+      allActions.push(...safeGetServerActions(server));
     }
     return allActions;
   }
@@ -1543,11 +1572,14 @@ class MCPClient {
     toolCount: number;
     toolNames: string[];
   }> {
-    return safeGetConnectedServerEntries(this.servers).map(([id, server]) => ({
-      id,
-      toolCount: server.tools.size,
-      toolNames: Array.from(server.tools.keys()),
-    }));
+    return safeGetConnectedServerEntries(this.servers).map(([id, server]) => {
+      const toolNames = safeGetServerToolNames(server);
+      return {
+        id,
+        toolCount: toolNames.length,
+        toolNames,
+      };
+    });
   }
 
   /**

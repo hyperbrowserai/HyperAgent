@@ -2642,4 +2642,56 @@ describe("MCPClient server metadata accessors", () => {
     expect(mcpClient.getServerInfo()).toEqual([]);
     expect(mcpClient.getAllActions()).toEqual([]);
   });
+
+  it("returns safe action defaults when server action reads trap", () => {
+    const mcpClient = new MCPClient(false);
+    const trapServer = new Proxy(
+      {
+        tools: new Map([["search", {}]]),
+      },
+      {
+        get(target, prop, receiver): unknown {
+          if (prop === "actions") {
+            throw new Error("actions trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+    setServersForClient(
+      mcpClient,
+      new Map([["server-a", trapServer]])
+    );
+
+    expect(mcpClient.getAllActions()).toEqual([]);
+  });
+
+  it("returns safe tool metadata when server tool reads trap", () => {
+    const mcpClient = new MCPClient(false);
+    const trapServer = new Proxy(
+      {
+        actions: [{ type: "search" }],
+      },
+      {
+        get(target, prop, receiver): unknown {
+          if (prop === "tools") {
+            throw new Error("tools trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+    setServersForClient(
+      mcpClient,
+      new Map([["server-a", trapServer]])
+    );
+
+    expect(mcpClient.getServerInfo()).toEqual([
+      {
+        id: "server-a",
+        toolCount: 0,
+        toolNames: [],
+      },
+    ]);
+  });
 });
