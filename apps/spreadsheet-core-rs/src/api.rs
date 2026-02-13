@@ -1052,10 +1052,13 @@ async fn get_agent_schema(
       "results": "array of operation results"
     },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
-    "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
+    "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
     "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8&max_age_seconds=3600",
+    "agent_ops_cache_stats_query_shape": {
+      "max_age_seconds": "optional number > 0 (filter stats to entries older than or equal to this age)"
+    },
     "agent_ops_cache_entries_query_shape": {
       "request_id_prefix": "optional string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter to entries older than or equal to this age)",
@@ -1083,6 +1086,7 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_response_shape": {
       "entries": "current cache entries",
       "max_entries": "maximum cache size",
+      "max_age_seconds": "echoed age filter when provided",
       "oldest_request_id": "optional oldest cached request id",
       "newest_request_id": "optional newest cached request id",
       "oldest_cached_at": "optional iso timestamp of oldest cached entry",
@@ -1485,6 +1489,11 @@ async fn agent_ops_preview(
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
+struct AgentOpsCacheStatsQuery {
+  max_age_seconds: Option<i64>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
 struct AgentOpsCacheEntriesQuery {
   request_id_prefix: Option<String>,
   max_age_seconds: Option<i64>,
@@ -1506,8 +1515,21 @@ const MAX_AGENT_OPS_CACHE_PREFIXES_LIMIT: usize = 100;
 async fn agent_ops_cache_stats(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
+  Query(query): Query<AgentOpsCacheStatsQuery>,
 ) -> Result<Json<AgentOpsCacheStatsResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
+  if query
+    .max_age_seconds
+    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
+  {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MAX_AGE_SECONDS",
+      "max_age_seconds must be greater than 0.",
+    ));
+  }
+  let cutoff_timestamp = query
+    .max_age_seconds
+    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
   let (
     entries,
     oldest_request_id,
@@ -1515,11 +1537,12 @@ async fn agent_ops_cache_stats(
     oldest_cached_at,
     newest_cached_at,
   ) = state
-    .agent_ops_cache_stats(workbook_id)
+    .agent_ops_cache_stats(workbook_id, cutoff_timestamp)
     .await?;
   Ok(Json(AgentOpsCacheStatsResponse {
     entries,
     max_entries: AGENT_OPS_CACHE_MAX_ENTRIES,
+    max_age_seconds: query.max_age_seconds,
     oldest_request_id,
     newest_request_id,
     oldest_cached_at,
@@ -2192,7 +2215,7 @@ mod tests {
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
     validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
-    AgentOpsCachePrefixesQuery,
+    AgentOpsCachePrefixesQuery, AgentOpsCacheStatsQuery,
     MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
   };
   use crate::{
@@ -2476,15 +2499,32 @@ mod tests {
     let stats = agent_ops_cache_stats(
       State(state.clone()),
       Path(workbook.id),
+      Query(AgentOpsCacheStatsQuery {
+        max_age_seconds: None,
+      }),
     )
     .await
     .expect("stats should load")
     .0;
     assert_eq!(stats.entries, 1);
+    assert_eq!(stats.max_age_seconds, None);
     assert_eq!(stats.oldest_request_id.as_deref(), Some("handler-req-1"));
     assert_eq!(stats.newest_request_id.as_deref(), Some("handler-req-1"));
     assert!(stats.oldest_cached_at.is_some());
     assert!(stats.newest_cached_at.is_some());
+
+    let scoped_stats = agent_ops_cache_stats(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCacheStatsQuery {
+        max_age_seconds: Some(86_400),
+      }),
+    )
+    .await
+    .expect("age-scoped stats should load")
+    .0;
+    assert_eq!(scoped_stats.max_age_seconds, Some(86_400));
+    assert_eq!(scoped_stats.entries, 0);
 
     let cleared = clear_agent_ops_cache(
       State(state.clone()),
@@ -2495,15 +2535,37 @@ mod tests {
     .0;
     assert_eq!(cleared.cleared_entries, 1);
 
-    let stats_after_clear = agent_ops_cache_stats(State(state), Path(workbook.id))
-      .await
-      .expect("stats should load")
-      .0;
+    let stats_after_clear = agent_ops_cache_stats(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCacheStatsQuery {
+        max_age_seconds: None,
+      }),
+    )
+    .await
+    .expect("stats should load")
+    .0;
     assert_eq!(stats_after_clear.entries, 0);
     assert!(stats_after_clear.oldest_request_id.is_none());
     assert!(stats_after_clear.newest_request_id.is_none());
     assert!(stats_after_clear.oldest_cached_at.is_none());
     assert!(stats_after_clear.newest_cached_at.is_none());
+
+    let invalid_stats_error = agent_ops_cache_stats(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCacheStatsQuery {
+        max_age_seconds: Some(0),
+      }),
+    )
+    .await
+    .expect_err("non-positive max age should fail for stats");
+    match invalid_stats_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_MAX_AGE_SECONDS");
+      }
+      _ => panic!("expected invalid max age to use custom error code"),
+    }
   }
 
   #[tokio::test]
@@ -3474,7 +3536,7 @@ mod tests {
       schema
         .get("agent_ops_cache_stats_endpoint")
         .and_then(serde_json::Value::as_str),
-      Some("/v1/workbooks/{id}/agent/ops/cache"),
+      Some("/v1/workbooks/{id}/agent/ops/cache?max_age_seconds=3600"),
     );
     assert_eq!(
       schema

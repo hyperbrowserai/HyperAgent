@@ -198,9 +198,19 @@ export async function previewAgentOps(
 
 export async function getAgentOpsCacheStats(
   workbookId: string,
+  maxAgeSeconds?: number,
 ): Promise<AgentOpsCacheStatsResponse> {
+  const params = new URLSearchParams();
+  const normalizedMaxAgeSeconds =
+    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
+      ? Math.floor(maxAgeSeconds)
+      : undefined;
+  if (normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0) {
+    params.set("max_age_seconds", String(normalizedMaxAgeSeconds));
+  }
+  const suffix = params.toString();
   const response = await fetch(
-    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache`,
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache${suffix ? `?${suffix}` : ""}`,
   );
   return parseJsonResponse<AgentOpsCacheStatsResponse>(response);
 }

@@ -56,6 +56,7 @@ export interface AgentOpsPreviewResponse {
 export interface AgentOpsCacheStatsResponse {
   entries: number;
   max_entries: number;
+  max_age_seconds: number | null;
   oldest_request_id: string | null;
   newest_request_id: string | null;
   oldest_cached_at: string | null;

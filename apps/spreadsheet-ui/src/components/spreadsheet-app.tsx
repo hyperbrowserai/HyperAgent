@@ -268,9 +268,14 @@ export function SpreadsheetApp() {
   });
 
   const agentOpsCacheQuery = useQuery({
-    queryKey: ["agent-ops-cache", workbook?.id],
+    queryKey: [
+      "agent-ops-cache",
+      workbook?.id,
+      normalizedCacheEntriesMaxAgeSeconds,
+    ],
     enabled: Boolean(workbook?.id),
-    queryFn: () => getAgentOpsCacheStats(workbook!.id),
+    queryFn: () =>
+      getAgentOpsCacheStats(workbook!.id, normalizedCacheEntriesMaxAgeSeconds),
   });
 
   const agentOpsCacheEntriesQuery = useQuery({
@@ -2597,6 +2602,11 @@ export function SpreadsheetApp() {
                       {agentOpsCacheQuery.data.entries}/
                       {agentOpsCacheQuery.data.max_entries}
                     </span>
+                    {typeof agentOpsCacheQuery.data.max_age_seconds === "number" ? (
+                      <span className="ml-1 text-slate-500">
+                        (older than {agentOpsCacheQuery.data.max_age_seconds}s)
+                      </span>
+                    ) : null}
                   </span>
                   <button
                     onClick={handleClearAgentOpsCache}
