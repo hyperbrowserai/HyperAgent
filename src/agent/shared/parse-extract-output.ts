@@ -50,13 +50,57 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
     );
   }
 
-  const validationResult = outputSchema.safeParse(parsed);
-  if (!validationResult.success) {
-    const issues = truncateExtractDiagnostic(
-      validationResult.error.issues
-      .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
-      .join("; ")
+  let safeParseResult: unknown;
+  try {
+    safeParseResult = outputSchema.safeParse(parsed);
+  } catch (error) {
+    throw new Error(
+      `Extract failed: schema validation threw (${truncateExtractDiagnostic(
+        formatUnknownError(error)
+      )}). Parsed output: ${safeStringify(parsed)}`
     );
+  }
+  if (
+    !safeParseResult ||
+    typeof safeParseResult !== "object" ||
+    !("success" in safeParseResult)
+  ) {
+    throw new Error(
+      `Extract failed: schema validation returned an invalid result shape. Parsed output: ${safeStringify(
+        parsed
+      )}`
+    );
+  }
+  const validationResult = safeParseResult as {
+    success: boolean;
+    data?: z.infer<TSchema>;
+    error?: { issues?: Array<{ path: PropertyKey[]; message: string }> };
+  };
+
+  if (!validationResult.success) {
+    let issues: string;
+    try {
+      issues = truncateExtractDiagnostic(
+        (validationResult.error?.issues ?? [])
+          .map((issue) => {
+            const path = Array.isArray(issue.path)
+              ? issue.path
+                  .map((segment) =>
+                    typeof segment === "string" || typeof segment === "number"
+                      ? String(segment)
+                      : typeof segment === "symbol"
+                        ? segment.toString()
+                        : formatUnknownError(segment)
+                  )
+                  .join(".")
+              : "<root>";
+            return `${path || "<root>"}: ${issue.message}`;
+          })
+          .join("; ")
+      );
+    } catch (error) {
+      issues = truncateExtractDiagnostic(formatUnknownError(error));
+    }
     throw new Error(
       `Extract failed: output does not match schema (${issues}). Parsed output: ${safeStringify(
         parsed
@@ -64,7 +108,7 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
     );
   }
 
-  return validationResult.data;
+  return validationResult.data as z.infer<TSchema>;
 }
 
 export function parseExtractOutput(
