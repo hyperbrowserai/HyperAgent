@@ -41,6 +41,22 @@ describe("normalizeTaskDescription", () => {
     );
   });
 
+  it("sanitizes and truncates oversized source labels in errors", () => {
+    const oversizedLabel = `source-${"x".repeat(400)}`;
+    expect(() =>
+      normalizeTaskDescription(
+        42 as unknown as string,
+        oversizedLabel
+      )
+    ).toThrow("[truncated");
+    expect(() =>
+      normalizeTaskDescription(
+        42 as unknown as string,
+        oversizedLabel
+      )
+    ).toThrow("must be a string");
+  });
+
   it("throws when task descriptions exceed the allowed size", () => {
     expect(() =>
       normalizeTaskDescription(
@@ -145,6 +161,13 @@ describe("loadTaskDescriptionFromFile", () => {
     } finally {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("truncates oversized file-path diagnostics", async () => {
+    const longPath = `/tmp/${"x".repeat(400)}`;
+    await expect(loadTaskDescriptionFromFile(longPath)).rejects.toThrow(
+      "[truncated"
+    );
   });
 
   it("throws when file content is empty after trimming", async () => {

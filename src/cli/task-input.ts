@@ -3,6 +3,7 @@ import { formatUnknownError } from "@/utils";
 
 const MAX_TASK_DESCRIPTION_CHARS = 20_000;
 const MAX_TASK_FILE_BYTES = 1_000_000;
+const MAX_TASK_INPUT_DIAGNOSTIC_CHARS = 200;
 
 function hasUnsupportedControlChars(value: string): boolean {
   return Array.from(value).some((char) => {
@@ -18,34 +19,53 @@ function hasAnyControlChars(value: string): boolean {
   });
 }
 
+function formatTaskInputDiagnostic(value: string): string {
+  const sanitized = Array.from(value)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (sanitized.length <= MAX_TASK_INPUT_DIAGNOSTIC_CHARS) {
+    return sanitized;
+  }
+  return `${sanitized.slice(
+    0,
+    MAX_TASK_INPUT_DIAGNOSTIC_CHARS
+  )}... [truncated ${sanitized.length - MAX_TASK_INPUT_DIAGNOSTIC_CHARS} chars]`;
+}
+
 export function normalizeTaskDescription(
   value: string,
   sourceLabel: string
 ): string {
+  const safeSourceLabel = formatTaskInputDiagnostic(sourceLabel);
   if (typeof value !== "string") {
     throw new Error(
-      `${sourceLabel} must be a string. Please provide plain text.`
+      `${safeSourceLabel} must be a string. Please provide plain text.`
     );
   }
   const trimmed = value.replace(/^\uFEFF/, "").trim();
   if (trimmed.includes("\u0000")) {
     throw new Error(
-      `${sourceLabel} appears to be binary or contains null bytes. Please provide plain text.`
+      `${safeSourceLabel} appears to be binary or contains null bytes. Please provide plain text.`
     );
   }
   if (hasUnsupportedControlChars(trimmed)) {
     throw new Error(
-      `${sourceLabel} contains unsupported control characters. Please provide plain text.`
+      `${safeSourceLabel} contains unsupported control characters. Please provide plain text.`
     );
   }
   if (trimmed.length === 0) {
     throw new Error(
-      `${sourceLabel} is empty after trimming whitespace. Please provide a non-empty task description.`
+      `${safeSourceLabel} is empty after trimming whitespace. Please provide a non-empty task description.`
     );
   }
   if (trimmed.length > MAX_TASK_DESCRIPTION_CHARS) {
     throw new Error(
-      `${sourceLabel} exceeds ${MAX_TASK_DESCRIPTION_CHARS} characters. Please provide a shorter task description.`
+      `${safeSourceLabel} exceeds ${MAX_TASK_DESCRIPTION_CHARS} characters. Please provide a shorter task description.`
     );
   }
   return trimmed;
@@ -60,6 +80,7 @@ export async function loadTaskDescriptionFromFile(
     );
   }
   const normalizedFilePath = filePath.trim();
+  const safeFilePath = formatTaskInputDiagnostic(normalizedFilePath);
   if (hasAnyControlChars(normalizedFilePath)) {
     throw new Error(
       "Task description file path contains unsupported control characters."
@@ -75,12 +96,12 @@ export async function loadTaskDescriptionFromFile(
 
   if (fileStats && !fileStats.isFile()) {
     throw new Error(
-      `Task description file "${normalizedFilePath}" must be a regular text file.`
+      `Task description file "${safeFilePath}" must be a regular text file.`
     );
   }
   if (fileStats && fileStats.size > MAX_TASK_FILE_BYTES) {
     throw new Error(
-      `Task description file "${normalizedFilePath}" exceeds ${MAX_TASK_FILE_BYTES} bytes. Please provide a smaller text file.`
+      `Task description file "${safeFilePath}" exceeds ${MAX_TASK_FILE_BYTES} bytes. Please provide a smaller text file.`
     );
   }
 
@@ -89,12 +110,12 @@ export async function loadTaskDescriptionFromFile(
     content = await fs.promises.readFile(normalizedFilePath, "utf-8");
   } catch (error) {
     throw new Error(
-      `Failed to read task description file "${normalizedFilePath}": ${formatUnknownError(error)}`
+      `Failed to read task description file "${safeFilePath}": ${formatUnknownError(error)}`
     );
   }
 
   return normalizeTaskDescription(
     content,
-    `Task description file "${normalizedFilePath}"`
+    `Task description file "${safeFilePath}"`
   );
 }
