@@ -1,6 +1,19 @@
 import fs from "node:fs";
 import { formatUnknownError } from "@/utils";
 
+export function normalizeTaskDescription(
+  value: string,
+  sourceLabel: string
+): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    throw new Error(
+      `${sourceLabel} is empty after trimming whitespace. Please provide a non-empty task description.`
+    );
+  }
+  return trimmed;
+}
+
 export async function loadTaskDescriptionFromFile(
   filePath: string
 ): Promise<string> {
@@ -13,12 +26,8 @@ export async function loadTaskDescriptionFromFile(
     );
   }
 
-  const trimmed = content.trim();
-  if (trimmed.length === 0) {
-    throw new Error(
-      `Task description file "${filePath}" is empty after trimming whitespace.`
-    );
-  }
-
-  return trimmed;
+  return normalizeTaskDescription(
+    content,
+    `Task description file "${filePath}"`
+  );
 }

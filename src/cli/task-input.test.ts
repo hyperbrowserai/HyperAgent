@@ -1,7 +1,26 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadTaskDescriptionFromFile } from "@/cli/task-input";
+import {
+  loadTaskDescriptionFromFile,
+  normalizeTaskDescription,
+} from "@/cli/task-input";
+
+describe("normalizeTaskDescription", () => {
+  it("returns trimmed non-empty values", () => {
+    expect(
+      normalizeTaskDescription("  do the thing  ", "Task description from --command")
+    ).toBe("do the thing");
+  });
+
+  it("throws readable error for empty values after trim", () => {
+    expect(() =>
+      normalizeTaskDescription("   ", "Task description from --command")
+    ).toThrow(
+      "Task description from --command is empty after trimming whitespace. Please provide a non-empty task description."
+    );
+  });
+});
 
 describe("loadTaskDescriptionFromFile", () => {
   it("loads and trims task description text", async () => {
@@ -37,7 +56,7 @@ describe("loadTaskDescriptionFromFile", () => {
 
     try {
       await expect(loadTaskDescriptionFromFile(filePath)).rejects.toThrow(
-        `Task description file "${filePath}" is empty after trimming whitespace.`
+        `Task description file "${filePath}" is empty after trimming whitespace. Please provide a non-empty task description.`
       );
     } finally {
       await fs.promises.rm(tempDir, { recursive: true, force: true });

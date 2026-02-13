@@ -22,7 +22,7 @@ import { formatCliError } from "./format-cli-error";
 import { loadMCPServersFromFile } from "./mcp-config";
 import { closeAgentSafely } from "./shutdown";
 import { setRawModeIfSupported } from "./stdin-utils";
-import { loadTaskDescriptionFromFile } from "./task-input";
+import { loadTaskDescriptionFromFile, normalizeTaskDescription } from "./task-input";
 import { pauseTaskIfRunning, resumeTaskIfPaused } from "./task-controls";
 import { attachTaskErrorHandler } from "./task-error-handler";
 
@@ -70,6 +70,13 @@ program
           process.exit(0);
         }
         process.env.HYPERBROWSER_API_KEY = apiKey; // Set it for the current process
+      }
+
+      if (taskDescription !== undefined) {
+        taskDescription = normalizeTaskDescription(
+          taskDescription,
+          "Task description from --command"
+        );
       }
 
       const agent = new HyperAgent({
@@ -233,15 +240,19 @@ program
           ],
         });
         if (continueTask) {
-          const taskDescription = await inquirer.input({
+          const nextTaskDescriptionInput = await inquirer.input({
             message: "What should HyperAgent do next for you?",
             required: true,
           });
+          const nextTaskDescription = normalizeTaskDescription(
+            nextTaskDescriptionInput,
+            "Task description from follow-up prompt"
+          );
 
           setRawModeIfSupported(true);
           process.stdin.resume();
 
-          task = await agent.executeTaskAsync(taskDescription, {
+          task = await agent.executeTaskAsync(nextTaskDescription, {
             onStep: onStep,
             debugOnAgentOutput: debugAgentOutput,
             onComplete: onComplete,
@@ -260,10 +271,14 @@ program
         if (filePath) {
           taskDescription = await loadTaskDescriptionFromFile(filePath);
         } else {
-          taskDescription = await inquirer.input({
+          const taskInput = await inquirer.input({
             message: "What should HyperAgent do for you today?",
             required: true,
           });
+          taskDescription = normalizeTaskDescription(
+            taskInput,
+            "Task description from interactive prompt"
+          );
         }
       }
 
