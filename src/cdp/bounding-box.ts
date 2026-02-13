@@ -1,5 +1,6 @@
 import type { CDPSession } from "@/cdp/types";
 import type { Protocol } from "devtools-protocol";
+import { formatUnknownError } from "@/utils";
 
 // Track which domains have been enabled per session
 const enabledDomains = new WeakMap<object, Set<string>>();
@@ -19,7 +20,9 @@ async function ensureDomainEnabled(
     await session.send(`${domain}.enable`);
     enabled.add(domain);
   } catch (error) {
-    console.warn(`[CDP][BoundingBox] Failed to enable ${domain} domain:`, error);
+    console.warn(
+      `[CDP][BoundingBox] Failed to enable ${domain} domain: ${formatUnknownError(error)}`
+    );
   }
 }
 
@@ -130,7 +133,9 @@ async function getBoundingBoxFromQuads(
       bottom,
     };
   } catch (error) {
-    console.warn("[CDP][BoundingBox] Failed to get content quads:", error);
+    console.warn(
+      `[CDP][BoundingBox] Failed to get content quads: ${formatUnknownError(error)}`
+    );
     return null;
   }
 }
