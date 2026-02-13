@@ -13,11 +13,13 @@ import {
   exportWorkbook,
   getAgentSchema,
   getAgentPresets,
+  getAgentScenarios,
   getCells,
   getWorkbook,
   importWorkbook,
   runAgentOps,
   runAgentPreset,
+  runAgentScenario,
   subscribeToWorkbookEvents,
   upsertChart,
 } from "@/lib/spreadsheet-api";
@@ -51,11 +53,13 @@ export function SpreadsheetApp() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningAgentFlow, setIsRunningAgentFlow] = useState(false);
   const [isRunningPreset, setIsRunningPreset] = useState(false);
+  const [isRunningScenario, setIsRunningScenario] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
   const [uiError, setUiError] = useState<string | null>(null);
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
+  const [lastScenario, setLastScenario] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
 
   const createWorkbookMutation = useMutation({
@@ -105,6 +109,12 @@ export function SpreadsheetApp() {
     queryFn: () => getAgentSchema(workbook!.id),
   });
 
+  const scenariosQuery = useQuery({
+    queryKey: ["agent-scenarios", workbook?.id],
+    enabled: Boolean(workbook?.id),
+    queryFn: () => getAgentScenarios(workbook!.id),
+  });
+
   useEffect(() => {
     if (!workbook && !createWorkbookMutation.isPending) {
       createWorkbookMutation.mutate();
@@ -132,6 +142,7 @@ export function SpreadsheetApp() {
       queryClient.invalidateQueries({ queryKey: ["cells", workbook.id, activeSheet] });
       queryClient.invalidateQueries({ queryKey: ["workbook", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-presets", workbook.id] });
+      queryClient.invalidateQueries({ queryKey: ["agent-scenarios", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-schema", workbook.id] });
     });
     return unsubscribe;
@@ -220,6 +231,8 @@ export function SpreadsheetApp() {
       });
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
+      setLastPreset(null);
+      setLastScenario(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
@@ -341,6 +354,7 @@ export function SpreadsheetApp() {
         include_file_base64: preset === "export_snapshot" ? false : undefined,
       });
       setLastPreset(response.preset);
+      setLastScenario(null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       await queryClient.invalidateQueries({
@@ -352,6 +366,37 @@ export function SpreadsheetApp() {
       );
     } finally {
       setIsRunningPreset(false);
+    }
+  }
+
+  async function handleScenarioRun(scenario: string) {
+    if (!workbook) {
+      return;
+    }
+    setIsRunningScenario(true);
+    try {
+      setUiError(null);
+      const response = await runAgentScenario(workbook.id, scenario, {
+        request_id: `scenario-${scenario}-${Date.now()}`,
+        actor: "ui-scenario",
+        stop_on_error: true,
+        include_file_base64: false,
+      });
+      setLastScenario(response.scenario);
+      setLastPreset(null);
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastAgentOps(response.results);
+      await queryClient.invalidateQueries({
+        queryKey: ["cells", workbook.id, activeSheet],
+      });
+    } catch (error) {
+      setUiError(
+        error instanceof Error
+          ? error.message
+          : `Failed to run scenario ${scenario}.`,
+      );
+    } finally {
+      setIsRunningScenario(false);
     }
   }
 
@@ -445,6 +490,19 @@ export function SpreadsheetApp() {
               >
                 {isRunningAgentFlow ? "Running agent..." : "Run Agent Demo Flow"}
               </button>
+              {(scenariosQuery.data ?? []).map((scenarioInfo) => (
+                <button
+                  key={scenarioInfo.scenario}
+                  onClick={() => handleScenarioRun(scenarioInfo.scenario)}
+                  disabled={!workbook || isRunningScenario}
+                  title={`${scenarioInfo.description} (presets: ${scenarioInfo.presets.join(", ")})`}
+                  className="rounded-md bg-violet-500 px-3 py-2 text-sm font-medium text-white hover:bg-violet-400 disabled:opacity-40"
+                >
+                  {isRunningScenario
+                    ? "Running scenario..."
+                    : `Scenario: ${scenarioInfo.scenario}`}
+                </button>
+              ))}
             </div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-300 md:grid-cols-4">
@@ -612,6 +670,12 @@ export function SpreadsheetApp() {
             {lastPreset && (
               <p className="mb-2 text-xs text-slate-400">
                 preset: <span className="font-mono text-slate-200">{lastPreset}</span>
+              </p>
+            )}
+            {lastScenario && (
+              <p className="mb-2 text-xs text-slate-400">
+                scenario:{" "}
+                <span className="font-mono text-slate-200">{lastScenario}</span>
               </p>
             )}
             {lastAgentRequestId && (

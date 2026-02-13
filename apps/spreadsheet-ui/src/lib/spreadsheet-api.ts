@@ -3,6 +3,8 @@ import {
   AgentSchemaInfo,
   AgentPresetInfo,
   AgentPresetResponse,
+  AgentScenarioInfo,
+  AgentScenarioResponse,
   CellSnapshot,
   ChartSpec,
   WorkbookEvent,
@@ -186,6 +188,41 @@ export async function getAgentSchema(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/schema`,
   );
   return parseJsonResponse<AgentSchemaInfo>(response);
+}
+
+export async function getAgentScenarios(
+  workbookId: string,
+): Promise<AgentScenarioInfo[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/scenarios`,
+  );
+  const data = await parseJsonResponse<{ scenarios: AgentScenarioInfo[] }>(
+    response,
+  );
+  return data.scenarios;
+}
+
+interface AgentScenarioRequest {
+  request_id?: string;
+  actor?: string;
+  stop_on_error?: boolean;
+  include_file_base64?: boolean;
+}
+
+export async function runAgentScenario(
+  workbookId: string,
+  scenario: string,
+  payload: AgentScenarioRequest,
+): Promise<AgentScenarioResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/scenarios/${scenario}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  return parseJsonResponse<AgentScenarioResponse>(response);
 }
 
 export async function upsertChart(

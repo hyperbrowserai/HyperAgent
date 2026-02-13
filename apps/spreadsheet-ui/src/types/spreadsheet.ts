@@ -63,3 +63,15 @@ export interface AgentSchemaInfo {
   operation_payloads: Record<string, unknown>;
   presets: AgentPresetInfo[];
 }
+
+export interface AgentScenarioInfo {
+  scenario: string;
+  description: string;
+  presets: string[];
+}
+
+export interface AgentScenarioResponse {
+  scenario: string;
+  request_id?: string;
+  results: AgentOperationResult[];
+}
