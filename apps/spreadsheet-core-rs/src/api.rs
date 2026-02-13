@@ -1116,6 +1116,7 @@ async fn get_agent_schema(
     },
     "agent_ops_cache_prefixes_response_shape": {
       "total_prefixes": "total distinct prefix suggestions available",
+      "unscoped_total_prefixes": "total distinct prefixes without age filters",
       "returned_prefixes": "number of prefixes returned",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
@@ -1659,7 +1660,7 @@ async fn agent_ops_cache_prefixes(
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
     .min(MAX_AGENT_OPS_CACHE_PREFIXES_LIMIT);
-  let (total_prefixes, prefixes) = state
+  let (total_prefixes, unscoped_total_prefixes, prefixes) = state
     .agent_ops_cache_prefixes(workbook_id, cutoff_timestamp, limit)
     .await?;
   let mapped_prefixes = prefixes
@@ -1671,6 +1672,7 @@ async fn agent_ops_cache_prefixes(
     .collect::<Vec<_>>();
   Ok(Json(AgentOpsCachePrefixesResponse {
     total_prefixes,
+    unscoped_total_prefixes,
     returned_prefixes: mapped_prefixes.len(),
     max_age_seconds: query.max_age_seconds,
     cutoff_timestamp,
@@ -2790,6 +2792,7 @@ mod tests {
     .0;
 
     assert_eq!(prefixes.total_prefixes, 2);
+    assert_eq!(prefixes.unscoped_total_prefixes, 2);
     assert_eq!(prefixes.returned_prefixes, 2);
     assert_eq!(prefixes.max_age_seconds, None);
     assert!(prefixes.cutoff_timestamp.is_none());
@@ -2812,6 +2815,7 @@ mod tests {
     assert_eq!(age_filtered.max_age_seconds, Some(86_400));
     assert!(age_filtered.cutoff_timestamp.is_some());
     assert_eq!(age_filtered.total_prefixes, 0);
+    assert_eq!(age_filtered.unscoped_total_prefixes, 2);
     assert!(age_filtered.prefixes.is_empty());
 
     let invalid_error = agent_ops_cache_prefixes(
@@ -3722,6 +3726,13 @@ mod tests {
         .and_then(|value| value.get("cutoff_timestamp"))
         .and_then(serde_json::Value::as_str),
       Some("optional iso timestamp used for max_age_seconds filtering"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("unscoped_total_prefixes"))
+        .and_then(serde_json::Value::as_str),
+      Some("total distinct prefixes without age filters"),
     );
     assert_eq!(
       schema

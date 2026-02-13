@@ -2986,6 +2986,16 @@ export function SpreadsheetApp() {
                   {cachePrefixSuggestions.length > 0 ? (
                     <div className="mb-2 flex flex-wrap items-center gap-1">
                       <span className="text-[10px] text-slate-500">suggestions:</span>
+                      {agentOpsCachePrefixesQuery.data
+                        && agentOpsCachePrefixesQuery.data.total_prefixes
+                          !== agentOpsCachePrefixesQuery.data.unscoped_total_prefixes ? (
+                          <span className="text-[10px] text-slate-500">
+                            (
+                            {agentOpsCachePrefixesQuery.data.total_prefixes}/
+                            {agentOpsCachePrefixesQuery.data.unscoped_total_prefixes}
+                            {" "}scoped/global)
+                          </span>
+                        ) : null}
                       {typeof agentOpsCachePrefixesQuery.data?.max_age_seconds === "number" ? (
                         <span className="text-[10px] text-slate-500">
                           (older than {agentOpsCachePrefixesQuery.data.max_age_seconds}s)

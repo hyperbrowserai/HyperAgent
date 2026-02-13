@@ -81,6 +81,7 @@ export interface AgentOpsCachePrefix {
 
 export interface AgentOpsCachePrefixesResponse {
   total_prefixes: number;
+  unscoped_total_prefixes: number;
   returned_prefixes: number;
   max_age_seconds: number | null;
   cutoff_timestamp: string | null;

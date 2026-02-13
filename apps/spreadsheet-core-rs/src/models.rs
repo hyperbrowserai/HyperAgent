@@ -300,6 +300,7 @@ pub struct AgentOpsCachePrefix {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsCachePrefixesResponse {
   pub total_prefixes: usize,
+  pub unscoped_total_prefixes: usize,
   pub returned_prefixes: usize,
   pub max_age_seconds: Option<i64>,
   pub cutoff_timestamp: Option<DateTime<Utc>>,

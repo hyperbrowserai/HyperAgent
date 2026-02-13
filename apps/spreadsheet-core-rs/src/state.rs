@@ -540,14 +540,24 @@ impl AppState {
     workbook_id: Uuid,
     cutoff_timestamp: Option<DateTime<Utc>>,
     limit: usize,
-  ) -> Result<(usize, Vec<(String, usize)>), ApiError> {
+  ) -> Result<(usize, usize, Vec<(String, usize)>), ApiError> {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
       .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
 
     let mut prefix_counts: HashMap<String, usize> = HashMap::new();
+    let mut unscoped_prefix_counts: HashMap<String, usize> = HashMap::new();
     for request_id in &record.agent_ops_cache_order {
+      let Some(delimiter_index) = request_id.find('-') else {
+        continue;
+      };
+      if delimiter_index == 0 {
+        continue;
+      }
+      let prefix = request_id[..=delimiter_index].to_string();
+      let unscoped_entry = unscoped_prefix_counts.entry(prefix.clone()).or_insert(0);
+      *unscoped_entry += 1;
       if cutoff_timestamp
         .as_ref()
         .is_some_and(|cutoff| {
@@ -560,18 +570,12 @@ impl AppState {
       {
         continue;
       }
-      let Some(delimiter_index) = request_id.find('-') else {
-        continue;
-      };
-      if delimiter_index == 0 {
-        continue;
-      }
-      let prefix = request_id[..=delimiter_index].to_string();
       let entry = prefix_counts.entry(prefix).or_insert(0);
       *entry += 1;
     }
 
     let total_prefixes = prefix_counts.len();
+    let unscoped_total_prefixes = unscoped_prefix_counts.len();
     let mut prefixes = prefix_counts.into_iter().collect::<Vec<_>>();
     prefixes.sort_by(|left, right| {
       right
@@ -580,7 +584,7 @@ impl AppState {
         .then_with(|| left.0.cmp(&right.0))
     });
     prefixes.truncate(limit);
-    Ok((total_prefixes, prefixes))
+    Ok((total_prefixes, unscoped_total_prefixes, prefixes))
   }
 
   pub async fn remove_agent_ops_cache_entry(
@@ -1025,21 +1029,23 @@ mod tests {
         .expect("cache update should succeed");
     }
 
-    let (total_prefixes, prefixes) = state
+    let (total_prefixes, unscoped_total_prefixes, prefixes) = state
       .agent_ops_cache_prefixes(workbook.id, None, 5)
       .await
       .expect("prefix suggestions should load");
     assert_eq!(total_prefixes, 2);
+    assert_eq!(unscoped_total_prefixes, 2);
     assert_eq!(prefixes.len(), 2);
     assert_eq!(prefixes[0], ("preset-".to_string(), 3));
     assert_eq!(prefixes[1], ("scenario-".to_string(), 2));
 
     let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
-    let (filtered_total_prefixes, filtered_prefixes) = state
+    let (filtered_total_prefixes, filtered_unscoped_total_prefixes, filtered_prefixes) = state
       .agent_ops_cache_prefixes(workbook.id, Some(cutoff_timestamp), 5)
       .await
       .expect("age-filtered prefixes should load");
     assert_eq!(filtered_total_prefixes, 0);
+    assert_eq!(filtered_unscoped_total_prefixes, 2);
     assert!(filtered_prefixes.is_empty());
   }
 
