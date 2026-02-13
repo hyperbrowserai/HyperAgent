@@ -580,10 +580,50 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     result: AgentTaskOutput,
     output: string
   ): AgentTaskOutput {
+    let normalizedActionCache: ActionCacheOutput;
+    try {
+      const actionCache = result.actionCache;
+      const normalizedTaskId =
+        this.normalizeVariableKey(this.safeReadField(actionCache, "taskId")) ??
+        this.normalizeVariableKey(result.taskId) ??
+        "cancelled-task";
+      const rawCreatedAt = this.safeReadField(actionCache, "createdAt");
+      const createdAt =
+        typeof rawCreatedAt === "string" && rawCreatedAt.trim().length > 0
+          ? rawCreatedAt
+          : new Date().toISOString();
+      const rawSteps = this.safeReadField(actionCache, "steps");
+      let steps: ActionCacheEntry[] = [];
+      try {
+        if (Array.isArray(rawSteps)) {
+          steps = Array.from(rawSteps);
+        } else if (rawSteps && typeof rawSteps === "object") {
+          steps = Array.from(rawSteps as Iterable<ActionCacheEntry>);
+        }
+      } catch {
+        steps = [];
+      }
+      normalizedActionCache = {
+        taskId: normalizedTaskId,
+        createdAt,
+        status: TaskStatus.CANCELLED,
+        steps,
+      };
+    } catch {
+      const fallbackTaskId =
+        this.normalizeVariableKey(result.taskId) ?? "cancelled-task";
+      normalizedActionCache = {
+        taskId: fallbackTaskId,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.CANCELLED,
+        steps: [],
+      };
+    }
     return {
       ...result,
       status: TaskStatus.CANCELLED,
       output,
+      actionCache: normalizedActionCache,
     };
   }
 

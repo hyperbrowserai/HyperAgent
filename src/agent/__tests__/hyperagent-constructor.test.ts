@@ -493,6 +493,7 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(task.result).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
       output: "Task was cancelled",
+      actionCache: { status: TaskStatus.CANCELLED },
     });
     expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
     expect(emitterSpy).not.toHaveBeenCalledWith(
@@ -528,6 +529,7 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(execution).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
       output: "Task was cancelled",
+      actionCache: { status: TaskStatus.CANCELLED },
     });
     expect(activeTaskState.status).toBe(TaskStatus.CANCELLED);
   });
@@ -565,6 +567,7 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(task.result).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
       output: "Task was cancelled",
+      actionCache: { status: TaskStatus.CANCELLED },
     });
   });
 
@@ -606,6 +609,7 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(execution).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
       output: "Task was cancelled",
+      actionCache: { status: TaskStatus.CANCELLED },
     });
   });
 
@@ -2131,6 +2135,7 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(task.result).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
       output: "Task cancelled because agent was closed",
+      actionCache: { status: TaskStatus.CANCELLED },
     });
     expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
     expect(internalAgent.actionCacheByTaskId).toEqual({});
@@ -2169,6 +2174,7 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(execution).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
       output: "Task cancelled because agent was closed",
+      actionCache: { status: TaskStatus.CANCELLED },
     });
   });
 
@@ -2209,6 +2215,7 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(task.result).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
       output: "Task cancelled because agent was closed",
+      actionCache: { status: TaskStatus.CANCELLED },
     });
   });
 
@@ -2245,6 +2252,7 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(execution).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
       output: "Task cancelled because agent was closed",
+      actionCache: { status: TaskStatus.CANCELLED },
     });
   });
 
@@ -2271,6 +2279,7 @@ describe("HyperAgent constructor and task controls", () => {
       await expect(task.result).resolves.toMatchObject({
         status: TaskStatus.CANCELLED,
         output: "Task cancelled because agent was closed",
+        actionCache: { status: TaskStatus.CANCELLED },
       });
       expect(errorSpy).not.toHaveBeenCalledWith(
         expect.stringContaining("Task state")
