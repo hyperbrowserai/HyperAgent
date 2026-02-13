@@ -12,6 +12,14 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 const UNSAFE_OPTION_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
+function normalizeOptionKey(key: string): string {
+  return key.trim();
+}
+
+function toComparableOptionKey(key: string): string {
+  return normalizeOptionKey(key).toLowerCase();
+}
+
 function sanitizeOptionValue(
   value: unknown,
   seen: WeakSet<object>
@@ -30,11 +38,19 @@ function sanitizeOptionValue(
   }
 
   if (isPlainRecord(value)) {
-    const sanitized = Object.fromEntries(
-      Object.entries(value)
-        .filter(([key]) => !UNSAFE_OPTION_KEYS.has(key))
-        .map(([key, entry]) => [key, sanitizeOptionValue(entry, seen)])
-    );
+    const sanitizedEntries = new Map<string, unknown>();
+    for (const [rawKey, entry] of Object.entries(value)) {
+      const normalizedKey = normalizeOptionKey(rawKey);
+      const comparableKey = normalizedKey.toLowerCase();
+      if (normalizedKey.length === 0) {
+        continue;
+      }
+      if (UNSAFE_OPTION_KEYS.has(comparableKey)) {
+        continue;
+      }
+      sanitizedEntries.set(normalizedKey, sanitizeOptionValue(entry, seen));
+    }
+    const sanitized = Object.fromEntries(sanitizedEntries);
     seen.delete(value);
     return sanitized;
   }
@@ -54,16 +70,30 @@ export function sanitizeProviderOptions(
     return undefined;
   }
 
-  const seen = new WeakSet<object>();
-  const sanitizedEntries = Object.entries(providerOptions).filter(
-    ([key]) => !reservedKeys.has(key) && !UNSAFE_OPTION_KEYS.has(key)
+  const comparableReservedKeys = new Set(
+    Array.from(reservedKeys).map((key) => toComparableOptionKey(key))
   );
+  const seen = new WeakSet<object>();
+  const sanitizedEntries = new Map<string, unknown>();
 
-  if (sanitizedEntries.length === 0) {
+  for (const [rawKey, value] of Object.entries(providerOptions)) {
+    const normalizedKey = normalizeOptionKey(rawKey);
+    if (normalizedKey.length === 0) {
+      continue;
+    }
+    const comparableKey = normalizedKey.toLowerCase();
+    if (
+      comparableReservedKeys.has(comparableKey) ||
+      UNSAFE_OPTION_KEYS.has(comparableKey)
+    ) {
+      continue;
+    }
+    sanitizedEntries.set(normalizedKey, sanitizeOptionValue(value, seen));
+  }
+
+  if (sanitizedEntries.size === 0) {
     return undefined;
   }
 
-  return Object.fromEntries(
-    sanitizedEntries.map(([key, value]) => [key, sanitizeOptionValue(value, seen)])
-  );
+  return Object.fromEntries(sanitizedEntries);
 }

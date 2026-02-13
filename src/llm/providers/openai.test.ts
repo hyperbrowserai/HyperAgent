@@ -157,6 +157,7 @@ describe("OpenAIClient", () => {
     await client.invoke([{ role: "user", content: "hello" }], {
       providerOptions: {
         model: "override-model",
+        " Model ": "override-again",
         messages: [{ role: "user", content: "bad" }],
         max_tokens: 999,
         top_p: 0.7,

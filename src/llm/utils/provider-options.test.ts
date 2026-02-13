@@ -54,6 +54,35 @@ describe("sanitizeProviderOptions", () => {
     });
   });
 
+  it("matches reserved keys case-insensitively after trimming", () => {
+    expect(
+      sanitizeProviderOptions(
+        {
+          " Model ": "override",
+          " Messages ": "override",
+          top_p: 0.8,
+        },
+        reserved
+      )
+    ).toEqual({
+      top_p: 0.8,
+    });
+  });
+
+  it("trims custom keys and discards empty keys", () => {
+    expect(
+      sanitizeProviderOptions(
+        {
+          "  top_p  ": 0.8,
+          "   ": "empty",
+        },
+        reserved
+      )
+    ).toEqual({
+      top_p: 0.8,
+    });
+  });
+
   it("recursively removes unsafe keys from nested objects", () => {
     const result = sanitizeProviderOptions(
       {
@@ -77,6 +106,24 @@ describe("sanitizeProviderOptions", () => {
         nested: {
           keep: true,
         },
+      },
+    });
+  });
+
+  it("removes nested unsafe keys with surrounding whitespace", () => {
+    const result = sanitizeProviderOptions(
+      {
+        metadata: {
+          " __proto__ ": "bad",
+          keep: true,
+        },
+      },
+      reserved
+    );
+
+    expect(result).toEqual({
+      metadata: {
+        keep: true,
       },
     });
   });
