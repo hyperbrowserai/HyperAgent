@@ -29,6 +29,17 @@ const MCPToolActionParams = z.object({
 
 type MCPToolActionInput = z.infer<typeof MCPToolActionParams>;
 
+export function stringifyMCPPayload(value: unknown): string {
+  try {
+    const serialized = JSON.stringify(value);
+    return typeof serialized === "string"
+      ? serialized
+      : formatUnknownError(value);
+  } catch {
+    return formatUnknownError(value);
+  }
+}
+
 export function normalizeMCPToolParams(
   input: MCPToolActionInput["params"]
 ): Record<string, unknown> {
@@ -155,7 +166,7 @@ class MCPClient {
           return {
             type: tool.name,
             actionParams: MCPToolActionParams.describe(
-              `${tool.description ?? ""} Tool input schema: ${JSON.stringify(tool.inputSchema)}`
+              `${tool.description ?? ""} Tool input schema: ${stringifyMCPPayload(tool.inputSchema)}`
             ),
             run: async (
               ctx: ActionContext,
@@ -178,7 +189,7 @@ class MCPClient {
 
               return {
                 success: true,
-                message: `MCP tool ${tool.name} execution successful: ${JSON.stringify(result)}`,
+                message: `MCP tool ${tool.name} execution successful: ${stringifyMCPPayload(result)}`,
               };
             },
           };

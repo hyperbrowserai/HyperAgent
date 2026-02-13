@@ -1,4 +1,8 @@
-import { MCPClient, normalizeMCPToolParams } from "@/agent/mcp/client";
+import {
+  MCPClient,
+  normalizeMCPToolParams,
+  stringifyMCPPayload,
+} from "@/agent/mcp/client";
 
 function setServersForClient(client: MCPClient, servers: Map<string, unknown>): void {
   (client as unknown as { servers: Map<string, unknown> }).servers = servers;
@@ -28,6 +32,18 @@ describe("normalizeMCPToolParams", () => {
     expect(() => normalizeMCPToolParams("[1,2,3]")).toThrow(
       "must parse to a JSON object"
     );
+  });
+});
+
+describe("stringifyMCPPayload", () => {
+  it("serializes plain objects to JSON", () => {
+    expect(stringifyMCPPayload({ ok: true })).toBe('{"ok":true}');
+  });
+
+  it("falls back to formatted unknown error for circular payloads", () => {
+    const circular: { self?: unknown } = {};
+    circular.self = circular;
+    expect(stringifyMCPPayload(circular)).toBe('{"self":"[Circular]"}');
   });
 });
 
