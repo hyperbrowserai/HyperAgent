@@ -40,6 +40,23 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const normalizeMaxSteps = (value: number): number =>
   Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
 
+const formatUnknownError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
+
 export async function runCachedStep(
   params: RunCachedStepParams
 ): Promise<TaskOutput> {
@@ -71,7 +88,7 @@ export async function runCachedStep(
     page,
     retries: 1,
   }).catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     return {
       taskId,
       status: TaskStatus.FAILED,
@@ -159,7 +176,7 @@ export async function runCachedStep(
   // All cached attempts failed; optionally fall back to LLM perform
   if (params.performFallback) {
     const fb = await params.performFallback(instruction).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatUnknownError(error);
       return {
         taskId,
         status: TaskStatus.FAILED,
@@ -206,7 +223,9 @@ export async function runCachedStep(
     status: TaskStatus.FAILED,
     steps: [],
     output:
-      (lastError as Error | null)?.message || "Failed to execute cached action",
+      (lastError !== null
+        ? formatUnknownError(lastError)
+        : "Failed to execute cached action"),
     replayStepMeta: {
       usedCachedAction: true,
       fallbackUsed: false,

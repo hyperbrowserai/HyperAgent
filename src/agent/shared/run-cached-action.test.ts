@@ -373,4 +373,29 @@ describe("runCachedStep", () => {
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.replayStepMeta?.retries).toBe(1);
   });
+
+  it("surfaces non-Error throw values from cached attempts", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue("string failure");
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: 0,
+        arguments: [],
+      },
+      maxSteps: 1,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("string failure");
+  });
 });
