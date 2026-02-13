@@ -3,7 +3,7 @@
 Embedded DuckDB backend for an Excel-like spreadsheet experience with:
 
 - Workbook/sheet/cell APIs
-- Formula recalculation (`SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `COUNTIF`, `COUNTIFS`, `SUMIF`, `SUMIFS`, `MINIFS`, `MAXIFS`, `AVERAGEIF`, `AVERAGEIFS`, direct refs, arithmetic refs, `IF`, `IFERROR`, `CHOOSE`, `AND`/`OR`/`XOR`/`NOT`, `CONCAT`/`CONCATENATE`, `LEN`, `ABS`, `ROUND`/`ROUNDUP`/`ROUNDDOWN`, `CEILING`/`FLOOR`, `SQRT`, `POWER`, `MOD`, `SIGN`, `INT`, `TRUNC`, `EXACT`, `LEFT`/`RIGHT`/`MID`, `REPT`, `UPPER`/`LOWER`/`TRIM`, `ISBLANK`/`ISNUMBER`/`ISTEXT`/`ISEVEN`/`ISODD`, `TODAY`, `NOW`, `DATE`, `YEAR`/`MONTH`/`DAY`, `HOUR`/`MINUTE`/`SECOND`, `VLOOKUP` exact-match mode, `HLOOKUP` exact-match mode, `XLOOKUP` exact-match mode, `MATCH` exact-match mode, `INDEX`)
+- Formula recalculation (`SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, `COUNTIF`, `COUNTIFS`, `SUMIF`, `SUMIFS`, `MINIFS`, `MAXIFS`, `AVERAGEIF`, `AVERAGEIFS`, direct refs, arithmetic refs, `IF`, `IFERROR`, `CHOOSE`, `AND`/`OR`/`XOR`/`NOT`, `CONCAT`/`CONCATENATE`, `LEN`, `ABS`, `ROUND`/`ROUNDUP`/`ROUNDDOWN`, `CEILING`/`FLOOR`, `SQRT`, `POWER`, `MOD`, `SIGN`, `INT`, `TRUNC`, `EXACT`, `LEFT`/`RIGHT`/`MID`, `REPT`, `SEARCH`, `UPPER`/`LOWER`/`TRIM`, `ISBLANK`/`ISNUMBER`/`ISTEXT`/`ISEVEN`/`ISODD`, `TODAY`, `NOW`, `DATE`, `YEAR`/`MONTH`/`DAY`, `HOUR`/`MINUTE`/`SECOND`, `VLOOKUP` exact-match mode, `HLOOKUP` exact-match mode, `XLOOKUP` exact-match mode, `MATCH` exact-match mode, `INDEX`)
 - XLSX import/export
 - Chart metadata endpoints
 - Real-time SSE event stream for UI synchronization

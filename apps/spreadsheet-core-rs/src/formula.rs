@@ -484,6 +484,16 @@ pub fn parse_rept_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_search_formula(
+  formula: &str,
+) -> Option<(String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SEARCH" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
+}
+
 pub fn parse_date_formula(formula: &str) -> Option<(String, String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "DATE" && args.len() == 3 {
@@ -786,7 +796,7 @@ mod tests {
     parse_minifs_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
-    parse_mid_formula, parse_rept_formula,
+    parse_mid_formula, parse_rept_formula, parse_search_formula,
     parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
@@ -1006,6 +1016,12 @@ mod tests {
       parse_rept_formula(r#"=REPT("na", 4)"#).expect("rept should parse");
     assert_eq!(rept_args.0, r#""na""#);
     assert_eq!(rept_args.1, "4");
+
+    let search_args = parse_search_formula(r#"=SEARCH("sheet","spreadsheet",2)"#)
+      .expect("search should parse");
+    assert_eq!(search_args.0, r#""sheet""#);
+    assert_eq!(search_args.1, r#""spreadsheet""#);
+    assert_eq!(search_args.2.as_deref(), Some("2"));
 
     let date_parts = parse_date_formula("=DATE(2026,2,13)").expect("date should parse");
     assert_eq!(date_parts, ("2026".to_string(), "2".to_string(), "13".to_string()));
