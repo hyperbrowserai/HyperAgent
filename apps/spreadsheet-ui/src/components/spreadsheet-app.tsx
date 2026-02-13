@@ -3341,6 +3341,9 @@ export function SpreadsheetApp() {
                           ) : null}
                         </button>
                       ))}
+                      <span className="text-[10px] text-slate-500">
+                        (tips: Shift+click inspect, Alt+click preview)
+                      </span>
                     </div>
                   ) : cachePrefixSuggestionsData && hasActiveCacheScopeFilters ? (
                     <div className="mb-2 text-[10px] text-slate-500">

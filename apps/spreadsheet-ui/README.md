@@ -78,6 +78,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Cache list and detail inspector show when each request-id entry was cached (`cached_at`)
 - Cache timestamps also display relative age labels (e.g., `2m ago`) for quick freshness checks
 - Cache prefix filter offers backend-derived suggestions with entry counts plus oldest/newest cached request-id metadata, relative freshness labels, and optional span hints; Shift+click a prefix chip to inspect its newest cached request id directly, or Alt+click to preview scoped prefix removal
+- Prefix suggestion row now includes inline shortcut hints (`Shift+click inspect`, `Alt+click preview`)
 - Cache detail inspector supports copy actions for full detail JSON and operations-only payload
 - Cache detail inspector includes a one-click `Use prefix` action to apply the selected request-id prefix as the active cache filter
 - Prefix-filtered cache view supports one-click bulk removal of matching cached request IDs
