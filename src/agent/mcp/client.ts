@@ -1578,13 +1578,19 @@ class MCPClient {
     if (allMatchedServerIds.length === 0) {
       return { exists: false };
     }
-    if (allMatchedServerIds.length === 1 && ambiguousServerIds.length === 0) {
-      return { exists: true, serverId: allMatchedServerIds[0] };
+    const sanitizedMatchedServerIds = sanitizeConnectedServerIdsForOutput(
+      allMatchedServerIds
+    );
+    if (
+      sanitizedMatchedServerIds.length === 1 &&
+      ambiguousServerIds.length === 0
+    ) {
+      return { exists: true, serverId: sanitizedMatchedServerIds[0] };
     }
     return {
       exists: true,
-      serverId: allMatchedServerIds[0],
-      serverIds: allMatchedServerIds,
+      serverId: sanitizedMatchedServerIds[0],
+      serverIds: sanitizedMatchedServerIds,
       isAmbiguous: true,
     };
   }

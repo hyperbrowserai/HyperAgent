@@ -2644,6 +2644,27 @@ describe("MCPClient.hasTool", () => {
       serverId: "server-b",
     });
   });
+
+  it("sanitizes oversized server ids in hasTool output", () => {
+    const mcpClient = new MCPClient(false);
+    const oversizedServerId = `server-${"x".repeat(300)}\nunsafe`;
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          oversizedServerId,
+          {
+            tools: new Map([["search", {}]]),
+          },
+        ],
+      ])
+    );
+
+    const result = mcpClient.hasTool("search");
+    expect(result.exists).toBe(true);
+    expect(result.serverId).toContain("[truncated]");
+    expect(result.serverId).not.toContain("\n");
+  });
 });
 
 describe("MCPClient server metadata accessors", () => {
