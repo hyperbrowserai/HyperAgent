@@ -13,6 +13,15 @@ interface ReplaySpecialActionInput {
   retries?: number;
 }
 
+export const REPLAY_SPECIAL_ACTION_TYPES: ReadonlySet<string> = new Set([
+  "goToUrl",
+  "complete",
+  "refreshPage",
+  "wait",
+  "extract",
+  "analyzePdf",
+]);
+
 function createReplayMeta(
   retries: number
 ): NonNullable<TaskOutput["replayStepMeta"]> {

@@ -222,6 +222,42 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.usedXPath).toBe(true);
   });
 
+  it("does not mark cached XPath usage when perform fallback path throws", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockRejectedValue(new Error("perform failed"));
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "try fallback perform",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("perform failed");
+    expect(replay.steps[0]?.usedXPath).toBe(false);
+  });
+
   it("does not fail replay when debug file write throws", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

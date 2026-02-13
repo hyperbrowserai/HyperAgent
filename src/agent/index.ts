@@ -67,7 +67,10 @@ import {
 } from "./shared/action-cache-exec";
 import { AgentDeps } from "@/types/agent/types";
 import { parseExtractOutput } from "./shared/parse-extract-output";
-import { executeReplaySpecialAction } from "./shared/replay-special-actions";
+import {
+  executeReplaySpecialAction,
+  REPLAY_SPECIAL_ACTION_TYPES,
+} from "./shared/replay-special-actions";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
@@ -613,7 +616,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const page = getPage();
       const hyperPage = page as HyperPage;
       let result: TaskOutput;
+      let attemptedCachedAction = false;
       try {
+        if (REPLAY_SPECIAL_ACTION_TYPES.has(step.actionType)) {
+          attemptedCachedAction = true;
+        }
         const replaySpecialResult = await executeReplaySpecialAction({
           taskId: cache.taskId,
           actionType: step.actionType,
@@ -625,6 +632,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         });
 
         if (replaySpecialResult) {
+          attemptedCachedAction = true;
           result = replaySpecialResult;
         } else {
           const method = step.method;
@@ -664,6 +672,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               options.frameIndex = step.frameIndex;
             }
             const valueArg = step.arguments?.[0];
+            attemptedCachedAction = true;
             result = await dispatchPerformHelper(
               hyperPage,
               method,
@@ -692,19 +701,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        const usedCachedAction =
-          step.actionType !== "actElement" ||
-          (typeof step.method === "string" &&
-            isPageActionMethod(step.method) &&
-            typeof step.xpath === "string" &&
-            step.xpath.trim().length > 0);
         result = {
           taskId: cache.taskId,
           status: TaskStatus.FAILED,
           steps: [],
           output: `Replay step ${step.stepIndex} failed: ${message}`,
           replayStepMeta: {
-            usedCachedAction,
+            usedCachedAction: attemptedCachedAction,
             fallbackUsed: false,
             retries: 1,
             cachedXPath: step.xpath ?? null,
