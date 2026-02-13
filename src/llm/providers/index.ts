@@ -15,44 +15,100 @@ export interface LLMConfig {
   baseURL?: string; // For OpenAI custom endpoints
 }
 
+function normalizeProvider(provider: unknown): LLMProvider {
+  if (typeof provider !== "string") {
+    throw new Error("LLM provider must be a string");
+  }
+
+  const normalized = provider.trim().toLowerCase();
+  if (
+    normalized === "openai" ||
+    normalized === "anthropic" ||
+    normalized === "gemini" ||
+    normalized === "deepseek"
+  ) {
+    return normalized;
+  }
+
+  throw new Error(`Unsupported provider: ${provider}`);
+}
+
+function normalizeModel(model: unknown): string {
+  if (typeof model !== "string" || model.trim().length === 0) {
+    throw new Error("LLM model must be a non-empty string");
+  }
+  return model.trim();
+}
+
+function normalizeTemperature(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return value;
+}
+
+function normalizeMaxTokens(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  if (value <= 0) {
+    return undefined;
+  }
+  return Math.floor(value);
+}
+
+function normalizeBaseURL(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export function createLLMClient(config: LLMConfig): HyperAgentLLM {
-  switch (config.provider) {
+  const provider = normalizeProvider(config.provider);
+  const model = normalizeModel(config.model);
+  const temperature = normalizeTemperature(config.temperature);
+  const maxTokens = normalizeMaxTokens(config.maxTokens);
+  const baseURL = normalizeBaseURL(config.baseURL);
+
+  switch (provider) {
     case "openai":
       return createOpenAIClient({
         apiKey: config.apiKey,
-        model: config.model,
-        temperature: config.temperature,
-        maxTokens: config.maxTokens,
-        baseURL: config.baseURL,
+        model,
+        temperature,
+        maxTokens,
+        baseURL,
       });
 
     case "anthropic":
       return createAnthropicClient({
         apiKey: config.apiKey,
-        model: config.model,
-        temperature: config.temperature,
-        maxTokens: config.maxTokens,
+        model,
+        temperature,
+        maxTokens,
       });
 
     case "gemini":
       return createGeminiClient({
         apiKey: config.apiKey,
-        model: config.model,
-        temperature: config.temperature,
-        maxTokens: config.maxTokens,
+        model,
+        temperature,
+        maxTokens,
       });
 
     case "deepseek":
       return createDeepSeekClient({
         apiKey: config.apiKey,
-        model: config.model,
-        temperature: config.temperature,
-        maxTokens: config.maxTokens,
-        baseURL: config.baseURL,
+        model,
+        temperature,
+        maxTokens,
+        baseURL,
       });
 
     default:
-      throw new Error(`Unsupported provider: ${config.provider}`);
+      throw new Error(`Unsupported provider: ${provider}`);
   }
 }
 
