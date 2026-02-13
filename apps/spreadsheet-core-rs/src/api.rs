@@ -64,6 +64,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "IF",
   "IFERROR",
   "CHOOSE",
+  "TRUE",
+  "FALSE",
   "AND",
   "OR",
   "XOR",

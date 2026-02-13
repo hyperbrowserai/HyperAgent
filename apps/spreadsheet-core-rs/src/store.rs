@@ -28,7 +28,8 @@ use crate::{
     parse_sqrt_formula, parse_hour_formula, parse_minute_formula,
     parse_second_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
-    parse_today_formula, parse_now_formula, parse_upper_formula,
+    parse_today_formula, parse_now_formula, parse_true_formula,
+    parse_false_formula, parse_upper_formula,
     parse_vlookup_formula,
     parse_xlookup_formula, parse_year_formula, ConditionalAggregateFormula,
     HLookupFormula, IndexFormula, MatchFormula, MultiCriteriaAggregateFormula,
@@ -362,6 +363,14 @@ fn evaluate_formula(
 
   if parse_now_formula(formula).is_some() {
     return Ok(Some(Utc::now().to_rfc3339()));
+  }
+
+  if parse_true_formula(formula).is_some() {
+    return Ok(Some(true.to_string()));
+  }
+
+  if parse_false_formula(formula).is_some() {
+    return Ok(Some(false.to_string()));
   }
 
   if let Some(vlookup_formula) = parse_vlookup_formula(formula) {
@@ -2621,12 +2630,24 @@ mod tests {
         value: None,
         formula: Some(r#"=CODE("Apple")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 86,
+        value: None,
+        formula: Some("=TRUE()".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 87,
+        value: None,
+        formula: Some("=FALSE()".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 83);
+    assert_eq!(updated_cells, 85);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2640,7 +2661,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 85,
+        end_col: 87,
       },
     )
     .expect("cells should be fetched");
@@ -2767,6 +2788,8 @@ mod tests {
     assert_eq!(by_position(1, 83).evaluated_value.as_deref(), Some("12.34"));
     assert_eq!(by_position(1, 84).evaluated_value.as_deref(), Some("A"));
     assert_eq!(by_position(1, 85).evaluated_value.as_deref(), Some("65"));
+    assert_eq!(by_position(1, 86).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 87).evaluated_value.as_deref(), Some("false"));
   }
 
   #[test]
@@ -3027,6 +3050,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec![r#"=CODE("")"#.to_string()]);
+  }
+
+  #[test]
+  fn should_leave_true_with_argument_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=TRUE(1)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=TRUE(1)".to_string()]);
   }
 
   #[test]
