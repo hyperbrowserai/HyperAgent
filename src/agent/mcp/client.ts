@@ -147,16 +147,64 @@ function summarizeMCPToolNames(toolNames: string[]): string {
   return preview.join(", ");
 }
 
+function normalizeMCPToolFilterList(
+  value: string[] | undefined,
+  fieldName: "includeTools" | "excludeTools"
+): Set<string> | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`MCP ${fieldName} must be an array of tool names`);
+  }
+  const normalizedValues = value.map((name) =>
+    normalizeMCPExecutionToolName(name)
+  );
+  const seenNames = new Set<string>();
+  const seenNamesLower = new Set<string>();
+  for (const normalizedName of normalizedValues) {
+    const lower = normalizedName.toLowerCase();
+    if (seenNamesLower.has(lower)) {
+      throw new Error(
+        `MCP ${fieldName} contains duplicate tool name "${formatMCPIdentifier(
+          normalizedName,
+          "unknown-tool"
+        )}" after normalization`
+      );
+    }
+    seenNamesLower.add(lower);
+    seenNames.add(normalizedName);
+  }
+  return seenNames;
+}
+
 export function normalizeDiscoveredMCPTools(
   tools: Tool[],
   options: MCPToolDiscoveryOptions
 ): NormalizedDiscoveredMCPTool[] {
-  const includeSet = options.includeTools
-    ? new Set(options.includeTools.map((name) => normalizeMCPExecutionToolName(name)))
-    : undefined;
-  const excludeSet = options.excludeTools
-    ? new Set(options.excludeTools.map((name) => normalizeMCPExecutionToolName(name)))
-    : undefined;
+  const includeSet = normalizeMCPToolFilterList(
+    options.includeTools,
+    "includeTools"
+  );
+  const excludeSet = normalizeMCPToolFilterList(
+    options.excludeTools,
+    "excludeTools"
+  );
+  if (includeSet && excludeSet) {
+    const includeLookup = new Set(
+      Array.from(includeSet).map((name) => name.toLowerCase())
+    );
+    const overlap = Array.from(excludeSet).filter((name) =>
+      includeLookup.has(name.toLowerCase())
+    );
+    if (overlap.length > 0) {
+      throw new Error(
+        `MCP includeTools and excludeTools overlap on: ${summarizeMCPToolNames(
+          overlap
+        )}`
+      );
+    }
+  }
   const seenToolNames = new Set<string>();
   const normalizedTools: NormalizedDiscoveredMCPTool[] = [];
 

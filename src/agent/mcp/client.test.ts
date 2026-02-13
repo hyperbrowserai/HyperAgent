@@ -73,6 +73,25 @@ describe("normalizeDiscoveredMCPTools", () => {
       "No MCP tools matched includeTools filter (missing-0, missing-1, missing-2, missing-3, missing-4, missing-5, missing-6, missing-7, missing-8, missing-9, ... (+2 more)). Available tools: tool-0, tool-1, tool-2, tool-3, tool-4, tool-5, tool-6, tool-7, tool-8, tool-9, ... (+4 more)."
     );
   });
+
+  it("rejects duplicate includeTools entries after normalization", () => {
+    expect(() =>
+      normalizeDiscoveredMCPTools([createTool("search")], {
+        includeTools: ["search", " Search "],
+      })
+    ).toThrow(
+      'MCP includeTools contains duplicate tool name "Search" after normalization'
+    );
+  });
+
+  it("rejects overlapping includeTools and excludeTools entries", () => {
+    expect(() =>
+      normalizeDiscoveredMCPTools([createTool("search"), createTool("notes")], {
+        includeTools: ["search"],
+        excludeTools: [" Search "],
+      })
+    ).toThrow("MCP includeTools and excludeTools overlap on: Search");
+  });
 });
 
 describe("normalizeMCPToolParams", () => {
