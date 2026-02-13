@@ -20,7 +20,8 @@ use crate::{
     parse_sign_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
     parse_trunc_formula,
-    parse_sqrt_formula,
+    parse_sqrt_formula, parse_hour_formula, parse_minute_formula,
+    parse_second_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_today_formula, parse_now_formula, parse_upper_formula,
     parse_vlookup_formula,
@@ -30,7 +31,7 @@ use crate::{
   },
   models::{CellMutation, CellRange, CellSnapshot},
 };
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
 use duckdb::{params, Connection};
 use regex::Regex;
 use serde_json::Value;
@@ -623,6 +624,25 @@ fn evaluate_formula(
   if let Some(day_arg) = parse_day_formula(formula) {
     let date = parse_date_operand(connection, sheet, &day_arg)?;
     return Ok(Some(date.map(|value| value.day().to_string()).unwrap_or_default()));
+  }
+
+  if let Some(hour_arg) = parse_hour_formula(formula) {
+    let time = parse_time_operand(connection, sheet, &hour_arg)?;
+    return Ok(Some(time.map(|value| value.hour().to_string()).unwrap_or_default()));
+  }
+
+  if let Some(minute_arg) = parse_minute_formula(formula) {
+    let time = parse_time_operand(connection, sheet, &minute_arg)?;
+    return Ok(Some(
+      time.map(|value| value.minute().to_string()).unwrap_or_default(),
+    ));
+  }
+
+  if let Some(second_arg) = parse_second_formula(formula) {
+    let time = parse_time_operand(connection, sheet, &second_arg)?;
+    return Ok(Some(
+      time.map(|value| value.second().to_string()).unwrap_or_default(),
+    ));
   }
 
   if formula.starts_with('=') {
@@ -1455,6 +1475,43 @@ fn parse_date_operand(
   Ok(NaiveDate::parse_from_str(trimmed, "%m/%d/%Y").ok())
 }
 
+fn parse_time_operand(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<Option<NaiveTime>, ApiError> {
+  let resolved = resolve_scalar_operand(connection, sheet, operand)?;
+  let trimmed = resolved.trim();
+  if trimmed.is_empty() {
+    return Ok(None);
+  }
+
+  if let Ok(parsed) = DateTime::parse_from_rfc3339(trimmed) {
+    return Ok(Some(parsed.time()));
+  }
+  if let Ok(parsed) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S")
+  {
+    return Ok(Some(parsed.time()));
+  }
+  if let Ok(parsed) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S")
+  {
+    return Ok(Some(parsed.time()));
+  }
+  if let Ok(parsed) = NaiveTime::parse_from_str(trimmed, "%H:%M:%S") {
+    return Ok(Some(parsed));
+  }
+  if let Ok(parsed) = NaiveTime::parse_from_str(trimmed, "%H:%M") {
+    return Ok(Some(parsed));
+  }
+  if NaiveDate::parse_from_str(trimmed, "%Y-%m-%d").is_ok()
+    || NaiveDate::parse_from_str(trimmed, "%m/%d/%Y").is_ok()
+  {
+    return Ok(NaiveTime::from_hms_opt(0, 0, 0));
+  }
+
+  Ok(None)
+}
+
 fn evaluate_vlookup_formula(
   connection: &Connection,
   sheet: &str,
@@ -2248,12 +2305,30 @@ mod tests {
         value: None,
         formula: Some("=NOW()".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 69,
+        value: None,
+        formula: Some(r#"=HOUR("2026-02-13T14:25:36+00:00")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 70,
+        value: None,
+        formula: Some(r#"=MINUTE("2026-02-13T14:25:36+00:00")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 71,
+        value: None,
+        formula: Some(r#"=SECOND("2026-02-13T14:25:36+00:00")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 66);
+    assert_eq!(updated_cells, 69);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2267,7 +2342,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 68,
+        end_col: 71,
       },
     )
     .expect("cells should be fetched");
@@ -2371,6 +2446,9 @@ mod tests {
       DateTime::parse_from_rfc3339(now_value).is_ok(),
       "now formula should produce an RFC3339 timestamp",
     );
+    assert_eq!(by_position(1, 69).evaluated_value.as_deref(), Some("14"));
+    assert_eq!(by_position(1, 70).evaluated_value.as_deref(), Some("25"));
+    assert_eq!(by_position(1, 71).evaluated_value.as_deref(), Some("36"));
   }
 
   #[test]

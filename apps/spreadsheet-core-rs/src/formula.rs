@@ -500,6 +500,30 @@ pub fn parse_day_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_hour_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "HOUR" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_minute_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "MINUTE" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_second_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "SECOND" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_countif_formula(formula: &str) -> Option<((u32, u32), (u32, u32), String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "COUNTIF" || args.len() != 2 {
@@ -722,6 +746,7 @@ mod tests {
     parse_abs_formula, parse_concat_formula, parse_date_formula, parse_day_formula,
     parse_ceiling_formula, parse_floor_formula,
     parse_exact_formula,
+    parse_hour_formula, parse_minute_formula, parse_second_formula,
     parse_index_formula, parse_int_formula, parse_isblank_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_lower_formula, parse_match_formula, parse_maxifs_formula,
@@ -941,6 +966,9 @@ mod tests {
       Some("A1"),
     );
     assert_eq!(parse_day_formula("=DAY(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_hour_formula("=HOUR(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_minute_formula("=MINUTE(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_second_formula("=SECOND(A1)").as_deref(), Some("A1"));
 
     let countif = parse_countif_formula(r#"=COUNTIF(A1:A5,">=10")"#)
       .expect("countif should parse");
