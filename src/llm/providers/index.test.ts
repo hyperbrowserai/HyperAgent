@@ -262,4 +262,29 @@ describe("createLLMClient", () => {
       createLLMClient(modelTrapConfig as unknown as LLMConfig)
     ).toThrow('Invalid LLM config: failed to read "model" (model trap)');
   });
+
+  it("sanitizes and truncates oversized config getter diagnostics", () => {
+    const providerTrapConfig = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "provider") {
+            throw new Error(`provider\u0000\n${"x".repeat(2_000)}`);
+          }
+          return undefined;
+        },
+      }
+    );
+
+    let errorMessage = "";
+    try {
+      createLLMClient(providerTrapConfig as unknown as LLMConfig);
+    } catch (error) {
+      errorMessage = String(error instanceof Error ? error.message : error);
+    }
+    expect(errorMessage).toContain("[truncated");
+    expect(errorMessage).not.toContain("\u0000");
+    expect(errorMessage).not.toContain("\n");
+    expect(errorMessage.length).toBeLessThan(400);
+  });
 });

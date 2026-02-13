@@ -30,6 +30,18 @@ function truncateLLMConfigDiagnostic(value: string): string {
   )}... [truncated ${value.length - MAX_LLM_CONFIG_DIAGNOSTIC_CHARS} chars]`;
 }
 
+function formatLLMConfigDiagnostic(value: unknown): string {
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  return truncateLLMConfigDiagnostic(fallback);
+}
+
 function safeReadConfigField(
   config: Record<string, unknown>,
   field: keyof LLMConfig
@@ -38,8 +50,8 @@ function safeReadConfigField(
     return config[field];
   } catch (error) {
     throw new Error(
-      `Invalid LLM config: failed to read "${field}" (${truncateLLMConfigDiagnostic(
-        formatUnknownError(error)
+      `Invalid LLM config: failed to read "${field}" (${formatLLMConfigDiagnostic(
+        error
       )})`
     );
   }
