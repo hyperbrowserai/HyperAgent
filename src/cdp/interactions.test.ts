@@ -597,6 +597,88 @@ describe("dispatchCDPAction argument coercion", () => {
     ).toBe(true);
   });
 
+  it("requires boolean true for commitEnter option", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+
+    await dispatchCDPAction("type", ["hello", { commitEnter: "true" }], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "Input.dispatchKeyEvent" &&
+          call.params?.type === "keyDown"
+      )
+    ).toBe(false);
+  });
+
+  it("rejects oversized delayMs options before dispatch", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+
+    await expect(
+      dispatchCDPAction("press", ["Enter", { delayMs: 10_001 }], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow("[CDP][Interactions] delayMs exceeds 10000ms");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("ignores trap-prone option getters during option normalization", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+    const trappedOptions = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "delayMs") {
+            throw new Error("delay getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    await dispatchCDPAction("press", ["Enter", trappedOptions], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "Input.dispatchKeyEvent" &&
+          call.params?.type === "keyDown" &&
+          call.params?.key === "Enter"
+      )
+    ).toBe(true);
+  });
+
   it("falls back to default scroll percentage for null/object targets", async () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session = createSession(async (method, params) => {

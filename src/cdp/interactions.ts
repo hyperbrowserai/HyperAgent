@@ -52,25 +52,6 @@ export interface CDPActionContext {
   preferScriptBoundingBox?: boolean;
 }
 
-interface ClickOptions {
-  button?: MouseButton;
-  clickCount?: 1 | 2;
-  delayMs?: number;
-}
-
-interface TypeOptions {
-  commitEnter?: boolean;
-  delayMs?: number;
-}
-
-interface PressOptions {
-  delayMs?: number;
-}
-
-interface FillOptions {
-  commitChange?: boolean;
-}
-
 interface ScrollToOptions {
   target?: string | number;
   behavior?: "smooth" | "instant";
@@ -97,6 +78,7 @@ type SelectOptionResult =
 const MAX_INTERACTION_DIAGNOSTIC_CHARS = 200;
 const MAX_SELECT_OPTION_INPUT_CHARS = 2_000;
 const MAX_ACTION_TEXT_INPUT_CHARS = 20_000;
+const MAX_ACTION_DELAY_MS = 10_000;
 
 interface ScrollDebugMetrics {
   targetTagName: string | null;
@@ -106,6 +88,25 @@ interface ScrollDebugMetrics {
   clientHeight: number;
   scrollHeight: number;
   maxScroll: number;
+}
+
+interface NormalizedClickOptions {
+  button: MouseButton;
+  clickCount: 1 | 2;
+  delayMs?: number;
+}
+
+interface NormalizedTypeOptions {
+  commitEnter: boolean;
+  delayMs?: number;
+}
+
+interface NormalizedPressOptions {
+  delayMs?: number;
+}
+
+interface NormalizedFillOptions {
+  commitChange: boolean;
 }
 
 const domEnabledSessions = new WeakSet<CDPSession>();
@@ -313,6 +314,65 @@ function ensureActionTextInputSize(
   );
 }
 
+function readActionOptionValue(options: unknown, key: string): unknown {
+  if (!options || typeof options !== "object" || Array.isArray(options)) {
+    return undefined;
+  }
+  try {
+    return (options as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeActionDelayMs(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  if (value <= 0) {
+    return undefined;
+  }
+  if (value > MAX_ACTION_DELAY_MS) {
+    throw new Error(
+      `[CDP][Interactions] delayMs exceeds ${MAX_ACTION_DELAY_MS}ms`
+    );
+  }
+  return value;
+}
+
+function normalizeClickOptions(value: unknown): NormalizedClickOptions {
+  const rawButton = readActionOptionValue(value, "button");
+  const rawClickCount = readActionOptionValue(value, "clickCount");
+  const rawDelayMs = readActionOptionValue(value, "delayMs");
+  return {
+    button:
+      rawButton === "left" || rawButton === "right" || rawButton === "middle"
+        ? rawButton
+        : "left",
+    clickCount: rawClickCount === 2 ? 2 : 1,
+    delayMs: normalizeActionDelayMs(rawDelayMs),
+  };
+}
+
+function normalizeTypeOptions(value: unknown): NormalizedTypeOptions {
+  return {
+    commitEnter: readActionOptionValue(value, "commitEnter") === true,
+    delayMs: normalizeActionDelayMs(readActionOptionValue(value, "delayMs")),
+  };
+}
+
+function normalizePressOptions(value: unknown): NormalizedPressOptions {
+  return {
+    delayMs: normalizeActionDelayMs(readActionOptionValue(value, "delayMs")),
+  };
+}
+
+function normalizeFillOptions(value: unknown): NormalizedFillOptions {
+  return {
+    commitChange: readActionOptionValue(value, "commitChange") === true,
+  };
+}
+
 export async function dispatchCDPAction(
   method: CDPActionMethod,
   args: unknown[],
@@ -329,13 +389,13 @@ export async function dispatchCDPAction(
 
   switch (normalizedMethod) {
     case "click":
-      await clickElement(ctx, args[0] as ClickOptions | undefined);
+      await clickElement(ctx, normalizeClickOptions(args[0]));
       return;
     case "doubleClick":
-      await clickElement(
-        ctx,
-        Object.assign({}, (args[0] as ClickOptions) ?? {}, { clickCount: 2 })
-      );
+      await clickElement(ctx, {
+        ...normalizeClickOptions(args[0]),
+        clickCount: 2,
+      });
       return;
     case "hover":
       await hoverElement(ctx);
@@ -344,21 +404,21 @@ export async function dispatchCDPAction(
       await typeText(
         ctx,
         ensureActionTextInputSize(coerceActionStringArg(args[0]), "type"),
-        args[1] as TypeOptions
+        normalizeTypeOptions(args[1])
       );
       return;
     case "fill":
       await fillElement(
         ctx,
         ensureActionTextInputSize(coerceActionStringArg(args[0]), "fill"),
-        args[1] as FillOptions
+        normalizeFillOptions(args[1])
       );
       return;
     case "press":
       await pressKey(
         ctx,
         coerceActionStringArg(args[0], "Enter"),
-        args[1] as PressOptions
+        normalizePressOptions(args[1])
       );
       return;
     case "check":
@@ -502,12 +562,11 @@ function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
 
 async function clickElement(
   ctx: CDPActionContext,
-  options?: ClickOptions
+  options: NormalizedClickOptions
 ): Promise<void> {
   const { element } = ctx;
   const session = element.session;
-  const button = options?.button ?? "left";
-  const clickCount = options?.clickCount ?? 1;
+  const { button, clickCount, delayMs } = options;
 
   await scrollIntoViewIfNeeded(ctx);
   const box = await getEffectiveBoundingBox(ctx);
@@ -543,8 +602,8 @@ async function clickElement(
       button,
       clickCount,
     });
-    if (options?.delayMs) {
-      await delay(options.delayMs);
+    if (delayMs) {
+      await delay(delayMs);
     }
   }
 }
@@ -572,7 +631,7 @@ async function hoverElement(ctx: CDPActionContext): Promise<void> {
 async function typeText(
   ctx: CDPActionContext,
   text: string,
-  options?: TypeOptions
+  options: NormalizedTypeOptions
 ): Promise<void> {
   const normalizedText = text ?? "";
   if (normalizedText.length > 0) {
@@ -584,10 +643,10 @@ async function typeText(
     await session.send("Input.insertText", { text: normalizedText });
   }
 
-  if (options?.commitEnter) {
+  if (options.commitEnter) {
     await pressKey(ctx, "Enter");
   }
-  if (options?.delayMs) {
+  if (options.delayMs) {
     await delay(options.delayMs);
   }
 }
@@ -595,7 +654,7 @@ async function typeText(
 async function fillElement(
   ctx: CDPActionContext,
   value: string,
-  options?: FillOptions
+  options: NormalizedFillOptions
 ): Promise<void> {
   const { element } = ctx;
   const session = element.session;
@@ -657,7 +716,7 @@ async function fillElement(
     }
   }
 
-  if (options?.commitChange) {
+  if (options.commitChange) {
     await session.send("Runtime.callFunctionOn", {
       objectId,
       functionDeclaration: `
@@ -674,7 +733,7 @@ async function fillElement(
 async function pressKey(
   ctx: CDPActionContext,
   key: string,
-  options?: PressOptions
+  options: NormalizedPressOptions = {}
 ): Promise<void> {
   const { element } = ctx;
   const session = element.session;
@@ -700,7 +759,7 @@ async function pressKey(
     nativeVirtualKeyCode: keyDef.nativeVirtualKeyCode,
   });
 
-  if (options?.delayMs) {
+  if (options.delayMs) {
     await delay(options.delayMs);
   }
 }
@@ -786,7 +845,7 @@ async function setChecked(
   }
 
   if (value.status === "needs_click") {
-    await clickElement(ctx);
+    await clickElement(ctx, normalizeClickOptions(undefined));
   }
 }
 
