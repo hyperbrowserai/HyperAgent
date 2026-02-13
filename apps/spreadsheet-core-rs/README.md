@@ -48,6 +48,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview`
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-stale`
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
 - `GET /v1/workbooks/{id}/agent/presets/{preset}/operations`
@@ -86,6 +87,7 @@ Response includes:
 - Cache-management validation error codes:
   - `INVALID_REQUEST_ID`
   - `INVALID_NEW_REQUEST_ID`
+  - `INVALID_MAX_AGE_SECONDS`
   - `INVALID_REQUEST_ID_PREFIX`
   - `CACHE_ENTRY_NOT_FOUND`
 
@@ -106,6 +108,7 @@ Cache helpers:
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix` with `{ "request_id_prefix": "scenario-" }`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview` with `{ "request_id_prefix": "scenario-", "sample_limit": 10 }` (optional sample_limit, reports matched count + sample IDs before deletion)
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-stale` with `{ "max_age_seconds": 3600, "dry_run": true, "sample_limit": 10 }` (`dry_run` previews stale matches based on `cached_at` cutoff and returns sample IDs)
 
 Supported `op_type` values:
 - `get_workbook`

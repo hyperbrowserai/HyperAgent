@@ -9,6 +9,7 @@ import {
   ReexecuteAgentOpsCacheEntryResponse,
   RemoveAgentOpsCacheEntriesByPrefixResponse,
   PreviewRemoveAgentOpsCacheEntriesByPrefixResponse,
+  RemoveStaleAgentOpsCacheEntriesResponse,
   RemoveAgentOpsCacheEntryResponse,
   AgentOpsResponse,
   AgentOperationPlanPreview,
@@ -348,6 +349,27 @@ export async function previewRemoveAgentOpsCacheEntriesByPrefix(
     },
   );
   return parseJsonResponse<PreviewRemoveAgentOpsCacheEntriesByPrefixResponse>(response);
+}
+
+interface RemoveStaleAgentOpsCacheEntriesRequest {
+  max_age_seconds: number;
+  dry_run?: boolean;
+  sample_limit?: number;
+}
+
+export async function removeStaleAgentOpsCacheEntries(
+  workbookId: string,
+  payload: RemoveStaleAgentOpsCacheEntriesRequest,
+): Promise<RemoveStaleAgentOpsCacheEntriesResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove-stale`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  return parseJsonResponse<RemoveStaleAgentOpsCacheEntriesResponse>(response);
 }
 
 interface AgentPresetRequest {

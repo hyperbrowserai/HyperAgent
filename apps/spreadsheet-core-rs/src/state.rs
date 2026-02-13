@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use duckdb::Connection;
 use serde_json::Value;
 use std::{
-  collections::{HashMap, VecDeque},
+  collections::{HashMap, HashSet, VecDeque},
   fs,
   path::PathBuf,
   sync::Arc,
@@ -372,6 +372,72 @@ impl AppState {
     Ok((removed_entries, record.agent_ops_cache_order.len()))
   }
 
+  pub async fn remove_stale_agent_ops_cache_entries(
+    &self,
+    workbook_id: Uuid,
+    cutoff_timestamp: DateTime<Utc>,
+    dry_run: bool,
+    sample_limit: usize,
+  ) -> Result<(usize, usize, usize, Vec<String>), ApiError> {
+    let mut guard = self.workbooks.write().await;
+    let record = guard
+      .get_mut(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+
+    let matching_request_ids = record
+      .agent_ops_cache_order
+      .iter()
+      .filter(|request_id| {
+        record
+          .agent_ops_cache_timestamps
+          .get(*request_id)
+          .map(|cached_at| *cached_at <= cutoff_timestamp)
+          .unwrap_or(false)
+      })
+      .cloned()
+      .collect::<Vec<_>>();
+    let matched_entries = matching_request_ids.len();
+
+    let sample_request_ids = record
+      .agent_ops_cache_order
+      .iter()
+      .rev()
+      .filter(|request_id| {
+        record
+          .agent_ops_cache_timestamps
+          .get(*request_id)
+          .map(|cached_at| *cached_at <= cutoff_timestamp)
+          .unwrap_or(false)
+      })
+      .take(sample_limit)
+      .cloned()
+      .collect::<Vec<_>>();
+
+    if !dry_run && matched_entries > 0 {
+      let matching_request_id_set = matching_request_ids
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
+      record
+        .agent_ops_cache_order
+        .retain(|request_id| !matching_request_id_set.contains(request_id));
+      for request_id in matching_request_ids {
+        record.agent_ops_cache.remove(&request_id);
+        record.agent_ops_cached_operations.remove(&request_id);
+        record.agent_ops_cache_timestamps.remove(&request_id);
+      }
+    }
+
+    let removed_entries = if dry_run { 0 } else { matched_entries };
+    let remaining_entries = record.agent_ops_cache_order.len();
+    Ok((
+      matched_entries,
+      removed_entries,
+      remaining_entries,
+      sample_request_ids,
+    ))
+  }
+
   pub async fn agent_ops_cache_prefixes(
     &self,
     workbook_id: Uuid,
@@ -450,7 +516,7 @@ fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
 
 #[cfg(test)]
 mod tests {
-  use chrono::Utc;
+  use chrono::{Duration as ChronoDuration, Utc};
   use super::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES};
   use crate::models::{AgentOperation, AgentOperationResult, AgentOpsResponse};
   use serde_json::json;
@@ -793,5 +859,51 @@ mod tests {
     assert_eq!(prefixes.len(), 2);
     assert_eq!(prefixes[0], ("preset-".to_string(), 3));
     assert_eq!(prefixes[1], ("scenario-".to_string(), 2));
+  }
+
+  #[tokio::test]
+  async fn should_preview_and_remove_stale_cache_entries() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-remove-stale".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["stale-1", "stale-2"] {
+      state
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id.to_string(),
+          vec![AgentOperation::Recalculate],
+          AgentOpsResponse {
+            request_id: Some(request_id.to_string()),
+            operations_signature: Some(format!("sig-{request_id}")),
+            served_from_cache: false,
+            results: Vec::new(),
+          },
+        )
+        .await
+        .expect("cache update should succeed");
+    }
+
+    let cutoff_timestamp = Utc::now() + ChronoDuration::seconds(1);
+    let preview = state
+      .remove_stale_agent_ops_cache_entries(workbook.id, cutoff_timestamp, true, 1)
+      .await
+      .expect("stale preview should succeed");
+    assert_eq!(preview.0, 2);
+    assert_eq!(preview.1, 0);
+    assert_eq!(preview.2, 2);
+    assert_eq!(preview.3.len(), 1);
+
+    let remove = state
+      .remove_stale_agent_ops_cache_entries(workbook.id, cutoff_timestamp, false, 10)
+      .await
+      .expect("stale remove should succeed");
+    assert_eq!(remove.0, 2);
+    assert_eq!(remove.1, 2);
+    assert_eq!(remove.2, 0);
   }
 }

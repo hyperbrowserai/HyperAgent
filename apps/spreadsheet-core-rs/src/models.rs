@@ -195,6 +195,25 @@ pub struct PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveStaleAgentOpsCacheEntriesRequest {
+  pub max_age_seconds: i64,
+  pub dry_run: Option<bool>,
+  pub sample_limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveStaleAgentOpsCacheEntriesResponse {
+  pub max_age_seconds: i64,
+  pub dry_run: bool,
+  pub cutoff_timestamp: DateTime<Utc>,
+  pub matched_entries: usize,
+  pub removed_entries: usize,
+  pub remaining_entries: usize,
+  pub sample_limit: usize,
+  pub sample_request_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplayAgentOpsCacheEntryRequest {
   pub request_id: String,
 }

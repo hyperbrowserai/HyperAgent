@@ -35,6 +35,7 @@ import {
   reexecuteAgentOpsCacheEntry,
   removeAgentOpsCacheEntry,
   removeAgentOpsCacheEntriesByPrefix,
+  removeStaleAgentOpsCacheEntries,
   runAgentOps,
   runAgentPreset,
   runAgentScenario,
@@ -132,6 +133,16 @@ export function SpreadsheetApp() {
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [cacheRemovePreviewSampleLimit, setCacheRemovePreviewSampleLimit] = useState("10");
+  const [cacheStaleMaxAgeSeconds, setCacheStaleMaxAgeSeconds] = useState("3600");
+  const [isPreviewingStaleCache, setIsPreviewingStaleCache] = useState(false);
+  const [isRemovingStaleCache, setIsRemovingStaleCache] = useState(false);
+  const [cacheStaleRemovalPreview, setCacheStaleRemovalPreview] = useState<{
+    maxAgeSeconds: number;
+    cutoffTimestamp: string;
+    matchedEntries: number;
+    sampleLimit: number;
+    sampleRequestIds: string[];
+  } | null>(null);
   const [cacheRerunRequestId, setCacheRerunRequestId] = useState("");
   const [cachePrefixRemovalPreview, setCachePrefixRemovalPreview] = useState<{
     requestIdPrefix: string;
@@ -315,12 +326,18 @@ export function SpreadsheetApp() {
     setCacheRerunRequestId("");
     setCachePrefixRemovalPreview(null);
     setCacheRemovePreviewSampleLimit("10");
+    setCacheStaleMaxAgeSeconds("3600");
+    setCacheStaleRemovalPreview(null);
   }, [workbook?.id]);
 
   useEffect(() => {
     setCacheEntriesOffset(0);
     setCachePrefixRemovalPreview(null);
   }, [cacheRequestIdPrefix]);
+
+  useEffect(() => {
+    setCacheStaleRemovalPreview(null);
+  }, [cacheStaleMaxAgeSeconds]);
 
   useEffect(() => {
     if (
@@ -1607,6 +1624,104 @@ export function SpreadsheetApp() {
     }
   }
 
+  function parseStaleMaxAgeSecondsInput(): number | null {
+    const parsedValue = Number.parseInt(cacheStaleMaxAgeSeconds, 10);
+    if (Number.isNaN(parsedValue) || parsedValue <= 0) {
+      setUiError("max_age_seconds must be a positive integer.");
+      setUiErrorCode("INVALID_MAX_AGE_SECONDS");
+      return null;
+    }
+    return parsedValue;
+  }
+
+  async function handlePreviewRemoveStaleCacheEntries() {
+    if (!workbook) {
+      return;
+    }
+    const maxAgeSeconds = parseStaleMaxAgeSecondsInput();
+    if (maxAgeSeconds === null) {
+      return;
+    }
+    const parsedSampleLimit = Number.parseInt(cacheRemovePreviewSampleLimit, 10);
+    const normalizedSampleLimit = Number.isNaN(parsedSampleLimit)
+      ? undefined
+      : Math.max(1, Math.min(parsedSampleLimit, 100));
+    setIsPreviewingStaleCache(true);
+    try {
+      clearUiError();
+      const preview = await removeStaleAgentOpsCacheEntries(workbook.id, {
+        max_age_seconds: maxAgeSeconds,
+        dry_run: true,
+        sample_limit: normalizedSampleLimit,
+      });
+      setCacheStaleRemovalPreview({
+        maxAgeSeconds: preview.max_age_seconds,
+        cutoffTimestamp: preview.cutoff_timestamp,
+        matchedEntries: preview.matched_entries,
+        sampleLimit: preview.sample_limit,
+        sampleRequestIds: preview.sample_request_ids,
+      });
+      setNotice(
+        `Previewed ${preview.matched_entries} stale cache entr${
+          preview.matched_entries === 1 ? "y" : "ies"
+        } older than ${preview.max_age_seconds}s.`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to preview stale cache removal.");
+    } finally {
+      setIsPreviewingStaleCache(false);
+    }
+  }
+
+  async function handleRemoveStaleCacheEntries() {
+    if (!workbook) {
+      return;
+    }
+    const maxAgeSeconds = parseStaleMaxAgeSecondsInput();
+    if (maxAgeSeconds === null) {
+      return;
+    }
+    const parsedSampleLimit = Number.parseInt(cacheRemovePreviewSampleLimit, 10);
+    const normalizedSampleLimit = Number.isNaN(parsedSampleLimit)
+      ? undefined
+      : Math.max(1, Math.min(parsedSampleLimit, 100));
+    setIsRemovingStaleCache(true);
+    try {
+      clearUiError();
+      const response = await removeStaleAgentOpsCacheEntries(workbook.id, {
+        max_age_seconds: maxAgeSeconds,
+        dry_run: false,
+        sample_limit: normalizedSampleLimit,
+      });
+      if (response.removed_entries > 0) {
+        setSelectedCacheEntryDetail(null);
+      }
+      setCacheEntriesOffset(0);
+      setCachePrefixRemovalPreview(null);
+      setCacheStaleRemovalPreview(null);
+      setNotice(
+        `Removed ${response.removed_entries} stale cache entr${
+          response.removed_entries === 1 ? "y" : "ies"
+        } older than ${response.max_age_seconds}s.`,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-entries", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-prefixes", workbook.id],
+        }),
+      ]);
+    } catch (error) {
+      applyUiError(error, "Failed to remove stale cache entries.");
+    } finally {
+      setIsRemovingStaleCache(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -2394,6 +2509,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_remove_stale_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache remove-stale endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_remove_stale_endpoint}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.cache_validation_error_codes?.length ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache validation codes:{" "}
@@ -2507,6 +2630,35 @@ export function SpreadsheetApp() {
                     >
                       Clear rerun id
                     </button>
+                    <label className="ml-2 text-[10px] text-slate-500">
+                      stale age (sec)
+                    </label>
+                    <input
+                      value={cacheStaleMaxAgeSeconds}
+                      onChange={(event) =>
+                        setCacheStaleMaxAgeSeconds(event.target.value)
+                      }
+                      inputMode="numeric"
+                      className="h-6 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-amber-500"
+                    />
+                    <button
+                      onClick={handlePreviewRemoveStaleCacheEntries}
+                      disabled={isPreviewingStaleCache || isRemovingStaleCache}
+                      className="rounded border border-amber-700/70 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-900/40 disabled:opacity-50"
+                    >
+                      {isPreviewingStaleCache ? "Previewing stale..." : "Preview stale"}
+                    </button>
+                    <button
+                      onClick={handleRemoveStaleCacheEntries}
+                      disabled={
+                        isRemovingStaleCache
+                        || isPreviewingStaleCache
+                        || (agentOpsCacheEntriesQuery.data?.total_entries ?? 0) === 0
+                      }
+                      className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
+                    >
+                      {isRemovingStaleCache ? "Removing stale..." : "Remove stale"}
+                    </button>
                   </div>
                   {cachePrefixRemovalPreview ? (
                     <div className="mb-2 rounded border border-amber-800/60 bg-amber-900/10 p-2 text-[10px] text-amber-100">
@@ -2537,6 +2689,44 @@ export function SpreadsheetApp() {
                               onClick={() => handleInspectCacheRequestId(requestId)}
                               disabled={inspectingCacheRequestId === requestId}
                               className="rounded border border-amber-700/70 px-1.5 py-0.5 font-mono text-[10px] hover:bg-amber-900/30 disabled:opacity-50"
+                            >
+                              {inspectingCacheRequestId === requestId
+                                ? "Inspecting..."
+                                : requestId}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {cacheStaleRemovalPreview ? (
+                    <div className="mb-2 rounded border border-rose-800/60 bg-rose-900/10 p-2 text-[10px] text-rose-100">
+                      <p>
+                        stale preview ({cacheStaleRemovalPreview.maxAgeSeconds}s) cutoff{" "}
+                        <span className="font-mono">
+                          {formatIsoTimestamp(cacheStaleRemovalPreview.cutoffTimestamp)}
+                        </span>{" "}
+                        matched{" "}
+                        <span className="font-mono">
+                          {cacheStaleRemovalPreview.matchedEntries}
+                        </span>{" "}
+                        entr
+                        {cacheStaleRemovalPreview.matchedEntries === 1 ? "y" : "ies"} (
+                        sample limit{" "}
+                        <span className="font-mono">
+                          {cacheStaleRemovalPreview.sampleLimit}
+                        </span>
+                        ).
+                      </p>
+                      {cacheStaleRemovalPreview.sampleRequestIds.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-1 text-rose-200/90">
+                          <span>sample:</span>
+                          {cacheStaleRemovalPreview.sampleRequestIds.map((requestId) => (
+                            <button
+                              key={requestId}
+                              onClick={() => handleInspectCacheRequestId(requestId)}
+                              disabled={inspectingCacheRequestId === requestId}
+                              className="rounded border border-rose-700/70 px-1.5 py-0.5 font-mono text-[10px] hover:bg-rose-900/30 disabled:opacity-50"
                             >
                               {inspectingCacheRequestId === requestId
                                 ? "Inspecting..."

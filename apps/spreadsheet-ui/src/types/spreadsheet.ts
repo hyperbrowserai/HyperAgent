@@ -109,6 +109,17 @@ export interface PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
   sample_request_ids: string[];
 }
 
+export interface RemoveStaleAgentOpsCacheEntriesResponse {
+  max_age_seconds: number;
+  dry_run: boolean;
+  cutoff_timestamp: string;
+  matched_entries: number;
+  removed_entries: number;
+  remaining_entries: number;
+  sample_limit: number;
+  sample_request_ids: string[];
+}
+
 export interface ReplayAgentOpsCacheEntryResponse {
   cached_at: string;
   cached_response: AgentOpsResponse;
@@ -163,6 +174,7 @@ export interface AgentSchemaInfo {
   agent_ops_cache_remove_endpoint?: string;
   agent_ops_cache_remove_by_prefix_endpoint?: string;
   agent_ops_cache_remove_by_prefix_preview_endpoint?: string;
+  agent_ops_cache_remove_stale_endpoint?: string;
   agent_ops_idempotency_cache_max_entries?: number;
   agent_ops_preview_request_shape?: Record<string, string>;
   agent_ops_preview_response_shape?: Record<string, string>;

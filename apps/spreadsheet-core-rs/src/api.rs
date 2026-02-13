@@ -10,6 +10,8 @@ use crate::{
     RemoveAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntryResponse,
     RemoveAgentOpsCacheEntriesByPrefixRequest,
     RemoveAgentOpsCacheEntriesByPrefixResponse,
+    RemoveStaleAgentOpsCacheEntriesRequest,
+    RemoveStaleAgentOpsCacheEntriesResponse,
     PreviewRemoveAgentOpsCacheEntriesByPrefixRequest,
     PreviewRemoveAgentOpsCacheEntriesByPrefixResponse,
     ReexecuteAgentOpsCacheEntryRequest, ReexecuteAgentOpsCacheEntryResponse,
@@ -36,7 +38,7 @@ use axum::{
   Json, Router,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use chrono::Utc;
+use chrono::{Duration as ChronoDuration, Utc};
 use futures_util::StreamExt;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -109,6 +111,10 @@ pub fn create_router(state: AppState) -> Router {
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview",
       post(preview_remove_agent_ops_cache_entries_by_prefix),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache/remove-stale",
+      post(remove_stale_agent_ops_cache_entries),
     )
     .route("/v1/workbooks/{id}/agent/schema", get(get_agent_schema))
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
@@ -1061,6 +1067,7 @@ async fn get_agent_schema(
     "agent_ops_cache_remove_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove",
     "agent_ops_cache_remove_by_prefix_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix",
     "agent_ops_cache_remove_by_prefix_preview_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview",
+    "agent_ops_cache_remove_stale_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-stale",
     "agent_ops_preview_request_shape": {
       "operations": "non-empty array of operation objects"
     },
@@ -1160,9 +1167,25 @@ async fn get_agent_schema(
       "sample_limit": "max sample request ids returned",
       "sample_request_ids": "newest-first sample matching request ids"
     },
+    "agent_ops_cache_remove_stale_request_shape": {
+      "max_age_seconds": "number > 0 (required)",
+      "dry_run": "optional boolean (default false)",
+      "sample_limit": "optional number (default 20, max 100)"
+    },
+    "agent_ops_cache_remove_stale_response_shape": {
+      "max_age_seconds": "requested max age threshold",
+      "dry_run": "boolean",
+      "cutoff_timestamp": "iso timestamp used for stale matching",
+      "matched_entries": "number of stale cache entries matching cutoff",
+      "removed_entries": "number of entries removed (0 for dry_run)",
+      "remaining_entries": "entries left in cache after operation",
+      "sample_limit": "applied sample size",
+      "sample_request_ids": "newest-first sample stale request ids"
+    },
     "cache_validation_error_codes": [
       "INVALID_REQUEST_ID",
       "INVALID_NEW_REQUEST_ID",
+      "INVALID_MAX_AGE_SECONDS",
       "INVALID_REQUEST_ID_PREFIX",
       "CACHE_ENTRY_NOT_FOUND"
     ],
@@ -1773,6 +1796,8 @@ async fn remove_agent_ops_cache_entries_by_prefix(
 
 const DEFAULT_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT: usize = 20;
 const MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT: usize = 100;
+const DEFAULT_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT: usize = 20;
+const MAX_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT: usize = 100;
 
 async fn preview_remove_agent_ops_cache_entries_by_prefix(
   State(state): State<AppState>,
@@ -1806,6 +1831,51 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
   Ok(Json(PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
     request_id_prefix: request_id_prefix.to_string(),
     matched_entries,
+    sample_limit,
+    sample_request_ids,
+  }))
+}
+
+async fn remove_stale_agent_ops_cache_entries(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<RemoveStaleAgentOpsCacheEntriesRequest>,
+) -> Result<Json<RemoveStaleAgentOpsCacheEntriesResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  if payload.max_age_seconds <= 0 {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MAX_AGE_SECONDS",
+      "max_age_seconds must be greater than 0.",
+    ));
+  }
+  let dry_run = payload.dry_run.unwrap_or(false);
+  let sample_limit = payload
+    .sample_limit
+    .unwrap_or(DEFAULT_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT)
+    .min(MAX_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT);
+  let cutoff_timestamp =
+    Utc::now() - ChronoDuration::seconds(payload.max_age_seconds);
+  let (
+    matched_entries,
+    removed_entries,
+    remaining_entries,
+    sample_request_ids,
+  ) = state
+    .remove_stale_agent_ops_cache_entries(
+      workbook_id,
+      cutoff_timestamp,
+      dry_run,
+      sample_limit,
+    )
+    .await?;
+
+  Ok(Json(RemoveStaleAgentOpsCacheEntriesResponse {
+    max_age_seconds: payload.max_age_seconds,
+    dry_run,
+    cutoff_timestamp,
+    matched_entries,
+    removed_entries,
+    remaining_entries,
     sample_limit,
     sample_request_ids,
   }))
@@ -1986,6 +2056,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/ops/cache/remove": {"post": {"summary": "Remove a single request-id idempotency cache entry for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix": {"post": {"summary": "Remove all cached request-id entries matching a prefix"}},
       "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview": {"post": {"summary": "Preview affected cache entries for prefix removal"}},
+      "/v1/workbooks/{id}/agent/ops/cache/remove-stale": {"post": {"summary": "Remove or preview stale cache entries older than max_age_seconds"}},
       "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}/operations": {"get": {"summary": "Preview generated operations for a built-in preset"}},
@@ -2006,6 +2077,7 @@ async fn openapi() -> Json<serde_json::Value> {
 #[cfg(test)]
 mod tests {
   use axum::{extract::Path, extract::Query, extract::State, Json};
+  use std::time::Duration;
   use tempfile::tempdir;
 
   use super::{
@@ -2014,6 +2086,7 @@ mod tests {
     agent_ops_cache_stats,
     clear_agent_ops_cache, get_agent_schema, remove_agent_ops_cache_entry,
     remove_agent_ops_cache_entries_by_prefix,
+    remove_stale_agent_ops_cache_entries,
     preview_remove_agent_ops_cache_entries_by_prefix,
     replay_agent_ops_cache_entry, reexecute_agent_ops_cache_entry,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
@@ -2028,6 +2101,7 @@ mod tests {
       AgentOperation, AgentOpsRequest, RemoveAgentOpsCacheEntryRequest,
       RemoveAgentOpsCacheEntriesByPrefixRequest,
       PreviewRemoveAgentOpsCacheEntriesByPrefixRequest,
+      RemoveStaleAgentOpsCacheEntriesRequest,
       ReexecuteAgentOpsCacheEntryRequest,
       ReplayAgentOpsCacheEntryRequest,
     },
@@ -2744,6 +2818,85 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn should_remove_stale_cache_entries_via_handler() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-remove-stale".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["stale-a", "stale-b"] {
+      let _ = agent_ops(
+        State(state.clone()),
+        Path(workbook.id),
+        Json(AgentOpsRequest {
+          request_id: Some(request_id.to_string()),
+          actor: Some("test".to_string()),
+          stop_on_error: Some(true),
+          expected_operations_signature: None,
+          operations: vec![AgentOperation::Recalculate],
+        }),
+      )
+      .await
+      .expect("agent ops should succeed");
+    }
+    tokio::time::sleep(Duration::from_millis(1_300)).await;
+
+    let preview = remove_stale_agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        max_age_seconds: 1,
+        dry_run: Some(true),
+        sample_limit: Some(1),
+      }),
+    )
+    .await
+    .expect("stale preview should succeed")
+    .0;
+    assert!(preview.dry_run);
+    assert_eq!(preview.matched_entries, 2);
+    assert_eq!(preview.sample_limit, 1);
+    assert_eq!(preview.sample_request_ids.len(), 1);
+
+    let remove = remove_stale_agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        max_age_seconds: 0,
+        dry_run: Some(false),
+        sample_limit: None,
+      }),
+    )
+    .await
+    .expect_err("invalid max age should return validation error");
+    match remove {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_MAX_AGE_SECONDS");
+      }
+      _ => panic!("expected invalid max age to use custom error code"),
+    }
+
+    let remove_all = remove_stale_agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        max_age_seconds: 1,
+        dry_run: Some(false),
+        sample_limit: Some(10),
+      }),
+    )
+    .await
+    .expect("stale remove should succeed")
+    .0;
+    assert_eq!(remove_all.matched_entries, 2);
+    assert_eq!(remove_all.removed_entries, 2);
+    assert_eq!(remove_all.remaining_entries, 0);
+  }
+
+  #[tokio::test]
   async fn should_reject_blank_request_id_when_removing_cache_entry() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =
@@ -3055,6 +3208,12 @@ mod tests {
     );
     assert_eq!(
       schema
+        .get("agent_ops_cache_remove_stale_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache/remove-stale"),
+    );
+    assert_eq!(
+      schema
         .get("agent_ops_cache_entries_endpoint")
         .and_then(serde_json::Value::as_str),
       Some(
@@ -3114,6 +3273,10 @@ mod tests {
     assert!(
       cache_validation_error_codes.contains(&"INVALID_REQUEST_ID_PREFIX"),
       "schema should advertise invalid request-id-prefix error code",
+    );
+    assert!(
+      cache_validation_error_codes.contains(&"INVALID_MAX_AGE_SECONDS"),
+      "schema should advertise invalid max-age-seconds error code",
     );
   }
 }
