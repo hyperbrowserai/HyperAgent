@@ -13,6 +13,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent batch execution + built-in preset runner
 - Built-in scenario runner (seed/export orchestration)
 - Wizard flow: optional XLSX upload + scenario execution in one action
+- Wizard metadata discovery (schema/presets/scenarios) with scenario operation preview
 - Event stream viewer with per-event-type filtering
 
 ## Run
