@@ -7,6 +7,7 @@ import {
 } from "@hyperbrowser/sdk/types";
 
 import BrowserProvider from "@/types/browser-providers/types";
+import { formatUnknownError } from "@/utils";
 
 export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
   browserConfig: Omit<ConnectOverCDPOptions, "endpointURL"> | undefined;
@@ -30,15 +31,63 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
     this.config = params?.config;
   }
 
+  private async stopSessionSafely(
+    client: Hyperbrowser,
+    sessionId: string
+  ): Promise<string | null> {
+    try {
+      await client.sessions.stop(sessionId);
+      return null;
+    } catch (error) {
+      return `Failed to stop Hyperbrowser session ${sessionId}: ${formatUnknownError(
+        error
+      )}`;
+    }
+  }
+
   async start(): Promise<Browser> {
     const client = new Hyperbrowser(this.config);
-    const session = await client.sessions.create(this.sessionConfig);
+    let session: SessionDetail;
+    try {
+      session = await client.sessions.create(this.sessionConfig);
+    } catch (error) {
+      throw new Error(
+        `Failed to create Hyperbrowser session: ${formatUnknownError(error)}`
+      );
+    }
+
     this.hbClient = client;
     this.session = session;
-    this.browser = await chromium.connectOverCDP(
-      session.wsEndpoint,
-      this.browserConfig
-    );
+    const endpoint =
+      typeof session.wsEndpoint === "string" ? session.wsEndpoint.trim() : "";
+    if (endpoint.length === 0) {
+      const stopError = await this.stopSessionSafely(client, session.id);
+      this.session = undefined;
+      this.hbClient = undefined;
+      const diagnostics = [
+        "Failed to connect to Hyperbrowser session: missing wsEndpoint",
+      ];
+      if (stopError) {
+        diagnostics.push(stopError);
+      }
+      throw new Error(diagnostics.join("; "));
+    }
+
+    try {
+      this.browser = await chromium.connectOverCDP(endpoint, this.browserConfig);
+    } catch (error) {
+      const stopError = await this.stopSessionSafely(client, session.id);
+      this.browser = undefined;
+      this.session = undefined;
+      this.hbClient = undefined;
+      const diagnostics = [
+        `Failed to connect to Hyperbrowser session: ${formatUnknownError(error)}`,
+      ];
+      if (stopError) {
+        diagnostics.push(stopError);
+      }
+      throw new Error(diagnostics.join("; "));
+    }
 
     if (this.debug) {
       console.log(
@@ -56,9 +105,30 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
   }
 
   async close(): Promise<void> {
-    await this.browser?.close();
-    if (this.session) {
-      await this.hbClient?.sessions.stop(this.session.id);
+    const diagnostics: string[] = [];
+    if (this.browser) {
+      try {
+        await this.browser.close();
+      } catch (error) {
+        diagnostics.push(
+          `Failed to close browser connection: ${formatUnknownError(error)}`
+        );
+      }
+    }
+    if (this.session && this.hbClient) {
+      const stopError = await this.stopSessionSafely(
+        this.hbClient,
+        this.session.id
+      );
+      if (stopError) {
+        diagnostics.push(stopError);
+      }
+    }
+    this.browser = undefined;
+    this.session = undefined;
+    this.hbClient = undefined;
+    if (diagnostics.length > 0) {
+      throw new Error(diagnostics.join("; "));
     }
   }
 
