@@ -173,6 +173,35 @@ describe("convertToOpenAIMessages", () => {
     expect(toolCall?.function.name).toBe("weird_name");
   });
 
+  it("sanitizes explicit tool_call ids to API-safe format", () => {
+    const result = convertToOpenAIMessages([
+      {
+        role: "assistant",
+        content: "done",
+        toolCalls: [
+          {
+            id: "  weird id !@# with\nspaces ",
+            name: "lookup",
+            arguments: {},
+          },
+        ],
+      },
+      {
+        role: "tool",
+        toolName: "lookup",
+        toolCallId: "  weird id !@# with\nspaces ",
+        content: "result",
+      },
+    ]);
+
+    const assistantToolCall = (result[0] as {
+      tool_calls?: Array<{ id: string }>;
+    }).tool_calls?.[0];
+    const toolMessage = result[1] as { tool_call_id?: string };
+    expect(assistantToolCall?.id).toBe("weird_id_with_spaces");
+    expect(toolMessage.tool_call_id).toBe("weird_id_with_spaces");
+  });
+
   it("sanitizes OpenAI tool names to supported charset and length", () => {
     const longName = "tool " + "x".repeat(80) + " !@#$";
     const result = convertToOpenAIMessages([

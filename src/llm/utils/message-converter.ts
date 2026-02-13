@@ -95,7 +95,13 @@ function normalizeToolCallId(
   toolCallId: string | undefined,
   toolName: string
 ): string {
-  const normalizedId = toolCallId?.trim();
+  const normalizedId = toolCallId
+    ?.trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
   if (normalizedId && normalizedId.length > 0) {
     return normalizedId;
   }
