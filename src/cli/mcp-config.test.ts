@@ -119,6 +119,19 @@ describe("parseMCPServersConfig", () => {
       'MCP server entry at index 0 must provide "excludeTools" as an array of non-empty strings.'
     );
   });
+
+  it("normalizes connectionType casing/whitespace and rejects unsupported values", () => {
+    const parsed = parseMCPServersConfig(
+      '[{"connectionType":"  SSE  ","sseUrl":"https://example.com/sse"}]'
+    );
+    expect(parsed[0]?.connectionType).toBe("sse");
+
+    expect(() =>
+      parseMCPServersConfig('[{"connectionType":"websocket","command":"npx"}]')
+    ).toThrow(
+      'MCP server entry at index 0 has unsupported connectionType "websocket". Supported values are "stdio" and "sse".'
+    );
+  });
 });
 
 describe("loadMCPServersFromFile", () => {

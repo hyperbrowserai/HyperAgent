@@ -96,8 +96,19 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       delete normalizedEntry.id;
     }
 
-    const connectionType =
-      entry.connectionType === "sse" ? "sse" : "stdio";
+    const rawConnectionType = isNonEmptyString(entry.connectionType)
+      ? entry.connectionType.trim().toLowerCase()
+      : undefined;
+    if (
+      rawConnectionType &&
+      rawConnectionType !== "stdio" &&
+      rawConnectionType !== "sse"
+    ) {
+      throw new Error(
+        `MCP server entry at index ${i} has unsupported connectionType "${entry.connectionType}". Supported values are "stdio" and "sse".`
+      );
+    }
+    const connectionType = rawConnectionType === "sse" ? "sse" : "stdio";
     normalizedEntry.connectionType = connectionType;
     if (connectionType === "sse") {
       const sseUrl = isNonEmptyString(entry.sseUrl) ? entry.sseUrl.trim() : "";
