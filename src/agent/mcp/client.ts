@@ -1440,15 +1440,28 @@ class MCPClient {
     const server = this.servers.get(resolvedServerId);
     if (server) {
       let closeError: unknown;
+      let unregisterError: unknown;
       try {
         await server.transport.close();
       } catch (error) {
         closeError = error;
       } finally {
-        this.servers.delete(resolvedServerId);
+        try {
+          this.servers.delete(resolvedServerId);
+        } catch (error) {
+          unregisterError = error;
+        }
       }
       if (closeError) {
         throw new Error(formatMCPRuntimeDiagnostic(closeError));
+      }
+      if (unregisterError) {
+        const safeServerId = formatMCPIdentifier(resolvedServerId, "unknown-server");
+        throw new Error(
+          `Failed to unregister MCP server ${safeServerId}: ${formatMCPRuntimeDiagnostic(
+            unregisterError
+          )}`
+        );
       }
       if (this.debug) {
         console.log(`Disconnected from MCP server with ID: ${resolvedServerId}`);

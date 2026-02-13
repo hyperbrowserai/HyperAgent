@@ -2262,6 +2262,32 @@ describe("MCPClient disconnect lifecycle", () => {
     expect(mcpClient.hasConnections()).toBe(false);
   });
 
+  it("disconnectServer surfaces bounded unregister failures", async () => {
+    const mcpClient = new MCPClient(false);
+    const close = jest.fn().mockResolvedValue(undefined);
+    setServersForClient(
+      mcpClient,
+      {
+        has: (id: string): boolean => id === "server-1",
+        keys: (): IterableIterator<string> => ["server-1"][Symbol.iterator](),
+        get: (id: string): unknown =>
+          id === "server-1"
+            ? {
+                transport: { close },
+              }
+            : undefined,
+        delete: (): never => {
+          throw new Error("x".repeat(2_000));
+        },
+      } as unknown as Map<string, unknown>
+    );
+
+    await expect(mcpClient.disconnectServer("server-1")).rejects.toThrow(
+      /Failed to unregister MCP server server-1: .*\[truncated/
+    );
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it("disconnect continues closing remaining servers on failure", async () => {
     const mcpClient = new MCPClient(false);
     const closeA = jest.fn().mockRejectedValue(new Error("close A failed"));
