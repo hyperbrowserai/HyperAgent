@@ -66,6 +66,22 @@ export async function runCachedStep(
       : undefined,
     page,
     retries: 1,
+  }).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      taskId,
+      status: TaskStatus.FAILED,
+      steps: [],
+      output: `Failed to execute cached special action: ${message}`,
+      replayStepMeta: {
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 1,
+        cachedXPath: cachedAction.xpath ?? null,
+        fallbackXPath: null,
+        fallbackElementId: null,
+      },
+    } satisfies TaskOutput;
   });
   if (specialActionResult) {
     return specialActionResult;
@@ -138,7 +154,23 @@ export async function runCachedStep(
 
   // All cached attempts failed; optionally fall back to LLM perform
   if (params.performFallback) {
-    const fb = await params.performFallback(instruction);
+    const fb = await params.performFallback(instruction).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        taskId,
+        status: TaskStatus.FAILED,
+        steps: [],
+        output: `Fallback perform failed: ${message}`,
+        replayStepMeta: {
+          usedCachedAction: true,
+          fallbackUsed: true,
+          retries: maxSteps,
+          cachedXPath: cachedAction.xpath ?? null,
+          fallbackXPath: null,
+          fallbackElementId: null,
+        },
+      } satisfies TaskOutput;
+    });
     if (debug) {
       const cachedXPath = cachedAction.xpath || "N/A";
       const resolvedXPath = fb.replayStepMeta?.fallbackXPath || "N/A";

@@ -282,4 +282,70 @@ describe("runCachedStep", () => {
       })
     );
   });
+
+  it("returns failed task output when special action execution throws", async () => {
+    executeReplaySpecialAction.mockRejectedValue(new Error("navigation failed"));
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "go to app",
+      cachedAction: {
+        actionType: "goToUrl",
+        arguments: ["https://example.com"],
+      },
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("Failed to execute cached special action");
+    expect(result.output).toContain("navigation failed");
+    expect(result.replayStepMeta).toEqual(
+      expect.objectContaining({
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 1,
+      })
+    );
+  });
+
+  it("returns failed output when perform fallback throws", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));
+    const performFallback = jest
+      .fn()
+      .mockRejectedValue(new Error("perform fallback crashed"));
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: 0,
+        arguments: [],
+      },
+      maxSteps: 1,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+      performFallback,
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("Fallback perform failed");
+    expect(result.output).toContain("perform fallback crashed");
+    expect(result.replayStepMeta).toEqual(
+      expect.objectContaining({
+        usedCachedAction: true,
+        fallbackUsed: true,
+        retries: 1,
+        cachedXPath: "//button[1]",
+      })
+    );
+  });
 });
