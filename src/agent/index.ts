@@ -85,6 +85,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private static readonly MAX_REPLAY_OUTPUT_CHARS = 4_000;
   private static readonly MAX_REPLAY_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_LIFECYCLE_DIAGNOSTIC_CHARS = 400;
+  private static readonly MAX_HELPER_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_REPLAY_STEPS = 1_000;
   private static readonly MAX_ACTION_CACHE_ENTRIES = 200;
   private static readonly DEFAULT_ACTION_CACHE_CREATED_AT =
@@ -150,6 +151,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return `${fallback.slice(
       0,
       HyperAgent.MAX_LIFECYCLE_DIAGNOSTIC_CHARS
+    )}... [truncated ${omitted} chars]`;
+  }
+
+  private formatHelperDiagnostic(value: unknown): string {
+    const normalized = formatUnknownError(value).replace(/\s+/g, " ").trim();
+    const fallback = normalized.length > 0 ? normalized : "unknown error";
+    if (fallback.length <= HyperAgent.MAX_HELPER_DIAGNOSTIC_CHARS) {
+      return fallback;
+    }
+    const omitted = fallback.length - HyperAgent.MAX_HELPER_DIAGNOSTIC_CHARS;
+    return `${fallback.slice(
+      0,
+      HyperAgent.MAX_HELPER_DIAGNOSTIC_CHARS
     )}... [truncated ${omitted} chars]`;
   }
 
@@ -3059,7 +3073,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to pprint action "${actionType}": ${formatUnknownError(
+          `[HyperAgent] Failed to pprint action "${actionType}": ${this.formatHelperDiagnostic(
             error
           )}`
         );
@@ -3075,7 +3089,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to read browser session: ${formatUnknownError(
+          `[HyperAgent] Failed to read browser session: ${this.formatHelperDiagnostic(
             error
           )}`
         );
@@ -3101,7 +3115,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     } catch (error) {
       throw new HyperagentError(
-        `Failed to read action cache steps: ${formatUnknownError(error)}`,
+        `Failed to read action cache steps: ${this.formatHelperDiagnostic(error)}`,
         400
       );
     }
@@ -3112,7 +3126,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       });
     } catch (error) {
       throw new HyperagentError(
-        `Failed to create action cache script: ${formatUnknownError(error)}`,
+        `Failed to create action cache script: ${this.formatHelperDiagnostic(error)}`,
         500
       );
     }

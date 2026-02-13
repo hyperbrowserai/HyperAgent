@@ -1741,6 +1741,30 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("truncates oversized session-read diagnostics", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      browserProvider: { getSession: () => unknown };
+    };
+    internalAgent.browserProvider = {
+      getSession: () => {
+        throw new Error("x".repeat(2_000));
+      },
+    };
+
+    try {
+      expect(agent.getSession()).toBeNull();
+      const warnedMessage = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warnedMessage).toContain("[truncated");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("normalizes MCP server ids and handles invalid values", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
@@ -2075,6 +2099,36 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("truncates oversized pprint diagnostics", () => {
+    const throwingAction: AgentActionDefinition = {
+      type: "customPprint",
+      actionParams: z.object({}),
+      run: async () => ({ success: true, message: "ok" }),
+      pprintAction: () => {
+        throw new Error("x".repeat(2_000));
+      },
+    };
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      customActions: [throwingAction],
+    });
+
+    try {
+      expect(
+        agent.pprintAction({
+          type: "customPprint",
+          params: {},
+        } as never)
+      ).toBe("");
+      const firstMessage = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(firstMessage).toContain("[truncated");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("creates scripts from iterable action-cache steps", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
@@ -2117,6 +2171,27 @@ describe("HyperAgent constructor and task controls", () => {
 
     expect(() => agent.createScriptFromActionCache(trappedSteps)).toThrow(
       "Failed to read action cache steps: steps iterator trap"
+    );
+  });
+
+  it("truncates oversized createScriptFromActionCache diagnostics", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const trappedSteps = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === Symbol.iterator) {
+            throw new Error("x".repeat(2_000));
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as ActionCacheEntry[];
+
+    expect(() => agent.createScriptFromActionCache(trappedSteps)).toThrow(
+      /\[truncated/
     );
   });
 
