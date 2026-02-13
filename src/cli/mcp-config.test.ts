@@ -53,6 +53,12 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("throws clear message when config contains null bytes", () => {
+    expect(() => parseMCPServersConfig("\u0000[]")).toThrow(
+      "Invalid MCP config JSON: config appears to be binary or contains null bytes."
+    );
+  });
+
   it("throws when raw config exceeds maximum allowed size", () => {
     expect(() => parseMCPServersConfig("x".repeat(1_000_001))).toThrow(
       "Invalid MCP config JSON: config exceeds 1000000 characters."

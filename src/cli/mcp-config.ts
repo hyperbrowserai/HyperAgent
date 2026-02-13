@@ -163,6 +163,11 @@ function normalizeServersPayload(payload: unknown): unknown[] {
 export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
   let parsed: unknown;
   const normalizedConfig = rawConfig.replace(/^\uFEFF/, "").trim();
+  if (normalizedConfig.includes("\u0000")) {
+    throw new Error(
+      "Invalid MCP config JSON: config appears to be binary or contains null bytes."
+    );
+  }
   if (normalizedConfig.length > MAX_MCP_CONFIG_FILE_CHARS) {
     throw new Error(
       `Invalid MCP config JSON: config exceeds ${MAX_MCP_CONFIG_FILE_CHARS} characters.`
