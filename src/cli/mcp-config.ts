@@ -279,6 +279,9 @@ function normalizeServersPayload(payload: unknown): unknown[] {
 }
 
 export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
+  if (typeof rawConfig !== "string") {
+    throw new Error("Invalid MCP config JSON: config must be a string.");
+  }
   let parsed: unknown;
   const normalizedConfig = rawConfig.replace(/^\uFEFF/, "").trim();
   if (normalizedConfig.length === 0) {

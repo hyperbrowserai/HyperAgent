@@ -53,6 +53,12 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("throws clear message when config input is not a string", () => {
+    expect(() => parseMCPServersConfig(42 as unknown as string)).toThrow(
+      "Invalid MCP config JSON: config must be a string."
+    );
+  });
+
   it("throws clear message for empty config payloads", () => {
     expect(() => parseMCPServersConfig("   ")).toThrow(
       "Invalid MCP config JSON: config is empty."
