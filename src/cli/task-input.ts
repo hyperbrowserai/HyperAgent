@@ -4,6 +4,13 @@ import { formatUnknownError } from "@/utils";
 const MAX_TASK_DESCRIPTION_CHARS = 20_000;
 const MAX_TASK_FILE_BYTES = 1_000_000;
 
+function hasUnsupportedControlChars(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127;
+  });
+}
+
 export function normalizeTaskDescription(
   value: string,
   sourceLabel: string
@@ -12,6 +19,11 @@ export function normalizeTaskDescription(
   if (trimmed.includes("\u0000")) {
     throw new Error(
       `${sourceLabel} appears to be binary or contains null bytes. Please provide plain text.`
+    );
+  }
+  if (hasUnsupportedControlChars(trimmed)) {
+    throw new Error(
+      `${sourceLabel} contains unsupported control characters. Please provide plain text.`
     );
   }
   if (trimmed.length === 0) {

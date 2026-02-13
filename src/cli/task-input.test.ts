@@ -51,6 +51,17 @@ describe("normalizeTaskDescription", () => {
       "Task description from --command appears to be binary or contains null bytes. Please provide plain text."
     );
   });
+
+  it("throws when task description contains unsupported control characters", () => {
+    expect(() =>
+      normalizeTaskDescription(
+        "hello\u0007world",
+        "Task description from --command"
+      )
+    ).toThrow(
+      "Task description from --command contains unsupported control characters. Please provide plain text."
+    );
+  });
 });
 
 describe("loadTaskDescriptionFromFile", () => {
