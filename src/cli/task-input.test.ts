@@ -13,6 +13,15 @@ describe("normalizeTaskDescription", () => {
     ).toBe("do the thing");
   });
 
+  it("removes UTF-8 BOM prefix before validation", () => {
+    expect(
+      normalizeTaskDescription(
+        "\uFEFFdo the thing",
+        "Task description from --command"
+      )
+    ).toBe("do the thing");
+  });
+
   it("throws readable error for empty values after trim", () => {
     expect(() =>
       normalizeTaskDescription("   ", "Task description from --command")

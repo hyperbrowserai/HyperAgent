@@ -7,7 +7,7 @@ export function normalizeTaskDescription(
   value: string,
   sourceLabel: string
 ): string {
-  const trimmed = value.trim();
+  const trimmed = value.replace(/^\uFEFF/, "").trim();
   if (trimmed.length === 0) {
     throw new Error(
       `${sourceLabel} is empty after trimming whitespace. Please provide a non-empty task description.`
