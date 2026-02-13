@@ -53,6 +53,12 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("throws clear message for empty config payloads", () => {
+    expect(() => parseMCPServersConfig("   ")).toThrow(
+      "Invalid MCP config JSON: config is empty."
+    );
+  });
+
   it("throws clear message when config contains null bytes", () => {
     expect(() => parseMCPServersConfig("\u0000[]")).toThrow(
       "Invalid MCP config JSON: config appears to be binary or contains null bytes."
