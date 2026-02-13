@@ -105,6 +105,23 @@ describe("convertToOpenAIMessages", () => {
     ]);
   });
 
+  it("truncates oversized unknown content diagnostics", () => {
+    const huge = "x".repeat(3_500);
+    const result = convertToOpenAIMessages([
+      {
+        role: "assistant",
+        content: [{ type: "mystery", payload: huge } as unknown as never],
+      },
+    ]);
+
+    const text = (
+      result[0]?.content as Array<{
+        text: string;
+      }>
+    )[0]?.text;
+    expect(text).toContain("[truncated");
+  });
+
   it("normalizes tool-role messages with tool_call_id and text content", () => {
     const result = convertToOpenAIMessages([
       {
@@ -381,6 +398,23 @@ describe("system message text extraction", () => {
     ]);
   });
 
+  it("truncates oversized unknown Gemini content diagnostics", () => {
+    const huge = "x".repeat(3_500);
+    const { messages } = convertToGeminiMessages([
+      {
+        role: "user",
+        content: [{ type: "mystery", payload: huge } as unknown as never],
+      },
+    ]);
+
+    const text = (
+      messages[0]?.parts as Array<{
+        text: string;
+      }>
+    )[0]?.text;
+    expect(text).toContain("[truncated");
+  });
+
   it("normalizes unknown Anthropic content parts into text blocks", () => {
     const { messages } = convertToAnthropicMessages([
       {
@@ -401,6 +435,24 @@ describe("system message text extraction", () => {
         text: '{"type":"tool_call","toolName":"lookup","arguments":{"id":"123"}}',
       },
     ]);
+  });
+
+  it("truncates oversized unknown Anthropic content diagnostics", () => {
+    const huge = "x".repeat(3_500);
+    const { messages } = convertToAnthropicMessages([
+      {
+        role: "assistant",
+        content: [{ type: "mystery", payload: huge } as unknown as never],
+      },
+    ]);
+
+    const text = (
+      messages[0]?.content as Array<{
+        type: string;
+        text: string;
+      }>
+    )[0]?.text;
+    expect(text).toContain("[truncated");
   });
 
   it("prefixes Anthropic tool-role messages with tool label", () => {

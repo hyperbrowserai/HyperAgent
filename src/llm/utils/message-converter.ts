@@ -11,6 +11,8 @@ import type {
  * Utility functions for converting between different message formats
  */
 
+const MAX_CONVERTER_DIAGNOSTIC_CHARS = 2_000;
+
 function stringifyToolArguments(value: unknown): string {
   if (typeof value === "undefined") {
     return "{}";
@@ -37,6 +39,21 @@ function stringifyToolArguments(value: unknown): string {
   } catch {
     return "{}";
   }
+}
+
+function truncateConverterDiagnostic(value: string): string {
+  if (value.length <= MAX_CONVERTER_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  const omitted = value.length - MAX_CONVERTER_DIAGNOSTIC_CHARS;
+  return `${value.slice(
+    0,
+    MAX_CONVERTER_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
+
+function formatConverterFallback(value: unknown): string {
+  return truncateConverterDiagnostic(formatUnknownError(value));
 }
 
 function extractBase64Payload(url: string): string {
@@ -124,7 +141,9 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
           ? msg.content
           : extractTextContent(msg.content);
       openAIMessage.content =
-        textContent.length > 0 ? textContent : formatUnknownError(msg.content);
+        textContent.length > 0
+          ? textContent
+          : formatConverterFallback(msg.content);
       openAIMessage.tool_call_id = normalizeToolCallId(
         msg.toolCallId,
         msg.toolName
@@ -154,7 +173,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
             },
           };
         }
-        return { type: "text", text: formatUnknownError(part) };
+        return { type: "text", text: formatConverterFallback(part) };
       });
     }
 
@@ -224,7 +243,7 @@ export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
         } else {
           const textBlock: TextBlockParam = {
             type: "text",
-            text: formatUnknownError(part),
+            text: formatConverterFallback(part),
           };
           blocks.push(textBlock);
         }
@@ -305,7 +324,7 @@ export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
             },
           };
         }
-        return { text: formatUnknownError(part) };
+        return { text: formatConverterFallback(part) };
       });
       geminiMessage.parts = isToolMessage
         ? [{ text: buildToolMessageLabel(msg.toolName) }, ...parts]
