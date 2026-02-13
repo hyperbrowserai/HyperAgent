@@ -295,6 +295,16 @@ describe("parseMCPServersConfig", () => {
       'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
     );
     expect(() =>
+      parseMCPServersConfig('[{"command":"npx","env":{"KE\\u0007Y":"oops"}}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig('[{"command":"npx","env":{"KEY":"oo\\u0007ps"}}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
+    );
+    expect(() =>
       parseMCPServersConfig(
         '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"__proto__":"oops"}}]'
       )
@@ -304,6 +314,13 @@ describe("parseMCPServersConfig", () => {
     expect(() =>
       parseMCPServersConfig(
         '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Authorization":"   "}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Authorization":"Bearer\\u0007token"}}]'
       )
     ).toThrow(
       'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'

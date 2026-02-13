@@ -68,7 +68,13 @@ function normalizeOptionalStringRecord(
     const key = rawKey.trim();
     const normalizedKey = key.toLowerCase();
     const isUnsafeKey = UNSAFE_RECORD_KEYS.has(normalizedKey);
-    if (key.length === 0 || typeof rawValue !== "string" || isUnsafeKey) {
+    if (
+      key.length === 0 ||
+      typeof rawValue !== "string" ||
+      isUnsafeKey ||
+      hasUnsupportedControlChars(key) ||
+      hasUnsupportedControlChars(rawValue)
+    ) {
       throw new Error(
         `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
       );
