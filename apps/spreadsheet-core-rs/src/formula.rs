@@ -372,6 +372,22 @@ pub fn parse_power_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_mod_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "MOD" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_sign_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "SIGN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_isblank_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ISBLANK" && args.len() == 1 {
@@ -658,6 +674,7 @@ mod tests {
     parse_lower_formula, parse_match_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
+    parse_mod_formula, parse_sign_formula,
     parse_power_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
     parse_sqrt_formula,
@@ -810,6 +827,13 @@ mod tests {
     let power = parse_power_formula("=POWER(3, 4)").expect("power should parse");
     assert_eq!(power.0, "3");
     assert_eq!(power.1, "4");
+    let mod_formula = parse_mod_formula("=MOD(10, 3)").expect("mod should parse");
+    assert_eq!(mod_formula.0, "10");
+    assert_eq!(mod_formula.1, "3");
+    assert_eq!(
+      parse_sign_formula("=SIGN(-12.5)").as_deref(),
+      Some("-12.5"),
+    );
     assert_eq!(
       parse_isblank_formula("=ISBLANK(A1)").as_deref(),
       Some("A1"),

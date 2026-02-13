@@ -9,9 +9,11 @@ use crate::{
     parse_ceiling_formula, parse_floor_formula, parse_index_formula,
     parse_isblank_formula, parse_isnumber_formula, parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
-    parse_match_formula, parse_month_formula, parse_not_formula,
+    parse_match_formula, parse_mod_formula, parse_month_formula,
+    parse_not_formula,
     parse_power_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
+    parse_sign_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
     parse_sqrt_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
@@ -500,6 +502,28 @@ fn evaluate_formula(
     let base = parse_required_float(connection, sheet, &base_arg)?;
     let exponent = parse_required_float(connection, sheet, &exponent_arg)?;
     return Ok(Some(base.powf(exponent).to_string()));
+  }
+
+  if let Some((dividend_arg, divisor_arg)) = parse_mod_formula(formula) {
+    let dividend = parse_required_float(connection, sheet, &dividend_arg)?;
+    let divisor = parse_required_float(connection, sheet, &divisor_arg)?;
+    if divisor == 0.0 {
+      return Ok(None);
+    }
+    let result = dividend - divisor * (dividend / divisor).floor();
+    return Ok(Some(result.to_string()));
+  }
+
+  if let Some(sign_arg) = parse_sign_formula(formula) {
+    let value = parse_required_float(connection, sheet, &sign_arg)?;
+    let result = if value > 0.0 {
+      1
+    } else if value < 0.0 {
+      -1
+    } else {
+      0
+    };
+    return Ok(Some(result.to_string()));
   }
 
   if let Some((text_arg, count_arg)) = parse_left_formula(formula) {
@@ -2011,12 +2035,24 @@ mod tests {
         value: None,
         formula: Some("=FLOOR(-12.31,0.25)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 59,
+        value: None,
+        formula: Some("=MOD(10,3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 60,
+        value: None,
+        formula: Some("=SIGN(-12.5)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 56);
+    assert_eq!(updated_cells, 58);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2030,7 +2066,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 58,
+        end_col: 60,
       },
     )
     .expect("cells should be fetched");
@@ -2117,6 +2153,8 @@ mod tests {
     assert_eq!(by_position(1, 56).evaluated_value.as_deref(), Some("8.94427190999916"));
     assert_eq!(by_position(1, 57).evaluated_value.as_deref(), Some("12.5"));
     assert_eq!(by_position(1, 58).evaluated_value.as_deref(), Some("-12.25"));
+    assert_eq!(by_position(1, 59).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 60).evaluated_value.as_deref(), Some("-1"));
   }
 
   #[test]
@@ -2211,6 +2249,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=SQRT(-1)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_mod_by_zero_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=MOD(10,0)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=MOD(10,0)".to_string()]);
   }
 
   #[test]

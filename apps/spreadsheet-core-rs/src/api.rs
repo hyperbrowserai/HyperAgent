@@ -76,6 +76,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "FLOOR",
   "SQRT",
   "POWER",
+  "MOD",
+  "SIGN",
   "LEFT",
   "RIGHT",
   "UPPER",
