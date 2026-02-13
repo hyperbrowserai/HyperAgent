@@ -17,6 +17,11 @@ describe("parseJsonMaybe", () => {
     expect(parseJsonMaybe("   ")).toBe("   ");
   });
 
+  it("skips parsing when payload exceeds safe size threshold", () => {
+    const huge = `"${"x".repeat(120000)}"`;
+    expect(parseJsonMaybe(huge)).toBe(huge);
+  });
+
   it("returns non-string values unchanged", () => {
     const obj = { a: 1 };
     expect(parseJsonMaybe(obj)).toBe(obj);
