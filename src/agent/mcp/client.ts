@@ -28,6 +28,23 @@ const MCPToolActionParams = z.object({
 
 type MCPToolActionInput = z.infer<typeof MCPToolActionParams>;
 
+const formatUnknownError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
+
 export function normalizeMCPToolParams(
   input: MCPToolActionInput["params"]
 ): Record<string, unknown> {
@@ -36,7 +53,7 @@ export function normalizeMCPToolParams(
     try {
       parsed = JSON.parse(input);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatUnknownError(error);
       throw new Error(`Invalid MCP tool params JSON string: ${message}`);
     }
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -96,8 +113,7 @@ class MCPClient {
         );
 
         transport.onerror = (error: unknown) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
+          const message = formatUnknownError(error);
           console.error(`SSE error: ${message}`);
         };
       } else {
@@ -195,9 +211,9 @@ class MCPClient {
         console.log("Added tools:", Array.from(toolsMap.keys()));
       }
       return { serverId, actions };
-    } catch (e) {
-      console.error("Failed to connect to MCP server: ", e);
-      throw e;
+    } catch (error) {
+      console.error("Failed to connect to MCP server:", formatUnknownError(error));
+      throw error;
     }
   }
 
@@ -249,12 +265,14 @@ class MCPClient {
       });
 
       return result;
-    } catch (e) {
+    } catch (error) {
+      const message = formatUnknownError(error);
       console.error(
-        `Error executing tool ${toolName} on server ${serverId}:`,
-        e
+        `Error executing tool ${toolName} on server ${serverId}: ${message}`
       );
-      throw e;
+      throw new Error(
+        `Error executing tool ${toolName} on server ${serverId}: ${message}`
+      );
     }
   }
 

@@ -171,6 +171,37 @@ describe("MCPClient.executeTool server selection", () => {
     ).rejects.toThrow('Tool "search" is not registered on server "server-a"');
     expect(callTool).not.toHaveBeenCalled();
   });
+
+  it("wraps non-Error callTool failures with readable messages", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn().mockRejectedValue({ reason: "tool exploded" });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    try {
+      await expect(
+        mcpClient.executeTool("search", { query: "weather" })
+      ).rejects.toThrow(
+        'Error executing tool search on server server-1: {"reason":"tool exploded"}'
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Error executing tool search on server server-1: {"reason":"tool exploded"}'
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
 
 describe("MCPClient disconnect lifecycle", () => {
