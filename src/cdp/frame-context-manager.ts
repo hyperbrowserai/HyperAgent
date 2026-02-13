@@ -3,6 +3,7 @@ import type { CDPSession, CDPClient } from "./types";
 import type { FrameRecord } from "./frame-graph";
 import { FrameGraph } from "./frame-graph";
 import { isAdOrTrackingFrame } from "./frame-filters";
+import { formatUnknownError } from "@/utils";
 
 interface FrameTreeNode {
   frame: Protocol.Page.Frame;
@@ -555,12 +556,16 @@ export class FrameContextManager {
     await session
       .send("Page.enable")
       .catch((error) =>
-        console.warn("[FrameContext] Failed to enable Page domain:", error)
+        console.warn(
+          `[FrameContext] Failed to enable Page domain: ${formatUnknownError(error)}`
+        )
       );
 
     const attachedHandler = (event: Protocol.Page.FrameAttachedEvent): void => {
       this.handlePageFrameAttached(event).catch((error) =>
-        console.warn("[FrameContext] Error handling frameAttached:", error)
+        console.warn(
+          `[FrameContext] Error handling frameAttached: ${formatUnknownError(error)}`
+        )
       );
     };
 
@@ -731,8 +736,7 @@ export class FrameContextManager {
 
     session.send("Runtime.enable").catch((error) => {
       console.warn(
-        "[FrameContextManager] Failed to enable Runtime domain:",
-        error
+        `[FrameContextManager] Failed to enable Runtime domain: ${formatUnknownError(error)}`
       );
     });
   }

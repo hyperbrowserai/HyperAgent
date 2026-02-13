@@ -55,6 +55,18 @@ class FakeSession implements CDPSession {
   }
 }
 
+class FailingEnableSession extends FakeSession {
+  async send<T = unknown>(method: string): Promise<T> {
+    if (method === "Page.enable") {
+      throw { reason: "page enable object failure" };
+    }
+    if (method === "Runtime.enable") {
+      throw { reason: "runtime enable object failure" };
+    }
+    return super.send<T>(method);
+  }
+}
+
 function createFakeClient(session: CDPSession): CDPClient {
   return {
     rootSession: session,
@@ -82,5 +94,25 @@ describe("FrameContextManager listener bookkeeping", () => {
         "Runtime.executionContextsCleared",
       ])
     );
+  });
+
+  it("formats non-Error enable failures as readable messages", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const session = new FailingEnableSession();
+      const manager = new FrameContextManager(createFakeClient(session));
+
+      await manager.ensureInitialized();
+      await Promise.resolve();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[FrameContext] Failed to enable Page domain: {"reason":"page enable object failure"}'
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[FrameContextManager] Failed to enable Runtime domain: {"reason":"runtime enable object failure"}'
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

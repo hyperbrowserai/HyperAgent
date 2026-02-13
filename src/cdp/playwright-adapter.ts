@@ -5,6 +5,7 @@ import type {
   CDPSessionKind,
 } from "@/cdp/types";
 import { getDebugOptions } from "@/debug/options";
+import { formatUnknownError } from "@/utils";
 import type { CDPSession as PlaywrightSession, Frame, Page } from "playwright-core";
 
 class PlaywrightSessionAdapter implements CDPSession {
@@ -64,7 +65,9 @@ class PlaywrightSessionAdapter implements CDPSession {
     try {
       await this.session.detach();
     } catch (error) {
-      console.warn("[CDP][PlaywrightAdapter] Failed to detach session:", error);
+      console.warn(
+        `[CDP][PlaywrightAdapter] Failed to detach session: ${formatUnknownError(error)}`
+      );
     } finally {
       this.release(this);
     }
@@ -278,8 +281,7 @@ export async function disposeCDPClientForPage(page: Page): Promise<void> {
   if (!client) return;
   await client.dispose().catch((error) => {
     console.warn(
-      "[CDP][PlaywrightAdapter] Failed to dispose client for page:",
-      error
+      `[CDP][PlaywrightAdapter] Failed to dispose client for page: ${formatUnknownError(error)}`
     );
   });
 }
@@ -291,8 +293,7 @@ export async function disposeAllCDPClients(): Promise<void> {
       pendingClients.delete(page);
       await client.dispose().catch((error) => {
         console.warn(
-          "[CDP][PlaywrightAdapter] Failed to dispose cached client:",
-          error
+          `[CDP][PlaywrightAdapter] Failed to dispose cached client: ${formatUnknownError(error)}`
         );
       });
     }
