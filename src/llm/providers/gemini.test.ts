@@ -133,4 +133,68 @@ describe("GeminiClient", () => {
       client.invoke([{ role: "user", content: "hello" }])
     ).rejects.toThrow("No text response from Gemini");
   });
+
+  it("sanitizes reserved config keys from provider options", async () => {
+    generateContentMock.mockResolvedValue({
+      text: "result text",
+    });
+
+    const client = new GeminiClient({
+      model: "gemini-test",
+      temperature: 0.1,
+      maxTokens: 50,
+    });
+    await client.invoke(
+      [{ role: "user", content: "hello" }],
+      {
+        temperature: 0.7,
+        maxTokens: 120,
+        providerOptions: {
+          temperature: 999,
+          maxOutputTokens: 999,
+          systemInstruction: "override",
+          topK: 9,
+        },
+      }
+    );
+
+    expect(generateContentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          temperature: 0.7,
+          maxOutputTokens: 120,
+          systemInstruction: "follow system rules",
+          topK: 9,
+        }),
+      })
+    );
+  });
+
+  it("ignores non-object provider options safely", async () => {
+    generateContentMock.mockResolvedValue({
+      text: "result text",
+    });
+
+    const client = new GeminiClient({
+      model: "gemini-test",
+      temperature: 0.1,
+      maxTokens: 50,
+    });
+    await client.invoke(
+      [{ role: "user", content: "hello" }],
+      {
+        providerOptions: "oops" as unknown as Record<string, unknown>,
+      }
+    );
+
+    expect(generateContentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: {
+          temperature: 0.1,
+          maxOutputTokens: 50,
+          systemInstruction: "follow system rules",
+        },
+      })
+    );
+  });
 });

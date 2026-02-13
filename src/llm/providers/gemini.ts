@@ -9,7 +9,16 @@ import {
 } from "../types";
 import { convertToGeminiMessages } from "../utils/message-converter";
 import { convertToGeminiResponseSchema } from "../utils/schema-converter";
+import { sanitizeProviderOptions } from "../utils/provider-options";
 import { parseStructuredResponse } from "../utils/structured-response";
+
+const RESERVED_GEMINI_CONFIG_OPTION_KEYS = new Set([
+  "temperature",
+  "maxOutputTokens",
+  "systemInstruction",
+  "responseMimeType",
+  "responseSchema",
+]);
 
 export interface GeminiClientConfig {
   apiKey?: string;
@@ -45,9 +54,13 @@ export class GeminiClient implements HyperAgentLLM {
     systemInstruction?: string
   ): Record<string, unknown> {
     const resolvedMaxTokens = options?.maxTokens ?? this.maxTokens;
+    const providerOptions = sanitizeProviderOptions(
+      options?.providerOptions,
+      RESERVED_GEMINI_CONFIG_OPTION_KEYS
+    );
 
     return {
-      ...(options?.providerOptions ?? {}),
+      ...(providerOptions ?? {}),
       temperature: options?.temperature ?? this.temperature,
       ...(typeof resolvedMaxTokens === "number"
         ? { maxOutputTokens: resolvedMaxTokens }
