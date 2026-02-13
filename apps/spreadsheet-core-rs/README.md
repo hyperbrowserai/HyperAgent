@@ -26,6 +26,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/agent/wizard/schema`
 - `GET /v1/agent/wizard/presets`
 - `GET /v1/agent/wizard/scenarios`
+- `GET /v1/agent/wizard/scenarios/{scenario}/operations`
 - `POST /v1/agent/wizard/run`
 - `POST /v1/agent/wizard/run-json`
 - `POST /v1/workbooks`
@@ -93,6 +94,7 @@ Discovery helpers:
 - `GET /v1/agent/wizard/schema`
 - `GET /v1/agent/wizard/presets`
 - `GET /v1/agent/wizard/scenarios`
+- `GET /v1/agent/wizard/scenarios/{scenario}/operations` (optional query: `include_file_base64=true|false`)
 
 Multipart fields:
 - `scenario` (required)
