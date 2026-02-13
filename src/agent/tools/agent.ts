@@ -576,10 +576,16 @@ export const runAgentTask = async (
               })(),
             onError: (...args: Array<unknown>) => {
               const [attemptLabel, failure] = args;
+              const safeAttemptLabel = truncateDiagnosticText(
+                formatUnknownError(attemptLabel),
+                MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS
+              );
+              const safeFailure = truncateDiagnosticText(
+                formatUnknownError(failure),
+                MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS
+              );
               console.error(
-                `[LLM][StructuredOutput] Retry error ${formatUnknownError(
-                  attemptLabel
-                )}: ${formatUnknownError(failure)}`
+                `[LLM][StructuredOutput] Retry error ${safeAttemptLabel}: ${safeFailure}`
               );
             },
           });

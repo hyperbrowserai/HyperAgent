@@ -263,7 +263,9 @@ function createSchemaRetryCtx(
   };
 }
 
-function createTransientStructuredFailureCtx(): AgentCtx {
+function createTransientStructuredFailureCtx(
+  failurePayload: unknown = { reason: "temporary llm failure" }
+): AgentCtx {
   const parsedAction = {
     thoughts: "done",
     memory: "done",
@@ -278,7 +280,7 @@ function createTransientStructuredFailureCtx(): AgentCtx {
 
   const invokeStructured = jest
     .fn()
-    .mockRejectedValueOnce({ reason: "temporary llm failure" })
+    .mockRejectedValueOnce(failurePayload)
     .mockResolvedValue({
       rawText: JSON.stringify(parsedAction),
       parsed: parsedAction,
@@ -733,6 +735,28 @@ describe("runAgentTask completion behavior", () => {
       expect(retryLogLine).toBe(
         '[LLM][StructuredOutput] Retry error Retry Attempt 1/3: {"reason":"temporary llm failure"}'
       );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("truncates oversized structured-output retry failure diagnostics", async () => {
+    const page = createMockPage();
+    const hugeFailure = { reason: "x".repeat(10_000) };
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createTransientStructuredFailureCtx(hugeFailure);
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page));
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+
+      const retryLogLine = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes("[LLM][StructuredOutput] Retry error"));
+      expect(retryLogLine).toBeDefined();
+      expect(retryLogLine).toContain("[truncated");
+      expect(retryLogLine).not.toContain(hugeFailure.reason);
+      expect(retryLogLine?.length ?? 0).toBeLessThan(4_600);
     } finally {
       errorSpy.mockRestore();
     }
