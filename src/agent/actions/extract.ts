@@ -137,21 +137,30 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         markdown = fallbackMarkdownFromHtml(content);
       }
 
-      // Try to take a screenshot of the page; continue with text-only extraction if unavailable
-      let screenshotData: string | null = null;
-      try {
-        const cdpClient = await getCDPClient(ctx.page);
-        const cdpSession = await cdpClient.acquireSession("screenshot");
-        const screenshot = await cdpSession.send<{ data: string }>(
-          "Page.captureScreenshot"
+      const supportsMultimodal = ctx.llm.getCapabilities().multimodal;
+      if (!supportsMultimodal && ctx.debug) {
+        console.warn(
+          "[extract] LLM does not support multimodal input; proceeding without screenshot."
         );
-        screenshotData = screenshot.data;
-      } catch (error) {
-        if (ctx.debug) {
-          console.warn(
-            "[extract] Screenshot capture unavailable, falling back to markdown-only extraction:",
-            formatErrorMessage(error)
+      }
+
+      // Try to take a screenshot of the page only for multimodal models; continue with text-only extraction if unavailable
+      let screenshotData: string | null = null;
+      if (supportsMultimodal) {
+        try {
+          const cdpClient = await getCDPClient(ctx.page);
+          const cdpSession = await cdpClient.acquireSession("screenshot");
+          const screenshot = await cdpSession.send<{ data: string }>(
+            "Page.captureScreenshot"
           );
+          screenshotData = screenshot.data;
+        } catch (error) {
+          if (ctx.debug) {
+            console.warn(
+              "[extract] Screenshot capture unavailable, falling back to markdown-only extraction:",
+              formatErrorMessage(error)
+            );
+          }
         }
       }
 
@@ -164,13 +173,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         );
       }
 
-      const supportsMultimodal = ctx.llm.getCapabilities().multimodal;
       const includeScreenshot = Boolean(screenshotData && supportsMultimodal);
-      if (screenshotData && !supportsMultimodal && ctx.debug) {
-        console.warn(
-          "[extract] LLM does not support multimodal input; proceeding without screenshot."
-        );
-      }
 
       const markdownTokenBudget = computeMarkdownTokenBudget({
         tokenLimit: normalizedTokenLimit,

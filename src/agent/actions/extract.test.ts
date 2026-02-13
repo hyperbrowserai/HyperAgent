@@ -287,6 +287,7 @@ describe("ExtractActionDefinition.run", () => {
       }>;
       expect(messages[0]?.content).toHaveLength(1);
       expect(messages[0]?.content?.[0]?.type).toBe("text");
+      expect(getCDPClient).not.toHaveBeenCalled();
     } finally {
       warnSpy.mockRestore();
     }
