@@ -10,6 +10,15 @@ pub struct VLookupFormula {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HLookupFormula {
+  pub lookup_value: String,
+  pub table_start: (u32, u32),
+  pub table_end: (u32, u32),
+  pub result_row_index: u32,
+  pub range_lookup: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XLookupFormula {
   pub lookup_value: String,
   pub lookup_array_start: (u32, u32),
@@ -163,6 +172,26 @@ pub fn parse_vlookup_formula(formula: &str) -> Option<VLookupFormula> {
     table_start,
     table_end,
     result_col_index,
+    range_lookup: args.get(3).cloned(),
+  })
+}
+
+pub fn parse_hlookup_formula(formula: &str) -> Option<HLookupFormula> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "HLOOKUP" || !(args.len() == 3 || args.len() == 4) {
+    return None;
+  }
+  let (table_start, table_end) = parse_range_reference(&args[1])?;
+  let result_row_index = args[2].trim().parse::<u32>().ok()?;
+  if result_row_index == 0 {
+    return None;
+  }
+
+  Some(HLookupFormula {
+    lookup_value: args[0].clone(),
+    table_start,
+    table_end,
+    result_row_index,
     range_lookup: args.get(3).cloned(),
   })
 }
@@ -557,7 +586,7 @@ mod tests {
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_if_formula, parse_iferror_formula, parse_today_formula, parse_vlookup_formula,
-    parse_xlookup_formula, parse_countif_formula,
+    parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
     parse_year_formula, parse_upper_formula, parse_trim_formula,
   };
 
@@ -609,6 +638,14 @@ mod tests {
     assert_eq!(parsed.table_end, (6, 5));
     assert_eq!(parsed.result_col_index, 2);
     assert_eq!(parsed.range_lookup.as_deref(), Some("FALSE"));
+
+    let hlookup = parse_hlookup_formula("=HLOOKUP(A2, D2:F4, 2, FALSE)")
+      .expect("hlookup formula should parse");
+    assert_eq!(hlookup.lookup_value, "A2");
+    assert_eq!(hlookup.table_start, (2, 4));
+    assert_eq!(hlookup.table_end, (4, 6));
+    assert_eq!(hlookup.result_row_index, 2);
+    assert_eq!(hlookup.range_lookup.as_deref(), Some("FALSE"));
 
     let xlookup = parse_xlookup_formula(
       r#"=XLOOKUP("north",E1:E4,F1:F4,"missing",0,1)"#,

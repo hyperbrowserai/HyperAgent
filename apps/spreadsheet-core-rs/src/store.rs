@@ -7,13 +7,13 @@ use crate::{
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_left_formula, parse_index_formula, parse_isblank_formula,
     parse_isnumber_formula, parse_istext_formula, parse_len_formula, parse_lower_formula,
-    parse_match_formula, parse_month_formula, parse_not_formula,
+    parse_hlookup_formula, parse_match_formula, parse_month_formula, parse_not_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_today_formula, parse_upper_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_year_formula, ConditionalAggregateFormula,
-    IndexFormula, MatchFormula, MultiCriteriaAggregateFormula, VLookupFormula,
-    XLookupFormula,
+    HLookupFormula, IndexFormula, MatchFormula, MultiCriteriaAggregateFormula,
+    VLookupFormula, XLookupFormula,
   },
   models::{CellMutation, CellRange, CellSnapshot},
 };
@@ -322,6 +322,10 @@ fn evaluate_formula(
 
   if let Some(vlookup_formula) = parse_vlookup_formula(formula) {
     return evaluate_vlookup_formula(connection, sheet, &vlookup_formula);
+  }
+
+  if let Some(hlookup_formula) = parse_hlookup_formula(formula) {
+    return evaluate_hlookup_formula(connection, sheet, &hlookup_formula);
   }
 
   if let Some(xlookup_formula) = parse_xlookup_formula(formula) {
@@ -1209,6 +1213,49 @@ fn evaluate_vlookup_formula(
   Ok(Some(String::new()))
 }
 
+fn evaluate_hlookup_formula(
+  connection: &Connection,
+  sheet: &str,
+  formula: &HLookupFormula,
+) -> Result<Option<String>, ApiError> {
+  if formula
+    .range_lookup
+    .as_deref()
+    .map(|value| {
+      let normalized = value.trim().to_uppercase();
+      normalized == "TRUE" || normalized == "1"
+    })
+    .unwrap_or(false)
+  {
+    return Ok(None);
+  }
+
+  let start_row = formula.table_start.0.min(formula.table_end.0);
+  let end_row = formula.table_start.0.max(formula.table_end.0);
+  let start_col = formula.table_start.1.min(formula.table_end.1);
+  let end_col = formula.table_start.1.max(formula.table_end.1);
+  let height = end_row.saturating_sub(start_row) + 1;
+  if formula.result_row_index > height {
+    return Ok(Some(String::new()));
+  }
+
+  let lookup_value = resolve_scalar_operand(connection, sheet, &formula.lookup_value)?;
+  let lookup_numeric = lookup_value.parse::<f64>().ok();
+  let target_row = start_row + formula.result_row_index - 1;
+
+  for col_index in start_col..=end_col {
+    let candidate = load_cell_scalar(connection, sheet, start_row, col_index)?;
+    if !matches_lookup_value(&candidate, &lookup_value, lookup_numeric) {
+      continue;
+    }
+
+    let resolved = load_cell_scalar(connection, sheet, target_row, col_index)?;
+    return Ok(Some(resolved));
+  }
+
+  Ok(Some(String::new()))
+}
+
 fn evaluate_xlookup_formula(
   connection: &Connection,
   sheet: &str,
@@ -1776,12 +1823,24 @@ mod tests {
         value: None,
         formula: Some("=IFERROR(A1,0)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 46,
+        value: None,
+        formula: Some(r#"=HLOOKUP("Northeast",E1:F2,2,FALSE)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 47,
+        value: None,
+        formula: Some(r#"=HLOOKUP("missing",E1:F2,2,FALSE)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 43);
+    assert_eq!(updated_cells, 45);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -1795,7 +1854,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 45,
+        end_col: 47,
       },
     )
     .expect("cells should be fetched");
@@ -1869,6 +1928,8 @@ mod tests {
     assert_eq!(by_position(1, 43).evaluated_value.as_deref(), Some("fallback"));
     assert_eq!(by_position(1, 44).evaluated_value.as_deref(), Some("fallback"));
     assert_eq!(by_position(1, 45).evaluated_value.as_deref(), Some("120"));
+    assert_eq!(by_position(1, 46).evaluated_value.as_deref(), Some("Southeast"));
+    assert_eq!(by_position(1, 47).evaluated_value.as_deref(), Some(""));
   }
 
   #[test]
@@ -1901,6 +1962,51 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=VLOOKUP("a",A1:B1,2,TRUE)"#.to_string()]
+    );
+  }
+
+  #[test]
+  fn should_leave_approximate_hlookup_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!("north")),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!("south")),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!("Northeast")),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: Some(json!("Southeast")),
+        formula: None,
+      },
+      CellMutation {
+        row: 3,
+        col: 1,
+        value: None,
+        formula: Some(r#"=HLOOKUP("south",A1:B2,2,TRUE)"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=HLOOKUP("south",A1:B2,2,TRUE)"#.to_string()]
     );
   }
 
