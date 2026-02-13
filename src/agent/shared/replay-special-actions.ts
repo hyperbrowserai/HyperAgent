@@ -80,6 +80,23 @@ function normalizeWaitUntil(value: unknown): "domcontentloaded" | "load" | "netw
   return "domcontentloaded";
 }
 
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
 export async function executeReplaySpecialAction(
   params: ReplaySpecialActionInput
 ): Promise<TaskOutput | null> {
@@ -187,7 +204,7 @@ export async function executeReplaySpecialAction(
         try {
           serializedExtracted = JSON.stringify(extracted);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = formatUnknownError(error);
           return {
             taskId,
             status: TaskStatus.FAILED,
@@ -205,7 +222,7 @@ export async function executeReplaySpecialAction(
         replayStepMeta: createReplayMeta(retries),
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatUnknownError(error);
       return {
         taskId,
         status: TaskStatus.FAILED,

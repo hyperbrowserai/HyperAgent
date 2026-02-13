@@ -256,6 +256,23 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toContain("could not serialize extracted output");
   });
 
+  it("formats object-thrown extract errors as readable JSON", async () => {
+    const extract = jest.fn().mockRejectedValue({ reason: "bad extract" });
+    const page = createPage({
+      extract,
+    });
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-object-error-extract",
+      actionType: "extract",
+      instruction: "extract info",
+      page: page as unknown as Page,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.output).toContain('Extract failed: {"reason":"bad extract"}');
+  });
+
   it("honors explicit retry metadata value", async () => {
     const page = createPage();
 
