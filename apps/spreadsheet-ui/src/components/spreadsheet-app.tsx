@@ -84,6 +84,7 @@ export function SpreadsheetApp() {
   const [wizardFile, setWizardFile] = useState<File | null>(null);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [uiError, setUiError] = useState<string | null>(null);
+  const [uiErrorCode, setUiErrorCode] = useState<string | null>(null);
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastScenario, setLastScenario] = useState<string | null>(null);
@@ -103,7 +104,7 @@ export function SpreadsheetApp() {
   const createWorkbookMutation = useMutation({
     mutationFn: () => createWorkbook("Agent Workbook"),
     onSuccess: (createdWorkbook) => {
-      setUiError(null);
+      clearUiError();
       setWorkbook(createdWorkbook);
       setLastAgentRequestId(null);
       setLastPreset(null);
@@ -114,14 +115,14 @@ export function SpreadsheetApp() {
       setLastWizardImportSummary(null);
     },
     onError: (error) => {
-      setUiError(error.message);
+      applyUiError(error, "Failed to create workbook.");
     },
   });
 
   const importMutation = useMutation({
     mutationFn: (file: File) => importWorkbook(file),
     onSuccess: (importedWorkbook) => {
-      setUiError(null);
+      clearUiError();
       setWorkbook(importedWorkbook);
       setLastAgentRequestId(null);
       setLastPreset(null);
@@ -133,7 +134,7 @@ export function SpreadsheetApp() {
       queryClient.invalidateQueries({ queryKey: ["cells", importedWorkbook.id] });
     },
     onError: (error) => {
-      setUiError(error.message);
+      applyUiError(error, "Failed to import workbook.");
     },
   });
 
@@ -338,16 +339,38 @@ export function SpreadsheetApp() {
         ? "Syncing updates..."
         : "Ready";
 
+  function applyUiError(error: unknown, fallback: string): void {
+    if (error instanceof SpreadsheetApiError) {
+      setUiError(error.message);
+      setUiErrorCode(error.code ?? null);
+      return;
+    }
+    if (error instanceof Error) {
+      setUiError(error.message);
+      setUiErrorCode(null);
+      return;
+    }
+    setUiError(fallback);
+    setUiErrorCode(null);
+  }
+
+  function clearUiError(): void {
+    setUiError(null);
+    setUiErrorCode(null);
+  }
+
   async function handleSignatureMismatchRecovery(error: unknown): Promise<boolean> {
     if (error instanceof SpreadsheetApiError) {
       if (error.code === "EMPTY_OPERATION_LIST") {
         setUiError("No operations were provided. Refresh previews and retry.");
+        setUiErrorCode(error.code);
         return true;
       }
       if (error.code === "INVALID_SIGNATURE_FORMAT") {
         setUiError(
           `${error.message} Refresh previews to regenerate a valid signature and retry.`,
         );
+        setUiErrorCode(error.code);
         return true;
       }
       if (error.code !== "OPERATION_SIGNATURE_MISMATCH") {
@@ -358,6 +381,7 @@ export function SpreadsheetApp() {
         queryClient.invalidateQueries({ queryKey: ["wizard-preset-ops"] }),
       ]);
       setUiError(`${error.message} Refreshed operation previews. Please retry.`);
+      setUiErrorCode(error.code);
       return true;
     }
     const maybeMessage = error instanceof Error ? error.message : null;
@@ -370,6 +394,7 @@ export function SpreadsheetApp() {
       queryClient.invalidateQueries({ queryKey: ["wizard-preset-ops"] }),
     ]);
     setUiError(`${message} Refreshed operation previews. Please retry.`);
+    setUiErrorCode(null);
     return true;
   }
 
@@ -399,7 +424,7 @@ export function SpreadsheetApp() {
 
     setIsSaving(true);
     try {
-      setUiError(null);
+      clearUiError();
       const isFormula = formulaInput.trim().startsWith("=");
       const operations: AgentOperationPreview[] = [
         {
@@ -445,9 +470,7 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
-      setUiError(
-        error instanceof Error ? error.message : "Failed to apply cell update.",
-      );
+      applyUiError(error, "Failed to apply cell update.");
     } finally {
       setIsSaving(false);
     }
@@ -458,7 +481,7 @@ export function SpreadsheetApp() {
       return;
     }
     try {
-      setUiError(null);
+      clearUiError();
       const blob = await exportWorkbook(workbook.id);
       const fileUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -467,9 +490,7 @@ export function SpreadsheetApp() {
       anchor.click();
       URL.revokeObjectURL(fileUrl);
     } catch (error) {
-      setUiError(
-        error instanceof Error ? error.message : "Failed to export workbook.",
-      );
+      applyUiError(error, "Failed to export workbook.");
     }
   }
 
@@ -478,7 +499,7 @@ export function SpreadsheetApp() {
       return;
     }
     try {
-      setUiError(null);
+      clearUiError();
       await upsertChart(workbook.id, {
         id: "chart-default",
         sheet: activeSheet,
@@ -488,9 +509,7 @@ export function SpreadsheetApp() {
         values_range: `${activeSheet}!$B$1:$B$10`,
       });
     } catch (error) {
-      setUiError(
-        error instanceof Error ? error.message : "Failed to sync chart metadata.",
-      );
+      applyUiError(error, "Failed to sync chart metadata.");
     }
   }
 
@@ -500,7 +519,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningAgentFlow(true);
     try {
-      setUiError(null);
+      clearUiError();
       const operations: AgentOperationPreview[] = [
         {
           op_type: "set_cells",
@@ -548,9 +567,7 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
-      setUiError(
-        error instanceof Error ? error.message : "Failed to run agent demo flow.",
-      );
+      applyUiError(error, "Failed to run agent demo flow.");
     } finally {
       setIsRunningAgentFlow(false);
     }
@@ -562,7 +579,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningPreset(true);
     try {
-      setUiError(null);
+      clearUiError();
       const includeFileBase64 =
         preset === "export_snapshot" ? false : wizardIncludeFileBase64;
       const presetPlan = await getAgentPresetOperations(
@@ -594,9 +611,7 @@ export function SpreadsheetApp() {
       ) {
         return;
       }
-      setUiError(
-        error instanceof Error ? error.message : `Failed to run preset ${preset}.`,
-      );
+      applyUiError(error, `Failed to run preset ${preset}.`);
     } finally {
       setIsRunningPreset(false);
     }
@@ -608,7 +623,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningScenario(true);
     try {
-      setUiError(null);
+      clearUiError();
       const scenarioPlan = await getAgentScenarioOperations(
         workbook.id,
         scenario,
@@ -638,11 +653,7 @@ export function SpreadsheetApp() {
       ) {
         return;
       }
-      setUiError(
-        error instanceof Error
-          ? error.message
-          : `Failed to run scenario ${scenario}.`,
-      );
+      applyUiError(error, `Failed to run scenario ${scenario}.`);
     } finally {
       setIsRunningScenario(false);
     }
@@ -654,7 +665,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningSelectedScenario(true);
     try {
-      setUiError(null);
+      clearUiError();
       const scenarioPlan = await getAgentScenarioOperations(
         workbook.id,
         wizardScenario,
@@ -684,11 +695,7 @@ export function SpreadsheetApp() {
       ) {
         return;
       }
-      setUiError(
-        error instanceof Error
-          ? error.message
-          : `Failed to run selected scenario ${wizardScenario}.`,
-      );
+      applyUiError(error, `Failed to run selected scenario ${wizardScenario}.`);
     } finally {
       setIsRunningSelectedScenario(false);
     }
@@ -700,7 +707,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningPreviewOps(true);
     try {
-      setUiError(null);
+      clearUiError();
       const signedPlan = await signOperationsForExecution(wizardScenarioOps);
       const response = await runAgentOps(workbook.id, {
         request_id: `scenario-preview-ops-${wizardScenario}-${Date.now()}`,
@@ -726,11 +733,7 @@ export function SpreadsheetApp() {
       ) {
         return;
       }
-      setUiError(
-        error instanceof Error
-          ? error.message
-          : `Failed to run preview operations for ${wizardScenario}.`,
-      );
+      applyUiError(error, `Failed to run preview operations for ${wizardScenario}.`);
     } finally {
       setIsRunningPreviewOps(false);
     }
@@ -742,7 +745,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningSelectedPreset(true);
     try {
-      setUiError(null);
+      clearUiError();
       const presetPlan = await getAgentPresetOperations(
         workbook.id,
         wizardPresetPreview,
@@ -772,11 +775,7 @@ export function SpreadsheetApp() {
       ) {
         return;
       }
-      setUiError(
-        error instanceof Error
-          ? error.message
-          : `Failed to run selected preset ${wizardPresetPreview}.`,
-      );
+      applyUiError(error, `Failed to run selected preset ${wizardPresetPreview}.`);
     } finally {
       setIsRunningSelectedPreset(false);
     }
@@ -788,7 +787,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningPresetPreviewOps(true);
     try {
-      setUiError(null);
+      clearUiError();
       const signedPlan = await signOperationsForExecution(wizardPresetOps);
       const response = await runAgentOps(workbook.id, {
         request_id: `preset-preview-ops-${wizardPresetPreview}-${Date.now()}`,
@@ -814,10 +813,9 @@ export function SpreadsheetApp() {
       ) {
         return;
       }
-      setUiError(
-        error instanceof Error
-          ? error.message
-          : `Failed to run preset preview operations for ${wizardPresetPreview}.`,
+      applyUiError(
+        error,
+        `Failed to run preset preview operations for ${wizardPresetPreview}.`,
       );
     } finally {
       setIsRunningPresetPreviewOps(false);
@@ -840,9 +838,9 @@ export function SpreadsheetApp() {
           2,
         ),
       );
-      setUiError(null);
-    } catch {
-      setUiError("Failed to copy preview operations to clipboard.");
+      clearUiError();
+    } catch (error) {
+      applyUiError(error, "Failed to copy preview operations to clipboard.");
     } finally {
       setIsCopyingPreviewOps(false);
     }
@@ -864,9 +862,9 @@ export function SpreadsheetApp() {
           2,
         ),
       );
-      setUiError(null);
-    } catch {
-      setUiError("Failed to copy preset operations to clipboard.");
+      clearUiError();
+    } catch (error) {
+      applyUiError(error, "Failed to copy preset operations to clipboard.");
     } finally {
       setIsCopyingPresetOps(false);
     }
@@ -901,9 +899,9 @@ export function SpreadsheetApp() {
           2,
         ),
       );
-      setUiError(null);
-    } catch {
-      setUiError("Failed to copy preset run payload to clipboard.");
+      clearUiError();
+    } catch (error) {
+      applyUiError(error, "Failed to copy preset run payload to clipboard.");
     } finally {
       setIsCopyingPresetRunPayload(false);
     }
@@ -938,9 +936,9 @@ export function SpreadsheetApp() {
           2,
         ),
       );
-      setUiError(null);
-    } catch {
-      setUiError("Failed to copy scenario run payload to clipboard.");
+      clearUiError();
+    } catch (error) {
+      applyUiError(error, "Failed to copy scenario run payload to clipboard.");
     } finally {
       setIsCopyingScenarioRunPayload(false);
     }
@@ -973,9 +971,9 @@ export function SpreadsheetApp() {
           2,
         ),
       );
-      setUiError(null);
-    } catch {
-      setUiError("Failed to copy agent/ops payload for preset preview.");
+      clearUiError();
+    } catch (error) {
+      applyUiError(error, "Failed to copy agent/ops payload for preset preview.");
     } finally {
       setIsCopyingPresetOpsRunPayload(false);
     }
@@ -1008,9 +1006,9 @@ export function SpreadsheetApp() {
           2,
         ),
       );
-      setUiError(null);
-    } catch {
-      setUiError("Failed to copy agent/ops payload for scenario preview.");
+      clearUiError();
+    } catch (error) {
+      applyUiError(error, "Failed to copy agent/ops payload for scenario preview.");
     } finally {
       setIsCopyingScenarioOpsRunPayload(false);
     }
@@ -1036,9 +1034,9 @@ export function SpreadsheetApp() {
           2,
         ),
       );
-      setUiError(null);
-    } catch {
-      setUiError("Failed to copy payload from last execution plan.");
+      clearUiError();
+    } catch (error) {
+      applyUiError(error, "Failed to copy payload from last execution plan.");
     } finally {
       setIsCopyingLastExecutionPayload(false);
     }
@@ -1050,7 +1048,7 @@ export function SpreadsheetApp() {
     }
     setIsRunningWizard(true);
     try {
-      setUiError(null);
+      clearUiError();
       const scenarioPlan = await getWizardScenarioOperations(
         wizardScenario,
         wizardIncludeFileBase64,
@@ -1097,9 +1095,7 @@ export function SpreadsheetApp() {
       ) {
         return;
       }
-      setUiError(
-        error instanceof Error ? error.message : "Failed to run wizard flow.",
-      );
+      applyUiError(error, "Failed to run wizard flow.");
     } finally {
       setIsRunningWizard(false);
     }
@@ -1115,7 +1111,7 @@ export function SpreadsheetApp() {
     }
     setIsCreatingSheet(true);
     try {
-      setUiError(null);
+      clearUiError();
       await createSheet(workbook.id, trimmed);
       setActiveSheet(trimmed);
       await Promise.all([
@@ -1123,9 +1119,7 @@ export function SpreadsheetApp() {
         queryClient.invalidateQueries({ queryKey: ["cells", workbook.id, trimmed] }),
       ]);
     } catch (error) {
-      setUiError(
-        error instanceof Error ? error.message : "Failed to create sheet.",
-      );
+      applyUiError(error, "Failed to create sheet.");
     } finally {
       setIsCreatingSheet(false);
     }
@@ -1237,9 +1231,16 @@ export function SpreadsheetApp() {
           {uiError ? (
             <div className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-100">
               <div className="flex items-center justify-between gap-2">
-                <span>{uiError}</span>
+                <div className="flex items-center gap-2">
+                  {uiErrorCode ? (
+                    <span className="rounded border border-rose-300/40 bg-rose-500/20 px-1.5 py-0.5 font-mono text-[10px] text-rose-100">
+                      {uiErrorCode}
+                    </span>
+                  ) : null}
+                  <span>{uiError}</span>
+                </div>
                 <button
-                  onClick={() => setUiError(null)}
+                  onClick={clearUiError}
                   className="rounded border border-rose-300/30 px-2 py-0.5 text-[11px] hover:bg-rose-500/20"
                 >
                   Dismiss
