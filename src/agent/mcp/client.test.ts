@@ -206,4 +206,59 @@ describe("MCPClient disconnect lifecycle", () => {
     expect(closeB).toHaveBeenCalledTimes(1);
     expect(mcpClient.hasConnections()).toBe(false);
   });
+
+  it("disconnectServer removes server even when transport close fails", async () => {
+    const mcpClient = new MCPClient(false);
+    const close = jest.fn().mockRejectedValue(new Error("close failed"));
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            transport: { close },
+          },
+        ],
+      ])
+    );
+
+    await expect(mcpClient.disconnectServer("server-1")).rejects.toThrow(
+      "close failed"
+    );
+    expect(mcpClient.hasConnections()).toBe(false);
+  });
+
+  it("disconnect continues closing remaining servers on failure", async () => {
+    const mcpClient = new MCPClient(false);
+    const closeA = jest.fn().mockRejectedValue(new Error("close A failed"));
+    const closeB = jest.fn().mockResolvedValue(undefined);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            transport: { close: closeA },
+          },
+        ],
+        [
+          "server-b",
+          {
+            transport: { close: closeB },
+          },
+        ],
+      ])
+    );
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await mcpClient.disconnect();
+      expect(closeA).toHaveBeenCalledTimes(1);
+      expect(closeB).toHaveBeenCalledTimes(1);
+      expect(mcpClient.hasConnections()).toBe(false);
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

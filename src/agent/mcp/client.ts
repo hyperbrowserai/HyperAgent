@@ -285,8 +285,17 @@ class MCPClient {
   async disconnectServer(serverId: string): Promise<void> {
     const server = this.servers.get(serverId);
     if (server) {
-      await server.transport.close();
-      this.servers.delete(serverId);
+      let closeError: unknown;
+      try {
+        await server.transport.close();
+      } catch (error) {
+        closeError = error;
+      } finally {
+        this.servers.delete(serverId);
+      }
+      if (closeError) {
+        throw closeError;
+      }
       if (this.debug) {
         console.log(`Disconnected from MCP server with ID: ${serverId}`);
       }
@@ -298,7 +307,11 @@ class MCPClient {
    */
   async disconnect(): Promise<void> {
     for (const serverId of Array.from(this.servers.keys())) {
-      await this.disconnectServer(serverId);
+      try {
+        await this.disconnectServer(serverId);
+      } catch (error) {
+        console.error(`Failed to disconnect MCP server ${serverId}:`, error);
+      }
     }
   }
 
