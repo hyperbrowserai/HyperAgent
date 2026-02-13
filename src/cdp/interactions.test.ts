@@ -449,4 +449,51 @@ describe("dispatchCDPAction argument coercion", () => {
     expect(args?.[0]?.value).toBe(80);
     expect(args?.[1]?.value).toBe("smooth");
   });
+
+  it("falls back to 50% for non-finite numeric scroll targets", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {
+        result: {
+          value: { status: "done", finalTop: 0, maxScroll: 100 },
+        },
+      };
+    });
+
+    await dispatchCDPAction("scrollToPercentage", [Number.NaN], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+    await dispatchCDPAction("scrollToPercentage", [Number.POSITIVE_INFINITY], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const scrollCalls = calls.filter(
+      (call) =>
+        call.method === "Runtime.callFunctionOn" &&
+        typeof call.params?.functionDeclaration === "string" &&
+        (call.params.functionDeclaration as string).includes(
+          "function(percent, behavior)"
+        )
+    );
+    const firstArgs = scrollCalls[0]?.params?.arguments as
+      | Array<{ value?: unknown }>
+      | undefined;
+    const secondArgs = scrollCalls[1]?.params?.arguments as
+      | Array<{ value?: unknown }>
+      | undefined;
+
+    expect(firstArgs?.[0]?.value).toBe(50);
+    expect(secondArgs?.[0]?.value).toBe(50);
+  });
 });

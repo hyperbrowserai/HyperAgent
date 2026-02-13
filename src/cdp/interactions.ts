@@ -375,6 +375,9 @@ function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
     value: unknown
   ): string | number | undefined => {
     if (typeof value === "number") {
+      if (!Number.isFinite(value)) {
+        return undefined;
+      }
       return value;
     }
     if (typeof value !== "string") {
@@ -1262,6 +1265,9 @@ function stripControlChars(value: string): string {
 
 function normalizeScrollPercent(target: unknown): number {
   if (typeof target === "number") {
+    if (!Number.isFinite(target)) {
+      return 50;
+    }
     return clamp(target, 0, 100);
   }
   if (typeof target !== "string") {
