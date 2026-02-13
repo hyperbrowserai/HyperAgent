@@ -19,7 +19,7 @@ use crate::{
     parse_or_formula, parse_rept_formula, parse_right_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_find_formula,
-    parse_value_formula,
+    parse_value_formula, parse_char_formula, parse_code_formula,
     parse_single_ref_formula,
     parse_xor_formula,
     parse_sign_formula,
@@ -480,6 +480,25 @@ fn evaluate_formula(
       return Ok(None);
     };
     return Ok(Some(parsed.to_string()));
+  }
+
+  if let Some(char_arg) = parse_char_formula(formula) {
+    let code = parse_required_integer(connection, sheet, &char_arg)?;
+    if !(1..=255).contains(&code) {
+      return Ok(None);
+    }
+    let Some(character) = char::from_u32(code as u32) else {
+      return Ok(None);
+    };
+    return Ok(Some(character.to_string()));
+  }
+
+  if let Some(code_arg) = parse_code_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &code_arg)?;
+    let Some(first_char) = value.chars().next() else {
+      return Ok(None);
+    };
+    return Ok(Some((first_char as u32).to_string()));
   }
 
   if let Some(abs_arg) = parse_abs_formula(formula) {
@@ -2590,12 +2609,24 @@ mod tests {
         value: None,
         formula: Some(r#"=VALUE("12.34")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 84,
+        value: None,
+        formula: Some("=CHAR(65)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 85,
+        value: None,
+        formula: Some(r#"=CODE("Apple")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 81);
+    assert_eq!(updated_cells, 83);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2609,7 +2640,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 83,
+        end_col: 85,
       },
     )
     .expect("cells should be fetched");
@@ -2734,6 +2765,8 @@ mod tests {
       Some("north-south-north"),
     );
     assert_eq!(by_position(1, 83).evaluated_value.as_deref(), Some("12.34"));
+    assert_eq!(by_position(1, 84).evaluated_value.as_deref(), Some("A"));
+    assert_eq!(by_position(1, 85).evaluated_value.as_deref(), Some("65"));
   }
 
   #[test]
@@ -2962,6 +2995,38 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec![r#"=VALUE("north")"#.to_string()]);
+  }
+
+  #[test]
+  fn should_leave_char_out_of_range_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=CHAR(0)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=CHAR(0)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_code_empty_text_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=CODE("")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=CODE("")"#.to_string()]);
   }
 
   #[test]

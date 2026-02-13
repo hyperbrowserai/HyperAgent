@@ -91,6 +91,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "REPLACE",
   "SUBSTITUTE",
   "VALUE",
+  "CHAR",
+  "CODE",
   "SEARCH",
   "FIND",
   "UPPER",

@@ -522,6 +522,22 @@ pub fn parse_value_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_char_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "CHAR" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_code_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "CODE" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_search_formula(
   formula: &str,
 ) -> Option<(String, String, Option<String>)> {
@@ -846,7 +862,7 @@ mod tests {
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
     parse_find_formula, parse_mid_formula, parse_rept_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
-    parse_value_formula,
+    parse_value_formula, parse_char_formula, parse_code_formula,
     parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
@@ -1085,6 +1101,11 @@ mod tests {
     assert_eq!(
       parse_value_formula(r#"=VALUE("12.34")"#).as_deref(),
       Some(r#""12.34""#),
+    );
+    assert_eq!(parse_char_formula("=CHAR(65)").as_deref(), Some("65"));
+    assert_eq!(
+      parse_code_formula(r#"=CODE("Apple")"#).as_deref(),
+      Some(r#""Apple""#),
     );
 
     let search_args = parse_search_formula(r#"=SEARCH("sheet","spreadsheet",2)"#)
