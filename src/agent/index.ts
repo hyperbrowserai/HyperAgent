@@ -917,7 +917,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         this._currentPage = null;
       }
     }
+    this.tasks = {};
     this.taskResults = {};
+    this.actionCacheByTaskId = {};
     this._currentPage = null;
   }
 

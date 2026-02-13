@@ -1615,12 +1615,13 @@ describe("HyperAgent constructor and task controls", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
     });
+    const taskA = {
+      status: TaskStatus.RUNNING,
+    };
     const internalAgent = agent as unknown as {
       tasks: Record<string, { status: TaskStatus }>;
     };
-    internalAgent.tasks["task-a"] = {
-      status: TaskStatus.RUNNING,
-    };
+    internalAgent.tasks["task-a"] = taskA;
     const trappedTask = {};
     Object.defineProperty(trappedTask, "status", {
       configurable: true,
@@ -1634,7 +1635,8 @@ describe("HyperAgent constructor and task controls", () => {
     internalAgent.tasks["task-b"] = trappedTask as { status: TaskStatus };
 
     await expect(agent.closeAgent()).resolves.toBeUndefined();
-    expect(internalAgent.tasks["task-a"]?.status).toBe(TaskStatus.CANCELLED);
+    expect(taskA.status).toBe(TaskStatus.CANCELLED);
+    expect(internalAgent.tasks).toEqual({});
   });
 
   it("closeAgent closes browser provider when session exists without browser", async () => {
@@ -1695,6 +1697,7 @@ describe("HyperAgent constructor and task controls", () => {
     });
     const internalAgent = agent as unknown as {
       taskResults: Record<string, Promise<AgentTaskOutput>>;
+      actionCacheByTaskId: Record<string, unknown>;
     };
     internalAgent.taskResults = {
       "task-a": Promise.resolve({
@@ -1710,9 +1713,18 @@ describe("HyperAgent constructor and task controls", () => {
         },
       }),
     };
+    internalAgent.actionCacheByTaskId = {
+      "task-a": {
+        taskId: "task-a",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    };
 
     await expect(agent.closeAgent()).resolves.toBeUndefined();
     expect(internalAgent.taskResults).toEqual({});
+    expect(internalAgent.actionCacheByTaskId).toEqual({});
   });
 
   it("closeAgent tolerates trapped task-registry enumeration", async () => {
