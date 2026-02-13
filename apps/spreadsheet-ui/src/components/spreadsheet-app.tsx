@@ -1654,7 +1654,7 @@ export function SpreadsheetApp() {
             : ""
         }${
           response.cutoff_timestamp
-            ? ` cutoff ${formatIsoTimestamp(response.cutoff_timestamp)}`
+            ? ` cutoff ${formatIsoTimestamp(response.cutoff_timestamp)} (${formatRelativeAge(response.cutoff_timestamp)})`
             : ""
         }.`,
       );
@@ -1724,7 +1724,7 @@ export function SpreadsheetApp() {
             : ""
         }${
           preview.cutoff_timestamp
-            ? ` cutoff ${formatIsoTimestamp(preview.cutoff_timestamp)}`
+            ? ` cutoff ${formatIsoTimestamp(preview.cutoff_timestamp)} (${formatRelativeAge(preview.cutoff_timestamp)})`
             : ""
         }.`,
       );
@@ -2682,7 +2682,8 @@ export function SpreadsheetApp() {
                     ) : null}
                     {agentOpsCacheQuery.data.cutoff_timestamp ? (
                       <span className="ml-1 text-slate-500">
-                        cutoff {formatIsoTimestamp(agentOpsCacheQuery.data.cutoff_timestamp)}
+                        cutoff {formatIsoTimestamp(agentOpsCacheQuery.data.cutoff_timestamp)} (
+                        {formatRelativeAge(agentOpsCacheQuery.data.cutoff_timestamp)})
                       </span>
                     ) : null}
                     {agentOpsCacheQuery.data.request_id_prefix ? (
@@ -2921,6 +2922,9 @@ export function SpreadsheetApp() {
                             <span className="font-mono">
                               {formatIsoTimestamp(cachePrefixRemovalPreview.cutoffTimestamp)}
                             </span>{" "}
+                            <span className="text-amber-200/80">
+                              ({formatRelativeAge(cachePrefixRemovalPreview.cutoffTimestamp)})
+                            </span>{" "}
                           </>
                         ) : null}
                         {" "}
@@ -2962,6 +2966,9 @@ export function SpreadsheetApp() {
                         stale preview ({cacheStaleRemovalPreview.maxAgeSeconds}s) cutoff{" "}
                         <span className="font-mono">
                           {formatIsoTimestamp(cacheStaleRemovalPreview.cutoffTimestamp)}
+                        </span>{" "}
+                        <span className="text-rose-200/80">
+                          ({formatRelativeAge(cacheStaleRemovalPreview.cutoffTimestamp)})
                         </span>{" "}
                         {cacheStaleRemovalPreview.requestIdPrefix ? (
                           <>
@@ -3013,7 +3020,8 @@ export function SpreadsheetApp() {
                       {agentOpsCachePrefixesQuery.data?.cutoff_timestamp ? (
                         <span className="text-[10px] text-slate-500">
                           cutoff{" "}
-                          {formatIsoTimestamp(agentOpsCachePrefixesQuery.data.cutoff_timestamp)}
+                          {formatIsoTimestamp(agentOpsCachePrefixesQuery.data.cutoff_timestamp)} (
+                          {formatRelativeAge(agentOpsCachePrefixesQuery.data.cutoff_timestamp)})
                         </span>
                       ) : null}
                       {cachePrefixSuggestions.map((suggestion) => (
@@ -3106,6 +3114,9 @@ export function SpreadsheetApp() {
                           cutoff{" "}
                           <span className="font-mono text-amber-300">
                             {formatIsoTimestamp(cacheEntriesData.cutoff_timestamp)}
+                          </span>
+                          <span className="text-slate-400">
+                            {" "}({formatRelativeAge(cacheEntriesData.cutoff_timestamp)})
                           </span>
                         </>
                       ) : null}
