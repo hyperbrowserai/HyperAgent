@@ -30,6 +30,7 @@ import {
   getWorkbook,
   importWorkbook,
   previewAgentOps,
+  previewRemoveAgentOpsCacheEntriesByPrefix,
   replayAgentOpsCacheEntry,
   reexecuteAgentOpsCacheEntry,
   removeAgentOpsCacheEntry,
@@ -125,11 +126,17 @@ export function SpreadsheetApp() {
   const [isCopyingCacheDetailJson, setIsCopyingCacheDetailJson] = useState(false);
   const [isCopyingCacheDetailOperations, setIsCopyingCacheDetailOperations] =
     useState(false);
+  const [isPreviewingCacheByPrefix, setIsPreviewingCacheByPrefix] = useState(false);
   const [isRemovingCacheByPrefix, setIsRemovingCacheByPrefix] = useState(false);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [cacheRerunRequestId, setCacheRerunRequestId] = useState("");
+  const [cachePrefixRemovalPreview, setCachePrefixRemovalPreview] = useState<{
+    requestIdPrefix: string;
+    matchedEntries: number;
+    sampleRequestIds: string[];
+  } | null>(null);
   const [selectedCacheEntryDetail, setSelectedCacheEntryDetail] = useState<
     AgentOpsCacheEntryDetailResponse | null
   >(null);
@@ -304,10 +311,12 @@ export function SpreadsheetApp() {
     setCacheEntriesOffset(0);
     setSelectedCacheEntryDetail(null);
     setCacheRerunRequestId("");
+    setCachePrefixRemovalPreview(null);
   }, [workbook?.id]);
 
   useEffect(() => {
     setCacheEntriesOffset(0);
+    setCachePrefixRemovalPreview(null);
   }, [cacheRequestIdPrefix]);
 
   useEffect(() => {
@@ -1500,6 +1509,7 @@ export function SpreadsheetApp() {
       ) {
         setSelectedCacheEntryDetail(null);
       }
+      setCachePrefixRemovalPreview(null);
       setCacheEntriesOffset(0);
       setNotice(
         `Removed ${response.removed_entries} cache entr${
@@ -1521,6 +1531,38 @@ export function SpreadsheetApp() {
       applyUiError(error, "Failed to remove cache entries by prefix.");
     } finally {
       setIsRemovingCacheByPrefix(false);
+    }
+  }
+
+  async function handlePreviewRemoveCacheEntriesByPrefix() {
+    if (!workbook) {
+      return;
+    }
+    const normalizedPrefix = cacheRequestIdPrefix.trim();
+    if (!normalizedPrefix) {
+      return;
+    }
+    setIsPreviewingCacheByPrefix(true);
+    try {
+      clearUiError();
+      const preview = await previewRemoveAgentOpsCacheEntriesByPrefix(
+        workbook.id,
+        normalizedPrefix,
+      );
+      setCachePrefixRemovalPreview({
+        requestIdPrefix: preview.request_id_prefix,
+        matchedEntries: preview.matched_entries,
+        sampleRequestIds: preview.sample_request_ids,
+      });
+      setNotice(
+        `Previewed ${preview.matched_entries} cache entr${
+          preview.matched_entries === 1 ? "y" : "ies"
+        } for prefix ${preview.request_id_prefix}.`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to preview cache removal by prefix.");
+    } finally {
+      setIsPreviewingCacheByPrefix(false);
     }
   }
 
@@ -2303,6 +2345,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_remove_by_prefix_preview_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache remove-by-prefix preview endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_remove_by_prefix_preview_endpoint}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.cache_validation_error_codes?.length ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache validation codes:{" "}
@@ -2368,6 +2418,15 @@ export function SpreadsheetApp() {
                       Clear
                     </button>
                     <button
+                      onClick={handlePreviewRemoveCacheEntriesByPrefix}
+                      disabled={
+                        isPreviewingCacheByPrefix || !cacheRequestIdPrefix.trim()
+                      }
+                      className="rounded border border-amber-700/70 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-900/40 disabled:opacity-50"
+                    >
+                      {isPreviewingCacheByPrefix ? "Previewing..." : "Preview remove"}
+                    </button>
+                    <button
                       onClick={handleRemoveCacheEntriesByPrefix}
                       disabled={
                         isRemovingCacheByPrefix
@@ -2397,6 +2456,30 @@ export function SpreadsheetApp() {
                       Clear rerun id
                     </button>
                   </div>
+                  {cachePrefixRemovalPreview ? (
+                    <div className="mb-2 rounded border border-amber-800/60 bg-amber-900/10 p-2 text-[10px] text-amber-100">
+                      <p>
+                        preview prefix{" "}
+                        <span className="font-mono">
+                          {cachePrefixRemovalPreview.requestIdPrefix}
+                        </span>{" "}
+                        matches{" "}
+                        <span className="font-mono">
+                          {cachePrefixRemovalPreview.matchedEntries}
+                        </span>{" "}
+                        entr
+                        {cachePrefixRemovalPreview.matchedEntries === 1 ? "y" : "ies"}.
+                      </p>
+                      {cachePrefixRemovalPreview.sampleRequestIds.length > 0 ? (
+                        <p className="mt-1 text-amber-200/90">
+                          sample:{" "}
+                          <span className="font-mono">
+                            {cachePrefixRemovalPreview.sampleRequestIds.join(", ")}
+                          </span>
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {cachePrefixSuggestions.length > 0 ? (
                     <div className="mb-2 flex flex-wrap items-center gap-1">
                       <span className="text-[10px] text-slate-500">suggestions:</span>

@@ -47,6 +47,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/agent/ops/cache/reexecute`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix`
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview`
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
 - `GET /v1/workbooks/{id}/agent/presets/{preset}/operations`
@@ -104,6 +105,7 @@ Cache helpers:
 - `POST /v1/workbooks/{id}/agent/ops/cache/reexecute` with `{ "request_id": "...", "new_request_id": "..." }` (reexecutes cached operations as fresh `agent/ops`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix` with `{ "request_id_prefix": "scenario-" }`
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview` with `{ "request_id_prefix": "scenario-" }` (reports matched count + sample IDs before deletion)
 
 Supported `op_type` values:
 - `get_workbook`

@@ -10,6 +10,7 @@ use crate::{
     RemoveAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntryResponse,
     RemoveAgentOpsCacheEntriesByPrefixRequest,
     RemoveAgentOpsCacheEntriesByPrefixResponse,
+    PreviewRemoveAgentOpsCacheEntriesByPrefixResponse,
     ReexecuteAgentOpsCacheEntryRequest, ReexecuteAgentOpsCacheEntryResponse,
     ReplayAgentOpsCacheEntryRequest, ReplayAgentOpsCacheEntryResponse,
     AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
@@ -103,6 +104,10 @@ pub fn create_router(state: AppState) -> Router {
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix",
       post(remove_agent_ops_cache_entries_by_prefix),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview",
+      post(preview_remove_agent_ops_cache_entries_by_prefix),
     )
     .route("/v1/workbooks/{id}/agent/schema", get(get_agent_schema))
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
@@ -1054,6 +1059,7 @@ async fn get_agent_schema(
     "agent_ops_cache_reexecute_endpoint": "/v1/workbooks/{id}/agent/ops/cache/reexecute",
     "agent_ops_cache_remove_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove",
     "agent_ops_cache_remove_by_prefix_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix",
+    "agent_ops_cache_remove_by_prefix_preview_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview",
     "agent_ops_preview_request_shape": {
       "operations": "non-empty array of operation objects"
     },
@@ -1139,6 +1145,12 @@ async fn get_agent_schema(
       "request_id_prefix": "string",
       "removed_entries": "number of removed cache entries matching prefix",
       "remaining_entries": "entries left in cache after removal"
+    },
+    "agent_ops_cache_remove_by_prefix_preview_response_shape": {
+      "request_id_prefix": "string",
+      "matched_entries": "number of cache entries matching prefix",
+      "sample_limit": "max sample request ids returned",
+      "sample_request_ids": "newest-first sample matching request ids"
     },
     "cache_validation_error_codes": [
       "INVALID_REQUEST_ID",
@@ -1740,6 +1752,41 @@ async fn remove_agent_ops_cache_entries_by_prefix(
   }))
 }
 
+const REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT: usize = 20;
+
+async fn preview_remove_agent_ops_cache_entries_by_prefix(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<RemoveAgentOpsCacheEntriesByPrefixRequest>,
+) -> Result<Json<PreviewRemoveAgentOpsCacheEntriesByPrefixResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let request_id_prefix = payload.request_id_prefix.trim();
+  if request_id_prefix.is_empty() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID_PREFIX",
+      "request_id_prefix is required to preview cache removal by prefix.",
+    ));
+  }
+  let (matched_entries, entries) = state
+    .agent_ops_cache_entries(
+      workbook_id,
+      Some(request_id_prefix),
+      0,
+      REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
+    )
+    .await?;
+  let sample_request_ids = entries
+    .into_iter()
+    .map(|entry| entry.0)
+    .collect::<Vec<_>>();
+  Ok(Json(PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
+    request_id_prefix: request_id_prefix.to_string(),
+    matched_entries,
+    sample_limit: REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
+    sample_request_ids,
+  }))
+}
+
 async fn run_agent_preset(
   State(state): State<AppState>,
   Path((workbook_id, preset)): Path<(Uuid, String)>,
@@ -1914,6 +1961,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/ops/cache/reexecute": {"post": {"summary": "Reexecute cached operations as a fresh agent ops request"}},
       "/v1/workbooks/{id}/agent/ops/cache/remove": {"post": {"summary": "Remove a single request-id idempotency cache entry for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix": {"post": {"summary": "Remove all cached request-id entries matching a prefix"}},
+      "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview": {"post": {"summary": "Preview affected cache entries for prefix removal"}},
       "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}/operations": {"get": {"summary": "Preview generated operations for a built-in preset"}},
@@ -1942,6 +1990,7 @@ mod tests {
     agent_ops_cache_stats,
     clear_agent_ops_cache, get_agent_schema, remove_agent_ops_cache_entry,
     remove_agent_ops_cache_entries_by_prefix,
+    preview_remove_agent_ops_cache_entries_by_prefix,
     replay_agent_ops_cache_entry, reexecute_agent_ops_cache_entry,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
     normalize_sheet_name, operations_signature, parse_optional_bool,
@@ -2569,6 +2618,48 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn should_preview_cache_entries_by_prefix_via_handler() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-remove-prefix-preview".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["scenario-a", "scenario-b", "preset-a"] {
+      let _ = agent_ops(
+        State(state.clone()),
+        Path(workbook.id),
+        Json(AgentOpsRequest {
+          request_id: Some(request_id.to_string()),
+          actor: Some("test".to_string()),
+          stop_on_error: Some(true),
+          expected_operations_signature: None,
+          operations: vec![AgentOperation::Recalculate],
+        }),
+      )
+      .await
+      .expect("agent ops should succeed");
+    }
+
+    let preview = preview_remove_agent_ops_cache_entries_by_prefix(
+      State(state),
+      Path(workbook.id),
+      Json(RemoveAgentOpsCacheEntriesByPrefixRequest {
+        request_id_prefix: "scenario-".to_string(),
+      }),
+    )
+    .await
+    .expect("prefix preview should succeed")
+    .0;
+    assert_eq!(preview.request_id_prefix, "scenario-");
+    assert_eq!(preview.matched_entries, 2);
+    assert_eq!(preview.sample_request_ids.len(), 2);
+    assert_eq!(preview.sample_request_ids[0], "scenario-b");
+  }
+
+  #[tokio::test]
   async fn should_reject_blank_prefix_when_removing_cache_entries_by_prefix() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =
@@ -2593,6 +2684,34 @@ mod tests {
         assert_eq!(code, "INVALID_REQUEST_ID_PREFIX");
       }
       _ => panic!("expected invalid prefix to use custom error code"),
+    }
+  }
+
+  #[tokio::test]
+  async fn should_reject_blank_prefix_when_previewing_cache_entries_by_prefix() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-preview-prefix-invalid".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let error = preview_remove_agent_ops_cache_entries_by_prefix(
+      State(state),
+      Path(workbook.id),
+      Json(RemoveAgentOpsCacheEntriesByPrefixRequest {
+        request_id_prefix: "   ".to_string(),
+      }),
+    )
+    .await
+    .expect_err("blank prefix should fail for preview");
+
+    match error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_REQUEST_ID_PREFIX");
+      }
+      _ => panic!("expected invalid prefix preview to use custom error code"),
     }
   }
 
@@ -2887,6 +3006,12 @@ mod tests {
         .get("agent_ops_cache_remove_by_prefix_endpoint")
         .and_then(serde_json::Value::as_str),
       Some("/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_remove_by_prefix_preview_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview"),
     );
     assert_eq!(
       schema
