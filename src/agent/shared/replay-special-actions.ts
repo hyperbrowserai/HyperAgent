@@ -73,7 +73,7 @@ function normalizeOptionalTimeoutMs(value: unknown): number | undefined {
 }
 
 function normalizeWaitUntil(value: unknown): "domcontentloaded" | "load" | "networkidle" {
-  const parsed = asNonEmptyTrimmedString(value);
+  const parsed = asNonEmptyTrimmedString(value)?.toLowerCase();
   if (parsed === "load" || parsed === "networkidle") {
     return parsed;
   }

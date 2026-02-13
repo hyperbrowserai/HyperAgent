@@ -235,6 +235,27 @@ describe("action cache helpers", () => {
     expect(script).not.toContain('await page.waitForLoadState("interactive");');
   });
 
+  it("normalizes waitForLoadState target casing in generated script", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 17,
+      instruction: "wait uppercase target",
+      elementId: null,
+      method: null,
+      arguments: ["LOAD"],
+      actionType: "waitForLoadState",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain('await page.waitForLoadState("load");');
+  });
+
   it("renders waitForLoadState timeout from actionParams fallback", () => {
     const waitEntry: ActionCacheEntry = {
       stepIndex: 15,

@@ -178,6 +178,21 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toBe("Waited for load state: domcontentloaded");
   });
 
+  it("normalizes waitForLoadState value case-insensitively", async () => {
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-loadstate-uppercase",
+      actionType: "waitForLoadState",
+      arguments: ["LOAD"],
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForLoadState).toHaveBeenCalledWith("load", undefined);
+    expect(result?.status).toBe("completed");
+    expect(result?.output).toBe("Waited for load state: load");
+  });
+
   it("parses string timeout for waitForLoadState", async () => {
     const page = createPage();
 
