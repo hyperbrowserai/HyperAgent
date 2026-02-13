@@ -108,6 +108,7 @@ export function SpreadsheetApp() {
   const [isClearingOpsCache, setIsClearingOpsCache] = useState(false);
   const [copyingCacheRequestId, setCopyingCacheRequestId] = useState<string | null>(null);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
+  const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -208,10 +209,19 @@ export function SpreadsheetApp() {
   });
 
   const agentOpsCacheEntriesQuery = useQuery({
-    queryKey: ["agent-ops-cache-entries", workbook?.id, CACHE_ENTRIES_PREVIEW_LIMIT],
+    queryKey: [
+      "agent-ops-cache-entries",
+      workbook?.id,
+      cacheEntriesOffset,
+      CACHE_ENTRIES_PREVIEW_LIMIT,
+    ],
     enabled: Boolean(workbook?.id),
     queryFn: () =>
-      getAgentOpsCacheEntries(workbook!.id, CACHE_ENTRIES_PREVIEW_LIMIT),
+      getAgentOpsCacheEntries(
+        workbook!.id,
+        CACHE_ENTRIES_PREVIEW_LIMIT,
+        cacheEntriesOffset,
+      ),
   });
 
   const wizardScenarioOpsQuery = useQuery({
@@ -259,6 +269,22 @@ export function SpreadsheetApp() {
   }, [cellsQuery.data, setCells]);
 
   useEffect(() => {
+    setCacheEntriesOffset(0);
+  }, [workbook?.id]);
+
+  useEffect(() => {
+    if (
+      cacheEntriesOffset > 0
+      && agentOpsCacheEntriesQuery.data
+      && agentOpsCacheEntriesQuery.data.entries.length === 0
+    ) {
+      setCacheEntriesOffset((previousOffset) =>
+        Math.max(0, previousOffset - CACHE_ENTRIES_PREVIEW_LIMIT),
+      );
+    }
+  }, [agentOpsCacheEntriesQuery.data, cacheEntriesOffset]);
+
+  useEffect(() => {
     if (!workbook?.id) {
       return;
     }
@@ -271,7 +297,7 @@ export function SpreadsheetApp() {
       queryClient.invalidateQueries({ queryKey: ["agent-schema", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-ops-cache", workbook.id] });
       queryClient.invalidateQueries({
-        queryKey: ["agent-ops-cache-entries", workbook.id, CACHE_ENTRIES_PREVIEW_LIMIT],
+        queryKey: ["agent-ops-cache-entries", workbook.id],
       });
     });
     return unsubscribe;
@@ -475,11 +501,7 @@ export function SpreadsheetApp() {
           queryKey: ["agent-ops-cache", workbookId],
         }),
         queryClient.invalidateQueries({
-          queryKey: [
-            "agent-ops-cache-entries",
-            workbookId,
-            CACHE_ENTRIES_PREVIEW_LIMIT,
-          ],
+          queryKey: ["agent-ops-cache-entries", workbookId],
         }),
       );
     }
@@ -1145,11 +1167,7 @@ export function SpreadsheetApp() {
           queryKey: ["agent-ops-cache", workbook.id],
         }),
         queryClient.invalidateQueries({
-          queryKey: [
-            "agent-ops-cache-entries",
-            workbook.id,
-            CACHE_ENTRIES_PREVIEW_LIMIT,
-          ],
+          queryKey: ["agent-ops-cache-entries", workbook.id],
         }),
       ]);
     } catch (error) {
@@ -1173,17 +1191,14 @@ export function SpreadsheetApp() {
     try {
       clearUiError();
       const response = await clearAgentOpsCache(workbook.id);
+      setCacheEntriesOffset(0);
       setNotice(`Cleared ${response.cleared_entries} cached request entries.`);
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ["agent-ops-cache", workbook.id],
         }),
         queryClient.invalidateQueries({
-          queryKey: [
-            "agent-ops-cache-entries",
-            workbook.id,
-            CACHE_ENTRIES_PREVIEW_LIMIT,
-          ],
+          queryKey: ["agent-ops-cache-entries", workbook.id],
         }),
       ]);
     } catch (error) {
@@ -1224,11 +1239,7 @@ export function SpreadsheetApp() {
           queryKey: ["agent-ops-cache", workbook.id],
         }),
         queryClient.invalidateQueries({
-          queryKey: [
-            "agent-ops-cache-entries",
-            workbook.id,
-            CACHE_ENTRIES_PREVIEW_LIMIT,
-          ],
+          queryKey: ["agent-ops-cache-entries", workbook.id],
         }),
       ]);
     } catch (error) {
@@ -1256,11 +1267,7 @@ export function SpreadsheetApp() {
           queryKey: ["agent-ops-cache", workbook.id],
         }),
         queryClient.invalidateQueries({
-          queryKey: [
-            "agent-ops-cache-entries",
-            workbook.id,
-            CACHE_ENTRIES_PREVIEW_LIMIT,
-          ],
+          queryKey: ["agent-ops-cache-entries", workbook.id],
         }),
       ]);
     } catch (error) {
@@ -2062,9 +2069,57 @@ export function SpreadsheetApp() {
                   </span>
                 </p>
                 <div className="mt-2 rounded border border-slate-800/80 bg-slate-900/40 p-2">
-                  <p className="text-[11px] text-slate-500">
-                    recent request IDs (newest first, max {CACHE_ENTRIES_PREVIEW_LIMIT} shown):
-                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-slate-500">
+                      recent request IDs (newest first):
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() =>
+                          setCacheEntriesOffset((previousOffset) =>
+                            Math.max(
+                              0,
+                              previousOffset - CACHE_ENTRIES_PREVIEW_LIMIT,
+                            ),
+                          )
+                        }
+                        disabled={cacheEntriesOffset === 0}
+                        className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        Newer
+                      </button>
+                      <button
+                        onClick={() =>
+                          setCacheEntriesOffset(
+                            cacheEntriesOffset + CACHE_ENTRIES_PREVIEW_LIMIT,
+                          )
+                        }
+                        disabled={!agentOpsCacheEntriesQuery.data?.has_more}
+                        className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        Older
+                      </button>
+                    </div>
+                  </div>
+                  {agentOpsCacheEntriesQuery.data ? (
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      showing{" "}
+                      <span className="font-mono text-slate-300">
+                        {agentOpsCacheEntriesQuery.data.returned_entries === 0
+                          ? 0
+                          : agentOpsCacheEntriesQuery.data.offset + 1}
+                      </span>
+                      –
+                      <span className="font-mono text-slate-300">
+                        {agentOpsCacheEntriesQuery.data.offset
+                          + agentOpsCacheEntriesQuery.data.returned_entries}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-mono text-slate-300">
+                        {agentOpsCacheEntriesQuery.data.total_entries}
+                      </span>
+                    </p>
+                  ) : null}
                   {agentOpsCacheEntriesQuery.isLoading ? (
                     <p className="mt-1 text-[11px] text-slate-500">Loading cache entries…</p>
                   ) : null}

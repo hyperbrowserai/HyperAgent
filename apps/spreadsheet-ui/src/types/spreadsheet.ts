@@ -68,7 +68,9 @@ export interface AgentOpsCacheEntry {
 export interface AgentOpsCacheEntriesResponse {
   total_entries: number;
   returned_entries: number;
+  offset: number;
   limit: number;
+  has_more: boolean;
   entries: AgentOpsCacheEntry[];
 }
 

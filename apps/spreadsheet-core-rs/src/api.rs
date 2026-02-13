@@ -1019,7 +1019,7 @@ async fn get_agent_schema(
     },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
-    "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?limit=20",
+    "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?offset=0&limit=20",
     "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
     "agent_ops_cache_replay_endpoint": "/v1/workbooks/{id}/agent/ops/cache/replay",
     "agent_ops_cache_remove_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove",
@@ -1039,7 +1039,9 @@ async fn get_agent_schema(
     "agent_ops_cache_entries_response_shape": {
       "total_entries": "total cache entries available",
       "returned_entries": "number of entries returned in this response",
+      "offset": "start index in newest-first order",
       "limit": "applied limit (default 20, max 200)",
+      "has_more": "true when another page exists after this response",
       "entries": [{ "request_id": "string", "operations_signature": "optional string" }]
     },
     "agent_ops_cache_clear_response_shape": {
@@ -1348,6 +1350,7 @@ async fn agent_ops_preview(
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct AgentOpsCacheEntriesQuery {
+  offset: Option<usize>,
   limit: Option<usize>,
 }
 
@@ -1376,11 +1379,14 @@ async fn agent_ops_cache_entries(
   Query(query): Query<AgentOpsCacheEntriesQuery>,
 ) -> Result<Json<AgentOpsCacheEntriesResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
+  let offset = query.offset.unwrap_or(0);
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_ENTRIES_LIMIT)
     .min(MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT);
-  let entries = state.agent_ops_cache_entries(workbook_id, limit).await?;
+  let entries = state
+    .agent_ops_cache_entries(workbook_id, offset, limit)
+    .await?;
   let mapped_entries = entries
     .into_iter()
     .map(|(request_id, operations_signature)| AgentOpsCacheEntry {
@@ -1389,10 +1395,13 @@ async fn agent_ops_cache_entries(
     })
     .collect::<Vec<_>>();
   let total_entries = state.agent_ops_cache_stats(workbook_id).await?.0;
+  let has_more = offset + mapped_entries.len() < total_entries;
   Ok(Json(AgentOpsCacheEntriesResponse {
     total_entries,
     returned_entries: mapped_entries.len(),
+    offset,
     limit,
+    has_more,
     entries: mapped_entries,
   }))
 }
@@ -1990,7 +1999,10 @@ mod tests {
     let entries_response = agent_ops_cache_entries(
       State(state.clone()),
       Path(workbook.id),
-      Query(AgentOpsCacheEntriesQuery { limit: Some(2) }),
+      Query(AgentOpsCacheEntriesQuery {
+        offset: Some(0),
+        limit: Some(2),
+      }),
     )
     .await
     .expect("entries should load")
@@ -1998,21 +2010,29 @@ mod tests {
 
     assert_eq!(entries_response.total_entries, 3);
     assert_eq!(entries_response.returned_entries, 2);
+    assert_eq!(entries_response.offset, 0);
     assert_eq!(entries_response.limit, 2);
+    assert!(entries_response.has_more);
     assert_eq!(entries_response.entries[0].request_id, "handler-entries-3");
     assert_eq!(entries_response.entries[1].request_id, "handler-entries-2");
 
     let capped_response = agent_ops_cache_entries(
       State(state),
       Path(workbook.id),
-      Query(AgentOpsCacheEntriesQuery { limit: Some(9_999) }),
+      Query(AgentOpsCacheEntriesQuery {
+        offset: Some(2),
+        limit: Some(9_999),
+      }),
     )
     .await
     .expect("entries should load")
     .0;
     assert_eq!(capped_response.total_entries, 3);
-    assert_eq!(capped_response.returned_entries, 3);
+    assert_eq!(capped_response.returned_entries, 1);
+    assert_eq!(capped_response.offset, 2);
     assert_eq!(capped_response.limit, MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT);
+    assert!(!capped_response.has_more);
+    assert_eq!(capped_response.entries[0].request_id, "handler-entries-1");
   }
 
   #[tokio::test]
@@ -2057,7 +2077,10 @@ mod tests {
     let remaining_entries = agent_ops_cache_entries(
       State(state),
       Path(workbook.id),
-      Query(AgentOpsCacheEntriesQuery { limit: Some(10) }),
+      Query(AgentOpsCacheEntriesQuery {
+        offset: Some(0),
+        limit: Some(10),
+      }),
     )
     .await
     .expect("entries should load")
@@ -2250,7 +2273,7 @@ mod tests {
       schema
         .get("agent_ops_cache_entries_endpoint")
         .and_then(serde_json::Value::as_str),
-      Some("/v1/workbooks/{id}/agent/ops/cache/entries?limit=20"),
+      Some("/v1/workbooks/{id}/agent/ops/cache/entries?offset=0&limit=20"),
     );
     assert_eq!(
       schema

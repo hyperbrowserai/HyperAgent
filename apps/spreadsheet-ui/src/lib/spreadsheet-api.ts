@@ -201,10 +201,12 @@ export async function getAgentOpsCacheStats(
 export async function getAgentOpsCacheEntries(
   workbookId: string,
   limit: number = 20,
+  offset: number = 0,
 ): Promise<AgentOpsCacheEntriesResponse> {
   const safeLimit = Math.max(1, Math.min(limit, 200));
+  const safeOffset = Math.max(0, offset);
   const response = await fetch(
-    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/entries?limit=${safeLimit}`,
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/entries?offset=${safeOffset}&limit=${safeLimit}`,
   );
   return parseJsonResponse<AgentOpsCacheEntriesResponse>(response);
 }

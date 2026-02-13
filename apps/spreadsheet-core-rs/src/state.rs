@@ -247,6 +247,7 @@ impl AppState {
   pub async fn agent_ops_cache_entries(
     &self,
     workbook_id: Uuid,
+    offset: usize,
     limit: usize,
   ) -> Result<Vec<(String, Option<String>)>, ApiError> {
     let guard = self.workbooks.read().await;
@@ -258,6 +259,7 @@ impl AppState {
       .agent_ops_cache_order
       .iter()
       .rev()
+      .skip(offset)
       .take(limit)
       .filter_map(|request_id| {
         record.agent_ops_cache.get(request_id).map(|response| {
@@ -475,13 +477,20 @@ mod tests {
     }
 
     let entries = state
-      .agent_ops_cache_entries(workbook.id, 2)
+      .agent_ops_cache_entries(workbook.id, 0, 2)
       .await
       .expect("cache entries should load");
     assert_eq!(entries.len(), 2);
     assert_eq!(entries[0].0, "req-3");
     assert_eq!(entries[1].0, "req-2");
     assert_eq!(entries[0].1.as_deref(), Some("sig-3"));
+
+    let paged_entries = state
+      .agent_ops_cache_entries(workbook.id, 2, 2)
+      .await
+      .expect("cache entries should load");
+    assert_eq!(paged_entries.len(), 1);
+    assert_eq!(paged_entries[0].0, "req-1");
   }
 
   #[tokio::test]

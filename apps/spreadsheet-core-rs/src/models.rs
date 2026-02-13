@@ -183,7 +183,9 @@ pub struct AgentOpsCacheEntry {
 pub struct AgentOpsCacheEntriesResponse {
   pub total_entries: usize,
   pub returned_entries: usize,
+  pub offset: usize,
   pub limit: usize,
+  pub has_more: bool,
   pub entries: Vec<AgentOpsCacheEntry>,
 }
 
