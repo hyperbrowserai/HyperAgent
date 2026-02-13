@@ -13,6 +13,8 @@ pub struct ImportResult {
   pub sheet_names: Vec<String>,
   pub sheets_imported: usize,
   pub cells_imported: usize,
+  pub formula_cells_imported: usize,
+  pub formula_cells_with_cached_values: usize,
   pub warnings: Vec<String>,
 }
 
@@ -24,6 +26,8 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
     open_workbook_auto(temp_file.path()).map_err(ApiError::internal)?;
   let sheet_names = workbook.sheet_names().to_vec();
   let mut cells_imported = 0usize;
+  let mut formula_cells_imported = 0usize;
+  let mut formula_cells_with_cached_values = 0usize;
 
   for sheet_name in &sheet_names {
     let Ok(range) = workbook.worksheet_range(sheet_name) else {
@@ -41,8 +45,14 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
           .and_then(|formula_grid| formula_grid.get((row_index, col_index)))
           .map(ToString::to_string)
           .filter(|value| !value.trim().is_empty());
+        if formula.is_some() {
+          formula_cells_imported += 1;
+        }
 
         if let Some(value) = map_data_to_json(cell_value) {
+          if formula.is_some() {
+            formula_cells_with_cached_values += 1;
+          }
           mutations.push(CellMutation {
             row: row_number,
             col: col_number,
@@ -70,6 +80,8 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
     sheet_names: sheet_names.clone(),
     sheets_imported: sheet_names.len(),
     cells_imported,
+    formula_cells_imported,
+    formula_cells_with_cached_values,
     warnings: vec![
       "Charts, VBA/macros, and pivot artifacts are not imported in v1; formulas and cells are imported best-effort.".to_string(),
     ],
@@ -272,6 +284,14 @@ mod tests {
       import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 2);
     assert_eq!(import_result.cells_imported, 11);
+    assert!(
+      import_result.formula_cells_imported <= import_result.cells_imported,
+      "formula cell count should not exceed total imported cells",
+    );
+    assert!(
+      import_result.formula_cells_with_cached_values <= import_result.formula_cells_imported,
+      "cached formula value count should not exceed formula cell count",
+    );
     assert_eq!(
       import_result.sheet_names,
       vec!["Inputs".to_string(), "Notes".to_string()],

@@ -63,6 +63,14 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/events`
 - `GET /v1/openapi`
 
+`POST /v1/workbooks/import` returns:
+- `workbook`
+- `import.sheets_imported`
+- `import.cells_imported`
+- `import.formula_cells_imported`
+- `import.formula_cells_with_cached_values`
+- `import.warnings`
+
 > Note: `/v1/workbooks/{id}/duckdb/query` currently returns a guarded `400` response in this build to avoid a known upstream panic in the underlying DuckDB Rust wrapper for ad-hoc SQL execution paths.
 
 ### AI Agent multi-operation endpoint

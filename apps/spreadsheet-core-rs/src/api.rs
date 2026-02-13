@@ -279,6 +279,8 @@ async fn import_bytes_into_workbook(
       json!({
         "sheets_imported": import_result.sheets_imported,
         "cells_imported": import_result.cells_imported,
+        "formula_cells_imported": import_result.formula_cells_imported,
+        "formula_cells_with_cached_values": import_result.formula_cells_with_cached_values,
         "warnings": import_result.warnings,
       }),
     )
@@ -287,6 +289,8 @@ async fn import_bytes_into_workbook(
   Ok(AgentWizardImportResult {
     sheets_imported: import_result.sheets_imported,
     cells_imported: import_result.cells_imported,
+    formula_cells_imported: import_result.formula_cells_imported,
+    formula_cells_with_cached_values: import_result.formula_cells_with_cached_values,
     warnings: import_result.warnings,
   })
 }
@@ -320,6 +324,8 @@ async fn import_workbook(
     "import": {
       "sheets_imported": import_result.sheets_imported,
       "cells_imported": import_result.cells_imported,
+      "formula_cells_imported": import_result.formula_cells_imported,
+      "formula_cells_with_cached_values": import_result.formula_cells_with_cached_values,
       "warnings": import_result.warnings
     }
   })))

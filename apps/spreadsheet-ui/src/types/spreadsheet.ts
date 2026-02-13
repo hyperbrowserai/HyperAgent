@@ -235,6 +235,8 @@ export interface AgentScenarioResponse {
 export interface AgentWizardImportResult {
   sheets_imported: number;
   cells_imported: number;
+  formula_cells_imported: number;
+  formula_cells_with_cached_values: number;
   warnings: string[];
 }
 

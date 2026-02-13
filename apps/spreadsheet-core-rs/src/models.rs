@@ -348,6 +348,8 @@ pub struct AgentScenarioRunRequest {
 pub struct AgentWizardImportResult {
   pub sheets_imported: usize,
   pub cells_imported: usize,
+  pub formula_cells_imported: usize,
+  pub formula_cells_with_cached_values: usize,
   pub warnings: Vec<String>,
 }
 

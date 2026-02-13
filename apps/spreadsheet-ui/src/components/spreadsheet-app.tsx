@@ -199,6 +199,8 @@ export function SpreadsheetApp() {
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
     cellsImported: number;
+    formulaCellsImported: number;
+    formulaCellsWithCachedValues: number;
     warnings: string[];
   } | null>(null);
   const normalizedCacheEntriesMaxAgeSeconds = parsePositiveIntegerInput(
@@ -2043,6 +2045,9 @@ export function SpreadsheetApp() {
           ? {
               sheetsImported: response.import.sheets_imported,
               cellsImported: response.import.cells_imported,
+              formulaCellsImported: response.import.formula_cells_imported,
+              formulaCellsWithCachedValues:
+                response.import.formula_cells_with_cached_values,
               warnings: response.import.warnings,
             }
           : null,
@@ -3907,7 +3912,11 @@ export function SpreadsheetApp() {
                 wizard import:{" "}
                 <span className="font-mono text-slate-200">
                   {lastWizardImportSummary.sheetsImported} sheets /{" "}
-                  {lastWizardImportSummary.cellsImported} cells
+                  {lastWizardImportSummary.cellsImported} cells /{" "}
+                  {lastWizardImportSummary.formulaCellsImported} formulas
+                  {lastWizardImportSummary.formulaCellsImported > 0 ? (
+                    <> ({lastWizardImportSummary.formulaCellsWithCachedValues} cached)</>
+                  ) : null}
                 </span>
                 {lastWizardImportSummary.warnings.length > 0 ? (
                   <ul className="mt-1 list-disc pl-4 text-amber-200">
