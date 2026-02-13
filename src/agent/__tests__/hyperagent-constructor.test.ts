@@ -490,7 +490,10 @@ describe("HyperAgent constructor and task controls", () => {
     expect(task.cancel()).toBe(TaskStatus.CANCELLED);
     rejectTask(new Error("async cancel rejection"));
 
-    await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.CANCELLED,
+      output: "Task cancelled because agent was closed",
+    });
     expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
     expect(emitterSpy).not.toHaveBeenCalledWith(
       "error",
@@ -522,7 +525,10 @@ describe("HyperAgent constructor and task controls", () => {
 
     rejectTask(new Error("sync cancel rejection"));
 
-    await expect(execution).rejects.toThrow("sync cancel rejection");
+    await expect(execution).resolves.toMatchObject({
+      status: TaskStatus.CANCELLED,
+      output: "Task cancelled because agent was closed",
+    });
     expect(activeTaskState.status).toBe(TaskStatus.CANCELLED);
   });
 
@@ -2147,7 +2153,10 @@ describe("HyperAgent constructor and task controls", () => {
     try {
       await expect(agent.closeAgent()).resolves.toBeUndefined();
       rejectTask(new Error("late boom"));
-      await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.CANCELLED,
+        output: "Task cancelled because agent was closed",
+      });
       expect(errorSpy).not.toHaveBeenCalledWith(
         expect.stringContaining("Task state")
       );

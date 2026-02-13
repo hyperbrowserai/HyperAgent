@@ -582,6 +582,30 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
   }
 
+  private buildCancelledTaskOutput(
+    taskId: string,
+    taskState: TaskState
+  ): AgentTaskOutput {
+    let steps: TaskState["steps"] = [];
+    try {
+      steps = Array.from(taskState.steps ?? []);
+    } catch {
+      steps = [];
+    }
+    return {
+      taskId,
+      status: TaskStatus.CANCELLED,
+      steps,
+      output: "Task cancelled because agent was closed",
+      actionCache: {
+        taskId,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.CANCELLED,
+        steps: [],
+      },
+    };
+  }
+
   private attachBrowserPageListener(context: BrowserContext): void {
     const contextOn = this.safeReadField(context, "on");
     if (typeof contextOn !== "function") {
@@ -1300,6 +1324,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               : new Error(formatUnknownError(error));
           const taskFailureError =
             new HyperagentTaskError(taskId, normalizedTaskError);
+          const lifecycleActive = this.isTaskLifecycleGenerationActive(
+            taskLifecycleGeneration
+          );
           if (failedTaskState) {
             const currentStatus = this.readTaskStatus(
               failedTaskState,
@@ -1310,13 +1337,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
                 ? TaskStatus.CANCELLED
                 : TaskStatus.FAILED;
             this.writeTaskStatus(failedTaskState, nextStatus);
-            if (nextStatus !== TaskStatus.CANCELLED) {
-              failedTaskState.error = taskFailureError.cause.message;
-              // Emit error on the central emitter, including the taskId
-              this.emitTaskErrorSafely(taskFailureError);
+            if (nextStatus === TaskStatus.CANCELLED) {
+              return this.buildCancelledTaskOutput(taskId, failedTaskState);
             }
+            failedTaskState.error = taskFailureError.cause.message;
+            // Emit error on the central emitter, including the taskId
+            this.emitTaskErrorSafely(taskFailureError);
           } else {
-            if (this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+            if (!lifecycleActive) {
+              return this.buildCancelledTaskOutput(taskId, taskState);
+            }
+            if (lifecycleActive) {
               if (this.debug) {
                 console.warn(
                   `[HyperAgent] Task state ${taskId} not found during error handling.`
@@ -1427,6 +1458,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           ? TaskStatus.CANCELLED
           : TaskStatus.FAILED;
       this.writeTaskStatus(taskState, nextStatus);
+      if (nextStatus === TaskStatus.CANCELLED) {
+        this.cleanupTaskLifecycle(taskId);
+        return this.buildCancelledTaskOutput(taskId, taskState);
+      }
       this.cleanupTaskLifecycle(taskId);
       throw error;
     }
