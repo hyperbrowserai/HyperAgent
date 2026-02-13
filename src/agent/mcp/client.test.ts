@@ -2222,4 +2222,19 @@ describe("MCPClient.hasTool", () => {
     expect(mcpClient.hasTool("   ")).toEqual({ exists: false });
     expect(mcpClient.hasTool("sea\nrch")).toEqual({ exists: false });
   });
+
+  it("returns exists false when server map iteration traps throw", () => {
+    const mcpClient = new MCPClient(false);
+    const throwingMap = new Proxy(new Map(), {
+      get(target, prop, receiver): unknown {
+        if (prop === "entries") {
+          throw new Error("entries trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
+
+    expect(mcpClient.hasTool("search")).toEqual({ exists: false });
+  });
 });

@@ -1377,16 +1377,20 @@ class MCPClient {
     }
     const matchingServerIds: string[] = [];
     const ambiguousServerIds: string[] = [];
-    for (const [serverId, server] of this.servers.entries()) {
-      const resolvedTool = resolveMCPToolNameOnServer(
-        server.tools,
-        normalizedToolName
-      );
-      if (resolvedTool.ambiguousMatches) {
-        ambiguousServerIds.push(serverId);
-      } else if (resolvedTool.toolName) {
-        matchingServerIds.push(serverId);
+    try {
+      for (const [serverId, server] of this.servers.entries()) {
+        const resolvedTool = resolveMCPToolNameOnServer(
+          server.tools,
+          normalizedToolName
+        );
+        if (resolvedTool.ambiguousMatches) {
+          ambiguousServerIds.push(serverId);
+        } else if (resolvedTool.toolName) {
+          matchingServerIds.push(serverId);
+        }
       }
+    } catch {
+      return { exists: false };
     }
     const allMatchedServerIds = [...matchingServerIds, ...ambiguousServerIds];
     if (allMatchedServerIds.length === 0) {
