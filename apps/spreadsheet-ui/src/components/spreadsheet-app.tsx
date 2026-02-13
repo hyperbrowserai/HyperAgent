@@ -329,6 +329,7 @@ export function SpreadsheetApp() {
     queryKey: [
       "agent-ops-cache-prefixes",
       workbook?.id,
+      cacheRequestIdPrefix,
       normalizedCacheEntriesMaxAgeSeconds,
     ],
     enabled: Boolean(workbook?.id) && !hasInvalidCacheEntriesMaxAgeInput,
@@ -336,6 +337,7 @@ export function SpreadsheetApp() {
       getAgentOpsCachePrefixes(
         workbook!.id,
         12,
+        cacheRequestIdPrefix,
         normalizedCacheEntriesMaxAgeSeconds,
       ),
   });
@@ -3036,6 +3038,11 @@ export function SpreadsheetApp() {
                             {" "}scoped/global)
                           </span>
                         ) : null}
+                      {agentOpsCachePrefixesQuery.data?.request_id_prefix ? (
+                        <span className="text-[10px] text-slate-500">
+                          (prefix {agentOpsCachePrefixesQuery.data.request_id_prefix})
+                        </span>
+                      ) : null}
                       {typeof agentOpsCachePrefixesQuery.data?.max_age_seconds === "number" ? (
                         <span className="text-[10px] text-slate-500">
                           (older than {agentOpsCachePrefixesQuery.data.max_age_seconds}s)
@@ -3053,7 +3060,7 @@ export function SpreadsheetApp() {
                           key={suggestion.prefix}
                           onClick={() => setCacheRequestIdPrefix(suggestion.prefix)}
                           className={`rounded border px-1.5 py-0.5 text-[10px] ${
-                            cacheRequestIdPrefix === suggestion.prefix
+                            cacheRequestIdPrefix.trim() === suggestion.prefix
                               ? "border-indigo-500/80 bg-indigo-500/20 text-indigo-200"
                               : "border-slate-700 text-slate-300 hover:bg-slate-800"
                           }`}

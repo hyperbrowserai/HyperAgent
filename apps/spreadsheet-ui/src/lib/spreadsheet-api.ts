@@ -276,12 +276,17 @@ export async function getAgentOpsCacheEntryDetail(
 export async function getAgentOpsCachePrefixes(
   workbookId: string,
   limit: number = 8,
+  requestIdPrefix?: string,
   maxAgeSeconds?: number,
 ): Promise<AgentOpsCachePrefixesResponse> {
   const safeLimit = Math.max(1, Math.min(limit, 100));
   const params = new URLSearchParams({
     limit: String(safeLimit),
   });
+  const normalizedPrefix = requestIdPrefix?.trim();
+  if (normalizedPrefix) {
+    params.set("request_id_prefix", normalizedPrefix);
+  }
   const normalizedMaxAgeSeconds = normalizePositiveInteger(maxAgeSeconds);
   if (typeof normalizedMaxAgeSeconds === "number") {
     params.set("max_age_seconds", String(normalizedMaxAgeSeconds));
