@@ -62,6 +62,12 @@ const { resolveXPathWithCDP } = jest.requireMock(
   resolveXPathWithCDP: jest.Mock;
 };
 
+const { performAction } = jest.requireMock(
+  "@/agent/actions/shared/perform-action"
+) as {
+  performAction: jest.Mock;
+};
+
 function createMockLLM(): HyperAgentLLM {
   return {
     invoke: async () => ({ role: "assistant", content: "ok" }),
@@ -97,6 +103,10 @@ describe("runCachedStep", () => {
     initializeRuntimeContext.mockResolvedValue({
       cdpClient: {},
       frameContextManager: {},
+    });
+    performAction.mockResolvedValue({
+      success: true,
+      message: "ok",
     });
   });
 
@@ -441,5 +451,87 @@ describe("runCachedStep", () => {
 
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.output).toContain("string failure");
+  });
+
+  it("handles trap-prone cached-action getters safely", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    const cachedAction = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (
+            prop === "actionType" ||
+            prop === "xpath" ||
+            prop === "method" ||
+            prop === "arguments" ||
+            prop === "frameIndex" ||
+            prop === "actionParams"
+          ) {
+            throw new Error("cached-action getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: cachedAction as unknown as Parameters<typeof runCachedStep>[0]["cachedAction"],
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toBe("Unsupported cached action");
+  });
+
+  it("normalizes cached arguments and frame index before action replay", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockResolvedValue({
+      backendNodeId: 222,
+      frameId: "frame-1",
+      objectId: "obj-1",
+      session: {},
+    });
+    performAction.mockResolvedValue({
+      success: true,
+      message: "clicked",
+    });
+    const oversizedArg = "x".repeat(3_500);
+    const manyArgs = Array.from({ length: 30 }, (_, i) => i);
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: Number.NaN as unknown as number,
+        arguments: [0, null as unknown as string, oversizedArg, ...manyArgs],
+      },
+      maxSteps: 1,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    const callArgs = performAction.mock.calls[0]?.[1] as {
+      arguments: string[];
+    };
+    expect(callArgs.arguments[0]).toBe("0");
+    expect(callArgs.arguments[1]).toBe("");
+    expect(callArgs.arguments[2]?.length).toBe(2000);
+    expect(callArgs.arguments.length).toBeLessThanOrEqual(20);
+    expect(resolveXPathWithCDP).toHaveBeenCalledWith(
+      expect.objectContaining({
+        frameIndex: 0,
+      })
+    );
   });
 });

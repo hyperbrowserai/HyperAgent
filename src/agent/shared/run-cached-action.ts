@@ -38,6 +38,54 @@ export interface RunCachedStepParams {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const MAX_CACHED_ACTION_ARGS = 20;
+const MAX_CACHED_ACTION_ARG_CHARS = 2_000;
+
+const safeReadCachedActionField = (
+  cachedAction: CachedActionInput,
+  key: keyof CachedActionInput
+): unknown => {
+  try {
+    return (cachedAction as unknown as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+};
+
+const normalizeOptionalTrimmedString = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const normalizeCachedActionArguments = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  let entries: unknown[];
+  try {
+    entries = Array.from(value);
+  } catch {
+    return [];
+  }
+  return entries.slice(0, MAX_CACHED_ACTION_ARGS).map((entry) => {
+    const normalized = entry == null ? "" : String(entry);
+    if (normalized.length <= MAX_CACHED_ACTION_ARG_CHARS) {
+      return normalized;
+    }
+    return normalized.slice(0, MAX_CACHED_ACTION_ARG_CHARS);
+  });
+};
+
+const normalizeCachedFrameIndex = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
+};
+
 const normalizeMaxSteps = (value: number): number =>
   Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
 
@@ -60,22 +108,38 @@ export async function runCachedStep(
 
   const taskId = uuidv4();
   const attempts = normalizeMaxSteps(maxSteps);
-  const normalizedXPath = cachedAction.xpath?.trim();
-  const normalizedMethod = cachedAction.method?.trim();
+  const normalizedActionType =
+    normalizeOptionalTrimmedString(
+      safeReadCachedActionField(cachedAction, "actionType")
+    ) ?? "unknown";
+  const normalizedXPath = normalizeOptionalTrimmedString(
+    safeReadCachedActionField(cachedAction, "xpath")
+  );
+  const normalizedMethod = normalizeOptionalTrimmedString(
+    safeReadCachedActionField(cachedAction, "method")
+  );
+  const normalizedArguments = normalizeCachedActionArguments(
+    safeReadCachedActionField(cachedAction, "arguments")
+  );
+  const normalizedFrameIndex = normalizeCachedFrameIndex(
+    safeReadCachedActionField(cachedAction, "frameIndex")
+  );
+  const actionParamsValue = safeReadCachedActionField(cachedAction, "actionParams");
   const normalizedCachedAction: CachedActionInput = {
-    ...cachedAction,
+    actionType: normalizedActionType,
+    actionParams: isRecord(actionParamsValue) ? actionParamsValue : undefined,
+    arguments: normalizedArguments,
+    frameIndex: normalizedFrameIndex,
     xpath: normalizedXPath,
     method: normalizedMethod,
   };
 
   const specialActionResult = await executeReplaySpecialAction({
     taskId,
-    actionType: cachedAction.actionType,
+    actionType: normalizedActionType,
     instruction,
-    arguments: cachedAction.arguments,
-    actionParams: isRecord(cachedAction.actionParams)
-      ? cachedAction.actionParams
-      : undefined,
+    arguments: normalizedArguments,
+    actionParams: normalizedCachedAction.actionParams,
     page,
     retries: 1,
   }).catch((error) => {
@@ -100,7 +164,7 @@ export async function runCachedStep(
   }
 
   if (
-    cachedAction.actionType !== "actElement" ||
+    normalizedActionType !== "actElement" ||
     !normalizedXPath ||
     !normalizedMethod
   ) {
@@ -311,9 +375,7 @@ async function runCachedAttempt(args: {
     [encodedId]: cachedAction.xpath!,
   };
 
-  const methodArgs = (cachedAction.arguments ?? []).map((v) =>
-    v == null ? "" : String(v)
-  );
+  const methodArgs = normalizeCachedActionArguments(cachedAction.arguments);
 
   const actionOutput = await performAction(actionContext, {
     elementId: encodedId,
