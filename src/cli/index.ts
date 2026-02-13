@@ -20,6 +20,7 @@ import {
 import { SessionDetail } from "@hyperbrowser/sdk/types";
 import { formatCliError } from "./format-cli-error";
 import { loadMCPServersFromFile } from "./mcp-config";
+import { closeAgentSafely } from "./shutdown";
 import { setRawModeIfSupported } from "./stdin-utils";
 import { loadTaskDescriptionFromFile } from "./task-input";
 import { pauseTaskIfRunning, resumeTaskIfPaused } from "./task-controls";
@@ -175,13 +176,12 @@ program
             currentSpinner.stopAndPersist();
           }
           console.log("\nShutting down HyperAgent");
-          try {
-            await agent.closeAgent();
-            process.exit(0);
-          } catch (err) {
-            console.error(`Error during shutdown: ${formatCliError(err)}`);
+          const shutdown = await closeAgentSafely(agent);
+          if (!shutdown.success) {
+            console.error(`Error during shutdown: ${shutdown.message}`);
             process.exit(1);
           }
+          process.exit(0);
         }
       });
 
@@ -248,6 +248,11 @@ program
           });
           attachTaskErrorHandler(task, onTaskError);
         } else {
+          const shutdown = await closeAgentSafely(agent);
+          if (!shutdown.success) {
+            console.error(`Error during shutdown: ${shutdown.message}`);
+            process.exit(1);
+          }
           process.exit(0);
         }
       };
