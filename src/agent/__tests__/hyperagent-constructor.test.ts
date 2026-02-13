@@ -1481,6 +1481,89 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("cleans previous HyperPage root listeners when re-wrapping same page", async () => {
+    const contextOn = jest.fn();
+    const contextOff = jest.fn();
+    const pageOn = jest.fn();
+    const pageOff = jest.fn();
+    const page = {
+      on: pageOn,
+      off: pageOff,
+      context: () => ({
+        on: contextOn,
+        off: contextOff,
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+
+    expect(pageOff).toHaveBeenCalledWith("close", expect.any(Function));
+    expect(contextOff).toHaveBeenCalledWith("page", expect.any(Function));
+  });
+
+  it("cleans tracked child-tab close listeners during HyperPage re-wrap", async () => {
+    let contextPageListener: ((newPage: Page) => Promise<void>) | undefined;
+    const contextOn = jest.fn(
+      (event: "page", listener: (newPage: Page) => Promise<void>) => {
+        if (event === "page") {
+          contextPageListener = listener;
+        }
+      }
+    );
+    const contextOff = jest.fn();
+    const pageOn = jest.fn();
+    const pageOff = jest.fn();
+    const page = {
+      on: pageOn,
+      off: pageOff,
+      context: () => ({
+        on: contextOn,
+        off: contextOff,
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const newPageOff = jest.fn();
+    const newPage = {
+      on: jest.fn(),
+      off: newPageOff,
+      opener: async () => page,
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+    expect(contextPageListener).toBeDefined();
+    await contextPageListener?.(newPage);
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+
+    expect(newPageOff).toHaveBeenCalledWith("close", expect.any(Function));
+  });
+
   it("returns null session when browser provider getSession throws", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

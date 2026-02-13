@@ -3157,18 +3157,50 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         pageStack.splice(idx, 1);
       }
     };
-    // Listen for close on the root page
-    try {
-      page.on("close", () => handleClose(page));
-    } catch (error) {
-      if (this.debug) {
-        console.warn(
-          `[HyperPage] Failed to attach close listener: ${formatUnknownError(
-            error
-          )}`
-        );
+    const closeListenerCleanups: Array<() => void> = [];
+    const attachCloseListener = (targetPage: Page, targetLabel: string): void => {
+      const onClose = () => handleClose(targetPage);
+      const pageOn = this.safeReadField(targetPage, "on");
+      if (typeof pageOn !== "function") {
+        return;
       }
-    }
+      try {
+        (
+          pageOn as (
+            this: Page,
+            event: "close",
+            listener: () => void
+          ) => void
+        ).call(targetPage, "close", onClose);
+      } catch (error) {
+        if (this.debug) {
+          console.warn(
+            `[HyperPage] Failed to attach close listener for ${targetLabel}: ${formatUnknownError(
+              error
+            )}`
+          );
+        }
+        return;
+      }
+      closeListenerCleanups.push(() => {
+        const pageOff = this.safeReadField(targetPage, "off");
+        if (typeof pageOff !== "function") {
+          return;
+        }
+        try {
+          (
+            pageOff as (
+              this: Page,
+              event: "close",
+              listener: () => void
+            ) => void
+          ).call(targetPage, "close", onClose);
+        } catch {
+          // no-op
+        }
+      });
+    };
+    attachCloseListener(page, "root page");
 
     // Handle new tabs (Push)
     const onPage = async (newPage: Page) => {
@@ -3186,17 +3218,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           // Update the scope to follow the new tab
           pageStack.push(newPage);
           // Listen for close on the new page
-          try {
-            newPage.on("close", () => handleClose(newPage));
-          } catch (error) {
-            if (this.debug) {
-              console.warn(
-                `[HyperPage] Failed to attach close listener for new tab: ${formatUnknownError(
-                  error
-                )}`
-              );
-            }
-          }
+          attachCloseListener(newPage, "new tab");
         }
       } catch {
         // Ignore
@@ -3225,6 +3247,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     }
     scopedPage._scopeListenerCleanup = () => {
+      for (const closeCleanup of closeListenerCleanups) {
+        try {
+          closeCleanup();
+        } catch {
+          // no-op
+        }
+      }
+      closeListenerCleanups.length = 0;
       if (!pageContext) {
         return;
       }
