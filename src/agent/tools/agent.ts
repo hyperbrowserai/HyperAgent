@@ -401,9 +401,25 @@ export const runAgentTask = async (
         if (overlayKey === lastOverlayKey && lastScreenshotBase64) {
           trimmedScreenshot = lastScreenshotBase64;
         } else {
-          trimmedScreenshot = await compositeScreenshot(page, overlayKey, ctx.debug);
-          lastOverlayKey = overlayKey;
-          lastScreenshotBase64 = trimmedScreenshot;
+          try {
+            trimmedScreenshot = await compositeScreenshot(
+              page,
+              overlayKey,
+              ctx.debug
+            );
+            lastOverlayKey = overlayKey;
+            lastScreenshotBase64 = trimmedScreenshot;
+          } catch (error) {
+            if (ctx.debug) {
+              console.warn(
+                "[Screenshot] Failed to compose overlay screenshot; continuing without visual image:",
+                formatUnknownError(error)
+              );
+            }
+            trimmedScreenshot = undefined;
+            lastOverlayKey = null;
+            lastScreenshotBase64 = undefined;
+          }
         }
       } else {
         lastOverlayKey = null;

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Page } from "playwright-core";
 import fs from "fs";
+import * as cdp from "@/cdp";
 import type { AgentActionDefinition } from "@/types";
 import type { AgentCtx } from "@/agent/tools/types";
 import { TaskStatus, type TaskState } from "@/types/agent/types";
@@ -255,6 +256,34 @@ describe("runAgentTask completion behavior", () => {
       writeSpy.mockRestore();
       errorSpy.mockRestore();
       logSpy.mockRestore();
+    }
+  });
+
+  it("continues task when visual screenshot composition fails", async () => {
+    const page = createMockPage();
+    const getCDPClientSpy = jest
+      .spyOn(cdp, "getCDPClient")
+      .mockRejectedValue(new Error("cdp screenshot unavailable"));
+    captureDOMState.mockResolvedValue({
+      elements: new Map(),
+      domState: "dom",
+      xpathMap: {},
+      backendNodeMap: {},
+      frameMap: new Map(),
+      visualOverlay: "overlay-base64",
+    });
+
+    try {
+      const result = await runAgentTask(
+        createAgentCtx({ success: true, text: "final answer" }),
+        createTaskState(page),
+        { enableVisualMode: true }
+      );
+
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(result.output).toBe("final answer");
+    } finally {
+      getCDPClientSpy.mockRestore();
     }
   });
 });
