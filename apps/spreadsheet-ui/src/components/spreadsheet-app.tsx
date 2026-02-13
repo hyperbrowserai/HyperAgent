@@ -290,11 +290,16 @@ export function SpreadsheetApp() {
     queryKey: [
       "agent-ops-cache",
       workbook?.id,
+      cacheRequestIdPrefix,
       normalizedCacheEntriesMaxAgeSeconds,
     ],
     enabled: Boolean(workbook?.id),
     queryFn: () =>
-      getAgentOpsCacheStats(workbook!.id, normalizedCacheEntriesMaxAgeSeconds),
+      getAgentOpsCacheStats(
+        workbook!.id,
+        normalizedCacheEntriesMaxAgeSeconds,
+        cacheRequestIdPrefix,
+      ),
   });
 
   const agentOpsCacheEntriesQuery = useQuery({
@@ -2663,6 +2668,11 @@ export function SpreadsheetApp() {
                     {agentOpsCacheQuery.data.cutoff_timestamp ? (
                       <span className="ml-1 text-slate-500">
                         cutoff {formatIsoTimestamp(agentOpsCacheQuery.data.cutoff_timestamp)}
+                      </span>
+                    ) : null}
+                    {agentOpsCacheQuery.data.request_id_prefix ? (
+                      <span className="ml-1 text-slate-500">
+                        prefix {agentOpsCacheQuery.data.request_id_prefix}
                       </span>
                     ) : null}
                   </span>

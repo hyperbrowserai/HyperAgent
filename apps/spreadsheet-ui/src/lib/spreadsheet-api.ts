@@ -218,8 +218,13 @@ export async function previewAgentOps(
 export async function getAgentOpsCacheStats(
   workbookId: string,
   maxAgeSeconds?: number,
+  requestIdPrefix?: string,
 ): Promise<AgentOpsCacheStatsResponse> {
   const params = new URLSearchParams();
+  const normalizedPrefix = requestIdPrefix?.trim();
+  if (normalizedPrefix) {
+    params.set("request_id_prefix", normalizedPrefix);
+  }
   const normalizedMaxAgeSeconds = normalizePositiveInteger(maxAgeSeconds);
   if (typeof normalizedMaxAgeSeconds === "number") {
     params.set("max_age_seconds", String(normalizedMaxAgeSeconds));

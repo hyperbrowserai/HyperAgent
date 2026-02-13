@@ -1052,11 +1052,12 @@ async fn get_agent_schema(
       "results": "array of operation results"
     },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
-    "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?max_age_seconds=3600",
+    "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
     "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8&max_age_seconds=3600",
     "agent_ops_cache_stats_query_shape": {
+      "request_id_prefix": "optional string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter stats to entries older than or equal to this age)"
     },
     "agent_ops_cache_entries_query_shape": {
@@ -1086,6 +1087,7 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_response_shape": {
       "entries": "current cache entries",
       "max_entries": "maximum cache size",
+      "request_id_prefix": "echoed filter prefix when provided",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "oldest_request_id": "optional oldest cached request id",
@@ -1495,6 +1497,7 @@ async fn agent_ops_preview(
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct AgentOpsCacheStatsQuery {
+  request_id_prefix: Option<String>,
   max_age_seconds: Option<i64>,
 }
 
@@ -1523,6 +1526,11 @@ async fn agent_ops_cache_stats(
   Query(query): Query<AgentOpsCacheStatsQuery>,
 ) -> Result<Json<AgentOpsCacheStatsResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
+  let normalized_prefix = query
+    .request_id_prefix
+    .as_deref()
+    .map(str::trim)
+    .filter(|prefix| !prefix.is_empty());
   let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let (
     entries,
@@ -1531,11 +1539,12 @@ async fn agent_ops_cache_stats(
     oldest_cached_at,
     newest_cached_at,
   ) = state
-    .agent_ops_cache_stats(workbook_id, cutoff_timestamp)
+    .agent_ops_cache_stats(workbook_id, normalized_prefix, cutoff_timestamp)
     .await?;
   Ok(Json(AgentOpsCacheStatsResponse {
     entries,
     max_entries: AGENT_OPS_CACHE_MAX_ENTRIES,
+    request_id_prefix: normalized_prefix.map(str::to_string),
     max_age_seconds: query.max_age_seconds,
     cutoff_timestamp,
     oldest_request_id,
@@ -2462,6 +2471,7 @@ mod tests {
       State(state.clone()),
       Path(workbook.id),
       Query(AgentOpsCacheStatsQuery {
+        request_id_prefix: None,
         max_age_seconds: None,
       }),
     )
@@ -2476,10 +2486,28 @@ mod tests {
     assert!(stats.oldest_cached_at.is_some());
     assert!(stats.newest_cached_at.is_some());
 
+    let prefix_scoped_stats = agent_ops_cache_stats(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCacheStatsQuery {
+        request_id_prefix: Some("handler-".to_string()),
+        max_age_seconds: None,
+      }),
+    )
+    .await
+    .expect("prefix-scoped stats should load")
+    .0;
+    assert_eq!(
+      prefix_scoped_stats.request_id_prefix.as_deref(),
+      Some("handler-"),
+    );
+    assert_eq!(prefix_scoped_stats.entries, 1);
+
     let scoped_stats = agent_ops_cache_stats(
       State(state.clone()),
       Path(workbook.id),
       Query(AgentOpsCacheStatsQuery {
+        request_id_prefix: None,
         max_age_seconds: Some(86_400),
       }),
     )
@@ -2503,6 +2531,7 @@ mod tests {
       State(state.clone()),
       Path(workbook.id),
       Query(AgentOpsCacheStatsQuery {
+        request_id_prefix: None,
         max_age_seconds: None,
       }),
     )
@@ -2520,6 +2549,7 @@ mod tests {
       State(state),
       Path(workbook.id),
       Query(AgentOpsCacheStatsQuery {
+        request_id_prefix: None,
         max_age_seconds: Some(0),
       }),
     )
@@ -3509,7 +3539,9 @@ mod tests {
       schema
         .get("agent_ops_cache_stats_endpoint")
         .and_then(serde_json::Value::as_str),
-      Some("/v1/workbooks/{id}/agent/ops/cache?max_age_seconds=3600"),
+      Some(
+        "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
+      ),
     );
     assert_eq!(
       schema

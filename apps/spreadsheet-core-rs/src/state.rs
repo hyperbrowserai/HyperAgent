@@ -266,6 +266,7 @@ impl AppState {
   pub async fn agent_ops_cache_stats(
     &self,
     workbook_id: Uuid,
+    request_id_prefix: Option<&str>,
     cutoff_timestamp: Option<DateTime<Utc>>,
   ) -> Result<
     (
@@ -281,10 +282,16 @@ impl AppState {
     let record = guard
       .get(&workbook_id)
       .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+    let normalized_prefix = request_id_prefix
+      .map(str::trim)
+      .filter(|prefix| !prefix.is_empty());
     let scoped_request_ids = record
       .agent_ops_cache_order
       .iter()
       .filter(|request_id| {
+        let prefix_matches = normalized_prefix
+          .map(|prefix| request_id.starts_with(prefix))
+          .unwrap_or(true);
         cutoff_timestamp
           .as_ref()
           .map(|cutoff| {
@@ -295,6 +302,7 @@ impl AppState {
               .unwrap_or(false)
           })
           .unwrap_or(true)
+          && prefix_matches
       })
       .cloned()
       .collect::<Vec<_>>();
@@ -724,7 +732,7 @@ mod tests {
       .expect("cache update should succeed");
 
     let (entries, oldest, newest, oldest_cached_at, newest_cached_at) = state
-      .agent_ops_cache_stats(workbook.id, None)
+      .agent_ops_cache_stats(workbook.id, None, None)
       .await
       .expect("cache stats should load");
     assert_eq!(entries, 1);
@@ -732,6 +740,14 @@ mod tests {
     assert_eq!(newest.as_deref(), Some("req-1"));
     assert!(oldest_cached_at.is_some());
     assert!(newest_cached_at.is_some());
+
+    let prefix_stats = state
+      .agent_ops_cache_stats(workbook.id, Some("req-"), None)
+      .await
+      .expect("prefix-scoped cache stats should load");
+    assert_eq!(prefix_stats.0, 1);
+    assert_eq!(prefix_stats.1.as_deref(), Some("req-1"));
+    assert_eq!(prefix_stats.2.as_deref(), Some("req-1"));
 
     let cleared = state
       .clear_agent_ops_cache(workbook.id)
@@ -742,6 +758,7 @@ mod tests {
     let scoped_stats = state
       .agent_ops_cache_stats(
         workbook.id,
+        None,
         Some(Utc::now() - ChronoDuration::hours(1)),
       )
       .await
@@ -757,7 +774,7 @@ mod tests {
       oldest_cached_at_after,
       newest_cached_at_after,
     ) = state
-      .agent_ops_cache_stats(workbook.id, None)
+      .agent_ops_cache_stats(workbook.id, None, None)
       .await
       .expect("cache stats should load");
     assert_eq!(entries_after, 0);

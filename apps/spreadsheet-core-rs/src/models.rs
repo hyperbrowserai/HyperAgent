@@ -147,6 +147,7 @@ pub struct AgentOpsPreviewResponse {
 pub struct AgentOpsCacheStatsResponse {
   pub entries: usize,
   pub max_entries: usize,
+  pub request_id_prefix: Option<String>,
   pub max_age_seconds: Option<i64>,
   pub cutoff_timestamp: Option<DateTime<Utc>>,
   pub oldest_request_id: Option<String>,
