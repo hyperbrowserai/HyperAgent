@@ -8,15 +8,28 @@ import { HyperVariable } from "@/types/agent/types";
 import { formatUnknownError } from "@/utils";
 
 const MAX_HISTORY_STEPS = 10;
+const MAX_SERIALIZED_PROMPT_VALUE_CHARS = 2000;
+
+function truncatePromptText(value: string): string {
+  if (value.length <= MAX_SERIALIZED_PROMPT_VALUE_CHARS) {
+    return value;
+  }
+  return (
+    value.slice(0, MAX_SERIALIZED_PROMPT_VALUE_CHARS) +
+    "... [truncated for prompt budget]"
+  );
+}
 
 function safeSerializeForPrompt(value: unknown): string {
   try {
     const serialized = JSON.stringify(value);
-    return typeof serialized === "string"
-      ? serialized
-      : formatUnknownError(value);
+    return truncatePromptText(
+      typeof serialized === "string"
+        ? serialized
+        : formatUnknownError(value)
+    );
   } catch {
-    return formatUnknownError(value);
+    return truncatePromptText(formatUnknownError(value));
   }
 }
 

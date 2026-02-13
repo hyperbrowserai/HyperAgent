@@ -166,4 +166,36 @@ describe("buildAgentStepMessages", () => {
     expect(textParts).toContain("Pixels above: 0");
     expect(textParts).toContain("Pixels below: 0");
   });
+
+  it("truncates oversized serialized payloads to protect prompt budget", async () => {
+    const step = createStep(0);
+    step.actionOutput.extract = { payload: "x".repeat(5000) };
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [step],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[truncated for prompt budget]");
+    expect(joined.length).toBeLessThan(6000);
+  });
 });
