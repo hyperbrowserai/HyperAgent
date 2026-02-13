@@ -205,6 +205,7 @@ export interface AgentSchemaInfo {
   workbook_import_event_shape?: Record<string, unknown>;
   workbook_export_event_shape?: Record<string, unknown>;
   workbook_event_shapes?: Record<string, unknown>;
+  formula_capabilities?: Record<string, unknown>;
   agent_ops_preview_endpoint?: string;
   agent_ops_cache_stats_endpoint?: string;
   agent_ops_cache_entries_endpoint?: string;

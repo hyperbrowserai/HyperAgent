@@ -1071,6 +1071,11 @@ async fn get_agent_schema(
         "include_file_base64": "optional boolean (default true)"
       }
     },
+    "formula_capabilities": {
+      "supported_functions": "SUM, AVERAGE, MIN, MAX, COUNT, direct references, arithmetic expressions, IF, CONCAT, CONCATENATE, TODAY, VLOOKUP exact-match mode",
+      "unsupported_behaviors": "VLOOKUP with range_lookup TRUE/1 (approximate match) remains unsupported and is surfaced via unsupported_formulas",
+      "fallback_behavior": "unsupported formulas are preserved and reported by formula.recalculated payloads"
+    },
     "agent_ops_response_shape": {
       "request_id": "optional string",
       "operations_signature": "sha256 signature over submitted operations",
@@ -4628,6 +4633,24 @@ mod tests {
         .get("workbook_export_endpoint")
         .and_then(serde_json::Value::as_str),
       Some("/v1/workbooks/{id}/export"),
+    );
+    assert_eq!(
+      schema
+        .get("formula_capabilities")
+        .and_then(|value| value.get("supported_functions"))
+        .and_then(serde_json::Value::as_str),
+      Some(
+        "SUM, AVERAGE, MIN, MAX, COUNT, direct references, arithmetic expressions, IF, CONCAT, CONCATENATE, TODAY, VLOOKUP exact-match mode",
+      ),
+    );
+    assert_eq!(
+      schema
+        .get("formula_capabilities")
+        .and_then(|value| value.get("unsupported_behaviors"))
+        .and_then(serde_json::Value::as_str),
+      Some(
+        "VLOOKUP with range_lookup TRUE/1 (approximate match) remains unsupported and is surfaced via unsupported_formulas",
+      ),
     );
     assert_eq!(
       schema

@@ -810,6 +810,10 @@ export function SpreadsheetApp() {
       ),
     [agentSchemaQuery.data?.workbook_export_response_headers_shape],
   );
+  const agentFormulaCapabilityFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.formula_capabilities),
+    [agentSchemaQuery.data?.formula_capabilities],
+  );
   const agentWorkbookImportEventFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
     [agentSchemaQuery.data?.workbook_import_event_shape],
@@ -2940,6 +2944,14 @@ export function SpreadsheetApp() {
                 workbook import endpoint:{" "}
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.workbook_import_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentFormulaCapabilityFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                formula capabilities:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentFormulaCapabilityFields)}
                 </span>
               </p>
             ) : null}
