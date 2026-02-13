@@ -268,6 +268,98 @@ describe("HyperAgent constructor and task controls", () => {
     expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
   });
 
+  it("executeTaskAsync succeeds when action-cache assignment traps throw", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      actionCacheByTaskId: Record<string, unknown>;
+    };
+    internalAgent.actionCacheByTaskId = new Proxy(
+      {},
+      {
+        set: () => {
+          throw new Error("cache set trap");
+        },
+      }
+    );
+
+    const fakePage = {} as unknown as Page;
+    try {
+      const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.COMPLETED,
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to store action cache")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("executeTask succeeds when action-cache assignment traps throw", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      actionCacheByTaskId: Record<string, unknown>;
+    };
+    internalAgent.actionCacheByTaskId = new Proxy(
+      {},
+      {
+        set: () => {
+          throw new Error("cache set trap");
+        },
+      }
+    );
+
+    const fakePage = {} as unknown as Page;
+    try {
+      await expect(agent.executeTask("sync task", undefined, fakePage)).resolves
+        .toMatchObject({
+          status: TaskStatus.COMPLETED,
+        });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to store action cache")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("returns variable snapshots without exposing internal mutable store", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

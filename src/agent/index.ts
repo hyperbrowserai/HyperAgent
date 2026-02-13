@@ -383,6 +383,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private storeTaskActionCache(taskId: string, actionCache: ActionCacheOutput): void {
+    try {
+      this.actionCacheByTaskId[taskId] = actionCache;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to store action cache for task ${taskId}: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+  }
+
   private attachBrowserPageListener(context: BrowserContext): void {
     const contextOn = this.safeReadField(context, "on");
     if (typeof contextOn !== "function") {
@@ -989,7 +1003,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       mergedParams
     )
       .then((result) => {
-        this.actionCacheByTaskId[taskId] = result.actionCache;
+        this.storeTaskActionCache(taskId, result.actionCache);
         cleanup();
         return result;
       })
@@ -1095,7 +1109,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         mergedParams
       );
       cleanup();
-      this.actionCacheByTaskId[taskId] = result.actionCache;
+      this.storeTaskActionCache(taskId, result.actionCache);
       delete this.tasks[taskId];
       return result;
     } catch (error) {
