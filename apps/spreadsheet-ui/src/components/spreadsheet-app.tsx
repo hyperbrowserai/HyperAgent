@@ -180,6 +180,12 @@ export function SpreadsheetApp() {
   const hasInvalidCacheEntriesMaxAgeInput =
     cacheEntriesMaxAgeSeconds.trim().length > 0
     && typeof normalizedCacheEntriesMaxAgeSeconds !== "number";
+  const normalizedCacheStaleMaxAgeSeconds = parsePositiveIntegerInput(
+    cacheStaleMaxAgeSeconds,
+  );
+  const hasInvalidCacheStaleMaxAgeInput =
+    cacheStaleMaxAgeSeconds.trim().length > 0
+    && typeof normalizedCacheStaleMaxAgeSeconds !== "number";
 
   const createWorkbookMutation = useMutation({
     mutationFn: () => createWorkbook("Agent Workbook"),
@@ -1685,13 +1691,12 @@ export function SpreadsheetApp() {
   }
 
   function parseStaleMaxAgeSecondsInput(): number | null {
-    const parsedValue = Number.parseInt(cacheStaleMaxAgeSeconds, 10);
-    if (Number.isNaN(parsedValue) || parsedValue <= 0) {
+    if (typeof normalizedCacheStaleMaxAgeSeconds !== "number") {
       setUiError("max_age_seconds must be a positive integer.");
       setUiErrorCode("INVALID_MAX_AGE_SECONDS");
       return null;
     }
-    return parsedValue;
+    return normalizedCacheStaleMaxAgeSeconds;
   }
 
   async function handlePreviewRemoveStaleCacheEntries() {
@@ -2744,7 +2749,11 @@ export function SpreadsheetApp() {
                         setCacheStaleMaxAgeSeconds(event.target.value)
                       }
                       inputMode="numeric"
-                      className="h-6 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-amber-500"
+                      className={`h-6 w-20 rounded bg-slate-950 px-2 text-[11px] text-slate-200 outline-none ${
+                        hasInvalidCacheStaleMaxAgeInput
+                          ? "border border-rose-500/80 focus:border-rose-400"
+                          : "border border-slate-700 focus:border-amber-500"
+                      }`}
                     />
                     <label className="text-[10px] text-slate-500">
                       stale sample
@@ -2759,7 +2768,11 @@ export function SpreadsheetApp() {
                     />
                     <button
                       onClick={handlePreviewRemoveStaleCacheEntries}
-                      disabled={isPreviewingStaleCache || isRemovingStaleCache}
+                      disabled={
+                        isPreviewingStaleCache
+                        || isRemovingStaleCache
+                        || hasInvalidCacheStaleMaxAgeInput
+                      }
                       className="rounded border border-amber-700/70 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-900/40 disabled:opacity-50"
                     >
                       {isPreviewingStaleCache ? "Previewing stale..." : "Preview stale"}
@@ -2769,6 +2782,7 @@ export function SpreadsheetApp() {
                       disabled={
                         isRemovingStaleCache
                         || isPreviewingStaleCache
+                        || hasInvalidCacheStaleMaxAgeInput
                         || (agentOpsCacheEntriesQuery.data?.total_entries ?? 0) === 0
                       }
                       className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
@@ -2780,6 +2794,11 @@ export function SpreadsheetApp() {
                     <p className="mb-2 text-[10px] text-rose-300">
                       older-than filter must be a positive integer (seconds). Cache
                       entries/prefix queries are paused until corrected.
+                    </p>
+                  ) : null}
+                  {hasInvalidCacheStaleMaxAgeInput ? (
+                    <p className="mb-2 text-[10px] text-rose-300">
+                      stale age filter must be a positive integer (seconds).
                     </p>
                   ) : null}
                   {cachePrefixRemovalPreview ? (
