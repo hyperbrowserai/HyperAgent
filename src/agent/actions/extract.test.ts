@@ -147,4 +147,16 @@ describe("ExtractActionDefinition.run", () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain("No content extracted");
   });
+
+  it("returns formatted root error messages", async () => {
+    parseMarkdown.mockRejectedValue(new Error("markdown parse failed"));
+    const ctx = createContext();
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "Extract content",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("markdown parse failed");
+  });
 });

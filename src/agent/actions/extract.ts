@@ -76,6 +76,10 @@ function writeDebugFileSafe(
   }
 }
 
+function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export const ExtractActionDefinition: AgentActionDefinition = {
   type: "extract" as const,
   actionParams: ExtractAction,
@@ -101,7 +105,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         if (ctx.debug) {
           console.warn(
             "[extract] Screenshot capture unavailable, falling back to markdown-only extraction:",
-            error
+            formatErrorMessage(error)
           );
         }
       }
@@ -172,7 +176,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     } catch (error) {
       return {
         success: false,
-        message: `Failed to extract content: ${error}`,
+        message: `Failed to extract content: ${formatErrorMessage(error)}`,
       };
     }
   },
