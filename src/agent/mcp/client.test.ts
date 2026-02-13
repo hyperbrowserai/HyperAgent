@@ -2216,6 +2216,34 @@ describe("MCPClient disconnect lifecycle", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("disconnect truncates oversized server-id diagnostics", async () => {
+    const mcpClient = new MCPClient(false);
+    const closeA = jest.fn().mockRejectedValue(new Error("close failed"));
+    const oversizedServerId = `server-${"x".repeat(400)}`;
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          oversizedServerId,
+          {
+            transport: { close: closeA },
+          },
+        ],
+      ])
+    );
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await mcpClient.disconnect();
+      const errorMessage = String(errorSpy.mock.calls[0]?.[0] ?? "");
+      expect(errorMessage).toContain("Failed to disconnect MCP server");
+      expect(errorMessage).toContain("[truncated]");
+      expect(errorMessage).toContain("close failed");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
 
 describe("MCPClient.hasTool", () => {

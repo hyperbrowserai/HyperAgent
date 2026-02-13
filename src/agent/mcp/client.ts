@@ -1417,8 +1417,9 @@ class MCPClient {
       try {
         await this.disconnectServer(serverId);
       } catch (error) {
+        const safeServerId = formatMCPIdentifier(serverId, "unknown-server");
         console.error(
-          `Failed to disconnect MCP server ${serverId}: ${formatMCPRuntimeDiagnostic(error)}`
+          `Failed to disconnect MCP server ${safeServerId}: ${formatMCPRuntimeDiagnostic(error)}`
         );
       }
     }
