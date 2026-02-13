@@ -26,6 +26,7 @@ const MAX_MCP_PARAM_KEY_CHARS = 256;
 const MAX_MCP_PARAM_COLLECTION_SIZE = 500;
 const MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS = 128;
 const MAX_MCP_TOOL_NAME_CHARS = 256;
+const MAX_MCP_SERVER_ID_CHARS = 256;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -105,6 +106,11 @@ function normalizeMCPExecutionServerId(
   }
   if (hasAnyControlChars(normalized)) {
     throw new Error("MCP serverId contains unsupported control characters");
+  }
+  if (normalized.length > MAX_MCP_SERVER_ID_CHARS) {
+    throw new Error(
+      `MCP serverId exceeds ${MAX_MCP_SERVER_ID_CHARS} characters`
+    );
   }
   return normalized;
 }

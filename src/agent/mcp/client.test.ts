@@ -591,6 +591,24 @@ describe("MCPClient.executeTool server selection", () => {
     ).rejects.toThrow("MCP tool name contains unsupported control characters");
   });
 
+  it("rejects server ids with control characters", async () => {
+    const mcpClient = new MCPClient(false);
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "server\n-a")
+    ).rejects.toThrow("MCP serverId contains unsupported control characters");
+  });
+
+  it("rejects oversized server ids before lookup", async () => {
+    const mcpClient = new MCPClient(false);
+    await expect(
+      mcpClient.executeTool(
+        "search",
+        { query: "missing" },
+        `server-${"x".repeat(300)}`
+      )
+    ).rejects.toThrow("MCP serverId exceeds 256 characters");
+  });
+
   it("sanitizes tool identifiers in missing-server errors", async () => {
     const mcpClient = new MCPClient(false);
     const noisyToolName = `bad-${"x".repeat(200)}`;
