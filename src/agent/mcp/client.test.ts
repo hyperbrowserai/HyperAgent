@@ -1545,6 +1545,49 @@ describe("MCPClient disconnect lifecycle", () => {
     expect(mcpClient.hasConnections()).toBe(false);
   });
 
+  it("disconnectServer resolves server id case-insensitively", async () => {
+    const mcpClient = new MCPClient(false);
+    const close = jest.fn().mockResolvedValue(undefined);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "Server-1",
+          {
+            transport: { close },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.disconnectServer(" server-1 ");
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(mcpClient.getServerIds()).toEqual([]);
+  });
+
+  it("disconnectServer ignores invalid server id inputs", async () => {
+    const mcpClient = new MCPClient(false);
+    const close = jest.fn().mockResolvedValue(undefined);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            transport: { close },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.disconnectServer("   ");
+    await mcpClient.disconnectServer("bad\nid");
+
+    expect(close).not.toHaveBeenCalled();
+    expect(mcpClient.getServerIds()).toEqual(["server-1"]);
+  });
+
   it("disconnect closes every connected server transport", async () => {
     const mcpClient = new MCPClient(false);
     const closeA = jest.fn().mockResolvedValue(undefined);

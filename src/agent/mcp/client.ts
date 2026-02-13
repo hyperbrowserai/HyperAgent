@@ -550,6 +550,20 @@ function findConnectedServerId(
   return undefined;
 }
 
+function resolveConnectedServerIdForManagement(
+  servers: Map<string, ServerConnection>,
+  requestedId: unknown
+): string | undefined {
+  if (typeof requestedId !== "string") {
+    return undefined;
+  }
+  const normalized = requestedId.trim();
+  if (normalized.length === 0 || hasAnyControlChars(normalized)) {
+    return undefined;
+  }
+  return findConnectedServerId(servers, normalized);
+}
+
 function resolveMCPToolNameOnServer(
   tools: Map<string, Tool>,
   requestedToolName: string
@@ -1120,7 +1134,14 @@ class MCPClient {
    * @param serverId The ID of the server to disconnect from
    */
   async disconnectServer(serverId: string): Promise<void> {
-    const server = this.servers.get(serverId);
+    const resolvedServerId = resolveConnectedServerIdForManagement(
+      this.servers,
+      serverId
+    );
+    if (!resolvedServerId) {
+      return;
+    }
+    const server = this.servers.get(resolvedServerId);
     if (server) {
       let closeError: unknown;
       try {
@@ -1128,13 +1149,13 @@ class MCPClient {
       } catch (error) {
         closeError = error;
       } finally {
-        this.servers.delete(serverId);
+        this.servers.delete(resolvedServerId);
       }
       if (closeError) {
         throw closeError;
       }
       if (this.debug) {
-        console.log(`Disconnected from MCP server with ID: ${serverId}`);
+        console.log(`Disconnected from MCP server with ID: ${resolvedServerId}`);
       }
     }
   }
