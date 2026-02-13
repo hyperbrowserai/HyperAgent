@@ -1184,6 +1184,29 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("rejects command args when array length access throws", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const argsProxy = new Proxy(["-y"], {
+      get(target, prop, receiver) {
+        if (prop === "length") {
+          throw new Error("length trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          args: argsProxy as unknown as string[],
+        })
+      ).rejects.toThrow("MCP command args must be an array of non-empty strings");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("rejects non-object env records", async () => {
     const mcpClient = new MCPClient(false);
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
@@ -1209,6 +1232,32 @@ describe("MCPClient.connectToServer validation", () => {
           env: {
             constructor: "bad",
           },
+        })
+      ).rejects.toThrow("MCP env must be an object of string key/value pairs");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects env records when entry enumeration throws", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const envProxy = new Proxy(
+      {},
+      {
+        ownKeys(): ArrayLike<string | symbol> {
+          throw new Error("ownKeys trap");
+        },
+        getPrototypeOf(): object | null {
+          return Object.prototype;
+        },
+      }
+    );
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          env: envProxy as unknown as Record<string, string>,
         })
       ).rejects.toThrow("MCP env must be an object of string key/value pairs");
     } finally {

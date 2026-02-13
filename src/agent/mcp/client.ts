@@ -315,12 +315,25 @@ function normalizeMCPConnectionArgs(args?: string[]): string[] | undefined {
   if (!Array.isArray(args)) {
     throw new Error("MCP command args must be an array of non-empty strings");
   }
-  if (args.length > MAX_MCP_CONFIG_ARGS_PER_SERVER) {
+  let argCount = 0;
+  try {
+    argCount = args.length;
+  } catch {
+    throw new Error("MCP command args must be an array of non-empty strings");
+  }
+  if (argCount > MAX_MCP_CONFIG_ARGS_PER_SERVER) {
     throw new Error(
       `MCP command args cannot contain more than ${MAX_MCP_CONFIG_ARGS_PER_SERVER} entries`
     );
   }
-  return args.map((arg) => {
+  const normalizedArgs: string[] = [];
+  for (let index = 0; index < argCount; index += 1) {
+    let arg: unknown;
+    try {
+      arg = args[index];
+    } catch {
+      throw new Error("MCP command args must be an array of non-empty strings");
+    }
     if (typeof arg !== "string") {
       throw new Error("MCP command args must be an array of non-empty strings");
     }
@@ -336,8 +349,9 @@ function normalizeMCPConnectionArgs(args?: string[]): string[] | undefined {
         `MCP command args cannot include entries longer than ${MAX_MCP_CONFIG_ARG_CHARS} characters`
       );
     }
-    return normalized;
-  });
+    normalizedArgs.push(normalized);
+  }
+  return normalizedArgs;
 }
 
 function normalizeMCPConnectionStringRecord(
@@ -352,7 +366,14 @@ function normalizeMCPConnectionStringRecord(
       `MCP ${field} must be an object of string key/value pairs`
     );
   }
-  const entries = Object.entries(value);
+  let entries: Array<[string, unknown]>;
+  try {
+    entries = Object.entries(value);
+  } catch {
+    throw new Error(
+      `MCP ${field} must be an object of string key/value pairs`
+    );
+  }
   if (entries.length > MAX_MCP_CONFIG_RECORD_ENTRIES) {
     throw new Error(
       `MCP ${field} cannot include more than ${MAX_MCP_CONFIG_RECORD_ENTRIES} entries`
