@@ -1570,12 +1570,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   ): Promise<ActionCacheReplayResult> {
     const replayId = uuidv4();
     const replayLifecycleGeneration = this.lifecycleGeneration;
+    const rawMaxXPathRetries = this.safeReadField(params, "maxXPathRetries");
     const maxXPathRetries = this.normalizeRetryCount(
-      params?.maxXPathRetries,
+      rawMaxXPathRetries,
       3,
       20
     );
-    const debug = params?.debug ?? this.debug;
+    const rawDebug = this.safeReadField(params, "debug");
+    const debug = typeof rawDebug === "boolean" ? rawDebug : this.debug;
     const sourceTaskId =
       this.normalizeVariableKey(this.safeReadField(cache, "taskId")) ??
       "unknown-task";
