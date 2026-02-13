@@ -692,13 +692,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
+        const usedCachedAction =
+          step.actionType !== "actElement" ||
+          (typeof step.method === "string" &&
+            isPageActionMethod(step.method) &&
+            typeof step.xpath === "string" &&
+            step.xpath.trim().length > 0);
         result = {
           taskId: cache.taskId,
           status: TaskStatus.FAILED,
           steps: [],
           output: `Replay step ${step.stepIndex} failed: ${message}`,
           replayStepMeta: {
-            usedCachedAction: false,
+            usedCachedAction,
             fallbackUsed: false,
             retries: 1,
             cachedXPath: step.xpath ?? null,

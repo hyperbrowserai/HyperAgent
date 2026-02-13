@@ -179,6 +179,7 @@ describe("runFromActionCache hardening", () => {
     expect(replay.status).toBe(TaskStatus.FAILED);
     expect(replay.steps[0]?.message).toContain("Replay step 0 failed");
     expect(replay.steps[0]?.message).toContain("timeout call failed");
+    expect(replay.steps[0]?.usedXPath).toBe(true);
   });
 
   it("fails replay step cleanly when helper dispatch throws", async () => {
@@ -217,5 +218,6 @@ describe("runFromActionCache hardening", () => {
     expect(replay.status).toBe(TaskStatus.FAILED);
     expect(replay.steps[0]?.message).toContain("Replay step 0 failed");
     expect(replay.steps[0]?.message).toContain("helper click failed");
+    expect(replay.steps[0]?.usedXPath).toBe(true);
   });
 });
