@@ -42,7 +42,12 @@ const MAX_MCP_CONFIG_COMMAND_CHARS = 2_048;
 const MAX_MCP_CONFIG_SSE_URL_CHARS = 4_000;
 const MAX_MCP_CONFIG_ARGS_PER_SERVER = 100;
 const MAX_MCP_CONFIG_ARG_CHARS = 4_000;
+const MAX_MCP_CONFIG_RECORD_ENTRIES = 200;
+const MAX_MCP_CONFIG_RECORD_KEY_CHARS = 256;
+const MAX_MCP_CONFIG_RECORD_VALUE_CHARS = 4_000;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const UNSAFE_MCP_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
 
 function hasUnsupportedControlChars(value: string): boolean {
   return Array.from(value).some((char) => {
@@ -246,6 +251,66 @@ function normalizeMCPConnectionArgs(args?: string[]): string[] | undefined {
     }
     return normalized;
   });
+}
+
+function normalizeMCPConnectionStringRecord(
+  field: "env" | "sseHeaders",
+  value: unknown
+): Record<string, string> | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+  if (!isPlainRecord(value)) {
+    throw new Error(
+      `MCP ${field} must be an object of string key/value pairs`
+    );
+  }
+  const entries = Object.entries(value);
+  if (entries.length > MAX_MCP_CONFIG_RECORD_ENTRIES) {
+    throw new Error(
+      `MCP ${field} cannot include more than ${MAX_MCP_CONFIG_RECORD_ENTRIES} entries`
+    );
+  }
+  const normalized: Record<string, string> = Object.create(null);
+  const seenKeys = new Set<string>();
+  for (const [rawKey, rawValue] of entries) {
+    const key = rawKey.trim();
+    const lowerKey = key.toLowerCase();
+    if (
+      key.length === 0 ||
+      key.length > MAX_MCP_CONFIG_RECORD_KEY_CHARS ||
+      hasAnyControlChars(key) ||
+      UNSAFE_MCP_RECORD_KEYS.has(lowerKey) ||
+      typeof rawValue !== "string" ||
+      hasAnyControlChars(rawValue)
+    ) {
+      throw new Error(
+        `MCP ${field} must be an object of string key/value pairs`
+      );
+    }
+    if (field === "sseHeaders" && !HTTP_HEADER_NAME_PATTERN.test(key)) {
+      throw new Error(
+        `MCP ${field} must be an object of string key/value pairs`
+      );
+    }
+    const normalizedValue =
+      field === "sseHeaders" ? rawValue.trim() : rawValue;
+    if (
+      normalizedValue.length > MAX_MCP_CONFIG_RECORD_VALUE_CHARS ||
+      (field === "sseHeaders" && normalizedValue.length === 0)
+    ) {
+      throw new Error(
+        `MCP ${field} must be an object of string key/value pairs`
+      );
+    }
+    const duplicateLookup = field === "sseHeaders" ? lowerKey : key;
+    if (seenKeys.has(duplicateLookup)) {
+      throw new Error(`MCP ${field} contains duplicate key "${key}"`);
+    }
+    seenKeys.add(duplicateLookup);
+    normalized[key] = normalizedValue;
+  }
+  return normalized;
 }
 
 function summarizeMCPServerIds(serverIds: string[]): string {
@@ -671,6 +736,11 @@ class MCPClient {
       const connectionType = normalizeMCPConnectionType(
         serverConfig?.connectionType
       );
+      const env = normalizeMCPConnectionStringRecord("env", serverConfig.env);
+      const sseHeaders = normalizeMCPConnectionStringRecord(
+        "sseHeaders",
+        serverConfig.sseHeaders
+      );
 
       if (connectionType === "sse") {
         const sseUrl = normalizeMCPConnectionSSEUrl(serverConfig.sseUrl);
@@ -683,10 +753,10 @@ class MCPClient {
 
         transport = new SSEClientTransport(
           new URL(sseUrl),
-          serverConfig.sseHeaders
+          sseHeaders
             ? {
                 requestInit: {
-                  headers: serverConfig.sseHeaders,
+                  headers: sseHeaders,
                 },
               }
             : undefined
@@ -705,7 +775,7 @@ class MCPClient {
           args,
           env: {
             ...((process.env ?? {}) as Record<string, string>),
-            ...(serverConfig.env ?? {}),
+            ...(env ?? {}),
           },
           // Pipe stdin/stdout, ignore stderr
           stderr: this.debug ? "inherit" : "ignore",

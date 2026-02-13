@@ -746,6 +746,95 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("rejects non-object env records", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          env: "invalid" as unknown as Record<string, string>,
+        })
+      ).rejects.toThrow("MCP env must be an object of string key/value pairs");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects invalid env record entries", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          env: {
+            constructor: "bad",
+          },
+        })
+      ).rejects.toThrow("MCP env must be an object of string key/value pairs");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects oversized env records", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const env = Object.fromEntries(
+      Array.from({ length: 201 }, (_, index) => [`KEY_${index}`, "value"])
+    );
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          env,
+        })
+      ).rejects.toThrow("MCP env cannot include more than 200 entries");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects invalid SSE header records", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "sse",
+          sseUrl: "https://example.com/stream",
+          sseHeaders: {
+            "Bad Header": "value",
+          },
+        })
+      ).rejects.toThrow(
+        "MCP sseHeaders must be an object of string key/value pairs"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects duplicate SSE header keys after normalization", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "sse",
+          sseUrl: "https://example.com/stream",
+          sseHeaders: {
+            " X-Test ": "one",
+            "x-test": "two",
+          },
+        })
+      ).rejects.toThrow('MCP sseHeaders contains duplicate key "x-test"');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("rejects SSE URLs with unsupported protocols", async () => {
     const mcpClient = new MCPClient(false);
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
