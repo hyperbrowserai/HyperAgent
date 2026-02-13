@@ -5,8 +5,20 @@ import { getScrollInfo } from "./utils";
 import { retry } from "@/utils/retry";
 import { A11yDOMState } from "@/context-providers/a11y-dom/types";
 import { HyperVariable } from "@/types/agent/types";
+import { formatUnknownError } from "@/utils";
 
 const MAX_HISTORY_STEPS = 10;
+
+function safeSerializeForPrompt(value: unknown): string {
+  try {
+    const serialized = JSON.stringify(value);
+    return typeof serialized === "string"
+      ? serialized
+      : formatUnknownError(value);
+  } catch {
+    return formatUnknownError(value);
+  }
+}
 
 export const buildAgentStepMessages = async (
   baseMessages: HyperAgentMessage[],
@@ -50,7 +62,7 @@ export const buildAgentStepMessages = async (
       ? variables
           .map(
             (v) =>
-              `<<${v.key}>> - ${v.description} | current value: ${JSON.stringify(v.value)}`
+              `<<${v.key}>> - ${v.description} | current value: ${safeSerializeForPrompt(v.value)}`
           )
           .join("\n")
       : "No variables set";
@@ -78,7 +90,7 @@ export const buildAgentStepMessages = async (
       const { thoughts, memory, action } = step.agentOutput;
       messages.push({
         role: "assistant",
-        content: `Thoughts: ${thoughts}\nMemory: ${memory}\nAction: ${JSON.stringify(
+        content: `Thoughts: ${thoughts}\nMemory: ${memory}\nAction: ${safeSerializeForPrompt(
           action
         )}`,
       });
@@ -86,7 +98,7 @@ export const buildAgentStepMessages = async (
       messages.push({
         role: "user",
         content: actionResult.extract
-          ? `${actionResult.message} :\n ${JSON.stringify(actionResult.extract)}`
+          ? `${actionResult.message} :\n ${safeSerializeForPrompt(actionResult.extract)}`
           : actionResult.message,
       });
     }

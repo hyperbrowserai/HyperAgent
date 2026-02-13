@@ -77,4 +77,37 @@ describe("buildAgentStepMessages", () => {
     expect(joined).not.toContain("thought-0");
     expect(joined).toContain("thought-11");
   });
+
+  it("does not crash when step extract payload is circular", async () => {
+    const circular: { self?: unknown } = {};
+    circular.self = circular;
+    const step = createStep(0);
+    step.actionOutput.extract = circular;
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [step],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain('"self":"[Circular]"');
+  });
 });
