@@ -610,6 +610,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return finalSuccess;
     };
 
+    const getReplayInstruction = (
+      instruction: string | undefined
+    ): string | null => {
+      const trimmed = instruction?.trim();
+      return trimmed && trimmed.length > 0 ? trimmed : null;
+    };
+
     for (const step of [...cache.steps].sort(
       (a, b) => a.stepIndex - b.stepIndex
     )) {
@@ -640,9 +647,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             const xpath = step.xpath;
             const hasXPath =
               typeof xpath === "string" && xpath.trim().length > 0;
+            const replayInstruction = getReplayInstruction(step.instruction);
             if (!hasXPath) {
-              if (step.instruction) {
-                result = await hyperPage.perform(step.instruction);
+              if (replayInstruction) {
+                result = await hyperPage.perform(replayInstruction);
               } else {
                 result = {
                   taskId: cache.taskId,
@@ -665,7 +673,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               continue;
             }
             const options: PerformOptions = {
-              performInstruction: step.instruction ?? null,
+              performInstruction: replayInstruction,
               maxSteps: maxXPathRetries,
             };
             if (step.frameIndex !== null && step.frameIndex !== undefined) {
@@ -680,23 +688,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               valueArg,
               options
             );
-          } else if (step.instruction) {
-            result = await hyperPage.perform(step.instruction);
           } else {
-            result = {
-              taskId: cache.taskId,
-              status: TaskStatus.FAILED,
-              steps: [],
-              output: `Cannot replay action type "${step.actionType}" without instruction`,
-              replayStepMeta: {
-                usedCachedAction: false,
-                fallbackUsed: false,
-                retries: 0,
-                cachedXPath: null,
-                fallbackXPath: null,
-                fallbackElementId: null,
-              },
-            };
+            const replayInstruction = getReplayInstruction(step.instruction);
+            if (replayInstruction) {
+              result = await hyperPage.perform(replayInstruction);
+            } else {
+              result = {
+                taskId: cache.taskId,
+                status: TaskStatus.FAILED,
+                steps: [],
+                output: `Cannot replay action type "${step.actionType}" without instruction`,
+                replayStepMeta: {
+                  usedCachedAction: false,
+                  fallbackUsed: false,
+                  retries: 0,
+                  cachedXPath: null,
+                  fallbackXPath: null,
+                  fallbackElementId: null,
+                },
+              };
+            }
           }
         }
       } catch (error: unknown) {

@@ -104,6 +104,42 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toContain("without XPath or instruction");
   });
 
+  it("treats whitespace instruction as missing when xpath is unavailable", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn();
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "   ",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: null,
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("without XPath or instruction");
+    expect(perform).not.toHaveBeenCalled();
+  });
+
   it("replays special wait action using actionParams duration", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
