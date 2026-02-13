@@ -1083,6 +1083,7 @@ async fn get_agent_schema(
       "has_more": "true when another page exists after this response",
       "entries": [{
         "request_id": "string",
+        "cached_at": "iso timestamp when entry was cached",
         "operations_signature": "optional string",
         "operation_count": "number of cached operations in this request",
         "result_count": "number of cached operation results"
@@ -1096,6 +1097,7 @@ async fn get_agent_schema(
     },
     "agent_ops_cache_entry_detail_response_shape": {
       "request_id": "string",
+      "cached_at": "iso timestamp when entry was cached",
       "operation_count": "number of cached operations in this request",
       "result_count": "number of cached operation results",
       "cached_response": "cached agent_ops response payload",
@@ -1108,6 +1110,7 @@ async fn get_agent_schema(
       "request_id": "string (required)"
     },
     "agent_ops_cache_replay_response_shape": {
+      "cached_at": "iso timestamp when source cache entry was created",
       "cached_response": {
         "request_id": "optional string",
         "operations_signature": "sha256 signature over cached operations",
@@ -1499,12 +1502,21 @@ async fn agent_ops_cache_entries(
     .await?;
   let mapped_entries = entries
     .into_iter()
-    .map(|(request_id, operations_signature, operation_count, result_count)| AgentOpsCacheEntry {
-      request_id,
-      operations_signature,
-      operation_count,
-      result_count,
-    })
+    .map(
+      |(
+        request_id,
+        operations_signature,
+        operation_count,
+        result_count,
+        cached_at,
+      )| AgentOpsCacheEntry {
+        request_id,
+        cached_at,
+        operations_signature,
+        operation_count,
+        result_count,
+      },
+    )
     .collect::<Vec<_>>();
   let has_more = offset + mapped_entries.len() < total_entries;
   Ok(Json(AgentOpsCacheEntriesResponse {
@@ -1530,7 +1542,7 @@ async fn agent_ops_cache_entry_detail(
       "request_id is required to fetch cache entry detail.",
     ));
   }
-  let (cached_response, operations) = state
+  let (cached_response, operations, cached_at) = state
     .get_cached_agent_ops_replay_data(workbook_id, normalized_request_id)
     .await?
     .ok_or_else(|| {
@@ -1541,6 +1553,7 @@ async fn agent_ops_cache_entry_detail(
     })?;
   Ok(Json(AgentOpsCacheEntryDetailResponse {
     request_id: normalized_request_id.to_string(),
+    cached_at,
     operation_count: operations.len(),
     result_count: cached_response.results.len(),
     cached_response,
@@ -1598,7 +1611,7 @@ async fn replay_agent_ops_cache_entry(
       "request_id is required to replay a cache entry.",
     ));
   }
-  let (mut cached_response, operations) = state
+  let (mut cached_response, operations, cached_at) = state
     .get_cached_agent_ops_replay_data(workbook_id, request_id)
     .await?
     .ok_or_else(|| {
@@ -1609,6 +1622,7 @@ async fn replay_agent_ops_cache_entry(
     })?;
   cached_response.served_from_cache = true;
   Ok(Json(ReplayAgentOpsCacheEntryResponse {
+    cached_at,
     cached_response,
     operations,
   }))
@@ -1627,7 +1641,7 @@ async fn reexecute_agent_ops_cache_entry(
       "request_id is required to reexecute a cache entry.",
     ));
   }
-  let (_, operations) = state
+  let (_, operations, _) = state
     .get_cached_agent_ops_replay_data(workbook_id, source_request_id)
     .await?
     .ok_or_else(|| {

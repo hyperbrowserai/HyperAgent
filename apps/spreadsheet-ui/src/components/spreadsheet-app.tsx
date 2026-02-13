@@ -454,6 +454,14 @@ export function SpreadsheetApp() {
         ? "Syncing updates..."
         : "Ready";
 
+  function formatIsoTimestamp(value: string): string {
+    const parsedDate = new Date(value);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return value;
+    }
+    return parsedDate.toLocaleString();
+  }
+
   function applyUiError(error: unknown, fallback: string): void {
     setUiNotice(null);
     if (error instanceof SpreadsheetApiError) {
@@ -2617,6 +2625,12 @@ export function SpreadsheetApp() {
                               </span>
                             </span>
                             <span className="ml-2 text-slate-500">
+                              cached:
+                              <span className="ml-1 font-mono text-slate-300">
+                                {formatIsoTimestamp(entry.cached_at)}
+                              </span>
+                            </span>
+                            <span className="ml-2 text-slate-500">
                               ops:
                               <span className="ml-1 font-mono text-slate-300">
                                 {entry.operation_count}
@@ -2775,6 +2789,10 @@ export function SpreadsheetApp() {
                         · results:{" "}
                         <span className="font-mono text-slate-300">
                           {selectedCacheEntryDetail.result_count}
+                        </span>{" "}
+                        · cached:{" "}
+                        <span className="font-mono text-slate-300">
+                          {formatIsoTimestamp(selectedCacheEntryDetail.cached_at)}
                         </span>
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-1">

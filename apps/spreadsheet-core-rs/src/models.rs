@@ -201,6 +201,7 @@ pub struct ReplayAgentOpsCacheEntryRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplayAgentOpsCacheEntryResponse {
+  pub cached_at: DateTime<Utc>,
   pub cached_response: AgentOpsResponse,
   pub operations: Vec<AgentOperation>,
 }
@@ -227,6 +228,7 @@ pub struct ReexecuteAgentOpsCacheEntryResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsCacheEntryDetailResponse {
   pub request_id: String,
+  pub cached_at: DateTime<Utc>,
   pub operation_count: usize,
   pub result_count: usize,
   pub cached_response: AgentOpsResponse,
@@ -236,6 +238,7 @@ pub struct AgentOpsCacheEntryDetailResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsCacheEntry {
   pub request_id: String,
+  pub cached_at: DateTime<Utc>,
   pub operations_signature: Option<String>,
   pub operation_count: usize,
   pub result_count: usize,

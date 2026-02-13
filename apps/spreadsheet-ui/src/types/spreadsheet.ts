@@ -62,6 +62,7 @@ export interface AgentOpsCacheStatsResponse {
 
 export interface AgentOpsCacheEntry {
   request_id: string;
+  cached_at: string;
   operations_signature: string | null;
   operation_count: number;
   result_count: number;
@@ -109,6 +110,7 @@ export interface PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
 }
 
 export interface ReplayAgentOpsCacheEntryResponse {
+  cached_at: string;
   cached_response: AgentOpsResponse;
   operations: AgentOperationPreview[];
 }
@@ -124,6 +126,7 @@ export interface ReexecuteAgentOpsCacheEntryResponse {
 
 export interface AgentOpsCacheEntryDetailResponse {
   request_id: string;
+  cached_at: string;
   operation_count: number;
   result_count: number;
   cached_response: AgentOpsResponse;

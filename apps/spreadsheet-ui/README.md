@@ -48,6 +48,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent integration panel displays discovered cache stats/clear endpoint metadata from schema
 - Agent integration panel shows live idempotency cache stats (entries/oldest/newest) with a clear-cache control
 - Agent integration panel lists paged cached request IDs/signature prefixes plus per-entry operation/result counts with prefix filtering, newer/older pagination, and inspect/replay/rerun/copy/copy-ops/single-entry remove controls
+- Cache list and detail inspector show when each request-id entry was cached (`cached_at`)
 - Cache prefix filter offers one-click backend-derived suggestions with entry counts
 - Cache detail inspector supports copy actions for full detail JSON and operations-only payload
 - Prefix-filtered cache view supports one-click bulk removal of matching cached request IDs

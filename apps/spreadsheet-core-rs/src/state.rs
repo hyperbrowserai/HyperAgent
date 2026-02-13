@@ -4,7 +4,7 @@ use crate::{
     AgentOperation, AgentOpsResponse, ChartSpec, WorkbookEvent, WorkbookSummary,
   },
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use duckdb::Connection;
 use serde_json::Value;
 use std::{
@@ -32,6 +32,7 @@ pub struct WorkbookRecord {
   pub next_seq: u64,
   pub agent_ops_cache: HashMap<String, AgentOpsResponse>,
   pub agent_ops_cached_operations: HashMap<String, Vec<AgentOperation>>,
+  pub agent_ops_cache_timestamps: HashMap<String, DateTime<Utc>>,
   pub agent_ops_cache_order: VecDeque<String>,
 }
 
@@ -70,6 +71,7 @@ impl AppState {
       next_seq: 1,
       agent_ops_cache: HashMap::new(),
       agent_ops_cached_operations: HashMap::new(),
+      agent_ops_cache_timestamps: HashMap::new(),
       agent_ops_cache_order: VecDeque::new(),
     };
 
@@ -227,11 +229,15 @@ impl AppState {
     let cache_key = request_id.clone();
     record.agent_ops_cache.insert(cache_key.clone(), response);
     record.agent_ops_cached_operations.insert(cache_key, operations);
+    record
+      .agent_ops_cache_timestamps
+      .insert(request_id, Utc::now());
 
     while record.agent_ops_cache_order.len() > AGENT_OPS_CACHE_MAX_ENTRIES {
       if let Some(evicted) = record.agent_ops_cache_order.pop_front() {
         record.agent_ops_cache.remove(&evicted);
         record.agent_ops_cached_operations.remove(&evicted);
+        record.agent_ops_cache_timestamps.remove(&evicted);
       }
     }
     Ok(())
@@ -241,16 +247,17 @@ impl AppState {
     &self,
     workbook_id: Uuid,
     request_id: &str,
-  ) -> Result<Option<(AgentOpsResponse, Vec<AgentOperation>)>, ApiError> {
+  ) -> Result<Option<(AgentOpsResponse, Vec<AgentOperation>, DateTime<Utc>)>, ApiError> {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
       .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
     let response = record.agent_ops_cache.get(request_id).cloned();
     let operations = record.agent_ops_cached_operations.get(request_id).cloned();
-    Ok(match (response, operations) {
-      (Some(existing_response), Some(existing_operations)) => {
-        Some((existing_response, existing_operations))
+    let cached_at = record.agent_ops_cache_timestamps.get(request_id).cloned();
+    Ok(match (response, operations, cached_at) {
+      (Some(existing_response), Some(existing_operations), Some(existing_cached_at)) => {
+        Some((existing_response, existing_operations, existing_cached_at))
       }
       _ => None,
     })
@@ -277,7 +284,7 @@ impl AppState {
     request_id_prefix: Option<&str>,
     offset: usize,
     limit: usize,
-  ) -> Result<(usize, Vec<(String, Option<String>, usize, usize)>), ApiError> {
+  ) -> Result<(usize, Vec<(String, Option<String>, usize, usize, DateTime<Utc>)>), ApiError> {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
@@ -304,11 +311,13 @@ impl AppState {
       .filter_map(|request_id| {
         let response = record.agent_ops_cache.get(&request_id)?;
         let operations = record.agent_ops_cached_operations.get(&request_id)?;
+        let cached_at = record.agent_ops_cache_timestamps.get(&request_id)?.to_owned();
         Some((
           request_id,
           response.operations_signature.clone(),
           operations.len(),
           response.results.len(),
+          cached_at,
         ))
       })
       .collect::<Vec<_>>();
@@ -327,6 +336,7 @@ impl AppState {
     record.agent_ops_cache_order.clear();
     record.agent_ops_cache.clear();
     record.agent_ops_cached_operations.clear();
+    record.agent_ops_cache_timestamps.clear();
     Ok(cleared_entries)
   }
 
@@ -355,6 +365,7 @@ impl AppState {
       for request_id in matching_request_ids {
         record.agent_ops_cache.remove(&request_id);
         record.agent_ops_cached_operations.remove(&request_id);
+        record.agent_ops_cache_timestamps.remove(&request_id);
       }
     }
 
@@ -409,6 +420,7 @@ impl AppState {
     if removed {
       record.agent_ops_cache_order.retain(|entry| entry != request_id);
       record.agent_ops_cached_operations.remove(request_id);
+      record.agent_ops_cache_timestamps.remove(request_id);
     }
     Ok((removed, record.agent_ops_cache_order.len()))
   }
@@ -438,6 +450,7 @@ fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
 
 #[cfg(test)]
 mod tests {
+  use chrono::Utc;
   use super::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES};
   use crate::models::{AgentOperation, AgentOperationResult, AgentOpsResponse};
   use serde_json::json;
@@ -491,6 +504,7 @@ mod tests {
       .expect("cache replay data should be present");
     assert_eq!(replay_data.1.len(), 1);
     assert!(matches!(replay_data.1[0], AgentOperation::Recalculate));
+    assert!(replay_data.2 <= Utc::now());
   }
 
   #[tokio::test]
@@ -625,6 +639,7 @@ mod tests {
     assert_eq!(entries[0].1.as_deref(), Some("sig-3"));
     assert_eq!(entries[0].2, 1);
     assert_eq!(entries[0].3, 0);
+    assert!(entries[0].4 <= Utc::now());
 
     let (_, paged_entries) = state
       .agent_ops_cache_entries(workbook.id, None, 2, 2)
