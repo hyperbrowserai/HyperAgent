@@ -32,11 +32,13 @@ export function SpreadsheetApp() {
     workbook,
     activeSheet,
     selectedAddress,
+    eventSeq,
+    eventLog,
     cellsByAddress,
     setWorkbook,
     setCells,
     setSelectedAddress,
-    setEventSeq,
+    appendEvent,
   } = useWorkbookStore();
   const [formulaInput, setFormulaInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -79,11 +81,11 @@ export function SpreadsheetApp() {
       return;
     }
     const unsubscribe = subscribeToWorkbookEvents(workbook.id, (event) => {
-      setEventSeq(event.seq);
+      appendEvent(event);
       queryClient.invalidateQueries({ queryKey: ["cells", workbook.id, activeSheet] });
     });
     return unsubscribe;
-  }, [workbook?.id, activeSheet, queryClient, setEventSeq]);
+  }, [workbook?.id, activeSheet, queryClient, appendEvent]);
 
   useEffect(() => {
     const selectedCell = cellsByAddress[selectedAddress];
@@ -221,7 +223,7 @@ export function SpreadsheetApp() {
               </button>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-300 md:grid-cols-3">
+          <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-300 md:grid-cols-4">
             <div className="rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
               Workbook: <span className="font-semibold">{workbook?.name ?? "-"}</span>
             </div>
@@ -230,6 +232,9 @@ export function SpreadsheetApp() {
             </div>
             <div className="rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
               Status: <span className="font-semibold">{statusText}</span>
+            </div>
+            <div className="rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
+              Stream Seq: <span className="font-semibold">{eventSeq}</span>
             </div>
           </div>
         </header>
@@ -307,20 +312,57 @@ export function SpreadsheetApp() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-200">
-              Live Chart Preview (A1:A10 vs B1:B10)
-            </h2>
-            <button
-              onClick={handleChartSync}
-              className="rounded-md bg-fuchsia-500 px-3 py-2 text-xs font-medium text-white hover:bg-fuchsia-400"
-            >
-              Sync Chart Metadata
-            </button>
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-200">
+                Live Chart Preview (A1:A10 vs B1:B10)
+              </h2>
+              <button
+                onClick={handleChartSync}
+                className="rounded-md bg-fuchsia-500 px-3 py-2 text-xs font-medium text-white hover:bg-fuchsia-400"
+              >
+                Sync Chart Metadata
+              </button>
+            </div>
+            <div className="h-72 rounded-lg border border-slate-800 bg-slate-950 p-3">
+              <ChartPreview data={chartData} />
+            </div>
           </div>
-          <div className="h-72 rounded-lg border border-slate-800 bg-slate-950 p-3">
-            <ChartPreview data={chartData} />
+
+          <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+            <h2 className="mb-2 text-sm font-semibold text-slate-200">
+              Realtime Event Stream
+            </h2>
+            <div className="h-72 overflow-auto rounded-lg border border-slate-800 bg-slate-950">
+              {eventLog.length === 0 ? (
+                <p className="px-3 py-4 text-xs text-slate-500">
+                  Waiting for workbook events...
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-800 text-xs">
+                  {eventLog.map((event) => (
+                    <li key={`${event.seq}-${event.timestamp}`} className="px-3 py-2">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="rounded-full border border-indigo-400/40 bg-indigo-500/15 px-2 py-0.5 font-medium text-indigo-200">
+                          {event.event_type}
+                        </span>
+                        <span className="font-mono text-slate-400">
+                          #{event.seq}
+                        </span>
+                      </div>
+                      <p className="text-slate-400">
+                        actor: {event.actor} ·{" "}
+                        {new Date(event.timestamp).toLocaleTimeString()}
+                      </p>
+                      <pre className="mt-1 overflow-hidden text-ellipsis whitespace-pre-wrap text-[11px] text-slate-300">
+                        {JSON.stringify(event.payload, null, 2)}
+                      </pre>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </section>
       </div>
