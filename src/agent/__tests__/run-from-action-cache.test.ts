@@ -473,4 +473,67 @@ describe("runFromActionCache hardening", () => {
     expect(replay.status).toBe(TaskStatus.COMPLETED);
     expect(replay.steps[0]?.message).toBe("");
   });
+
+  it("handles malformed non-finite step indices safely", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest
+      .fn()
+      .mockResolvedValue({
+        taskId: "perform-task-1",
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: "first",
+      })
+      .mockResolvedValueOnce({
+        taskId: "perform-task-0",
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: "second",
+      });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: Number.NaN,
+          instruction: "nan index step",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+        {
+          stepIndex: 0,
+          instruction: "normal step",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.COMPLETED);
+    expect(perform).toHaveBeenNthCalledWith(1, "normal step");
+    expect(perform).toHaveBeenNthCalledWith(2, "nan index step");
+    expect(replay.steps[0]?.stepIndex).toBe(0);
+    expect(replay.steps[1]?.stepIndex).toBe(-1);
+  });
 });

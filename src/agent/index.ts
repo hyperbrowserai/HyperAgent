@@ -599,15 +599,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const stepsResult: ActionCacheReplayResult["steps"] = [];
     let replayStatus: TaskStatus.COMPLETED | TaskStatus.FAILED =
       TaskStatus.COMPLETED;
+    const getSafeStepIndex = (value: number): number =>
+      Number.isFinite(value) ? value : -1;
+    const getSortStepIndex = (value: number): number =>
+      Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
     const recordReplayStep = (
       step: ActionCacheOutput["steps"][number],
       result: TaskOutput
     ): boolean => {
       const finalMeta = result.replayStepMeta;
       const finalSuccess = result.status === TaskStatus.COMPLETED;
+      const safeStepIndex = getSafeStepIndex(step.stepIndex);
 
       stepsResult.push({
-        stepIndex: step.stepIndex,
+        stepIndex: safeStepIndex,
         actionType: step.actionType,
         usedXPath: finalMeta?.usedCachedAction ?? false,
         fallbackUsed: finalMeta?.fallbackUsed ?? false,
@@ -635,7 +640,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
 
     for (const step of [...cache.steps].sort(
-      (a, b) => a.stepIndex - b.stepIndex
+      (a, b) => getSortStepIndex(a.stepIndex) - getSortStepIndex(b.stepIndex)
     )) {
       const page = getPage();
       const hyperPage = page as HyperPage;
@@ -732,7 +737,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           taskId: cache.taskId,
           status: TaskStatus.FAILED,
           steps: [],
-          output: `Replay step ${step.stepIndex} failed: ${message}`,
+          output: `Replay step ${getSafeStepIndex(step.stepIndex)} failed: ${message}`,
           replayStepMeta: {
             usedCachedAction: attemptedCachedAction,
             fallbackUsed: false,
