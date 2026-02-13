@@ -397,6 +397,7 @@ export function SpreadsheetApp() {
   useEffect(() => {
     setCacheEntriesOffset(0);
     setCachePrefixRemovalPreview(null);
+    setCacheStaleRemovalPreview(null);
   }, [cacheRequestIdPrefix, cacheEntriesMaxAgeSeconds]);
 
   useEffect(() => {
