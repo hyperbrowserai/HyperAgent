@@ -1122,19 +1122,16 @@ export function SpreadsheetApp() {
   }
 
   async function handleReplayLastRequestId() {
-    if (!workbook || !lastAgentRequestId || lastExecutedOperations.length === 0) {
+    if (!workbook || !lastAgentRequestId) {
       return;
     }
     setIsReplayingLastRequest(true);
     try {
       clearUiError();
-      const response = await runAgentOps(workbook.id, {
-        request_id: lastAgentRequestId,
-        actor: "ui-replay-last-request",
-        stop_on_error: true,
-        expected_operations_signature: lastOperationsSignature ?? undefined,
-        operations: lastExecutedOperations,
-      });
+      const response = await replayAgentOpsCacheEntry(
+        workbook.id,
+        lastAgentRequestId,
+      );
       setLastOperationsSignature(response.operations_signature ?? null);
       setLastServedFromCache(response.served_from_cache ?? null);
       setLastAgentOps(response.results);
@@ -2196,14 +2193,20 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
-            {lastExecutedOperations.length > 0 ? (
+            {lastExecutedOperations.length > 0 || lastAgentRequestId ? (
               <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-400">
-                <span>
-                  last execution plan ops:{" "}
-                  <span className="font-mono text-slate-200">
-                    {lastExecutedOperations.length}
+                {lastExecutedOperations.length > 0 ? (
+                  <span>
+                    last execution plan ops:{" "}
+                    <span className="font-mono text-slate-200">
+                      {lastExecutedOperations.length}
+                    </span>
                   </span>
-                </span>
+                ) : (
+                  <span className="text-slate-500">
+                    last execution plan not available locally.
+                  </span>
+                )}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleReplayLastRequestId}
@@ -2220,7 +2223,11 @@ export function SpreadsheetApp() {
                   </button>
                   <button
                     onClick={handleCopyLastExecutionOpsPayload}
-                    disabled={isCopyingLastExecutionPayload || !workbook}
+                    disabled={
+                      isCopyingLastExecutionPayload
+                      || !workbook
+                      || lastExecutedOperations.length === 0
+                    }
                     className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                   >
                     {isCopyingLastExecutionPayload
