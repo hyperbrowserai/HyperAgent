@@ -287,7 +287,7 @@ export function SpreadsheetApp() {
       cacheEntriesOffset,
       CACHE_ENTRIES_PREVIEW_LIMIT,
     ],
-    enabled: Boolean(workbook?.id),
+    enabled: Boolean(workbook?.id) && !hasInvalidCacheEntriesMaxAgeInput,
     queryFn: () =>
       getAgentOpsCacheEntries(
         workbook!.id,
@@ -304,7 +304,7 @@ export function SpreadsheetApp() {
       workbook?.id,
       normalizedCacheEntriesMaxAgeSeconds,
     ],
-    enabled: Boolean(workbook?.id),
+    enabled: Boolean(workbook?.id) && !hasInvalidCacheEntriesMaxAgeInput,
     queryFn: () =>
       getAgentOpsCachePrefixes(
         workbook!.id,
@@ -2778,7 +2778,8 @@ export function SpreadsheetApp() {
                   </div>
                   {hasInvalidCacheEntriesMaxAgeInput ? (
                     <p className="mb-2 text-[10px] text-rose-300">
-                      older-than filter must be a positive integer (seconds).
+                      older-than filter must be a positive integer (seconds). Cache
+                      entries/prefix queries are paused until corrected.
                     </p>
                   ) : null}
                   {cachePrefixRemovalPreview ? (
