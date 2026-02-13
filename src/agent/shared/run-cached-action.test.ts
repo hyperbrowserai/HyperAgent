@@ -365,6 +365,29 @@ describe("runCachedStep", () => {
     );
   });
 
+  it("truncates oversized special-action failure diagnostics", async () => {
+    executeReplaySpecialAction.mockRejectedValue(
+      new Error(`x${"y".repeat(2_000)}\nnavigation failed`)
+    );
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "go to app",
+      cachedAction: {
+        actionType: "goToUrl",
+        arguments: ["https://example.com"],
+      },
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("[truncated");
+    expect(result.output).not.toContain("\n");
+  });
+
   it("returns failed output when perform fallback throws", async () => {
     executeReplaySpecialAction.mockResolvedValue(null);
     resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));
@@ -401,6 +424,36 @@ describe("runCachedStep", () => {
         cachedXPath: "//button[1]",
       })
     );
+  });
+
+  it("truncates oversized fallback failure diagnostics", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));
+    const performFallback = jest
+      .fn()
+      .mockRejectedValue(new Error(`x${"y".repeat(2_000)}\nperform fallback crashed`));
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: 0,
+        arguments: [],
+      },
+      maxSteps: 1,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+      performFallback,
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("[truncated");
+    expect(result.output).not.toContain("\n");
   });
 
   it("normalizes invalid fallback responses safely", async () => {
@@ -534,6 +587,32 @@ describe("runCachedStep", () => {
 
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.output).toContain("string failure");
+  });
+
+  it("truncates oversized cached attempt failure diagnostics", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue(new Error(`x${"y".repeat(5_000)}`));
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: 0,
+        arguments: [],
+      },
+      maxSteps: 1,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("[truncated");
+    expect(String(result.output ?? "").length).toBeLessThanOrEqual(4100);
   });
 
   it("handles trap-prone cached-action getters safely", async () => {

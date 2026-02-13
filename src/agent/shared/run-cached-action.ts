@@ -40,6 +40,68 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const MAX_CACHED_ACTION_ARGS = 20;
 const MAX_CACHED_ACTION_ARG_CHARS = 2_000;
+const MAX_CACHED_ACTION_OUTPUT_CHARS = 4_000;
+const MAX_CACHED_ACTION_DIAGNOSTIC_CHARS = 400;
+const MAX_CACHED_ACTION_DEBUG_LABEL_CHARS = 200;
+
+const sanitizeCachedActionText = (value: string): string => {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+};
+
+const truncateCachedActionText = (
+  value: string,
+  maxChars: number
+): string => {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omitted = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omitted} chars]`;
+};
+
+const formatCachedActionDiagnostic = (value: unknown): string =>
+  truncateCachedActionText(
+    sanitizeCachedActionText(formatUnknownError(value)) || "unknown error",
+    MAX_CACHED_ACTION_DIAGNOSTIC_CHARS
+  );
+
+const normalizeCachedActionOutputText = (
+  value: unknown,
+  fallback: string
+): string => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  if (value.length === 0) {
+    return value;
+  }
+  const sanitized = sanitizeCachedActionText(value);
+  if (sanitized.length === 0) {
+    return fallback;
+  }
+  return truncateCachedActionText(
+    sanitized,
+    MAX_CACHED_ACTION_OUTPUT_CHARS
+  );
+};
+
+const formatCachedActionDebugLabel = (value: unknown, fallback: string): string => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const sanitized = sanitizeCachedActionText(value);
+  if (sanitized.length === 0) {
+    return fallback;
+  }
+  return truncateCachedActionText(sanitized, MAX_CACHED_ACTION_DEBUG_LABEL_CHARS);
+};
 
 const safeReadCachedActionField = (
   cachedAction: CachedActionInput,
@@ -151,12 +213,12 @@ function normalizeFallbackTaskOutput(
       ) ?? taskId,
     status,
     steps: [],
-    output:
-      typeof outputValue === "string"
-        ? outputValue
-        : status === TaskStatus.FAILED
-          ? "Fallback perform returned an invalid response payload."
-          : "Fallback perform completed.",
+    output: normalizeCachedActionOutputText(
+      outputValue,
+      status === TaskStatus.FAILED
+        ? "Fallback perform returned an invalid response payload."
+        : "Fallback perform completed."
+    ),
     replayStepMeta: {
       usedCachedAction: true,
       fallbackUsed: true,
@@ -231,7 +293,7 @@ export async function runCachedStep(
     page,
     retries: 1,
   }).catch((error) => {
-    const message = formatUnknownError(error);
+    const message = formatCachedActionDiagnostic(error);
     return {
       taskId,
       status: TaskStatus.FAILED,
@@ -327,7 +389,7 @@ export async function runCachedStep(
   // All cached attempts failed; optionally fall back to LLM perform
   if (params.performFallback) {
     const fallbackResult = await params.performFallback(instruction).catch((error) => {
-      const message = formatUnknownError(error);
+      const message = formatCachedActionDiagnostic(error);
       return {
         taskId,
         status: TaskStatus.FAILED,
@@ -352,13 +414,17 @@ export async function runCachedStep(
     if (debug) {
       const cachedXPath = normalizedXPath || "N/A";
       const resolvedXPath =
-        normalizedFallback.replayStepMeta?.fallbackXPath || "N/A";
+        formatCachedActionDebugLabel(
+          normalizedFallback.replayStepMeta?.fallbackXPath,
+          "N/A"
+        );
+      const safeInstruction = formatCachedActionDebugLabel(instruction, "N/A");
       // eslint-disable-next-line no-console
       console.log(
         `
 ⚠️ [runCachedStep] Cached action failed. Falling back to LLM...
-   Instruction: "${instruction}"
-   ❌ Cached XPath Failed: "${cachedXPath}"
+   Instruction: "${safeInstruction}"
+   ❌ Cached XPath Failed: "${formatCachedActionDebugLabel(cachedXPath, "N/A")}"
    ✅ LLM Resolved New XPath: "${resolvedXPath}"
 `
       );
@@ -370,10 +436,12 @@ export async function runCachedStep(
     taskId,
     status: TaskStatus.FAILED,
     steps: [],
-    output:
-      (lastError !== null
-        ? formatUnknownError(lastError)
-        : "Failed to execute cached action"),
+    output: normalizeCachedActionOutputText(
+      lastError !== null
+        ? formatCachedActionDiagnostic(lastError)
+        : "Failed to execute cached action",
+      "Failed to execute cached action"
+    ),
     replayStepMeta: {
       usedCachedAction: true,
       fallbackUsed: false,
