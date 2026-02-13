@@ -15,6 +15,7 @@ import { normalizeOpenAIToolCalls } from "../utils/openai-tool-calls";
 import { sanitizeProviderOptions } from "../utils/provider-options";
 import { parseStructuredResponse } from "../utils/structured-response";
 import { z } from "zod";
+import { formatUnknownError } from "@/utils";
 
 export interface DeepSeekClientConfig {
   apiKey?: string;
@@ -32,6 +33,90 @@ const RESERVED_DEEPSEEK_PROVIDER_OPTION_KEYS = new Set([
   "maxTokens",
   "response_format",
 ]);
+const MAX_PROVIDER_RESPONSE_DIAGNOSTIC_CHARS = 300;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatProviderResponseDiagnostic(value: unknown): string {
+  const normalized = formatUnknownError(value);
+  if (normalized.length <= MAX_PROVIDER_RESPONSE_DIAGNOSTIC_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(
+    0,
+    MAX_PROVIDER_RESPONSE_DIAGNOSTIC_CHARS
+  )}... [truncated ${normalized.length - MAX_PROVIDER_RESPONSE_DIAGNOSTIC_CHARS} chars]`;
+}
+
+function safeReadRecordField(
+  source: Record<string, unknown>,
+  key: string,
+  fieldLabel: string,
+  providerLabel: string
+): unknown {
+  try {
+    return source[key];
+  } catch (error) {
+    throw new Error(
+      `[LLM][${providerLabel}] Invalid completion payload: failed to read ${fieldLabel} (${formatProviderResponseDiagnostic(
+        error
+      )})`
+    );
+  }
+}
+
+function extractMessageFromCompletionResponse(
+  response: unknown,
+  providerLabel: string
+): Record<string, unknown> {
+  if (!isRecord(response)) {
+    throw new Error(`[LLM][${providerLabel}] Invalid completion payload: response must be an object`);
+  }
+  const choices = safeReadRecordField(response, "choices", "choices", providerLabel);
+  if (!Array.isArray(choices) || choices.length === 0) {
+    throw new Error(`No response from ${providerLabel}`);
+  }
+  const firstChoice = choices[0];
+  if (!isRecord(firstChoice)) {
+    throw new Error(`[LLM][${providerLabel}] Invalid completion payload: first choice is not an object`);
+  }
+  const message = safeReadRecordField(
+    firstChoice,
+    "message",
+    "choice.message",
+    providerLabel
+  );
+  if (!isRecord(message)) {
+    throw new Error(`[LLM][${providerLabel}] Invalid completion payload: choice.message is not an object`);
+  }
+  return message;
+}
+
+function safeReadUsageTokens(
+  response: unknown,
+  field: "prompt_tokens" | "completion_tokens"
+): number | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+  let usage: unknown;
+  try {
+    usage = response.usage;
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(usage)) {
+    return undefined;
+  }
+  try {
+    const value = usage[field];
+    return typeof value === "number" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export class DeepSeekClient implements HyperAgentLLM {
   private client: OpenAI;
@@ -88,14 +173,22 @@ export class DeepSeekClient implements HyperAgentLLM {
       ...providerOptions,
     });
 
-    const choice = response.choices[0];
-    if (!choice) {
-      throw new Error("No response from DeepSeek");
-    }
-
-    const content = normalizeOpenAICompatibleContent(choice.message.content);
+    const message = extractMessageFromCompletionResponse(response, "DeepSeek");
+    const content = normalizeOpenAICompatibleContent(
+      safeReadRecordField(
+        message,
+        "content",
+        "choice.message.content",
+        "DeepSeek"
+      )
+    );
     const toolCalls = normalizeOpenAIToolCalls(
-      choice.message.tool_calls,
+      safeReadRecordField(
+        message,
+        "tool_calls",
+        "choice.message.tool_calls",
+        "DeepSeek"
+      ),
       "DeepSeek"
     );
 
@@ -104,8 +197,8 @@ export class DeepSeekClient implements HyperAgentLLM {
       content: content,
       toolCalls: toolCalls,
       usage: {
-        inputTokens: response.usage?.prompt_tokens,
-        outputTokens: response.usage?.completion_tokens,
+        inputTokens: safeReadUsageTokens(response, "prompt_tokens"),
+        outputTokens: safeReadUsageTokens(response, "completion_tokens"),
       },
     };
   }
@@ -130,12 +223,13 @@ export class DeepSeekClient implements HyperAgentLLM {
       ...providerOptions,
     });
 
-    const choice = response.choices[0];
-    if (!choice) {
-      throw new Error("No response from DeepSeek");
-    }
-
-    const content = choice.message.content;
+    const message = extractMessageFromCompletionResponse(response, "DeepSeek");
+    const content = safeReadRecordField(
+      message,
+      "content",
+      "choice.message.content",
+      "DeepSeek"
+    );
     return parseStructuredResponse(content, request.schema);
   }
 }

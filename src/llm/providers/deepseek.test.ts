@@ -230,4 +230,50 @@ describe("DeepSeekClient", () => {
       })
     );
   });
+
+  it("throws readable error when completion choices are unreadable", async () => {
+    const response = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "choices") {
+            throw new Error("choices getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+    createCompletionMock.mockResolvedValue(response);
+
+    const client = new DeepSeekClient({ model: "deepseek-test" });
+    await expect(
+      client.invoke([{ role: "user", content: "hello" }])
+    ).rejects.toThrow(
+      "[LLM][DeepSeek] Invalid completion payload: failed to read choices (choices getter trap)"
+    );
+  });
+
+  it("throws readable error when completion message fields are unreadable", async () => {
+    const choice = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "message") {
+            throw new Error("message getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+    createCompletionMock.mockResolvedValue({
+      choices: [choice],
+    });
+
+    const client = new DeepSeekClient({ model: "deepseek-test" });
+    await expect(
+      client.invoke([{ role: "user", content: "hello" }])
+    ).rejects.toThrow(
+      "[LLM][DeepSeek] Invalid completion payload: failed to read choice.message (message getter trap)"
+    );
+  });
 });
