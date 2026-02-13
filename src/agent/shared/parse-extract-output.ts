@@ -1,22 +1,28 @@
 import { z } from "zod";
 import { formatUnknownError } from "@/utils";
 
+const MAX_EXTRACT_DIAGNOSTIC_CHARS = 400;
+
+function truncateExtractDiagnostic(value: string): string {
+  if (value.length <= MAX_EXTRACT_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  return `${value.slice(0, MAX_EXTRACT_DIAGNOSTIC_CHARS)}... [truncated]`;
+}
+
 function ensureStringOutput(output: unknown, taskStatus: unknown): string {
   if (typeof output !== "string" || output.trim().length === 0) {
     throw new Error(
-      `Extract failed: Agent did not complete with output. Task status: ${String(taskStatus)}. Check debug output for details.`
+      `Extract failed: Agent did not complete with output. Task status: ${truncateExtractDiagnostic(
+        formatUnknownError(taskStatus)
+      )}. Check debug output for details.`
     );
   }
   return output;
 }
 
 function safeStringify(value: unknown): string {
-  try {
-    const serialized = JSON.stringify(value);
-    return typeof serialized === "string" ? serialized : String(value);
-  } catch {
-    return String(value);
-  }
+  return truncateExtractDiagnostic(formatUnknownError(value));
 }
 
 function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
@@ -29,9 +35,8 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
   } catch (error) {
     const message = formatUnknownError(error);
     throw new Error(
-      `Extract failed: output is not valid JSON (${message}). Raw output: ${rawOutput.slice(
-        0,
-        400
+      `Extract failed: output is not valid JSON (${message}). Raw output: ${truncateExtractDiagnostic(
+        rawOutput
       )}`
     );
   }
@@ -44,7 +49,7 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
     throw new Error(
       `Extract failed: output does not match schema (${issues}). Parsed output: ${safeStringify(
         parsed
-      ).slice(0, 400)}`
+      )}`
     );
   }
 

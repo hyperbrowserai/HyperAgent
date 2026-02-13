@@ -15,6 +15,12 @@ describe("parseExtractOutput", () => {
     );
   });
 
+  it("formats non-string task status diagnostics safely", () => {
+    expect(() =>
+      parseExtractOutput(undefined, { reason: "agent failed", code: 500 })
+    ).toThrow('Task status: {"reason":"agent failed","code":500}');
+  });
+
   it("parses and validates structured output with schema", () => {
     const schema = z.object({
       total: z.number(),
@@ -38,6 +44,16 @@ describe("parseExtractOutput", () => {
     expect(() =>
       parseExtractOutput("not-json", "completed", schema)
     ).toThrow("not valid JSON");
+  });
+
+  it("truncates oversized invalid JSON diagnostics", () => {
+    const schema = z.object({
+      total: z.number(),
+    });
+    const oversized = "x".repeat(1000);
+    expect(() =>
+      parseExtractOutput(oversized, "completed", schema)
+    ).toThrow("[truncated]");
   });
 
   it("throws clear error when structured output violates schema", () => {
