@@ -9,126 +9,143 @@ export interface FrameFilterContext {
   parentUrl?: string;
 }
 
+interface FrameRiskSignal {
+  name: string;
+  weight: number;
+  matched: boolean;
+}
+
+const PIXEL_PATTERNS = [/\(1×1\)/i, /\(1x1\)/i];
+
+const SUSPICIOUS_PATTERNS = [
+  /pixel/i,
+  /user-sync/i,
+  /cookie-sync/i,
+  /usersync/i,
+  /ecm3/i,
+  /dcm/i,
+  /safeframe/i,
+  /topics\s+frame/i,
+];
+
+const TRACKING_EXTENSIONS = [
+  ".gif",
+  ".ashx",
+  ".png?",
+  "/pixel",
+  "/usersync",
+];
+
+const AD_DOMAINS = [
+  // Google ad networks
+  "doubleclick.net",
+  "googlesyndication.com",
+  "googleadservices.com",
+  "google-analytics.com",
+  "googletagmanager.com",
+  "googletagservices.com",
+  "imasdk.googleapis.com",
+  // Yahoo/Verizon Media
+  "ybp.yahoo.com",
+  "yahoo.com/pixel",
+  // Major ad exchanges
+  "adnxs.com",
+  "rubiconproject.com",
+  "pubmatic.com",
+  "openx.net",
+  "advertising.com",
+  "contextweb.com",
+  "casalemedia.com",
+  // Retargeting/programmatic
+  "criteo.com",
+  "criteo.net",
+  "bidswitch.net",
+  // Analytics/tracking
+  "quantserve.com",
+  "scorecardresearch.com",
+  "moatads.com",
+  "adsafeprotected.com",
+  "chartbeat.com",
+  // Content recommendation (often ads)
+  "outbrain.com",
+  "taboola.com",
+  "zemanta.com",
+  // Other common ad networks
+  "openwebmedia.org",
+  "turn.com",
+  "amazon-adsystem.com",
+];
+
+const TRACKING_PARAMS = [
+  "correlator=",
+  "google_push=",
+  "gdfp_req=",
+  "prebid",
+  "pubads",
+];
+
+const MIN_FILTER_SCORE = 2;
+
 /**
  * Check if a frame is likely an ad or tracking iframe
- * 
- * Detection criteria:
- * 1. Tiny pixel frames (1x1) - common for tracking pixels
- * 2. Known ad/tracking keywords in URL or name
- * 3. Known ad network domains
- * 4. Common tracking file extensions
+ *
+ * Heuristic model:
+ * - Assign weighted signals for ad/tracking traits
+ * - Filter only when score meets threshold
+ * - Prevent single weak indicators (e.g. generic "sync" in URL) from dropping legitimate frames
  */
 export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
   const { url, name } = context;
   const urlLower = url.toLowerCase();
   const nameLower = (name || "").toLowerCase();
-  
-  // 1. Empty or about:blank frames (except named ones which might be legitimate)
-  if (!url || url === "about:blank") {
-    return !name; // Keep if it has a name, filter if anonymous
+
+  // Allow empty/about:blank frames. They are often bootstrapped to real apps post-load.
+  if (!url || urlLower === "about:blank") {
+    return false;
   }
-  
-  // 2. Pixel/sync frame patterns in title/name
-  const suspiciousPatterns = [
-    /\(1×1\)/i,
-    /\(1x1\)/i,
-    /pixel/i,
-    /sync/i,
-    /user-sync/i,
-    /cookie-sync/i,
-    /usersync/i,
-    /match/i,
-    /ecm3/i,
-    /dcm/i,
-    /safeframe/i,
-    /topics\s+frame/i,
+
+  const signals: FrameRiskSignal[] = [
+    {
+      name: "pixel-pattern",
+      weight: 2,
+      matched: PIXEL_PATTERNS.some(
+        (pattern) => pattern.test(urlLower) || pattern.test(nameLower)
+      ),
+    },
+    {
+      name: "suspicious-keyword",
+      weight: 1,
+      matched: SUSPICIOUS_PATTERNS.some(
+        (pattern) => pattern.test(urlLower) || pattern.test(nameLower)
+      ),
+    },
+    {
+      name: "tracking-extension",
+      weight: 1,
+      matched: TRACKING_EXTENSIONS.some((ext) => urlLower.includes(ext)),
+    },
+    {
+      name: "known-ad-domain",
+      weight: 2,
+      matched: AD_DOMAINS.some((domain) => urlLower.includes(domain)),
+    },
+    {
+      name: "tracking-query-param",
+      weight: 2,
+      matched: TRACKING_PARAMS.some((param) => urlLower.includes(param)),
+    },
+    {
+      name: "data-uri",
+      weight: 2,
+      matched: urlLower.startsWith("data:"),
+    },
   ];
-  
-  if (suspiciousPatterns.some(pattern => 
-    pattern.test(urlLower) || pattern.test(nameLower)
-  )) {
-    return true;
-  }
-  
-  // 3. Tracking/ad file extensions
-  const trackingExtensions = [
-    '.gif',
-    '.ashx',
-    '.png?',
-    '/pixel',
-    '/sync',
-    '/match',
-    '/usersync',
-  ];
-  
-  if (trackingExtensions.some(ext => urlLower.includes(ext))) {
-    return true;
-  }
-  
-  // 4. Known ad network domains
-  const adDomains = [
-    // Google ad networks
-    'doubleclick.net',
-    'googlesyndication.com',
-    'googleadservices.com',
-    'google-analytics.com',
-    'googletagmanager.com',
-    'googletagservices.com',
-    'imasdk.googleapis.com',
-    // Yahoo/Verizon Media
-    'ybp.yahoo.com',
-    'yahoo.com/pixel',
-    // Major ad exchanges
-    'adnxs.com',
-    'rubiconproject.com',
-    'pubmatic.com',
-    'openx.net',
-    'advertising.com',
-    'contextweb.com',
-    'casalemedia.com',
-    // Retargeting/programmatic
-    'criteo.com',
-    'criteo.net',
-    'bidswitch.net',
-    // Analytics/tracking
-    'quantserve.com',
-    'scorecardresearch.com',
-    'moatads.com',
-    'adsafeprotected.com',
-    'chartbeat.com',
-    // Content recommendation (often ads)
-    'outbrain.com',
-    'taboola.com',
-    'zemanta.com',
-    // Other common ad networks
-    'openwebmedia.org',
-    'turn.com',
-    'advertising.com',
-    'amazon-adsystem.com',
-  ];
-  
-  if (adDomains.some(domain => urlLower.includes(domain))) {
-    return true;
-  }
-  
-  // 5. Data URIs (often used for embedded ads)
-  if (urlLower.startsWith('data:')) {
-    return true;
-  }
-  
-  // 6. Common tracking query parameters
-  const trackingParams = [
-    'correlator=',
-    'google_push=',
-    'gdfp_req=',
-    'prebid',
-    'pubads',
-  ];
-  
-  if (trackingParams.some(param => urlLower.includes(param))) {
-    return true;
-  }
-  
-  return false;
+
+  const riskScore = signals.reduce(
+    (score, signal) => score + (signal.matched ? signal.weight : 0),
+    0
+  );
+
+  return riskScore >= MIN_FILTER_SCORE;
 }
 
