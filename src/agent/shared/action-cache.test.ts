@@ -57,6 +57,51 @@ describe("action cache helpers", () => {
     expect(script).toContain("waitForTimeout(2500)");
   });
 
+  it("renders wait script timeout from string duration", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 5,
+      instruction: "wait from string",
+      elementId: null,
+      method: null,
+      arguments: [],
+      actionType: "wait",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+      actionParams: {
+        duration: "700",
+      },
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain("waitForTimeout(700)");
+  });
+
+  it("preserves zero wait duration when explicitly provided", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 6,
+      instruction: "wait zero",
+      elementId: null,
+      method: null,
+      arguments: ["0"],
+      actionType: "wait",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain("waitForTimeout(0)");
+  });
+
   it("skips helper generation when xpath is missing", () => {
     const actElementEntry: ActionCacheEntry = {
       stepIndex: 3,

@@ -11,6 +11,25 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
+const asNumber = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+};
+
+const normalizeWaitMs = (value: unknown): number => {
+  const parsed = asNumber(value);
+  if (parsed === undefined) {
+    return 1000;
+  }
+  return parsed >= 0 ? parsed : 1000;
+};
+
 export function createScriptFromActionCache(
   params: CreateScriptFromActionCacheParams
 ): string {
@@ -74,11 +93,7 @@ ${indent}await page.reload({ waitUntil: "domcontentloaded" });`;
       const actionParams = isRecord(step.actionParams)
         ? step.actionParams
         : undefined;
-      const durationParam = actionParams?.duration;
-      const waitMs =
-        (step.arguments && Number(step.arguments[0])) ||
-        (typeof durationParam === "number" ? durationParam : 0) ||
-        1000;
+      const waitMs = normalizeWaitMs(step.arguments?.[0] ?? actionParams?.duration);
       return `${indent}// Step ${step.stepIndex}
 ${indent}await page.waitForTimeout(${waitMs});`;
     }
