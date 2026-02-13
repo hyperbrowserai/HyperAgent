@@ -1041,7 +1041,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   private getTaskControl(
     taskId: string,
-    result: Promise<AgentTaskOutput>
+    result: Promise<AgentTaskOutput>,
+    taskLifecycleGeneration: number
   ): Task {
     const taskState = this.tasks[taskId];
     if (!taskState) {
@@ -1096,8 +1097,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     return {
       id: taskId,
-      getStatus: () => this.readTaskStatus(taskState, TaskStatus.FAILED),
+      getStatus: () =>
+        this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)
+          ? this.readTaskStatus(taskState, TaskStatus.FAILED)
+          : TaskStatus.CANCELLED,
       pause: () => {
+        if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+          return TaskStatus.CANCELLED;
+        }
         const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
         if (status === TaskStatus.RUNNING) {
           return this.writeTaskStatus(taskState, TaskStatus.PAUSED, status);
@@ -1105,6 +1112,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return status;
       },
       resume: () => {
+        if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+          return TaskStatus.CANCELLED;
+        }
         const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
         if (status === TaskStatus.PAUSED) {
           return this.writeTaskStatus(taskState, TaskStatus.RUNNING, status);
@@ -1112,6 +1122,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return status;
       },
       cancel: () => {
+        if (!this.isTaskLifecycleGenerationActive(taskLifecycleGeneration)) {
+          return TaskStatus.CANCELLED;
+        }
         const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
         if (
           status === TaskStatus.PENDING ||
@@ -1249,7 +1262,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw error;
     }
     this.storeTaskResultPromise(taskId, taskResult);
-    return this.getTaskControl(taskId, taskResult);
+    return this.getTaskControl(taskId, taskResult, taskLifecycleGeneration);
   }
 
   /**
