@@ -7,6 +7,7 @@ use crate::{
     parse_counta_formula, parse_countblank_formula, parse_sumproduct_formula,
     parse_row_formula, parse_column_formula, parse_rows_formula,
     parse_columns_formula,
+    parse_large_formula, parse_small_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
@@ -460,6 +461,56 @@ fn evaluate_formula(
       }
     }
     return Ok(Some(total.to_string()));
+  }
+
+  if let Some((start, end, k_arg)) = parse_large_formula(formula) {
+    let bounds = normalized_range_bounds(start, end);
+    let k = parse_required_unsigned(connection, sheet, &k_arg)?;
+    if k == 0 {
+      return Ok(None);
+    }
+    let mut values = Vec::new();
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        let row_index = bounds.start_row + row_offset;
+        let col_index = bounds.start_col + col_offset;
+        let value = load_cell_scalar(connection, sheet, row_index, col_index)?;
+        if let Ok(parsed) = value.trim().parse::<f64>() {
+          values.push(parsed);
+        }
+      }
+    }
+    if values.is_empty() || usize::try_from(k).unwrap_or(usize::MAX) > values.len() {
+      return Ok(None);
+    }
+    values.sort_by(|left, right| right.partial_cmp(left).unwrap_or(std::cmp::Ordering::Equal));
+    let index = usize::try_from(k - 1).unwrap_or(0);
+    return Ok(Some(values[index].to_string()));
+  }
+
+  if let Some((start, end, k_arg)) = parse_small_formula(formula) {
+    let bounds = normalized_range_bounds(start, end);
+    let k = parse_required_unsigned(connection, sheet, &k_arg)?;
+    if k == 0 {
+      return Ok(None);
+    }
+    let mut values = Vec::new();
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        let row_index = bounds.start_row + row_offset;
+        let col_index = bounds.start_col + col_offset;
+        let value = load_cell_scalar(connection, sheet, row_index, col_index)?;
+        if let Ok(parsed) = value.trim().parse::<f64>() {
+          values.push(parsed);
+        }
+      }
+    }
+    if values.is_empty() || usize::try_from(k).unwrap_or(usize::MAX) > values.len() {
+      return Ok(None);
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let index = usize::try_from(k - 1).unwrap_or(0);
+    return Ok(Some(values[index].to_string()));
   }
 
   if let Some(sumif_formula) = parse_sumif_formula(formula) {
@@ -3356,12 +3407,24 @@ mod tests {
         value: None,
         formula: Some("=MEDIAN(A1:A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 130,
+        value: None,
+        formula: Some("=LARGE(A1:A2,1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 131,
+        value: None,
+        formula: Some("=SMALL(A1:A2,1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 127);
+    assert_eq!(updated_cells, 129);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3375,7 +3438,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 129,
+        end_col: 131,
       },
     )
     .expect("cells should be fetched");
@@ -3561,6 +3624,8 @@ mod tests {
     assert_eq!(by_position(1, 127).evaluated_value.as_deref(), Some("3"));
     assert_eq!(by_position(1, 128).evaluated_value.as_deref(), Some("3"));
     assert_eq!(by_position(1, 129).evaluated_value.as_deref(), Some("100.0"));
+    assert_eq!(by_position(1, 130).evaluated_value.as_deref(), Some("120"));
+    assert_eq!(by_position(1, 131).evaluated_value.as_deref(), Some("80"));
   }
 
   #[test]
@@ -3767,6 +3832,45 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=FACT(-1)".to_string(), "=COMBIN(5,7)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_large_small_k_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=LARGE(A1:A2,0)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=SMALL(A1:A2,3)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=LARGE(A1:A2,0)".to_string(), "=SMALL(A1:A2,3)".to_string()],
     );
   }
 

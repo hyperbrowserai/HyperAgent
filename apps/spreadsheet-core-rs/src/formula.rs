@@ -937,6 +937,28 @@ pub fn parse_columns_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_large_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "LARGE" || args.len() != 2 {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[0])?;
+  Some((start, end, args[1].clone()))
+}
+
+pub fn parse_small_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SMALL" || args.len() != 2 {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[0])?;
+  Some((start, end, args[1].clone()))
+}
+
 pub fn parse_sumproduct_formula(
   formula: &str,
 ) -> Option<Vec<((u32, u32), (u32, u32))>> {
@@ -1193,6 +1215,7 @@ mod tests {
     parse_countifs_formula, parse_sumproduct_formula, parse_sumif_formula,
     parse_sumifs_formula, parse_row_formula, parse_column_formula,
     parse_rows_formula, parse_columns_formula,
+    parse_large_formula, parse_small_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_true_formula,
@@ -1553,6 +1576,14 @@ mod tests {
       parse_columns_formula("=COLUMNS(A1:C3)").as_deref(),
       Some("A1:C3"),
     );
+    let large = parse_large_formula("=LARGE(A1:A5,2)").expect("large should parse");
+    assert_eq!(large.0, (1, 1));
+    assert_eq!(large.1, (5, 1));
+    assert_eq!(large.2, "2");
+    let small = parse_small_formula("=SMALL(A1:A5,2)").expect("small should parse");
+    assert_eq!(small.0, (1, 1));
+    assert_eq!(small.1, (5, 1));
+    assert_eq!(small.2, "2");
 
     let sumproduct =
       parse_sumproduct_formula("=SUMPRODUCT(A1:A5,B1:B5)")
