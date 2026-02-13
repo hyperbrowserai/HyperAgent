@@ -791,9 +791,14 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["cells", workbook.id, activeSheet],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["cells", workbook.id, activeSheet],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+      ]);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -873,9 +878,14 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["cells", workbook.id, activeSheet],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["cells", workbook.id, activeSheet],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+      ]);
     } catch (error) {
       if (
         error instanceof Error &&
