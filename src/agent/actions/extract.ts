@@ -106,6 +106,13 @@ function computeMarkdownTokenBudget(params: {
   return Math.max(32, available);
 }
 
+function normalizeTokenLimit(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 4000;
+  }
+  return Math.floor(value);
+}
+
 export const ExtractActionDefinition: AgentActionDefinition = {
   type: "extract" as const,
   actionParams: ExtractAction,
@@ -116,6 +123,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     try {
       const content = await ctx.page.content();
       const objective = action.objective;
+      const normalizedTokenLimit = normalizeTokenLimit(ctx.tokenLimit);
       let markdown: string;
       try {
         markdown = await parseMarkdown(content);
@@ -165,7 +173,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       }
 
       const markdownTokenBudget = computeMarkdownTokenBudget({
-        tokenLimit: ctx.tokenLimit,
+        tokenLimit: normalizedTokenLimit,
         objective,
         hasScreenshot: includeScreenshot,
       });
