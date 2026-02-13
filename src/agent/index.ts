@@ -1816,25 +1816,82 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
       return truncateReplayOutput(formatUnknownError(output));
     };
+    const readReplayResultStatus = (result: TaskOutput): TaskStatus => {
+      const rawStatus = this.safeReadField(result, "status");
+      if (
+        typeof rawStatus === "string" &&
+        HyperAgent.TASK_STATUS_VALUES.has(rawStatus)
+      ) {
+        return rawStatus as TaskStatus;
+      }
+      return TaskStatus.FAILED;
+    };
+    const readReplayResultOutput = (result: TaskOutput): unknown =>
+      this.safeReadField(result, "output");
+    const readReplayResultMeta = (
+      result: TaskOutput
+    ): Record<string, unknown> | null => {
+      const rawMeta = this.safeReadField(result, "replayStepMeta");
+      if (!rawMeta || typeof rawMeta !== "object") {
+        return null;
+      }
+      return rawMeta as Record<string, unknown>;
+    };
+    const readReplayMetaField = (meta: unknown, key: string): unknown => {
+      if (!meta || typeof meta !== "object") {
+        return undefined;
+      }
+      try {
+        return (meta as Record<string, unknown>)[key];
+      } catch {
+        return undefined;
+      }
+    };
     const recordReplayStep = (
       step: unknown,
       result: TaskOutput
     ): boolean => {
-      const finalMeta = result.replayStepMeta;
-      const finalSuccess = result.status === TaskStatus.COMPLETED;
+      const finalMeta = readReplayResultMeta(result);
+      const finalStatus = readReplayResultStatus(result);
+      const finalSuccess = finalStatus === TaskStatus.COMPLETED;
       const safeStepIndex = getSafeStepIndex(getStepIndexValue(step));
+      const usedCachedAction =
+        readReplayMetaField(finalMeta, "usedCachedAction") === true;
+      const fallbackUsed = readReplayMetaField(finalMeta, "fallbackUsed") === true;
+      const rawRetries = readReplayMetaField(finalMeta, "retries");
+      const retries =
+        typeof rawRetries === "number" &&
+        Number.isFinite(rawRetries) &&
+        rawRetries > 0
+          ? rawRetries
+          : 0;
+      const rawCachedXPath = readReplayMetaField(finalMeta, "cachedXPath");
+      const cachedXPath =
+        typeof rawCachedXPath === "string" ? rawCachedXPath : null;
+      const rawFallbackXPath = readReplayMetaField(finalMeta, "fallbackXPath");
+      const fallbackXPath =
+        typeof rawFallbackXPath === "string" ? rawFallbackXPath : null;
+      const rawFallbackElementId = readReplayMetaField(
+        finalMeta,
+        "fallbackElementId"
+      );
+      const fallbackElementId =
+        typeof rawFallbackElementId === "string" ? rawFallbackElementId : null;
 
       stepsResult.push({
         stepIndex: safeStepIndex,
         actionType: getActionType(step),
-        usedXPath: finalMeta?.usedCachedAction ?? false,
-        fallbackUsed: finalMeta?.fallbackUsed ?? false,
-        cachedXPath: finalMeta?.cachedXPath ?? null,
-        fallbackXPath: finalMeta?.fallbackXPath ?? null,
-        fallbackElementId: finalMeta?.fallbackElementId ?? null,
-        retries: finalMeta?.retries ?? 0,
+        usedXPath: usedCachedAction,
+        fallbackUsed,
+        cachedXPath,
+        fallbackXPath,
+        fallbackElementId,
+        retries,
         success: finalSuccess,
-        message: normalizeReplayOutput(result.output, finalSuccess),
+        message: normalizeReplayOutput(
+          readReplayResultOutput(result),
+          finalSuccess
+        ),
       });
 
       if (!finalSuccess) {

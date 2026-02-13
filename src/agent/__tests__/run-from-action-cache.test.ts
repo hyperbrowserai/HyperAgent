@@ -815,6 +815,109 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toBe('{"reason":"object output"}');
   });
 
+  it("handles trap-prone replay step metadata without failing replay", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      get status(): TaskStatus {
+        return TaskStatus.COMPLETED;
+      },
+      get output(): string {
+        return "done";
+      },
+      get replayStepMeta(): never {
+        throw new Error("meta trap");
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "meta trap path",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.COMPLETED);
+    expect(replay.steps[0]).toMatchObject({
+      success: true,
+      usedXPath: false,
+      fallbackUsed: false,
+      retries: 0,
+      message: "done",
+    });
+  });
+
+  it("fails replay step deterministically when replay result status/output getters trap", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      get status(): never {
+        throw new Error("status trap");
+      },
+      get output(): never {
+        throw new Error("output trap");
+      },
+      replayStepMeta: {
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 2,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "status trap path",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]).toMatchObject({
+      success: false,
+      usedXPath: true,
+      retries: 2,
+      message: "Failed to execute cached action",
+    });
+  });
+
   it("truncates oversized replay output diagnostics", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
