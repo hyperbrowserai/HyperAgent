@@ -142,6 +142,16 @@ describe("createLLMClient", () => {
     ).toThrow("Unsupported provider: mystery");
   });
 
+  it("rejects excessively long provider identifiers", () => {
+    const hugeProvider = "p".repeat(100);
+    expect(() =>
+      createLLMClient({
+        provider: hugeProvider as unknown as LLMConfig["provider"],
+        model: "model",
+      })
+    ).toThrow("LLM provider exceeds maximum length of 40 characters");
+  });
+
   it("rejects empty model values", () => {
     expect(() =>
       createLLMClient({

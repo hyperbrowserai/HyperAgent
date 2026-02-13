@@ -16,6 +16,7 @@ export interface LLMConfig {
 }
 
 const MAX_MODEL_ID_CHARS = 200;
+const MAX_PROVIDER_ID_CHARS = 40;
 
 function normalizeProvider(provider: unknown): LLMProvider {
   if (typeof provider !== "string") {
@@ -26,6 +27,11 @@ function normalizeProvider(provider: unknown): LLMProvider {
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .trim()
     .toLowerCase();
+  if (normalized.length > MAX_PROVIDER_ID_CHARS) {
+    throw new Error(
+      `LLM provider exceeds maximum length of ${MAX_PROVIDER_ID_CHARS} characters`
+    );
+  }
   if (
     normalized === "openai" ||
     normalized === "anthropic" ||
