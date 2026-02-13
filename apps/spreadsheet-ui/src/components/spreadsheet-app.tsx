@@ -31,6 +31,7 @@ import {
   previewAgentOps,
   replayAgentOpsCacheEntry,
   removeAgentOpsCacheEntry,
+  removeAgentOpsCacheEntriesByPrefix,
   runAgentOps,
   runAgentPreset,
   runAgentScenario,
@@ -119,6 +120,7 @@ export function SpreadsheetApp() {
   const [isCopyingCacheDetailJson, setIsCopyingCacheDetailJson] = useState(false);
   const [isCopyingCacheDetailOperations, setIsCopyingCacheDetailOperations] =
     useState(false);
+  const [isRemovingCacheByPrefix, setIsRemovingCacheByPrefix] = useState(false);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
@@ -1410,6 +1412,48 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleRemoveCacheEntriesByPrefix() {
+    if (!workbook) {
+      return;
+    }
+    const normalizedPrefix = cacheRequestIdPrefix.trim();
+    if (!normalizedPrefix) {
+      return;
+    }
+    setIsRemovingCacheByPrefix(true);
+    try {
+      clearUiError();
+      const response = await removeAgentOpsCacheEntriesByPrefix(
+        workbook.id,
+        normalizedPrefix,
+      );
+      if (
+        response.removed_entries > 0
+        && selectedCacheEntryDetail?.request_id.startsWith(normalizedPrefix)
+      ) {
+        setSelectedCacheEntryDetail(null);
+      }
+      setCacheEntriesOffset(0);
+      setNotice(
+        `Removed ${response.removed_entries} cache entr${
+          response.removed_entries === 1 ? "y" : "ies"
+        } for prefix ${response.request_id_prefix}.`,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-entries", workbook.id],
+        }),
+      ]);
+    } catch (error) {
+      applyUiError(error, "Failed to remove cache entries by prefix.");
+    } finally {
+      setIsRemovingCacheByPrefix(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -2165,6 +2209,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_remove_by_prefix_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache remove-by-prefix endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_remove_by_prefix_endpoint}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.cache_validation_error_codes?.length ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache validation codes:{" "}
@@ -2228,6 +2280,17 @@ export function SpreadsheetApp() {
                       className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
                     >
                       Clear
+                    </button>
+                    <button
+                      onClick={handleRemoveCacheEntriesByPrefix}
+                      disabled={
+                        isRemovingCacheByPrefix
+                        || !cacheRequestIdPrefix.trim()
+                        || (agentOpsCacheEntriesQuery.data?.total_entries ?? 0) === 0
+                      }
+                      className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
+                    >
+                      {isRemovingCacheByPrefix ? "Removing..." : "Remove filtered"}
                     </button>
                   </div>
                   {cachePrefixSuggestions.length > 0 ? (

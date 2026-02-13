@@ -44,6 +44,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove`
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix`
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
 - `GET /v1/workbooks/{id}/agent/presets/{preset}/operations`
@@ -81,6 +82,7 @@ Response includes:
   - `REQUEST_ID_CONFLICT` (same `request_id` reused with a different operation signature)
 - Cache-management validation error codes:
   - `INVALID_REQUEST_ID`
+  - `INVALID_REQUEST_ID_PREFIX`
   - `CACHE_ENTRY_NOT_FOUND`
 
 Schema discovery endpoints (`/v1/workbooks/{id}/agent/schema`, `/v1/agent/wizard/schema`) expose these under `signature_error_codes`.
@@ -96,6 +98,7 @@ Cache helpers:
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay` with `{ "request_id": "..." }` (returns `{ cached_response, operations }` where `operations` are the original cached ops payload)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
+- `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix` with `{ "request_id_prefix": "scenario-" }`
 
 Supported `op_type` values:
 - `get_workbook`

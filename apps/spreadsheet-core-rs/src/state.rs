@@ -330,6 +330,37 @@ impl AppState {
     Ok(cleared_entries)
   }
 
+  pub async fn remove_agent_ops_cache_entries_by_prefix(
+    &self,
+    workbook_id: Uuid,
+    request_id_prefix: &str,
+  ) -> Result<(usize, usize), ApiError> {
+    let mut guard = self.workbooks.write().await;
+    let record = guard
+      .get_mut(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+
+    let matching_request_ids = record
+      .agent_ops_cache_order
+      .iter()
+      .filter(|request_id| request_id.starts_with(request_id_prefix))
+      .cloned()
+      .collect::<Vec<_>>();
+    let removed_entries = matching_request_ids.len();
+
+    if removed_entries > 0 {
+      record
+        .agent_ops_cache_order
+        .retain(|request_id| !request_id.starts_with(request_id_prefix));
+      for request_id in matching_request_ids {
+        record.agent_ops_cache.remove(&request_id);
+        record.agent_ops_cached_operations.remove(&request_id);
+      }
+    }
+
+    Ok((removed_entries, record.agent_ops_cache_order.len()))
+  }
+
   pub async fn remove_agent_ops_cache_entry(
     &self,
     workbook_id: Uuid,
@@ -622,5 +653,51 @@ mod tests {
       .await
       .expect("cache lookup should succeed");
     assert!(kept_entry.is_some());
+  }
+
+  #[tokio::test]
+  async fn should_remove_agent_ops_cache_entries_by_prefix() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-remove-prefix".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["scenario-1", "scenario-2", "preset-1"] {
+      state
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id.to_string(),
+          vec![AgentOperation::Recalculate],
+          AgentOpsResponse {
+            request_id: Some(request_id.to_string()),
+            operations_signature: Some(format!("sig-{request_id}")),
+            served_from_cache: false,
+            results: Vec::new(),
+          },
+        )
+        .await
+        .expect("cache update should succeed");
+    }
+
+    let (removed_entries, remaining_entries) = state
+      .remove_agent_ops_cache_entries_by_prefix(workbook.id, "scenario-")
+      .await
+      .expect("prefix removal should succeed");
+    assert_eq!(removed_entries, 2);
+    assert_eq!(remaining_entries, 1);
+
+    let scenario_entry = state
+      .get_cached_agent_ops_response(workbook.id, "scenario-1")
+      .await
+      .expect("cache lookup should succeed");
+    assert!(scenario_entry.is_none());
+    let preset_entry = state
+      .get_cached_agent_ops_response(workbook.id, "preset-1")
+      .await
+      .expect("cache lookup should succeed");
+    assert!(preset_entry.is_some());
   }
 }

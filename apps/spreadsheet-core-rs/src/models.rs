@@ -169,6 +169,18 @@ pub struct RemoveAgentOpsCacheEntryResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveAgentOpsCacheEntriesByPrefixRequest {
+  pub request_id_prefix: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveAgentOpsCacheEntriesByPrefixResponse {
+  pub request_id_prefix: String,
+  pub removed_entries: usize,
+  pub remaining_entries: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplayAgentOpsCacheEntryRequest {
   pub request_id: String,
 }
