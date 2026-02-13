@@ -392,6 +392,16 @@ function coerceActionStringArg(
 
 function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
   const maxScrollTargetChars = 64;
+  const readCandidateValue = (
+    candidate: Record<string, unknown>,
+    key: "target" | "behavior"
+  ): unknown => {
+    try {
+      return candidate[key];
+    } catch {
+      return undefined;
+    }
+  };
   const normalizeScrollTarget = (
     value: unknown
   ): string | number | undefined => {
@@ -433,8 +443,10 @@ function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
   ) {
     const candidate = targetArg as Record<string, unknown>;
     return {
-      target: normalizeScrollTarget(candidate.target),
-      behavior: normalizeScrollBehavior(candidate.behavior),
+      target: normalizeScrollTarget(readCandidateValue(candidate, "target")),
+      behavior: normalizeScrollBehavior(
+        readCandidateValue(candidate, "behavior")
+      ),
     };
   }
 
