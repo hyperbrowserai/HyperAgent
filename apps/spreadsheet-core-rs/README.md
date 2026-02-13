@@ -29,6 +29,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/sheets`
 - `POST /v1/workbooks/{id}/cells/set-batch`
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
+- `POST /v1/workbooks/{id}/agent/presets/{preset}`
 - `POST /v1/workbooks/{id}/cells/get`
 - `POST /v1/workbooks/{id}/formulas/recalculate`
 - `POST /v1/workbooks/{id}/charts/upsert`
@@ -55,6 +56,14 @@ Supported `op_type` values:
 - `recalculate`
 - `upsert_chart`
 - `export_workbook` (`include_file_base64` optional, default `true`)
+
+### AI Agent preset endpoint
+
+`POST /v1/workbooks/{id}/agent/presets/{preset}` runs a built-in workflow with minimal payload.
+
+Supported `preset` values:
+- `seed_sales_demo` — fills demo regional sales, recalculates formulas, syncs chart metadata.
+- `export_snapshot` — recalculates and exports workbook (can include base64 file payload).
 
 ## Testing
 

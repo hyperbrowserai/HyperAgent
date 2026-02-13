@@ -2,6 +2,7 @@ use crate::{
   error::ApiError,
   models::{
     AgentOperation, AgentOperationResult, AgentOpsRequest, AgentOpsResponse,
+    AgentPresetRunRequest,
     CellMutation, CreateWorkbookRequest, CreateWorkbookResponse, ExportResponse, GetCellsRequest,
     GetCellsResponse, QueryRequest, RecalculateResponse, SetCellsRequest,
     SetCellsResponse, UpsertChartRequest,
@@ -36,6 +37,10 @@ pub fn create_router(state: AppState) -> Router {
     .route("/v1/workbooks/{id}/sheets", get(get_sheets))
     .route("/v1/workbooks/{id}/cells/set-batch", post(set_cells_batch))
     .route("/v1/workbooks/{id}/agent/ops", post(agent_ops))
+    .route(
+      "/v1/workbooks/{id}/agent/presets/{preset}",
+      post(run_agent_preset),
+    )
     .route("/v1/workbooks/{id}/cells/get", post(get_cells_range))
     .route(
       "/v1/workbooks/{id}/formulas/recalculate",
@@ -281,17 +286,93 @@ async fn upsert_chart(
   Ok(Json(json!({ "status": "ok" })))
 }
 
-async fn agent_ops(
-  State(state): State<AppState>,
-  Path(workbook_id): Path<Uuid>,
-  Json(payload): Json<AgentOpsRequest>,
-) -> Result<Json<AgentOpsResponse>, ApiError> {
-  let request_id = payload.request_id.clone();
-  let actor = payload.actor.unwrap_or_else(|| "agent".to_string());
-  let stop_on_error = payload.stop_on_error.unwrap_or(false);
+fn build_preset_operations(
+  preset: &str,
+  include_file_base64: Option<bool>,
+) -> Result<Vec<AgentOperation>, ApiError> {
+  match preset {
+    "seed_sales_demo" => Ok(vec![
+      AgentOperation::SetCells {
+        sheet: "Sheet1".to_string(),
+        cells: vec![
+          CellMutation {
+            row: 1,
+            col: 1,
+            value: Some(json!("North")),
+            formula: None,
+          },
+          CellMutation {
+            row: 2,
+            col: 1,
+            value: Some(json!("South")),
+            formula: None,
+          },
+          CellMutation {
+            row: 3,
+            col: 1,
+            value: Some(json!("West")),
+            formula: None,
+          },
+          CellMutation {
+            row: 1,
+            col: 2,
+            value: Some(json!(120)),
+            formula: None,
+          },
+          CellMutation {
+            row: 2,
+            col: 2,
+            value: Some(json!(90)),
+            formula: None,
+          },
+          CellMutation {
+            row: 3,
+            col: 2,
+            value: Some(json!(75)),
+            formula: None,
+          },
+          CellMutation {
+            row: 4,
+            col: 2,
+            value: None,
+            formula: Some("=SUM(B1:B3)".to_string()),
+          },
+        ],
+      },
+      AgentOperation::Recalculate,
+      AgentOperation::UpsertChart {
+        chart: crate::models::ChartSpec {
+          id: "chart-sales-demo".to_string(),
+          sheet: "Sheet1".to_string(),
+          chart_type: crate::models::ChartType::Bar,
+          title: "Regional Totals".to_string(),
+          categories_range: "Sheet1!$A$1:$A$3".to_string(),
+          values_range: "Sheet1!$B$1:$B$3".to_string(),
+        },
+      },
+    ]),
+    "export_snapshot" => Ok(vec![
+      AgentOperation::Recalculate,
+      AgentOperation::ExportWorkbook {
+        include_file_base64,
+      },
+    ]),
+    _ => Err(ApiError::BadRequest(format!(
+      "Unknown preset '{preset}'. Supported presets: seed_sales_demo, export_snapshot."
+    ))),
+  }
+}
+
+async fn execute_agent_operations(
+  state: &AppState,
+  workbook_id: Uuid,
+  actor: &str,
+  stop_on_error: bool,
+  operations: Vec<AgentOperation>,
+) -> Vec<AgentOperationResult> {
   let mut results = Vec::new();
 
-  for (op_index, operation) in payload.operations.into_iter().enumerate() {
+  for (op_index, operation) in operations.into_iter().enumerate() {
     let (op_type, outcome): (String, Result<serde_json::Value, ApiError>) = match operation {
       AgentOperation::GetWorkbook => (
         "get_workbook".to_string(),
@@ -309,21 +390,23 @@ async fn agent_ops(
       ),
       AgentOperation::SetCells { sheet, cells } => (
         "set_cells".to_string(),
-        apply_set_cells(&state, workbook_id, sheet.as_str(), &cells, actor.as_str())
+        apply_set_cells(state, workbook_id, sheet.as_str(), &cells, actor)
           .await
           .map(|updated| json!({ "sheet": sheet, "updated": updated })),
       ),
       AgentOperation::GetCells { sheet, range } => {
-        let db_path = state.db_path(workbook_id).await?;
-        (
-          "get_cells".to_string(),
-          get_cells(&db_path, sheet.as_str(), &range)
-            .map(|cells| json!({ "sheet": sheet, "cells": cells })),
-        )
+        let outcome = match state.db_path(workbook_id).await {
+          Ok(db_path) => {
+            get_cells(&db_path, sheet.as_str(), &range)
+              .map(|cells| json!({ "sheet": sheet, "cells": cells }))
+          }
+          Err(error) => Err(error),
+        };
+        ("get_cells".to_string(), outcome)
       }
       AgentOperation::Recalculate => (
         "recalculate".to_string(),
-        apply_recalculate(&state, workbook_id, actor.as_str())
+        apply_recalculate(state, workbook_id, actor)
           .await
           .map(|(updated_cells, unsupported_formulas)| {
             json!({
@@ -342,7 +425,7 @@ async fn agent_ops(
             .emit_event(
               workbook_id,
               "chart.updated",
-              actor.as_str(),
+              actor,
               json!({ "chart_id": chart.id }),
             )
             .await?;
@@ -355,12 +438,12 @@ async fn agent_ops(
         let should_include_file = include_file_base64.unwrap_or(true);
         let result = async {
           let (bytes, export_payload, _report_json) =
-            build_export_artifacts(&state, workbook_id).await?;
+            build_export_artifacts(state, workbook_id).await?;
           state
             .emit_event(
               workbook_id,
               "workbook.exported",
-              actor.as_str(),
+              actor,
               json!({
                 "file_name": export_payload.file_name,
                 "compatibility_report": export_payload.compatibility_report
@@ -399,12 +482,63 @@ async fn agent_ops(
       }),
     }
 
-    if stop_on_error && results.last().map(|entry| entry.ok == false).unwrap_or(false) {
+    if stop_on_error && results.last().map(|entry| !entry.ok).unwrap_or(false) {
       break;
     }
   }
 
+  results
+}
+
+async fn agent_ops(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<AgentOpsRequest>,
+) -> Result<Json<AgentOpsResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let request_id = payload.request_id.clone();
+  let actor = payload.actor.unwrap_or_else(|| "agent".to_string());
+  let stop_on_error = payload.stop_on_error.unwrap_or(false);
+  let results = execute_agent_operations(
+    &state,
+    workbook_id,
+    actor.as_str(),
+    stop_on_error,
+    payload.operations,
+  )
+  .await;
+
   Ok(Json(AgentOpsResponse { request_id, results }))
+}
+
+async fn run_agent_preset(
+  State(state): State<AppState>,
+  Path((workbook_id, preset)): Path<(Uuid, String)>,
+  Json(payload): Json<AgentPresetRunRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let operations =
+    build_preset_operations(preset.as_str(), payload.include_file_base64)?;
+  let request_id = payload.request_id.clone();
+  let actor = payload
+    .actor
+    .unwrap_or_else(|| format!("preset:{preset}"));
+  let stop_on_error = payload.stop_on_error.unwrap_or(true);
+
+  let results = execute_agent_operations(
+    &state,
+    workbook_id,
+    actor.as_str(),
+    stop_on_error,
+    operations,
+  )
+  .await;
+
+  Ok(Json(json!({
+    "preset": preset,
+    "request_id": request_id,
+    "results": results
+  })))
 }
 
 async fn duckdb_query(
@@ -492,6 +626,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}},
       "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
       "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports export_workbook op)"}},
+      "/v1/workbooks/{id}/agent/presets/{preset}": {"post": {"summary": "Run built-in AI operation preset (seed_sales_demo/export_snapshot)"}},
       "/v1/workbooks/{id}/cells/get": {"post": {"summary": "Get range cells"}},
       "/v1/workbooks/{id}/formulas/recalculate": {"post": {"summary": "Recalculate formulas"}},
       "/v1/workbooks/{id}/charts/upsert": {"post": {"summary": "Upsert chart metadata"}},

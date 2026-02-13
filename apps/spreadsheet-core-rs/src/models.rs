@@ -119,6 +119,14 @@ pub struct AgentOpsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPresetRunRequest {
+  pub request_id: Option<String>,
+  pub actor: Option<String>,
+  pub stop_on_error: Option<bool>,
+  pub include_file_base64: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "op_type", rename_all = "snake_case")]
 pub enum AgentOperation {
   GetWorkbook,
