@@ -6,8 +6,11 @@ import type { HyperAgentLLM } from "@/llm/types";
 const connectToServerMock = jest.fn();
 const disconnectServerMock = jest.fn();
 const disconnectMock = jest.fn();
-const getServerIdsMock = jest.fn(() => []);
-const getServerInfoMock = jest.fn(() => []);
+const getServerIdsMock: jest.Mock<string[], []> = jest.fn(() => []);
+const getServerInfoMock: jest.Mock<
+  Array<{ id: string; toolCount: number; toolNames: string[] }>,
+  []
+> = jest.fn(() => []);
 
 jest.mock("@/agent/mcp/client", () => ({
   MCPClient: jest.fn().mockImplementation(() => ({
@@ -88,6 +91,7 @@ describe("MCP lifecycle action registration", () => {
       } as ActionType)
     ).toBe("custom");
 
+    getServerIdsMock.mockReturnValue(["server-1"]);
     const disconnected = agent.disconnectFromMCPServer("server-1");
     expect(disconnected).toBe(true);
     expect(disconnectServerMock).toHaveBeenCalledWith("server-1");
@@ -128,6 +132,21 @@ describe("MCP lifecycle action registration", () => {
     } finally {
       consoleErrorSpy.mockRestore();
     }
+  });
+
+  it("returns false when disconnect is requested for unknown MCP server", async () => {
+    connectToServerMock.mockResolvedValue({
+      serverId: "server-a",
+      actions: [],
+    });
+    const agent = new HyperAgent({ llm: createMockLLM() });
+    await agent.connectToMCPServer({ command: "echo" });
+
+    getServerIdsMock.mockReturnValue(["server-a"]);
+    const disconnected = agent.disconnectFromMCPServer("missing-server");
+
+    expect(disconnected).toBe(false);
+    expect(disconnectServerMock).not.toHaveBeenCalled();
   });
 
   it("reinitializing MCP client removes previous MCP action registrations", async () => {

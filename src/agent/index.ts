@@ -1539,6 +1539,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return false;
     }
 
+    const isConnected = this.mcpClient.getServerIds().includes(serverId);
+    if (!isConnected) {
+      this.unregisterMCPActionsForServer(serverId);
+      return false;
+    }
+
     try {
       this.unregisterMCPActionsForServer(serverId);
       void this.mcpClient.disconnectServer(serverId).catch((error) => {
