@@ -101,6 +101,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private actionCacheByTaskId: Record<string, ActionCacheOutput> = {};
   private actionCacheTaskOrder: string[] = [];
   private taskResults: Record<string, Promise<AgentTaskOutput>> = {};
+  private taskErrorForwarders: Map<string, (error: Error) => void> = new Map();
   private mcpActionTypesByServer: Map<string, Set<string>> = new Map();
   private lifecycleGeneration = 0;
 
@@ -458,6 +459,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   private cleanupTaskLifecycle(taskId: string): void {
+    this.removeTaskErrorForwarder(taskId);
     try {
       delete this.taskResults[taskId];
     } catch (error) {
@@ -479,6 +481,40 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           )}`
         );
       }
+    }
+  }
+
+  private removeTaskErrorForwarder(taskId: string): void {
+    let forwarder: ((error: Error) => void) | undefined;
+    try {
+      forwarder = this.taskErrorForwarders.get(taskId);
+    } catch {
+      forwarder = undefined;
+    }
+    if (!forwarder) {
+      return;
+    }
+    try {
+      this.errorEmitter.off("error", forwarder);
+    } catch {
+      // no-op
+    }
+    try {
+      this.taskErrorForwarders.delete(taskId);
+    } catch {
+      // no-op
+    }
+  }
+
+  private clearTaskErrorForwarders(): void {
+    let forwarders: Array<[string, (error: Error) => void]> = [];
+    try {
+      forwarders = Array.from(this.taskErrorForwarders.entries());
+    } catch {
+      forwarders = [];
+    }
+    for (const [taskId] of forwarders) {
+      this.removeTaskErrorForwarder(taskId);
     }
   }
 
@@ -926,6 +962,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public async closeAgent(): Promise<void> {
     this.lifecycleGeneration += 1;
+    this.clearTaskErrorForwarders();
     await disposeAllCDPClients().catch((error) => {
       console.warn(
         `[HyperAgent] Failed to dispose CDP clients: ${formatUnknownError(error)}`
@@ -1078,6 +1115,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     try {
       this.errorEmitter.on("error", onTaskError);
+      this.taskErrorForwarders.set(taskId, onTaskError);
     } catch (error) {
       if (this.debug) {
         console.warn(
@@ -1089,11 +1127,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     void result
       .finally(() => {
-        try {
-          this.errorEmitter.off("error", onTaskError);
-        } catch {
-          // no-op
-        }
+        this.removeTaskErrorForwarder(taskId);
       })
       .catch(() => undefined);
 

@@ -339,6 +339,26 @@ describe("HyperAgent constructor and task controls", () => {
     expect(internalAgent.errorEmitter.listenerCount("error")).toBe(0);
   });
 
+  it("closeAgent removes task-scoped error forwarders for in-flight tasks", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockImplementation(
+      () => new Promise<AgentTaskOutput>(() => undefined)
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      errorEmitter: { listenerCount: (event: string) => number };
+    };
+    const fakePage = {} as unknown as Page;
+    await agent.executeTaskAsync("never settles", undefined, fakePage);
+    expect(internalAgent.errorEmitter.listenerCount("error")).toBeGreaterThan(0);
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    expect(internalAgent.errorEmitter.listenerCount("error")).toBe(0);
+  });
+
   it("surfaces HyperagentTaskError without requiring error listeners", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockRejectedValue(new Error("boom without listeners"));
