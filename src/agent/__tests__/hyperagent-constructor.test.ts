@@ -428,6 +428,7 @@ describe("HyperAgent constructor and task controls", () => {
 
   it("initBrowser resets browser state when context recreation fails", async () => {
     const close = jest.fn(async () => undefined);
+    const stalePage = {} as unknown as Page;
     const browser = {
       newContext: async () => {
         throw new Error("context rebuild trap");
@@ -439,6 +440,7 @@ describe("HyperAgent constructor and task controls", () => {
     const internalAgent = agent as unknown as {
       browser: unknown;
       context: unknown;
+      _currentPage: Page | null;
       browserProvider: {
         close: typeof close;
         getSession: () => unknown;
@@ -446,6 +448,7 @@ describe("HyperAgent constructor and task controls", () => {
     };
     internalAgent.browser = browser;
     internalAgent.context = null;
+    internalAgent._currentPage = stalePage;
     internalAgent.browserProvider = {
       close,
       getSession: () => ({ id: "session-1" }),
@@ -457,6 +460,7 @@ describe("HyperAgent constructor and task controls", () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(internalAgent.browser).toBeNull();
     expect(internalAgent.context).toBeNull();
+    expect(internalAgent._currentPage).toBeNull();
   });
 
   it("continues getPages when hyperpage context listener attachment fails", async () => {
@@ -1179,5 +1183,33 @@ describe("HyperAgent constructor and task controls", () => {
 
     await expect(agent.closeAgent()).resolves.toBeUndefined();
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("closeAgent clears stale current-page references", async () => {
+    const close = jest.fn(async () => undefined);
+    const stalePage = {} as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: object | null;
+      _currentPage: Page | null;
+      browserProvider: {
+        close: typeof close;
+        getSession: () => unknown;
+      };
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {};
+    internalAgent._currentPage = stalePage;
+    internalAgent.browserProvider = {
+      close,
+      getSession: () => ({ id: "session-1" }),
+    };
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(internalAgent._currentPage).toBeNull();
   });
 });

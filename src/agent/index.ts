@@ -597,6 +597,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } catch (error) {
         this.browser = null;
         this.context = null;
+        this._currentPage = null;
         try {
           await this.closeBrowserProvider();
         } catch (closeError) {
@@ -822,8 +823,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } finally {
         this.browser = null;
         this.context = null;
+        this._currentPage = null;
       }
     }
+    this._currentPage = null;
   }
 
   /**
