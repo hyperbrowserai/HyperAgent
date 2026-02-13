@@ -1,5 +1,58 @@
 import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
+import { formatUnknownError } from "@/utils";
+
+const MAX_COMPLETE_OUTPUT_CHARS = 20_000;
+
+function safeReadRecordField(value: unknown, key: string): unknown {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return undefined;
+  }
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function safeJsonStringify(value: unknown): string {
+  const seen = new WeakSet<object>();
+  try {
+    const serialized = JSON.stringify(
+      value,
+      (_key, candidate: unknown) => {
+        if (typeof candidate === "bigint") {
+          return `${candidate.toString()}n`;
+        }
+        if (candidate && typeof candidate === "object") {
+          if (seen.has(candidate)) {
+            return "[Circular]";
+          }
+          seen.add(candidate);
+        }
+        return candidate;
+      },
+      2
+    );
+    return typeof serialized === "string"
+      ? serialized
+      : JSON.stringify({ value: serialized }, null, 2);
+  } catch (error) {
+    return JSON.stringify(
+      { __nonSerializable: formatUnknownError(error) },
+      null,
+      2
+    );
+  }
+}
+
+function truncateOutput(value: string): string {
+  if (value.length <= MAX_COMPLETE_OUTPUT_CHARS) {
+    return value;
+  }
+  const omitted = value.length - MAX_COMPLETE_OUTPUT_CHARS;
+  return `${value.slice(0, MAX_COMPLETE_OUTPUT_CHARS)}\n... [truncated ${omitted} chars]`;
+}
 
 export const generateCompleteActionWithOutputDefinition = (
   outputSchema: z.ZodType<unknown>
@@ -28,11 +81,13 @@ export const generateCompleteActionWithOutputDefinition = (
       ctx: ActionContext,
       actionParams: CompleteActionWithOutputSchema
     ): Promise<ActionOutput> => {
-      if (actionParams.success && actionParams.outputSchema) {
+      const success = safeReadRecordField(actionParams, "success") === true;
+      const extracted = safeReadRecordField(actionParams, "outputSchema");
+      if (success && extracted != null) {
         return {
           success: true,
           message: "The action generated an object",
-          extract: actionParams.outputSchema,
+          extract: extracted as object,
         };
       } else {
         return {
@@ -43,7 +98,8 @@ export const generateCompleteActionWithOutputDefinition = (
       }
     },
     completeAction: async (params: CompleteActionWithOutputSchema) => {
-      return JSON.stringify(params.outputSchema, null, 2);
+      const outputSchemaValue = safeReadRecordField(params, "outputSchema");
+      return truncateOutput(safeJsonStringify(outputSchemaValue));
     },
   };
 };
