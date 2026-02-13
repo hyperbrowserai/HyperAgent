@@ -84,6 +84,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   };
   private static readonly MAX_REPLAY_OUTPUT_CHARS = 4_000;
   private static readonly MAX_REPLAY_DIAGNOSTIC_CHARS = 400;
+  private static readonly MAX_REPLAY_IDENTIFIER_CHARS = 128;
   private static readonly MAX_LIFECYCLE_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_HELPER_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_REPLAY_STEPS = 1_000;
@@ -1821,11 +1822,32 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       const value = safeReadStepField(step, "stepIndex");
       return typeof value === "number" ? value : Number.NaN;
     };
+    const sanitizeReplayIdentifier = (
+      value: unknown,
+      fallback: string
+    ): string => {
+      const raw = typeof value === "string" ? value : formatUnknownError(value);
+      const withoutControlChars = Array.from(raw, (char) => {
+        const code = char.charCodeAt(0);
+        return (code >= 0 && code < 32) || code === 127 ? " " : char;
+      }).join("");
+      const normalized = withoutControlChars.replace(/\s+/g, " ").trim();
+      if (normalized.length === 0) {
+        return fallback;
+      }
+      if (normalized.length <= HyperAgent.MAX_REPLAY_IDENTIFIER_CHARS) {
+        return normalized;
+      }
+      const omitted =
+        normalized.length - HyperAgent.MAX_REPLAY_IDENTIFIER_CHARS;
+      return `${normalized.slice(
+        0,
+        HyperAgent.MAX_REPLAY_IDENTIFIER_CHARS
+      )}... [truncated ${omitted} chars]`;
+    };
     const getActionType = (step: unknown): string => {
       const value = safeReadStepField(step, "actionType");
-      return typeof value === "string" && value.trim().length > 0
-        ? value.trim()
-        : "unknown-action";
+      return sanitizeReplayIdentifier(value, "unknown-action");
     };
     const readCacheSteps = (): {
       steps: unknown[];

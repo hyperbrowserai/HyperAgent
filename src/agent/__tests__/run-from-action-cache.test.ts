@@ -154,6 +154,42 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toContain("without XPath or instruction");
   });
 
+  it("sanitizes oversized replay action types in failure output", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const page = {} as import("@/types/agent/types").HyperPage;
+    const oversizedActionType = `action-${"x".repeat(500)}\nunsafe`;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: undefined,
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: oversizedActionType,
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.actionType).toContain("[truncated");
+    expect(replay.steps[0]?.actionType).not.toContain("\n");
+    expect(replay.steps[0]?.message).toContain("[truncated");
+    expect(replay.steps[0]?.message).not.toContain("\n");
+  });
+
   it("treats whitespace instruction as missing when xpath is unavailable", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
