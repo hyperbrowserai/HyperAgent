@@ -25,6 +25,8 @@ export interface CaptureDOMOptions {
   maxRetries?: number;
 }
 
+const MAX_DOM_CAPTURE_RETRIES = 10;
+
 class DomChunkAggregator {
   private parts: string[] = [];
   private pending = new Map<number, FrameChunkEvent>();
@@ -64,11 +66,17 @@ const isRecoverableDomError = (error: unknown): boolean => {
 };
 
 const isPlaceholderSnapshot = (snapshot: A11yDOMState): boolean => {
-  if (snapshot.elements.size > 0) return false;
-  return (
-    typeof snapshot.domState === "string" &&
-    snapshot.domState.startsWith("Error: Could not extract accessibility tree")
-  );
+  try {
+    if (!snapshot || typeof snapshot !== "object") return false;
+    if (!(snapshot.elements instanceof Map)) return false;
+    if (snapshot.elements.size > 0) return false;
+    return (
+      typeof snapshot.domState === "string" &&
+      snapshot.domState.startsWith("Error: Could not extract accessibility tree")
+    );
+  } catch {
+    return false;
+  }
 };
 
 function logPerf(
@@ -98,11 +106,17 @@ export async function captureDOMState(
     onFrameChunk,
     maxRetries = DOM_CAPTURE_MAX_ATTEMPTS,
   } = options;
+  const normalizedMaxRetries =
+    typeof maxRetries === "number" &&
+    Number.isFinite(maxRetries) &&
+    maxRetries > 0
+      ? Math.min(Math.floor(maxRetries), MAX_DOM_CAPTURE_RETRIES)
+      : DOM_CAPTURE_MAX_ATTEMPTS;
 
   let lastError: unknown;
   const domFetchStart = performance.now();
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+  for (let attempt = 0; attempt < normalizedMaxRetries; attempt++) {
     const attemptAggregator = enableStreaming
       ? new DomChunkAggregator()
       : null;
@@ -119,7 +133,18 @@ export async function captureDOMState(
           onFrameChunk: attemptAggregator
             ? (chunk) => {
                 attemptAggregator.push(chunk);
-                onFrameChunk?.(chunk);
+                if (!onFrameChunk) return;
+                try {
+                  onFrameChunk(chunk);
+                } catch (error) {
+                  if (debug) {
+                    console.warn(
+                      `[DOM] onFrameChunk callback failed: ${
+                        error instanceof Error ? error.message : "unknown callback error"
+                      }`
+                    );
+                  }
+                }
               }
             : undefined,
         }
@@ -132,7 +157,6 @@ export async function captureDOMState(
       if (isPlaceholderSnapshot(snapshot)) {
         lastError = new Error(snapshot.domState);
       } else {
-        const domDuration = performance.now() - domFetchStart;
         logPerf(debug, `[Perf][captureDOMState] success (attempt ${attempt + 1})`, domFetchStart);
         
         // If we were streaming, update the full string in the snapshot
@@ -151,7 +175,7 @@ export async function captureDOMState(
 
     if (debug) {
       console.warn(
-        `[DOM] Capture failed (attempt ${attempt + 1}/${maxRetries}), waiting for navigation to settle...`
+        `[DOM] Capture failed (attempt ${attempt + 1}/${normalizedMaxRetries}), waiting for navigation to settle...`
       );
     }
     
@@ -159,6 +183,9 @@ export async function captureDOMState(
     await waitForSettledDOM(page).catch(() => {});
   }
 
-  throw lastError ?? new Error(`Failed to capture DOM state after ${maxRetries} attempts`);
+  throw (
+    lastError ??
+    new Error(`Failed to capture DOM state after ${normalizedMaxRetries} attempts`)
+  );
 }
 
