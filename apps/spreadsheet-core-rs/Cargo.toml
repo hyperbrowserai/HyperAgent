@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "=1.0.95"
 axum = { version = "=0.8.1", features = ["macros", "json", "multipart"] }
+base64 = "0.22.1"
 calamine = "=0.24.0"
 chrono = { version = "=0.4.43", features = ["clock", "serde"] }
 comfy-table = "=7.1.2"

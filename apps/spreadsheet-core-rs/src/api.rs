@@ -20,6 +20,7 @@ use axum::{
   routing::{get, post},
   Json, Router,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use futures_util::StreamExt;
 use serde_json::json;
 use tokio_stream::wrappers::BroadcastStream;
@@ -202,6 +203,21 @@ async fn apply_recalculate(
   Ok((updated_cells, unsupported_formulas))
 }
 
+async fn build_export_artifacts(
+  state: &AppState,
+  workbook_id: Uuid,
+) -> Result<(Vec<u8>, ExportResponse, String), ApiError> {
+  let summary = state.get_workbook(workbook_id).await?;
+  let db_path = state.db_path(workbook_id).await?;
+  let (bytes, compatibility_report) = export_xlsx(&db_path, &summary)?;
+  let response_payload = ExportResponse {
+    file_name: format!("{}.xlsx", summary.name),
+    compatibility_report,
+  };
+  let report_json = serde_json::to_string(&response_payload).map_err(ApiError::internal)?;
+  Ok((bytes, response_payload, report_json))
+}
+
 async fn set_cells_batch(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
@@ -333,6 +349,35 @@ async fn agent_ops(
         .await;
         ("upsert_chart".to_string(), result)
       }
+      AgentOperation::ExportWorkbook { include_file_base64 } => {
+        let should_include_file = include_file_base64.unwrap_or(true);
+        let result = async {
+          let (bytes, export_payload, _report_json) =
+            build_export_artifacts(&state, workbook_id).await?;
+          state
+            .emit_event(
+              workbook_id,
+              "workbook.exported",
+              actor.as_str(),
+              json!({
+                "file_name": export_payload.file_name,
+                "compatibility_report": export_payload.compatibility_report
+              }),
+            )
+            .await?;
+          Ok::<serde_json::Value, ApiError>(json!({
+            "file_name": export_payload.file_name,
+            "compatibility_report": export_payload.compatibility_report,
+            "file_base64": if should_include_file {
+              serde_json::Value::String(BASE64_STANDARD.encode(bytes))
+            } else {
+              serde_json::Value::Null
+            }
+          }))
+        }
+        .await;
+        ("export_workbook".to_string(), result)
+      }
     };
 
     match outcome {
@@ -371,9 +416,8 @@ async fn export_workbook(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiError> {
-  let summary = state.get_workbook(workbook_id).await?;
-  let db_path = state.db_path(workbook_id).await?;
-  let (bytes, compatibility_report) = export_xlsx(&db_path, &summary)?;
+  let (bytes, response_payload, report_json) =
+    build_export_artifacts(&state, workbook_id).await?;
 
   state
     .emit_event(
@@ -381,17 +425,11 @@ async fn export_workbook(
       "workbook.exported",
       "export",
       json!({
-        "file_name": format!("{}.xlsx", summary.name),
-        "compatibility_report": compatibility_report
+        "file_name": response_payload.file_name,
+        "compatibility_report": response_payload.compatibility_report
       }),
     )
     .await?;
-
-  let response_payload = ExportResponse {
-    file_name: format!("{}.xlsx", summary.name),
-    compatibility_report,
-  };
-  let report_json = serde_json::to_string(&response_payload).map_err(ApiError::internal)?;
   let mut headers = HeaderMap::new();
   headers.insert(
     header::CONTENT_TYPE,
@@ -401,7 +439,7 @@ async fn export_workbook(
   );
   headers.insert(
     header::CONTENT_DISPOSITION,
-    HeaderValue::from_str(&format!("attachment; filename=\"{}.xlsx\"", summary.name))
+    HeaderValue::from_str(&format!("attachment; filename=\"{}\"", response_payload.file_name))
       .map_err(ApiError::internal)?,
   );
   headers.insert(
@@ -447,7 +485,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}": {"get": {"summary": "Get workbook"}},
       "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}},
       "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
-      "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint"}},
+      "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports export_workbook op)"}},
       "/v1/workbooks/{id}/cells/get": {"post": {"summary": "Get range cells"}},
       "/v1/workbooks/{id}/formulas/recalculate": {"post": {"summary": "Recalculate formulas"}},
       "/v1/workbooks/{id}/charts/upsert": {"post": {"summary": "Upsert chart metadata"}},

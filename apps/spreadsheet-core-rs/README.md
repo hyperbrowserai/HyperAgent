@@ -49,6 +49,7 @@ Supported `op_type` values:
 - `get_cells`
 - `recalculate`
 - `upsert_chart`
+- `export_workbook` (`include_file_base64` optional, default `true`)
 
 ## Testing
 

@@ -133,6 +133,9 @@ pub enum AgentOperation {
   UpsertChart {
     chart: ChartSpec,
   },
+  ExportWorkbook {
+    include_file_base64: Option<bool>,
+  },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
