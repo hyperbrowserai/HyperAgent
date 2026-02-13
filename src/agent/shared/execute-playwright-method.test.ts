@@ -23,12 +23,20 @@ describe("executePlaywrightMethod", () => {
       click: jest.fn().mockRejectedValue({ reason: "click failed" }),
       evaluate: jest.fn().mockRejectedValue({ reason: "js click failed" }),
     });
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
 
-    await expect(
-      executePlaywrightMethod("click", [], locator, { debug: true })
-    ).rejects.toThrow(
-      'Failed to click element. Playwright error: {"reason":"click failed"}. JS click error: {"reason":"js click failed"}'
-    );
+    try {
+      await expect(
+        executePlaywrightMethod("click", [], locator, { debug: true })
+      ).rejects.toThrow(
+        'Failed to click element. Playwright error: {"reason":"click failed"}. JS click error: {"reason":"js click failed"}'
+      );
+      expect(logSpy).toHaveBeenCalledWith(
+        '[executePlaywrightMethod] Playwright click failed, falling back to JS click: {"reason":"click failed"}'
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it("does not crash debug logging on circular method args", async () => {
