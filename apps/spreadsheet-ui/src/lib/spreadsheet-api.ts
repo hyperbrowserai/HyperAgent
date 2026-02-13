@@ -6,6 +6,7 @@ import {
   AgentOpsCacheStatsResponse,
   ClearAgentOpsCacheResponse,
   ReplayAgentOpsCacheEntryResponse,
+  ReexecuteAgentOpsCacheEntryResponse,
   RemoveAgentOpsCacheEntriesByPrefixResponse,
   RemoveAgentOpsCacheEntryResponse,
   AgentOpsResponse,
@@ -270,6 +271,29 @@ export async function replayAgentOpsCacheEntry(
     },
   );
   return parseJsonResponse<ReplayAgentOpsCacheEntryResponse>(response);
+}
+
+interface ReexecuteAgentOpsCacheEntryRequest {
+  request_id: string;
+  new_request_id?: string;
+  actor?: string;
+  stop_on_error?: boolean;
+  expected_operations_signature?: string;
+}
+
+export async function reexecuteAgentOpsCacheEntry(
+  workbookId: string,
+  payload: ReexecuteAgentOpsCacheEntryRequest,
+): Promise<ReexecuteAgentOpsCacheEntryResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/reexecute`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  return parseJsonResponse<ReexecuteAgentOpsCacheEntryResponse>(response);
 }
 
 export async function removeAgentOpsCacheEntry(

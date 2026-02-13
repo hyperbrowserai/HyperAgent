@@ -192,6 +192,25 @@ pub struct ReplayAgentOpsCacheEntryResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReexecuteAgentOpsCacheEntryRequest {
+  pub request_id: String,
+  pub new_request_id: Option<String>,
+  pub actor: Option<String>,
+  pub stop_on_error: Option<bool>,
+  pub expected_operations_signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReexecuteAgentOpsCacheEntryResponse {
+  pub source_request_id: String,
+  pub generated_request_id: bool,
+  pub operations_signature: String,
+  pub operations_count: usize,
+  pub operations: Vec<AgentOperation>,
+  pub response: AgentOpsResponse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsCacheEntryDetailResponse {
   pub request_id: String,
   pub operation_count: usize,

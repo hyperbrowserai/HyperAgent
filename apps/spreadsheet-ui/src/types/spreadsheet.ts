@@ -106,6 +106,15 @@ export interface ReplayAgentOpsCacheEntryResponse {
   operations: AgentOperationPreview[];
 }
 
+export interface ReexecuteAgentOpsCacheEntryResponse {
+  source_request_id: string;
+  generated_request_id: boolean;
+  operations_signature: string;
+  operations_count: number;
+  operations: AgentOperationPreview[];
+  response: AgentOpsResponse;
+}
+
 export interface AgentOpsCacheEntryDetailResponse {
   request_id: string;
   operation_count: number;
@@ -140,6 +149,7 @@ export interface AgentSchemaInfo {
   agent_ops_cache_prefixes_endpoint?: string;
   agent_ops_cache_clear_endpoint?: string;
   agent_ops_cache_replay_endpoint?: string;
+  agent_ops_cache_reexecute_endpoint?: string;
   agent_ops_cache_remove_endpoint?: string;
   agent_ops_cache_remove_by_prefix_endpoint?: string;
   agent_ops_idempotency_cache_max_entries?: number;

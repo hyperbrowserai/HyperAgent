@@ -10,6 +10,7 @@ use crate::{
     RemoveAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntryResponse,
     RemoveAgentOpsCacheEntriesByPrefixRequest,
     RemoveAgentOpsCacheEntriesByPrefixResponse,
+    ReexecuteAgentOpsCacheEntryRequest, ReexecuteAgentOpsCacheEntryResponse,
     ReplayAgentOpsCacheEntryRequest, ReplayAgentOpsCacheEntryResponse,
     AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
     ClearAgentOpsCacheResponse,
@@ -33,6 +34,7 @@ use axum::{
   Json, Router,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use chrono::Utc;
 use futures_util::StreamExt;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -89,6 +91,10 @@ pub fn create_router(state: AppState) -> Router {
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/replay",
       post(replay_agent_ops_cache_entry),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache/reexecute",
+      post(reexecute_agent_ops_cache_entry),
     )
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/remove",
@@ -1045,6 +1051,7 @@ async fn get_agent_schema(
     },
     "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
     "agent_ops_cache_replay_endpoint": "/v1/workbooks/{id}/agent/ops/cache/replay",
+    "agent_ops_cache_reexecute_endpoint": "/v1/workbooks/{id}/agent/ops/cache/reexecute",
     "agent_ops_cache_remove_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove",
     "agent_ops_cache_remove_by_prefix_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix",
     "agent_ops_preview_request_shape": {
@@ -1102,6 +1109,21 @@ async fn get_agent_schema(
       },
       "operations": "cached operation array for request replay portability"
     },
+    "agent_ops_cache_reexecute_request_shape": {
+      "request_id": "string (required source cache entry id)",
+      "new_request_id": "optional string for target execution request id",
+      "actor": "optional string",
+      "stop_on_error": "optional boolean (default true)",
+      "expected_operations_signature": "optional string guard for cached operations payload"
+    },
+    "agent_ops_cache_reexecute_response_shape": {
+      "source_request_id": "string",
+      "generated_request_id": "true if server generated request id",
+      "operations_signature": "sha256 signature over replayed operations",
+      "operations_count": "number of operations reexecuted",
+      "operations": "reexecuted operations array",
+      "response": "agent ops response from reexecution"
+    },
     "agent_ops_cache_remove_request_shape": {
       "request_id": "string (required)"
     },
@@ -1120,6 +1142,7 @@ async fn get_agent_schema(
     },
     "cache_validation_error_codes": [
       "INVALID_REQUEST_ID",
+      "INVALID_NEW_REQUEST_ID",
       "INVALID_REQUEST_ID_PREFIX",
       "CACHE_ENTRY_NOT_FOUND"
     ],
@@ -1574,6 +1597,103 @@ async fn replay_agent_ops_cache_entry(
   }))
 }
 
+async fn reexecute_agent_ops_cache_entry(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<ReexecuteAgentOpsCacheEntryRequest>,
+) -> Result<Json<ReexecuteAgentOpsCacheEntryResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let source_request_id = payload.request_id.trim();
+  if source_request_id.is_empty() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID",
+      "request_id is required to reexecute a cache entry.",
+    ));
+  }
+  let (_, operations) = state
+    .get_cached_agent_ops_replay_data(workbook_id, source_request_id)
+    .await?
+    .ok_or_else(|| {
+      ApiError::bad_request_with_code(
+        "CACHE_ENTRY_NOT_FOUND",
+        format!("No cache entry found for request_id '{source_request_id}'."),
+      )
+    })?;
+
+  let operation_signature = operations_signature(&operations)?;
+  validate_expected_operations_signature(
+    payload.expected_operations_signature.as_deref(),
+    operation_signature.as_str(),
+  )?;
+
+  let actor = payload
+    .actor
+    .unwrap_or_else(|| format!("cache-reexecute:{source_request_id}"));
+  let stop_on_error = payload.stop_on_error.unwrap_or(true);
+  let (request_id, generated_request_id) = match payload.new_request_id {
+    Some(value) => {
+      let normalized = value.trim();
+      if normalized.is_empty() {
+        return Err(ApiError::bad_request_with_code(
+          "INVALID_NEW_REQUEST_ID",
+          "new_request_id must be non-empty when provided.",
+        ));
+      }
+      (normalized.to_string(), false)
+    }
+    None => (
+      format!("{source_request_id}-rerun-{}", Utc::now().timestamp_millis()),
+      true,
+    ),
+  };
+
+  if let Some(mut cached_response) = state
+    .get_cached_agent_ops_response(workbook_id, request_id.as_str())
+    .await?
+  {
+    validate_request_id_signature_consistency(
+      cached_response.operations_signature.as_deref(),
+      operation_signature.as_str(),
+    )?;
+    cached_response.served_from_cache = true;
+    return Ok(Json(ReexecuteAgentOpsCacheEntryResponse {
+      source_request_id: source_request_id.to_string(),
+      generated_request_id,
+      operations_signature: operation_signature,
+      operations_count: operations.len(),
+      operations,
+      response: cached_response,
+    }));
+  }
+
+  let results = execute_agent_operations(
+    &state,
+    workbook_id,
+    actor.as_str(),
+    stop_on_error,
+    operations.clone(),
+  )
+  .await;
+  let response = AgentOpsResponse {
+    request_id: Some(request_id.clone()),
+    operations_signature: Some(operation_signature.clone()),
+    served_from_cache: false,
+    results,
+  };
+  state
+    .cache_agent_ops_response(workbook_id, request_id, operations.clone(), response.clone())
+    .await?;
+
+  Ok(Json(ReexecuteAgentOpsCacheEntryResponse {
+    source_request_id: source_request_id.to_string(),
+    generated_request_id,
+    operations_signature: operation_signature,
+    operations_count: operations.len(),
+    operations,
+    response,
+  }))
+}
+
 async fn remove_agent_ops_cache_entry(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
@@ -1791,6 +1911,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/ops/cache/prefixes": {"get": {"summary": "List request-id prefix suggestions from cached entries"}},
       "/v1/workbooks/{id}/agent/ops/cache/clear": {"post": {"summary": "Clear request-id idempotency cache for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/replay": {"post": {"summary": "Replay a cached request-id response for agent ops"}},
+      "/v1/workbooks/{id}/agent/ops/cache/reexecute": {"post": {"summary": "Reexecute cached operations as a fresh agent ops request"}},
       "/v1/workbooks/{id}/agent/ops/cache/remove": {"post": {"summary": "Remove a single request-id idempotency cache entry for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix": {"post": {"summary": "Remove all cached request-id entries matching a prefix"}},
       "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
@@ -1821,7 +1942,7 @@ mod tests {
     agent_ops_cache_stats,
     clear_agent_ops_cache, get_agent_schema, remove_agent_ops_cache_entry,
     remove_agent_ops_cache_entries_by_prefix,
-    replay_agent_ops_cache_entry,
+    replay_agent_ops_cache_entry, reexecute_agent_ops_cache_entry,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
@@ -1833,6 +1954,7 @@ mod tests {
     models::{
       AgentOperation, AgentOpsRequest, RemoveAgentOpsCacheEntryRequest,
       RemoveAgentOpsCacheEntriesByPrefixRequest,
+      ReexecuteAgentOpsCacheEntryRequest,
       ReplayAgentOpsCacheEntryRequest,
     },
     state::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES},
@@ -2573,6 +2695,114 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn should_reexecute_cached_entry_via_handler() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-reexecute".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let _ = agent_ops(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(AgentOpsRequest {
+        request_id: Some("source-reexecute-1".to_string()),
+        actor: Some("test".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+        operations: vec![AgentOperation::Recalculate],
+      }),
+    )
+    .await
+    .expect("initial request should succeed");
+
+    let reexecute = reexecute_agent_ops_cache_entry(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(ReexecuteAgentOpsCacheEntryRequest {
+        request_id: "source-reexecute-1".to_string(),
+        new_request_id: Some("reexecute-1".to_string()),
+        actor: Some("test-reexecute".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+      }),
+    )
+    .await
+    .expect("reexecute should succeed")
+    .0;
+    assert_eq!(reexecute.source_request_id, "source-reexecute-1");
+    assert!(!reexecute.generated_request_id);
+    assert_eq!(reexecute.response.request_id.as_deref(), Some("reexecute-1"));
+    assert!(!reexecute.response.served_from_cache);
+    assert_eq!(reexecute.operations_count, 1);
+    assert_eq!(reexecute.operations.len(), 1);
+
+    let replayed_reexecute = reexecute_agent_ops_cache_entry(
+      State(state),
+      Path(workbook.id),
+      Json(ReexecuteAgentOpsCacheEntryRequest {
+        request_id: "source-reexecute-1".to_string(),
+        new_request_id: Some("reexecute-1".to_string()),
+        actor: Some("test-reexecute".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+      }),
+    )
+    .await
+    .expect("reexecute replay should succeed")
+    .0;
+    assert!(replayed_reexecute.response.served_from_cache);
+  }
+
+  #[tokio::test]
+  async fn should_reject_blank_new_request_id_when_reexecuting_cache_entry() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-reexecute-invalid".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let _ = agent_ops(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(AgentOpsRequest {
+        request_id: Some("source-invalid-1".to_string()),
+        actor: Some("test".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+        operations: vec![AgentOperation::Recalculate],
+      }),
+    )
+    .await
+    .expect("initial request should succeed");
+
+    let error = reexecute_agent_ops_cache_entry(
+      State(state),
+      Path(workbook.id),
+      Json(ReexecuteAgentOpsCacheEntryRequest {
+        request_id: "source-invalid-1".to_string(),
+        new_request_id: Some("   ".to_string()),
+        actor: Some("test-reexecute".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+      }),
+    )
+    .await
+    .expect_err("blank new request id should fail");
+
+    match error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_NEW_REQUEST_ID");
+      }
+      _ => panic!("expected invalid new request id to use custom error code"),
+    }
+  }
+
+  #[tokio::test]
   async fn should_return_request_id_conflict_from_agent_ops_handler() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =
@@ -2666,6 +2896,12 @@ mod tests {
     );
     assert_eq!(
       schema
+        .get("agent_ops_cache_reexecute_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache/reexecute"),
+    );
+    assert_eq!(
+      schema
         .get("agent_ops_cache_entries_endpoint")
         .and_then(serde_json::Value::as_str),
       Some(
@@ -2717,6 +2953,10 @@ mod tests {
     assert!(
       cache_validation_error_codes.contains(&"CACHE_ENTRY_NOT_FOUND"),
       "schema should advertise missing-cache-entry error code",
+    );
+    assert!(
+      cache_validation_error_codes.contains(&"INVALID_NEW_REQUEST_ID"),
+      "schema should advertise invalid new request id error code",
     );
     assert!(
       cache_validation_error_codes.contains(&"INVALID_REQUEST_ID_PREFIX"),

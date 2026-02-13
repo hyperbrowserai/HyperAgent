@@ -31,6 +31,7 @@ import {
   importWorkbook,
   previewAgentOps,
   replayAgentOpsCacheEntry,
+  reexecuteAgentOpsCacheEntry,
   removeAgentOpsCacheEntry,
   removeAgentOpsCacheEntriesByPrefix,
   runAgentOps,
@@ -112,6 +113,9 @@ export function SpreadsheetApp() {
     useState(false);
   const [isReplayingLastRequest, setIsReplayingLastRequest] = useState(false);
   const [replayingCacheRequestId, setReplayingCacheRequestId] = useState<string | null>(null);
+  const [reexecutingCacheRequestId, setReexecutingCacheRequestId] = useState<string | null>(
+    null,
+  );
   const [inspectingCacheRequestId, setInspectingCacheRequestId] = useState<string | null>(null);
   const [isClearingOpsCache, setIsClearingOpsCache] = useState(false);
   const [copyingCacheRequestId, setCopyingCacheRequestId] = useState<string | null>(null);
@@ -1388,6 +1392,55 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleReexecuteCacheRequestId(requestId: string) {
+    if (!workbook) {
+      return;
+    }
+    setReexecutingCacheRequestId(requestId);
+    try {
+      clearUiError();
+      const reexecute = await reexecuteAgentOpsCacheEntry(workbook.id, {
+        request_id: requestId,
+        actor: "ui-cache-reexecute",
+        stop_on_error: true,
+      });
+      setLastExecutedOperations(reexecute.operations);
+      setLastAgentRequestId(reexecute.response.request_id ?? null);
+      setLastOperationsSignature(reexecute.operations_signature);
+      setLastServedFromCache(reexecute.response.served_from_cache ?? null);
+      setLastAgentOps(reexecute.response.results);
+      setNotice(
+        `Reexecuted ${requestId} as ${
+          reexecute.response.request_id ?? "new request"
+        }.`,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-entries", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache-prefixes", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["cells", workbook.id, activeSheet],
+        }),
+      ]);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error))
+      ) {
+        return;
+      }
+      applyUiError(error, "Failed to reexecute cached request id.");
+    } finally {
+      setReexecutingCacheRequestId(null);
+    }
+  }
+
   async function handleRemoveCacheRequestId(requestId: string) {
     if (!workbook) {
       return;
@@ -2222,6 +2275,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_reexecute_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache reexecute endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_reexecute_endpoint}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.agent_ops_cache_remove_endpoint ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache remove endpoint:{" "}
@@ -2433,6 +2494,7 @@ export function SpreadsheetApp() {
                               onClick={() => handleInspectCacheRequestId(entry.request_id)}
                               disabled={
                                 inspectingCacheRequestId === entry.request_id
+                                || reexecutingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
@@ -2448,6 +2510,7 @@ export function SpreadsheetApp() {
                               onClick={() => handleReplayCacheRequestId(entry.request_id)}
                               disabled={
                                 replayingCacheRequestId === entry.request_id
+                                || reexecutingCacheRequestId === entry.request_id
                                 || inspectingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
@@ -2460,11 +2523,28 @@ export function SpreadsheetApp() {
                                 : "Replay"}
                             </button>
                             <button
+                              onClick={() => handleReexecuteCacheRequestId(entry.request_id)}
+                              disabled={
+                                reexecutingCacheRequestId === entry.request_id
+                                || replayingCacheRequestId === entry.request_id
+                                || inspectingCacheRequestId === entry.request_id
+                                || removingCacheRequestId === entry.request_id
+                                || copyingCacheRequestId === entry.request_id
+                                || copyingCacheOpsPayloadRequestId === entry.request_id
+                              }
+                              className="rounded border border-amber-700/70 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-900/40 disabled:opacity-50"
+                            >
+                              {reexecutingCacheRequestId === entry.request_id
+                                ? "Rerunning..."
+                                : "Rerun"}
+                            </button>
+                            <button
                               onClick={() =>
                                 handleCopyCacheEntryAsOpsPayload(entry.request_id)
                               }
                               disabled={
                                 copyingCacheOpsPayloadRequestId === entry.request_id
+                                || reexecutingCacheRequestId === entry.request_id
                                 || inspectingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
@@ -2482,6 +2562,7 @@ export function SpreadsheetApp() {
                                 copyingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
+                                || reexecutingCacheRequestId === entry.request_id
                                 || inspectingCacheRequestId === entry.request_id
                                 || copyingCacheOpsPayloadRequestId === entry.request_id
                               }
@@ -2497,6 +2578,7 @@ export function SpreadsheetApp() {
                                 removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
+                                || reexecutingCacheRequestId === entry.request_id
                                 || inspectingCacheRequestId === entry.request_id
                                 || copyingCacheOpsPayloadRequestId === entry.request_id
                               }

@@ -44,6 +44,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/agent/ops/cache/prefixes`
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay`
+- `POST /v1/workbooks/{id}/agent/ops/cache/reexecute`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix`
 - `GET /v1/workbooks/{id}/agent/schema`
@@ -83,6 +84,7 @@ Response includes:
   - `REQUEST_ID_CONFLICT` (same `request_id` reused with a different operation signature)
 - Cache-management validation error codes:
   - `INVALID_REQUEST_ID`
+  - `INVALID_NEW_REQUEST_ID`
   - `INVALID_REQUEST_ID_PREFIX`
   - `CACHE_ENTRY_NOT_FOUND`
 
@@ -99,6 +101,7 @@ Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8` (prefix suggestions with counts for filter UX)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay` with `{ "request_id": "..." }` (returns `{ cached_response, operations }` where `operations` are the original cached ops payload)
+- `POST /v1/workbooks/{id}/agent/ops/cache/reexecute` with `{ "request_id": "...", "new_request_id": "..." }` (reexecutes cached operations as fresh `agent/ops`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove-by-prefix` with `{ "request_id_prefix": "scenario-" }`
 
