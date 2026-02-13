@@ -29,6 +29,7 @@ import {
   runAgentPreset,
   runAgentScenario,
   runAgentWizard,
+  SpreadsheetApiError,
   subscribeToWorkbookEvents,
   upsertChart,
 } from "@/lib/spreadsheet-api";
@@ -337,24 +338,31 @@ export function SpreadsheetApp() {
         ? "Syncing updates..."
         : "Ready";
 
-  async function handleSignatureMismatchRecovery(
-    maybeMessage: string | null,
-  ): Promise<boolean> {
+  async function handleSignatureMismatchRecovery(error: unknown): Promise<boolean> {
+    if (error instanceof SpreadsheetApiError) {
+      if (error.code === "EMPTY_OPERATION_LIST") {
+        setUiError("No operations were provided. Refresh previews and retry.");
+        return true;
+      }
+      if (error.code === "INVALID_SIGNATURE_FORMAT") {
+        setUiError(
+          `${error.message} Refresh previews to regenerate a valid signature and retry.`,
+        );
+        return true;
+      }
+      if (error.code !== "OPERATION_SIGNATURE_MISMATCH") {
+        return false;
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["wizard-scenario-ops"] }),
+        queryClient.invalidateQueries({ queryKey: ["wizard-preset-ops"] }),
+      ]);
+      setUiError(`${error.message} Refreshed operation previews. Please retry.`);
+      return true;
+    }
+    const maybeMessage = error instanceof Error ? error.message : null;
     const message = maybeMessage ?? "";
-    if (message.includes("EMPTY_OPERATION_LIST")) {
-      setUiError("No operations were provided. Refresh previews and retry.");
-      return true;
-    }
-    if (message.includes("INVALID_SIGNATURE_FORMAT")) {
-      setUiError(
-        `${message} Refresh previews to regenerate a valid signature and retry.`,
-      );
-      return true;
-    }
-    if (
-      !message.includes("OPERATION_SIGNATURE_MISMATCH") &&
-      !message.includes("Operation signature mismatch")
-    ) {
+    if (!message.includes("Operation signature mismatch")) {
       return false;
     }
     await Promise.all([
@@ -582,7 +590,7 @@ export function SpreadsheetApp() {
     } catch (error) {
       if (
         error instanceof Error &&
-        (await handleSignatureMismatchRecovery(error.message))
+        (await handleSignatureMismatchRecovery(error))
       ) {
         return;
       }
@@ -626,7 +634,7 @@ export function SpreadsheetApp() {
     } catch (error) {
       if (
         error instanceof Error &&
-        (await handleSignatureMismatchRecovery(error.message))
+        (await handleSignatureMismatchRecovery(error))
       ) {
         return;
       }
@@ -672,7 +680,7 @@ export function SpreadsheetApp() {
     } catch (error) {
       if (
         error instanceof Error &&
-        (await handleSignatureMismatchRecovery(error.message))
+        (await handleSignatureMismatchRecovery(error))
       ) {
         return;
       }
@@ -714,7 +722,7 @@ export function SpreadsheetApp() {
     } catch (error) {
       if (
         error instanceof Error &&
-        (await handleSignatureMismatchRecovery(error.message))
+        (await handleSignatureMismatchRecovery(error))
       ) {
         return;
       }
@@ -760,7 +768,7 @@ export function SpreadsheetApp() {
     } catch (error) {
       if (
         error instanceof Error &&
-        (await handleSignatureMismatchRecovery(error.message))
+        (await handleSignatureMismatchRecovery(error))
       ) {
         return;
       }
@@ -802,7 +810,7 @@ export function SpreadsheetApp() {
     } catch (error) {
       if (
         error instanceof Error &&
-        (await handleSignatureMismatchRecovery(error.message))
+        (await handleSignatureMismatchRecovery(error))
       ) {
         return;
       }
@@ -1085,7 +1093,7 @@ export function SpreadsheetApp() {
     } catch (error) {
       if (
         error instanceof Error &&
-        (await handleSignatureMismatchRecovery(error.message))
+        (await handleSignatureMismatchRecovery(error))
       ) {
         return;
       }

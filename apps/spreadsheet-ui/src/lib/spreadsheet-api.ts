@@ -26,6 +26,18 @@ interface JsonError {
   };
 }
 
+export class SpreadsheetApiError extends Error {
+  readonly code?: string;
+  readonly status: number;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "SpreadsheetApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const maybeError = (await response.json().catch(() => null)) as JsonError | null;
@@ -33,7 +45,7 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
     const message =
       maybeError?.error?.message ??
       `Request failed with status ${response.status}.`;
-    throw new Error(code ? `${code}: ${message}` : message);
+    throw new SpreadsheetApiError(message, response.status, code);
   }
   return (await response.json()) as T;
 }
