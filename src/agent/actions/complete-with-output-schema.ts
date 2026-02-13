@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 
 export const generateCompleteActionWithOutputDefinition = (
-  outputSchema: z.ZodType<any>
+  outputSchema: z.ZodType<unknown>
 ): AgentActionDefinition => {
   const actionParamsSchema = z
     .object({
@@ -19,14 +19,14 @@ export const generateCompleteActionWithOutputDefinition = (
       "Complete the task. An output schema has been provided to you. Try your best to provide your response so that it fits the output schema provided."
     );
 
-  type CompeleteActionWithOutputSchema = z.infer<typeof actionParamsSchema>;
+  type CompleteActionWithOutputSchema = z.infer<typeof actionParamsSchema>;
 
   return {
     type: "complete" as const,
     actionParams: actionParamsSchema,
     run: async (
       ctx: ActionContext,
-      actionParams: CompeleteActionWithOutputSchema
+      actionParams: CompleteActionWithOutputSchema
     ): Promise<ActionOutput> => {
       if (actionParams.success && actionParams.outputSchema) {
         return {
@@ -42,7 +42,7 @@ export const generateCompleteActionWithOutputDefinition = (
         };
       }
     },
-    completeAction: async (params: CompeleteActionWithOutputSchema) => {
+    completeAction: async (params: CompleteActionWithOutputSchema) => {
       return JSON.stringify(params.outputSchema, null, 2);
     },
   };
