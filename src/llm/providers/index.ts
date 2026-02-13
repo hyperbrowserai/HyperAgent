@@ -22,7 +22,10 @@ function normalizeProvider(provider: unknown): LLMProvider {
     throw new Error("LLM provider must be a string");
   }
 
-  const normalized = provider.trim().toLowerCase();
+  const normalized = provider
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim()
+    .toLowerCase();
   if (
     normalized === "openai" ||
     normalized === "anthropic" ||

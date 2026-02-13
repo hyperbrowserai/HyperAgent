@@ -54,6 +54,22 @@ describe("createLLMClient", () => {
     });
   });
 
+  it("strips control characters from provider identifiers", () => {
+    const client = createLLMClient({
+      provider: "open\u0000ai" as unknown as LLMConfig["provider"],
+      model: "gpt-test",
+    });
+
+    expect(client).toEqual({ provider: "openai" });
+    expect(createOpenAIClientMock).toHaveBeenCalledWith({
+      apiKey: undefined,
+      model: "gpt-test",
+      temperature: undefined,
+      maxTokens: undefined,
+      baseURL: undefined,
+    });
+  });
+
   it("normalizes apiKey and trims trailing baseURL slash", () => {
     createLLMClient({
       provider: "openai",
