@@ -47,6 +47,11 @@ export interface AgentOpsResponse {
   results: AgentOperationResult[];
 }
 
+export interface AgentOpsPreviewResponse {
+  operations_signature: string;
+  operations: AgentOperationPreview[];
+}
+
 export interface AgentPresetResponse {
   preset: string;
   operations_signature?: string;

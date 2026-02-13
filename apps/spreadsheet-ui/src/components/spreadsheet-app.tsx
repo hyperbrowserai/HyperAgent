@@ -24,6 +24,7 @@ import {
   getCells,
   getWorkbook,
   importWorkbook,
+  previewAgentOps,
   runAgentOps,
   runAgentPreset,
   runAgentScenario,
@@ -66,6 +67,8 @@ export function SpreadsheetApp() {
   const [isRunningPreviewOps, setIsRunningPreviewOps] = useState(false);
   const [isRunningSelectedPreset, setIsRunningSelectedPreset] = useState(false);
   const [isRunningPresetPreviewOps, setIsRunningPresetPreviewOps] = useState(false);
+  const [isCopyingPresetOpsRunPayload, setIsCopyingPresetOpsRunPayload] = useState(false);
+  const [isCopyingScenarioOpsRunPayload, setIsCopyingScenarioOpsRunPayload] = useState(false);
   const [isCopyingPresetRunPayload, setIsCopyingPresetRunPayload] = useState(false);
   const [isCopyingScenarioRunPayload, setIsCopyingScenarioRunPayload] = useState(false);
   const [isCopyingPresetOps, setIsCopyingPresetOps] = useState(false);
@@ -818,6 +821,76 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyPresetOpsRunPayload() {
+    if (wizardPresetOps.length === 0) {
+      return;
+    }
+    setIsCopyingPresetOpsRunPayload(true);
+    try {
+      let operationSignature = wizardPresetOpsSignature;
+      if (workbook) {
+        const preview = await previewAgentOps(workbook.id, wizardPresetOps);
+        operationSignature = preview.operations_signature;
+      }
+      if (!operationSignature) {
+        throw new Error("Operation signature unavailable for payload copy.");
+      }
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            request_id: "replace-with-request-id",
+            actor: "agent",
+            stop_on_error: true,
+            expected_operations_signature: operationSignature,
+            operations: wizardPresetOps,
+          },
+          null,
+          2,
+        ),
+      );
+      setUiError(null);
+    } catch {
+      setUiError("Failed to copy agent/ops payload for preset preview.");
+    } finally {
+      setIsCopyingPresetOpsRunPayload(false);
+    }
+  }
+
+  async function handleCopyScenarioOpsRunPayload() {
+    if (wizardScenarioOps.length === 0) {
+      return;
+    }
+    setIsCopyingScenarioOpsRunPayload(true);
+    try {
+      let operationSignature = wizardScenarioOpsSignature;
+      if (workbook) {
+        const preview = await previewAgentOps(workbook.id, wizardScenarioOps);
+        operationSignature = preview.operations_signature;
+      }
+      if (!operationSignature) {
+        throw new Error("Operation signature unavailable for payload copy.");
+      }
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            request_id: "replace-with-request-id",
+            actor: "agent",
+            stop_on_error: true,
+            expected_operations_signature: operationSignature,
+            operations: wizardScenarioOps,
+          },
+          null,
+          2,
+        ),
+      );
+      setUiError(null);
+    } catch {
+      setUiError("Failed to copy agent/ops payload for scenario preview.");
+    } finally {
+      setIsCopyingScenarioOpsRunPayload(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -1202,6 +1275,17 @@ export function SpreadsheetApp() {
                       ? "Copying..."
                       : "Copy Run Payload"}
                   </button>
+                  <button
+                    onClick={handleCopyPresetOpsRunPayload}
+                    disabled={
+                      isCopyingPresetOpsRunPayload || wizardPresetOps.length === 0
+                    }
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingPresetOpsRunPayload
+                      ? "Copying..."
+                      : "Copy agent/ops Payload"}
+                  </button>
                 </div>
                 {wizardPresetOpsSignature ? (
                   <p className="mb-1 text-[11px] text-slate-500">
@@ -1298,6 +1382,17 @@ export function SpreadsheetApp() {
                     {isCopyingScenarioRunPayload
                       ? "Copying..."
                       : "Copy Run Payload"}
+                  </button>
+                  <button
+                    onClick={handleCopyScenarioOpsRunPayload}
+                    disabled={
+                      isCopyingScenarioOpsRunPayload || wizardScenarioOps.length === 0
+                    }
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingScenarioOpsRunPayload
+                      ? "Copying..."
+                      : "Copy agent/ops Payload"}
                   </button>
                 </div>
                 {wizardScenarioOpsSignature ? (

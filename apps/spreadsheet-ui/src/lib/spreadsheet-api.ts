@@ -1,4 +1,5 @@
 import {
+  AgentOpsPreviewResponse,
   AgentOpsResponse,
   AgentOperationPlanPreview,
   AgentOperationPreview,
@@ -151,6 +152,21 @@ export async function runAgentOps(
     },
   );
   return parseJsonResponse<AgentOpsResponse>(response);
+}
+
+export async function previewAgentOps(
+  workbookId: string,
+  operations: AgentOperationPreview[],
+): Promise<AgentOpsPreviewResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/preview`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operations }),
+    },
+  );
+  return parseJsonResponse<AgentOpsPreviewResponse>(response);
 }
 
 interface AgentPresetRequest {
