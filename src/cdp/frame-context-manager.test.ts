@@ -69,6 +69,18 @@ class FailingEnableSession extends FakeSession {
   }
 }
 
+class OversizedFailingEnableSession extends FakeSession {
+  async send<T = unknown>(method: string): Promise<T> {
+    if (method === "Page.enable") {
+      throw new Error(`page\u0000\n${"x".repeat(10_000)}`);
+    }
+    if (method === "Runtime.enable") {
+      throw new Error(`runtime\u0000\n${"y".repeat(10_000)}`);
+    }
+    return super.send<T>(method);
+  }
+}
+
 function createFakeClient(session: CDPSession): CDPClient {
   return {
     rootSession: session,
@@ -113,6 +125,37 @@ describe("FrameContextManager listener bookkeeping", () => {
       expect(warnSpy).toHaveBeenCalledWith(
         '[FrameContextManager] Failed to enable Runtime domain: {"reason":"runtime enable object failure"}'
       );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("sanitizes and truncates oversized enable diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const session = new OversizedFailingEnableSession();
+      const manager = new FrameContextManager(createFakeClient(session));
+
+      await manager.ensureInitialized();
+      await Promise.resolve();
+
+      const pageEnableWarning = warnSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes("Failed to enable Page domain"));
+      const runtimeEnableWarning = warnSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes("Failed to enable Runtime domain"));
+
+      expect(pageEnableWarning).toBeDefined();
+      expect(runtimeEnableWarning).toBeDefined();
+      expect(pageEnableWarning).toContain("[truncated");
+      expect(runtimeEnableWarning).toContain("[truncated");
+      expect(pageEnableWarning).not.toContain("\u0000");
+      expect(runtimeEnableWarning).not.toContain("\u0000");
+      expect(pageEnableWarning).not.toContain("\n");
+      expect(runtimeEnableWarning).not.toContain("\n");
+      expect(pageEnableWarning?.length ?? 0).toBeLessThan(700);
+      expect(runtimeEnableWarning?.length ?? 0).toBeLessThan(700);
     } finally {
       warnSpy.mockRestore();
     }

@@ -5,6 +5,8 @@ import { FrameGraph } from "./frame-graph";
 import { isAdOrTrackingFrame } from "./frame-filters";
 import { formatUnknownError } from "@/utils";
 
+const MAX_FRAME_CONTEXT_DIAGNOSTIC_CHARS = 400;
+
 interface FrameTreeNode {
   frame: Protocol.Page.Frame;
   childFrames?: FrameTreeNode[];
@@ -33,6 +35,33 @@ interface UpsertFrameInput
   > {
   frameId: string;
   parentFrameId: string | null;
+}
+
+function sanitizeFrameContextDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateFrameContextDiagnostic(value: string): string {
+  if (value.length <= MAX_FRAME_CONTEXT_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  const omitted = value.length - MAX_FRAME_CONTEXT_DIAGNOSTIC_CHARS;
+  return `${value.slice(0, MAX_FRAME_CONTEXT_DIAGNOSTIC_CHARS)}... [truncated ${omitted} chars]`;
+}
+
+function formatFrameContextDiagnostic(value: unknown): string {
+  const normalized = sanitizeFrameContextDiagnostic(formatUnknownError(value));
+  if (normalized.length === 0) {
+    return "unknown error";
+  }
+  return truncateFrameContextDiagnostic(normalized);
 }
 
 export class FrameContextManager {
@@ -515,7 +544,7 @@ export class FrameContextManager {
         };
       } catch (_error) {
         this.log(
-          `[FrameContext] Failed to process OOPIF ${frameUrl}: ${formatUnknownError(
+          `[FrameContext] Failed to process OOPIF ${frameUrl}: ${formatFrameContextDiagnostic(
             _error
           )}`
         );
@@ -567,14 +596,18 @@ export class FrameContextManager {
       .send("Page.enable")
       .catch((error) =>
         console.warn(
-          `[FrameContext] Failed to enable Page domain: ${formatUnknownError(error)}`
+          `[FrameContext] Failed to enable Page domain: ${formatFrameContextDiagnostic(
+            error
+          )}`
         )
       );
 
     const attachedHandler = (event: Protocol.Page.FrameAttachedEvent): void => {
       this.handlePageFrameAttached(event).catch((error) =>
         console.warn(
-          `[FrameContext] Error handling frameAttached: ${formatUnknownError(error)}`
+          `[FrameContext] Error handling frameAttached: ${formatFrameContextDiagnostic(
+            error
+          )}`
         )
       );
     };
@@ -746,7 +779,9 @@ export class FrameContextManager {
 
     session.send("Runtime.enable").catch((error) => {
       console.warn(
-        `[FrameContextManager] Failed to enable Runtime domain: ${formatUnknownError(error)}`
+        `[FrameContextManager] Failed to enable Runtime domain: ${formatFrameContextDiagnostic(
+          error
+        )}`
       );
     });
   }
