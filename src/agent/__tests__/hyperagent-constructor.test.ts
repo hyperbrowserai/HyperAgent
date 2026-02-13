@@ -567,6 +567,49 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("evicts oldest action caches when cache history exceeds limit", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockImplementation((_, taskState) =>
+      Promise.resolve({
+        taskId: taskState.id,
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: "done",
+        actionCache: {
+          taskId: taskState.id,
+          createdAt: new Date().toISOString(),
+          status: TaskStatus.COMPLETED,
+          steps: [],
+        },
+      })
+    );
+
+    const maxEntries = (
+      HyperAgent as unknown as { MAX_ACTION_CACHE_ENTRIES: number }
+    ).MAX_ACTION_CACHE_ENTRIES;
+    const taskCount = maxEntries + 2;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const taskIds: string[] = [];
+
+    for (let i = 0; i < taskCount; i++) {
+      const task = await agent.executeTaskAsync(
+        `cache task ${i}`,
+        undefined,
+        fakePage
+      );
+      taskIds.push(task.id);
+      await task.result;
+    }
+
+    expect(agent.getActionCache(taskIds[0] ?? "")).toBeNull();
+    expect(agent.getActionCache(taskIds[1] ?? "")).toBeNull();
+    const latestTaskId = taskIds[taskIds.length - 1] ?? "";
+    expect(agent.getActionCache(latestTaskId)).not.toBeNull();
+  });
+
   it("executeTaskAsync tolerates task-lifecycle cleanup deletion traps", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({

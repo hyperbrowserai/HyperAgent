@@ -83,6 +83,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     MAX_LABEL_LENGTH: 60,
   };
   private static readonly MAX_REPLAY_OUTPUT_CHARS = 4_000;
+  private static readonly MAX_ACTION_CACHE_ENTRIES = 200;
 
   private llm: HyperAgentLLM;
   private tasks: Record<string, TaskState> = {};
@@ -96,6 +97,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private cdpActionsEnabled: boolean;
   private actionCacheByTaskId: Record<string, ActionCacheOutput> = {};
+  private actionCacheTaskOrder: string[] = [];
   private taskResults: Record<string, Promise<AgentTaskOutput>> = {};
   private mcpActionTypesByServer: Map<string, Set<string>> = new Map();
   private lifecycleGeneration = 0;
@@ -385,15 +387,45 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   private storeTaskActionCache(taskId: string, actionCache: ActionCacheOutput): void {
+    const normalizedTaskId = this.normalizeVariableKey(taskId);
+    if (!normalizedTaskId) {
+      return;
+    }
     try {
-      this.actionCacheByTaskId[taskId] = actionCache;
+      this.actionCacheByTaskId[normalizedTaskId] = actionCache;
     } catch (error) {
       if (this.debug) {
         console.warn(
-          `[HyperAgent] Failed to store action cache for task ${taskId}: ${formatUnknownError(
+          `[HyperAgent] Failed to store action cache for task ${normalizedTaskId}: ${formatUnknownError(
             error
           )}`
         );
+      }
+      return;
+    }
+
+    this.actionCacheTaskOrder = this.actionCacheTaskOrder.filter(
+      (cachedTaskId) => cachedTaskId !== normalizedTaskId
+    );
+    this.actionCacheTaskOrder.push(normalizedTaskId);
+
+    while (
+      this.actionCacheTaskOrder.length > HyperAgent.MAX_ACTION_CACHE_ENTRIES
+    ) {
+      const evictedTaskId = this.actionCacheTaskOrder.shift();
+      if (!evictedTaskId) {
+        continue;
+      }
+      try {
+        delete this.actionCacheByTaskId[evictedTaskId];
+      } catch (error) {
+        if (this.debug) {
+          console.warn(
+            `[HyperAgent] Failed to evict action cache for task ${evictedTaskId}: ${formatUnknownError(
+              error
+            )}`
+          );
+        }
       }
     }
   }
@@ -926,6 +958,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     this.tasks = {};
     this.taskResults = {};
     this.actionCacheByTaskId = {};
+    this.actionCacheTaskOrder = [];
     this._currentPage = null;
   }
 
