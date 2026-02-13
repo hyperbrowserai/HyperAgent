@@ -151,6 +151,23 @@ describe("ExtractActionDefinition.run", () => {
     expect(result.message).toContain("No content extracted");
   });
 
+  it("returns failure when llm text content is only whitespace", async () => {
+    const whitespaceLlm = createMockLLM(
+      jest.fn().mockResolvedValue({
+        role: "assistant",
+        content: "   \n\t  ",
+      })
+    );
+    const ctx = createContext(whitespaceLlm);
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "Extract content",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("No content extracted");
+  });
+
   it("returns formatted root error messages", async () => {
     const pageContent = jest
       .fn()

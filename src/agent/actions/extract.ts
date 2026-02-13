@@ -213,7 +213,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           .join("");
       }
 
-      if (extractedContent.length === 0) {
+      if (extractedContent.trim().length === 0) {
         return {
           success: false,
           message: `No content extracted from page.`,
