@@ -3,6 +3,26 @@ import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { formatUnknownError } from "@/utils";
 
 const MAX_COMPLETE_OUTPUT_CHARS = 20_000;
+const MAX_COMPLETE_DIAGNOSTIC_CHARS = 600;
+
+function formatCompleteDiagnostic(value: unknown): string {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = Array.from(raw, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32 && code !== 9 && code !== 10) || code === 127
+      ? " "
+      : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_COMPLETE_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_COMPLETE_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(0, MAX_COMPLETE_DIAGNOSTIC_CHARS)}... [truncated ${omitted} chars]`;
+}
 
 function safeReadRecordField(value: unknown, key: string): unknown {
   if (!value || (typeof value !== "object" && typeof value !== "function")) {
@@ -39,7 +59,7 @@ function safeJsonStringify(value: unknown): string {
       : JSON.stringify({ value: serialized }, null, 2);
   } catch (error) {
     return JSON.stringify(
-      { __nonSerializable: formatUnknownError(error) },
+      { __nonSerializable: formatCompleteDiagnostic(error) },
       null,
       2
     );

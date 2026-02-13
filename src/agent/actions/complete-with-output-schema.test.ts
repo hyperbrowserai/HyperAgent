@@ -129,4 +129,28 @@ describe("generateCompleteActionWithOutputDefinition", () => {
     expect(output).toContain("[truncated");
     expect(output?.length ?? 0).toBeLessThan(21_000);
   });
+
+  it("sanitizes and truncates non-serializable payload diagnostics", async () => {
+    const definition = generateCompleteActionWithOutputDefinition(
+      z.object({
+        title: z.string(),
+      })
+    );
+
+    const trap = {
+      toJSON: () => {
+        throw new Error(`bad\u0000\n${"x".repeat(10_000)}`);
+      },
+    };
+
+    const output = await definition.completeAction?.({
+      success: true,
+      outputSchema: trap as unknown as Record<string, unknown>,
+    });
+
+    expect(output).toContain("__nonSerializable");
+    expect(output).toContain("[truncated");
+    expect(output).not.toContain("\u0000");
+    expect(output?.length ?? 0).toBeLessThan(900);
+  });
 });
