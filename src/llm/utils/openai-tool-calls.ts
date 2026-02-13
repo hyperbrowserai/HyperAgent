@@ -11,6 +11,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export function normalizeOpenAIToolCalls(
   toolCalls: unknown,
   providerLabel = "OpenAI"
@@ -29,8 +37,8 @@ export function normalizeOpenAIToolCalls(
     if (toolCall.type === "function") {
       const fn = isRecord(toolCall.function) ? toolCall.function : {};
       return {
-        id: typeof toolCall.id === "string" ? toolCall.id : undefined,
-        name: typeof fn.name === "string" ? fn.name : "unknown-tool",
+        id: normalizeOptionalString(toolCall.id),
+        name: normalizeOptionalString(fn.name) ?? "unknown-tool",
         arguments: parseJsonMaybe(fn.arguments),
       };
     }
@@ -38,8 +46,8 @@ export function normalizeOpenAIToolCalls(
     if (toolCall.type === "custom") {
       const custom = isRecord(toolCall.custom) ? toolCall.custom : {};
       return {
-        id: typeof toolCall.id === "string" ? toolCall.id : undefined,
-        name: typeof custom.name === "string" ? custom.name : "unknown-tool",
+        id: normalizeOptionalString(toolCall.id),
+        name: normalizeOptionalString(custom.name) ?? "unknown-tool",
         arguments: parseJsonMaybe(custom.input),
       };
     }
