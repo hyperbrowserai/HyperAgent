@@ -311,7 +311,13 @@ fn normalize_cell_payload(
     } else {
       format!("={formula}")
     };
-    return Ok((None, Some(normalized), None));
+    let cached_formula_value = cell
+      .value
+      .as_ref()
+      .map(json_value_to_string)
+      .transpose()
+      .map_err(ApiError::BadRequest)?;
+    return Ok((None, Some(normalized), cached_formula_value));
   }
 
   let value = cell

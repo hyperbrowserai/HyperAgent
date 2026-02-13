@@ -309,6 +309,12 @@ mod tests {
         || imported_total_cell.raw_value.is_some(),
       "expected C2 to preserve formula metadata or fallback value",
     );
+    if imported_total_cell.formula.is_some() {
+      assert!(
+        imported_total_cell.evaluated_value.is_some(),
+        "formula imports should preserve cached evaluated value when available",
+      );
+    }
     assert_eq!(
       inputs_map
         .get("D2")
@@ -396,6 +402,12 @@ mod tests {
         || replay_total_cell.raw_value.is_some(),
       "expected C2 to preserve formula metadata or fallback value",
     );
+    if replay_total_cell.formula.is_some() {
+      assert!(
+        replay_total_cell.evaluated_value.is_some(),
+        "formula roundtrip should preserve cached evaluated value when available",
+      );
+    }
     assert_eq!(
       replay_map
         .get("A2")
