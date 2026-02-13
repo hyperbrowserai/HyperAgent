@@ -10,6 +10,7 @@ import {
 } from "../types";
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
+import { normalizeOpenAIToolCalls } from "../utils/openai-tool-calls";
 import { parseJsonMaybe } from "../utils/safe-json";
 import { parseStructuredResponse } from "../utils/structured-response";
 import { z } from "zod";
@@ -116,23 +117,7 @@ export class DeepSeekClient implements HyperAgentLLM {
     }
 
     const content = convertFromDeepSeekContent(choice.message.content);
-    const toolCalls = choice.message.tool_calls?.map((tc) => {
-      // Handle both function and custom tool calls in OpenAI v6
-      if (tc.type === "function") {
-        return {
-          id: tc.id,
-          name: tc.function.name,
-          arguments: parseJsonMaybe(tc.function.arguments),
-        };
-      } else if (tc.type === "custom") {
-        return {
-          id: tc.id,
-          name: tc.custom.name,
-          arguments: parseJsonMaybe(tc.custom.input),
-        };
-      }
-      throw new Error(`Unknown tool call type: ${(tc as any).type}`);
-    });
+    const toolCalls = normalizeOpenAIToolCalls(choice.message.tool_calls);
 
     return {
       role: "assistant",

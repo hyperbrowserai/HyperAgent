@@ -72,4 +72,30 @@ describe("DeepSeekClient", () => {
       },
     ]);
   });
+
+  it("throws readable errors for unknown tool call payloads", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: "ok",
+            tool_calls: [
+              {
+                id: "tc-1",
+                type: "mystery",
+                data: { reason: "unknown type" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const client = new DeepSeekClient({ model: "deepseek-test" });
+    await expect(
+      client.invoke([{ role: "user", content: "hello" }])
+    ).rejects.toThrow(
+      '[LLM][OpenAI] Unknown tool call type: {"id":"tc-1","type":"mystery","data":{"reason":"unknown type"}}'
+    );
+  });
 });

@@ -11,6 +11,7 @@ import {
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
 import { parseJsonMaybe } from "../utils/safe-json";
+import { normalizeOpenAIToolCalls } from "../utils/openai-tool-calls";
 import { parseStructuredResponse } from "../utils/structured-response";
 import { getDebugOptions } from "@/debug/options";
 import { formatUnknownError } from "@/utils";
@@ -129,23 +130,7 @@ export class OpenAIClient implements HyperAgentLLM {
     }
 
     const message = choice.message;
-    const toolCalls = message.tool_calls?.map((tc) => {
-      // Handle both function and custom tool calls in OpenAI v6
-      if (tc.type === "function") {
-        return {
-          id: tc.id,
-          name: tc.function.name,
-          arguments: parseJsonMaybe(tc.function.arguments),
-        };
-      } else if (tc.type === "custom") {
-        return {
-          id: tc.id,
-          name: tc.custom.name,
-          arguments: parseJsonMaybe(tc.custom.input),
-        };
-      }
-      throw new Error(`Unknown tool call type: ${(tc as any).type}`);
-    });
+    const toolCalls = normalizeOpenAIToolCalls(message.tool_calls);
 
     return {
       role: "assistant",
