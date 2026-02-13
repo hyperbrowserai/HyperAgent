@@ -10,7 +10,7 @@ use crate::{
     GetCellsResponse, QueryRequest, RecalculateResponse, SetCellsRequest,
     SetCellsResponse, UpsertChartRequest,
   },
-  state::AppState,
+  state::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES},
   store::{get_cells, recalculate_formulas, set_cells},
   xlsx::{export_xlsx, import_xlsx},
 };
@@ -983,6 +983,7 @@ async fn get_agent_schema(
       "operations_signature": "sha256 signature over submitted operations",
       "operations": "echoed operation array"
     },
+    "agent_ops_idempotency_cache_max_entries": AGENT_OPS_CACHE_MAX_ENTRIES,
     "signature_error_codes": [
       "INVALID_SIGNATURE_FORMAT",
       "OPERATION_SIGNATURE_MISMATCH",

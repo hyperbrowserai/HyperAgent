@@ -42,6 +42,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Signature recovery uses structured API error codes (not substring-only matching)
 - Error banner displays backend error code badges when available for faster debugging
 - Wizard and agent integration panels display discovered signature error-code lists from schema endpoints
+- Agent integration panel displays discovered request-id idempotency cache size metadata
 - Event stream viewer with per-event-type filtering
 
 ## Run

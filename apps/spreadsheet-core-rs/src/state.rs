@@ -14,7 +14,7 @@ use std::{
 use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
-const MAX_AGENT_OPS_CACHE_ENTRIES: usize = 256;
+pub const AGENT_OPS_CACHE_MAX_ENTRIES: usize = 256;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -221,7 +221,7 @@ impl AppState {
     }
     record.agent_ops_cache.insert(request_id, response);
 
-    while record.agent_ops_cache_order.len() > MAX_AGENT_OPS_CACHE_ENTRIES {
+    while record.agent_ops_cache_order.len() > AGENT_OPS_CACHE_MAX_ENTRIES {
       if let Some(evicted) = record.agent_ops_cache_order.pop_front() {
         record.agent_ops_cache.remove(&evicted);
       }
@@ -254,7 +254,7 @@ fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
 
 #[cfg(test)]
 mod tests {
-  use super::{AppState, MAX_AGENT_OPS_CACHE_ENTRIES};
+  use super::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES};
   use crate::models::{AgentOperationResult, AgentOpsResponse};
   use serde_json::json;
   use tempfile::tempdir;
@@ -306,7 +306,7 @@ mod tests {
       .await
       .expect("workbook should be created");
 
-    for index in 0..=MAX_AGENT_OPS_CACHE_ENTRIES {
+    for index in 0..=AGENT_OPS_CACHE_MAX_ENTRIES {
       let request_id = format!("req-{index}");
       let response = AgentOpsResponse {
         request_id: Some(request_id.clone()),
@@ -327,7 +327,7 @@ mod tests {
     let newest = state
       .get_cached_agent_ops_response(
         workbook.id,
-        format!("req-{MAX_AGENT_OPS_CACHE_ENTRIES}").as_str(),
+        format!("req-{AGENT_OPS_CACHE_MAX_ENTRIES}").as_str(),
       )
       .await
       .expect("cache lookup should succeed");

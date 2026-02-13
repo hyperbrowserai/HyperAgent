@@ -1790,6 +1790,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {typeof agentSchemaQuery.data?.agent_ops_idempotency_cache_max_entries === "number" ? (
+              <p className="mb-2 text-xs text-slate-400">
+                idempotency cache entries/workbook:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_idempotency_cache_max_entries}
+                </span>
+              </p>
+            ) : null}
             {lastPreset && (
               <p className="mb-2 text-xs text-slate-400">
                 preset: <span className="font-mono text-slate-200">{lastPreset}</span>
