@@ -100,6 +100,20 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toBe("Waited 1000ms");
   });
 
+  it("caps oversized wait duration values to safe maximum", async () => {
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-wait-cap",
+      actionType: "wait",
+      arguments: [999_999],
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForTimeout).toHaveBeenCalledWith(120_000);
+    expect(result?.output).toBe("Waited 120000ms");
+  });
+
   it("fails extract replay when instruction is missing", async () => {
     const page = createPage({
       extract: jest.fn(),
@@ -238,6 +252,21 @@ describe("executeReplaySpecialAction", () => {
     expect(page.waitForLoadState).toHaveBeenCalledWith("load", undefined);
   });
 
+  it("caps oversized waitForLoadState timeout values", async () => {
+    const page = createPage();
+
+    await executeReplaySpecialAction({
+      taskId: "task-loadstate-timeout-cap",
+      actionType: "waitForLoadState",
+      arguments: ["load", 999_999],
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForLoadState).toHaveBeenCalledWith("load", {
+      timeout: 120_000,
+    });
+  });
+
   it("continues waitForLoadState replay when settle wait fails", async () => {
     const page = createPage();
     waitForSettledDOM.mockRejectedValueOnce(new Error("settle failed"));
@@ -318,5 +347,65 @@ describe("executeReplaySpecialAction", () => {
     });
 
     expect(result?.replayStepMeta?.retries).toBe(3);
+  });
+
+  it("normalizes invalid retry metadata to a minimum value", async () => {
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-retries",
+      actionType: "complete",
+      page: page as unknown as Page,
+      retries: -2,
+    });
+
+    expect(result?.replayStepMeta?.retries).toBe(1);
+  });
+
+  it("returns failed output when top-level input getters throw", async () => {
+    const params = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "taskId") {
+            throw new Error("taskId trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    const result = await executeReplaySpecialAction(
+      params as unknown as Parameters<typeof executeReplaySpecialAction>[0]
+    );
+
+    expect(result?.status).toBe("failed");
+    expect(result?.output).toContain("Invalid replay input: taskId trap");
+    expect(result?.taskId).toBe("unknown-replay-task");
+  });
+
+  it("falls back to actionParams URL when goToUrl argument access traps throw", async () => {
+    const trappedArgs = new Proxy(["https://bad.example"], {
+      get: (target, prop, receiver) => {
+        if (prop === "0") {
+          throw new Error("arg index trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-go-url-fallback",
+      actionType: "goToUrl",
+      arguments: trappedArgs as unknown as Array<string | number>,
+      actionParams: { url: "https://example.com" },
+      page: page as unknown as Page,
+    });
+
+    expect(page.goto).toHaveBeenCalledWith("https://example.com", {
+      waitUntil: "domcontentloaded",
+    });
+    expect(result?.status).toBe("completed");
   });
 });
