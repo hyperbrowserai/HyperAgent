@@ -64,6 +64,8 @@ export function SpreadsheetApp() {
   const [isRunningScenario, setIsRunningScenario] = useState(false);
   const [isRunningSelectedScenario, setIsRunningSelectedScenario] = useState(false);
   const [isRunningPreviewOps, setIsRunningPreviewOps] = useState(false);
+  const [isRunningSelectedPreset, setIsRunningSelectedPreset] = useState(false);
+  const [isRunningPresetPreviewOps, setIsRunningPresetPreviewOps] = useState(false);
   const [isCopyingPresetOps, setIsCopyingPresetOps] = useState(false);
   const [isCopyingPreviewOps, setIsCopyingPreviewOps] = useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
@@ -573,6 +575,70 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleRunSelectedPresetOnCurrentWorkbook() {
+    if (!workbook || !wizardPresetPreview) {
+      return;
+    }
+    setIsRunningSelectedPreset(true);
+    try {
+      setUiError(null);
+      const response = await runAgentPreset(workbook.id, wizardPresetPreview, {
+        request_id: `preset-selected-${wizardPresetPreview}-${Date.now()}`,
+        actor: "ui-preset-selected",
+        stop_on_error: true,
+        include_file_base64: wizardIncludeFileBase64,
+      });
+      setLastPreset(response.preset);
+      setLastScenario(null);
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastAgentOps(response.results);
+      setLastWizardImportSummary(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["cells", workbook.id, activeSheet],
+      });
+    } catch (error) {
+      setUiError(
+        error instanceof Error
+          ? error.message
+          : `Failed to run selected preset ${wizardPresetPreview}.`,
+      );
+    } finally {
+      setIsRunningSelectedPreset(false);
+    }
+  }
+
+  async function handleRunPresetPreviewOperationsOnCurrentWorkbook() {
+    if (!workbook || wizardPresetOps.length === 0) {
+      return;
+    }
+    setIsRunningPresetPreviewOps(true);
+    try {
+      setUiError(null);
+      const response = await runAgentOps(workbook.id, {
+        request_id: `preset-preview-ops-${wizardPresetPreview}-${Date.now()}`,
+        actor: "ui-preset-preview-ops",
+        stop_on_error: true,
+        operations: wizardPresetOps,
+      });
+      setLastPreset(wizardPresetPreview);
+      setLastScenario(null);
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastAgentOps(response.results);
+      setLastWizardImportSummary(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["cells", workbook.id, activeSheet],
+      });
+    } catch (error) {
+      setUiError(
+        error instanceof Error
+          ? error.message
+          : `Failed to run preset preview operations for ${wizardPresetPreview}.`,
+      );
+    } finally {
+      setIsRunningPresetPreviewOps(false);
+    }
+  }
+
   async function handleCopyPreviewOperations() {
     if (wizardScenarioOps.length === 0) {
       return;
@@ -969,15 +1035,49 @@ export function SpreadsheetApp() {
                   </button>
                 </div>
                 {wizardPresetOps.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {wizardPresetOps.map((operation, index) => (
-                      <span
-                        key={`${operation.op_type}-preset-${index}`}
-                        className="rounded border border-cyan-500/30 bg-cyan-500/15 px-2 py-0.5 text-[11px] text-cyan-100"
+                  <div>
+                    <div className="flex flex-wrap gap-1">
+                      {wizardPresetOps.map((operation, index) => (
+                        <span
+                          key={`${operation.op_type}-preset-${index}`}
+                          className="rounded border border-cyan-500/30 bg-cyan-500/15 px-2 py-0.5 text-[11px] text-cyan-100"
+                        >
+                          {index + 1}. {operation.op_type}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        onClick={handleRunSelectedPresetOnCurrentWorkbook}
+                        disabled={!workbook || isRunningSelectedPreset}
+                        className="rounded bg-cyan-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-cyan-400 disabled:opacity-40"
                       >
-                        {index + 1}. {operation.op_type}
-                      </span>
-                    ))}
+                        {isRunningSelectedPreset
+                          ? "Running preset..."
+                          : "Run Preset in Current Workbook"}
+                      </button>
+                      <button
+                        onClick={handleRunPresetPreviewOperationsOnCurrentWorkbook}
+                        disabled={
+                          !workbook ||
+                          wizardPresetOps.length === 0 ||
+                          isRunningPresetPreviewOps
+                        }
+                        className="rounded bg-cyan-700 px-2 py-1 text-[11px] font-medium text-white hover:bg-cyan-600 disabled:opacity-40"
+                      >
+                        {isRunningPresetPreviewOps
+                          ? "Running preset ops..."
+                          : "Run Preset Preview via agent/ops"}
+                      </button>
+                    </div>
+                    <details className="mt-2 rounded border border-slate-800 bg-slate-950 p-2">
+                      <summary className="cursor-pointer text-[11px] text-slate-400">
+                        Show preset operation JSON payload
+                      </summary>
+                      <pre className="mt-2 whitespace-pre-wrap break-all text-[11px] text-slate-300">
+                        {JSON.stringify(wizardPresetOps, null, 2)}
+                      </pre>
+                    </details>
                   </div>
                 ) : (
                   <p className="text-[11px] text-slate-500">
