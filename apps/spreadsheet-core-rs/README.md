@@ -38,7 +38,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/cells/set-batch`
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
 - `POST /v1/workbooks/{id}/agent/ops/preview`
-- `GET /v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600` (includes scoped `entries`, global `unscoped_entries`, oldest/newest request ids, and `oldest_cached_at` / `newest_cached_at`; optional prefix + age scope; returns `cutoff_timestamp` when age-scoped)
+- `GET /v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600` (includes scoped `entries`, global `unscoped_entries`, oldest/newest request ids, and `oldest_cached_at` / `newest_cached_at`; optional **non-blank** prefix + age scope; returns `cutoff_timestamp` when age-scoped)
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries`
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries/{request_id}`
 - `GET /v1/workbooks/{id}/agent/ops/cache/prefixes`
@@ -99,9 +99,9 @@ Plan-preview helper:
 
 Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache`
-- `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&max_age_seconds=3600&offset=0&limit=20` (newest-first paged request-id summaries, optional prefix filter, optional age filter for stale-only browsing, max `limit=200`, includes `total_entries`, `unscoped_total_entries`, operation/result counts, `cached_at`, and scoped `cutoff_timestamp`)
+- `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&max_age_seconds=3600&offset=0&limit=20` (newest-first paged request-id summaries, optional **non-blank** prefix filter, optional age filter for stale-only browsing, max `limit=200`, includes `total_entries`, `unscoped_total_entries`, operation/result counts, `cached_at`, and scoped `cutoff_timestamp`)
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries/{request_id}` (full cached detail: response + operations + counts + `cached_at`)
-- `GET /v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&limit=8&max_age_seconds=3600` (prefix suggestions with counts for filter UX; optional request-id prefix + age filters; includes `total_prefixes`, `unscoped_total_prefixes`, echoed `request_id_prefix`, and scoped `cutoff_timestamp`)
+- `GET /v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&limit=8&max_age_seconds=3600` (prefix suggestions with counts for filter UX; optional **non-blank** request-id prefix + age filters; includes `total_prefixes`, `unscoped_total_prefixes`, echoed `request_id_prefix`, and scoped `cutoff_timestamp`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay` with `{ "request_id": "..." }` (returns `{ cached_response, operations }` where `operations` are the original cached ops payload)
 - `POST /v1/workbooks/{id}/agent/ops/cache/reexecute` with `{ "request_id": "...", "new_request_id": "..." }` (reexecutes cached operations as fresh `agent/ops`)

@@ -1057,17 +1057,17 @@ async fn get_agent_schema(
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
     "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&limit=8&max_age_seconds=3600",
     "agent_ops_cache_stats_query_shape": {
-      "request_id_prefix": "optional string filter (prefix match)",
+      "request_id_prefix": "optional non-blank string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter stats to entries older than or equal to this age)"
     },
     "agent_ops_cache_entries_query_shape": {
-      "request_id_prefix": "optional string filter (prefix match)",
+      "request_id_prefix": "optional non-blank string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter to entries older than or equal to this age)",
       "offset": "optional number, default 0",
       "limit": "optional number, default 20, max 200"
     },
     "agent_ops_cache_prefixes_query_shape": {
-      "request_id_prefix": "optional string filter (prefix match)",
+      "request_id_prefix": "optional non-blank string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
       "limit": "optional number, default 8, max 100"
     },
@@ -1539,6 +1539,12 @@ async fn agent_ops_cache_stats(
   state.get_workbook(workbook_id).await?;
   let normalized_prefix =
     normalize_optional_request_id_prefix(query.request_id_prefix.as_deref());
+  if query.request_id_prefix.is_some() && normalized_prefix.is_none() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID_PREFIX",
+      "request_id_prefix must not be blank when provided.",
+    ));
+  }
   let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let (
     entries,
@@ -1576,6 +1582,12 @@ async fn agent_ops_cache_entries(
   state.get_workbook(workbook_id).await?;
   let normalized_prefix =
     normalize_optional_request_id_prefix(query.request_id_prefix.as_deref());
+  if query.request_id_prefix.is_some() && normalized_prefix.is_none() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID_PREFIX",
+      "request_id_prefix must not be blank when provided.",
+    ));
+  }
   let offset = query.offset.unwrap_or(0);
   let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let limit = query
@@ -1663,6 +1675,12 @@ async fn agent_ops_cache_prefixes(
   state.get_workbook(workbook_id).await?;
   let normalized_prefix =
     normalize_optional_request_id_prefix(query.request_id_prefix.as_deref());
+  if query.request_id_prefix.is_some() && normalized_prefix.is_none() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID_PREFIX",
+      "request_id_prefix must not be blank when provided.",
+    ));
+  }
   let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let limit = query
     .limit
@@ -2775,6 +2793,71 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn should_reject_blank_prefix_when_querying_cache_views() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-query-prefix-invalid".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let stats_error = agent_ops_cache_stats(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCacheStatsQuery {
+        request_id_prefix: Some("   ".to_string()),
+        max_age_seconds: None,
+      }),
+    )
+    .await
+    .expect_err("blank prefix should fail for stats query");
+    match stats_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_REQUEST_ID_PREFIX");
+      }
+      _ => panic!("expected blank stats prefix to use custom error code"),
+    }
+
+    let entries_error = agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCacheEntriesQuery {
+        request_id_prefix: Some("   ".to_string()),
+        max_age_seconds: None,
+        offset: Some(0),
+        limit: Some(20),
+      }),
+    )
+    .await
+    .expect_err("blank prefix should fail for entries query");
+    match entries_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_REQUEST_ID_PREFIX");
+      }
+      _ => panic!("expected blank entries prefix to use custom error code"),
+    }
+
+    let prefixes_error = agent_ops_cache_prefixes(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: Some("   ".to_string()),
+        max_age_seconds: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect_err("blank prefix should fail for prefixes query");
+    match prefixes_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_REQUEST_ID_PREFIX");
+      }
+      _ => panic!("expected blank prefixes prefix to use custom error code"),
+    }
+  }
+
+  #[tokio::test]
   async fn should_list_cache_prefixes_via_handler() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =
@@ -3757,7 +3840,7 @@ mod tests {
         .get("agent_ops_cache_prefixes_query_shape")
         .and_then(|value| value.get("request_id_prefix"))
         .and_then(serde_json::Value::as_str),
-      Some("optional string filter (prefix match)"),
+      Some("optional non-blank string filter (prefix match)"),
     );
     assert_eq!(
       schema
@@ -3770,7 +3853,7 @@ mod tests {
         .get("agent_ops_cache_stats_query_shape")
         .and_then(|value| value.get("request_id_prefix"))
         .and_then(serde_json::Value::as_str),
-      Some("optional string filter (prefix match)"),
+      Some("optional non-blank string filter (prefix match)"),
     );
     assert_eq!(
       schema
