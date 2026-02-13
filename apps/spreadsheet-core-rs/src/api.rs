@@ -781,3 +781,28 @@ async fn openapi() -> Json<serde_json::Value> {
     }
   }))
 }
+
+#[cfg(test)]
+mod tests {
+  use super::{build_preset_operations, normalize_sheet_name};
+
+  #[test]
+  fn should_validate_sheet_name_rules() {
+    assert!(normalize_sheet_name("Sheet 1").is_ok());
+    assert!(normalize_sheet_name("").is_err());
+    assert!(normalize_sheet_name("   ").is_err());
+    assert!(normalize_sheet_name("Bad/Name").is_err());
+    assert!(normalize_sheet_name("ThisSheetNameIsWayTooLongForExcelRules").is_err());
+  }
+
+  #[test]
+  fn should_build_known_presets() {
+    let demo = build_preset_operations("seed_sales_demo", None)
+      .expect("seed_sales_demo should be supported");
+    let export = build_preset_operations("export_snapshot", Some(false))
+      .expect("export_snapshot should be supported");
+    assert!(!demo.is_empty());
+    assert!(!export.is_empty());
+    assert!(build_preset_operations("missing_preset", None).is_err());
+  }
+}
