@@ -3,7 +3,7 @@
 Embedded DuckDB backend for an Excel-like spreadsheet experience with:
 
 - Workbook/sheet/cell APIs
-- Formula recalculation (`SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, direct refs, arithmetic refs)
+- Formula recalculation (`SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, direct refs, arithmetic refs, `IF`, `CONCAT`/`CONCATENATE`, `TODAY`, `VLOOKUP` exact-match mode)
 - XLSX import/export
 - Chart metadata endpoints
 - Real-time SSE event stream for UI synchronization
