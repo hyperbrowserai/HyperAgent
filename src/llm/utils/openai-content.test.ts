@@ -209,4 +209,71 @@ describe("normalizeOpenAICompatibleContent", () => {
     expect(normalizeOpenAICompatibleContent(null)).toBe("");
     expect(normalizeOpenAICompatibleContent(undefined)).toBe("");
   });
+
+  it("handles content-part getters that throw", () => {
+    const trappedPart = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "type") {
+            throw new Error("type getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    expect(
+      normalizeOpenAICompatibleContent([trappedPart])
+    ).toEqual([
+      {
+        type: "text",
+        text: "{}",
+      },
+    ]);
+  });
+
+  it("handles tool-call field getters that throw", () => {
+    const trappedFunction = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "name" || prop === "arguments") {
+            throw new Error("function field trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    expect(
+      normalizeOpenAICompatibleContent([
+        {
+          type: "tool_call",
+          function: trappedFunction,
+        },
+      ])
+    ).toEqual([
+      {
+        type: "tool_call",
+        toolName: "unknown-tool",
+        arguments: {},
+      },
+    ]);
+  });
+
+  it("returns readable diagnostics when content array traversal throws", () => {
+    const trappedArray = new Proxy([1], {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.iterator) {
+          throw new Error("array iterator trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    expect(
+      normalizeOpenAICompatibleContent(trappedArray)
+    ).toBe("array iterator trap");
+  });
 });

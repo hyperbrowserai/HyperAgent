@@ -83,31 +83,42 @@ function normalizeOpenAICompatibleContentPart(
     };
   }
 
-  if (part.type === "text") {
+  const partType = safeReadRecordField(part, "type");
+
+  if (partType === "text") {
+    const textValue = safeReadRecordField(part, "text");
     return {
       type: "text",
       text:
-        typeof part.text === "string"
-          ? part.text
-          : normalizeContentDiagnostic(part.text),
+        typeof textValue === "string"
+          ? textValue
+          : normalizeContentDiagnostic(textValue),
     };
   }
 
-  if (part.type === "image_url") {
-    const imageUrl = isRecord(part.image_url) ? part.image_url : {};
+  if (partType === "image_url") {
+    const imageUrlValue = safeReadRecordField(part, "image_url");
+    const imageUrl = isRecord(imageUrlValue) ? imageUrlValue : {};
     return {
       type: "image",
-      url: normalizeImageUrl(imageUrl.url),
+      url: normalizeImageUrl(safeReadRecordField(imageUrl, "url")),
       mimeType: "image/png",
     };
   }
 
-  if (part.type === "tool_call") {
-    const fn = isRecord(part.function) ? part.function : {};
+  if (partType === "tool_call") {
+    const functionValue = safeReadRecordField(part, "function");
+    const fn = isRecord(functionValue) ? functionValue : {};
     return {
       type: "tool_call",
-      toolName: normalizeOptionalString(fn.name, MAX_TOOL_NAME_CHARS) ?? "unknown-tool",
-      arguments: sanitizeToolArguments(parseJsonMaybe(fn.arguments)),
+      toolName:
+        normalizeOptionalString(
+          safeReadRecordField(fn, "name"),
+          MAX_TOOL_NAME_CHARS
+        ) ?? "unknown-tool",
+      arguments: sanitizeToolArguments(
+        parseJsonMaybe(safeReadRecordField(fn, "arguments"))
+      ),
     };
   }
 
@@ -118,14 +129,29 @@ function normalizeOpenAICompatibleContentPart(
 }
 
 function isSingleContentPartShape(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.type !== "string") {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const type = safeReadRecordField(value, "type");
+  if (typeof type !== "string") {
     return false;
   }
   return (
-    value.type === "text" ||
-    value.type === "image_url" ||
-    value.type === "tool_call"
+    type === "text" ||
+    type === "image_url" ||
+    type === "tool_call"
   );
+}
+
+function safeReadRecordField(
+  value: Record<string, unknown>,
+  key: string
+): unknown {
+  try {
+    return value[key];
+  } catch {
+    return undefined;
+  }
 }
 
 export function normalizeOpenAICompatibleContent(
@@ -136,7 +162,11 @@ export function normalizeOpenAICompatibleContent(
   }
 
   if (Array.isArray(content)) {
-    return content.map(normalizeOpenAICompatibleContentPart);
+    try {
+      return Array.from(content).map(normalizeOpenAICompatibleContentPart);
+    } catch (error) {
+      return normalizeContentDiagnostic(error);
+    }
   }
 
   if (content == null) {
