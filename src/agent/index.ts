@@ -1393,10 +1393,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
       }
     };
+    let listenerAttached = false;
     try {
       this.errorEmitter.on("error", onTaskError);
+      listenerAttached = true;
       this.taskErrorForwarders.set(taskId, onTaskError);
     } catch (error) {
+      if (listenerAttached) {
+        try {
+          this.errorEmitter.off("error", onTaskError);
+        } catch {
+          // no-op
+        }
+      }
       if (this.debug) {
         console.warn(
           `[HyperAgent] Failed to register task-scoped error listener for ${taskId}: ${formatUnknownError(

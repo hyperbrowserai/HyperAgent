@@ -501,6 +501,50 @@ describe("HyperAgent constructor and task controls", () => {
     expect(internalAgent.errorEmitter.listenerCount("error")).toBe(0);
   });
 
+  it("avoids task error-listener leaks when forwarder registry set traps throw", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockImplementation(
+      () => new Promise<AgentTaskOutput>(() => undefined)
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      errorEmitter: { listenerCount: (event: string) => number };
+      taskErrorForwarders: Map<string, (error: Error) => void>;
+    };
+    const forwarders = new Proxy(new Map<string, (error: Error) => void>(), {
+      get: (target, property, receiver) => {
+        if (property === "set") {
+          return () => {
+            throw new Error("forwarder set trap");
+          };
+        }
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    });
+    internalAgent.taskErrorForwarders =
+      forwarders as unknown as Map<string, (error: Error) => void>;
+
+    const fakePage = {} as unknown as Page;
+    try {
+      await agent.executeTaskAsync("forwarder trap", undefined, fakePage);
+      expect(internalAgent.errorEmitter.listenerCount("error")).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to register task-scoped error listener")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("surfaces HyperagentTaskError without requiring error listeners", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockRejectedValue(new Error("boom without listeners"));
