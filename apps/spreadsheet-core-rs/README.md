@@ -28,6 +28,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}`
 - `GET /v1/workbooks/{id}/sheets`
 - `POST /v1/workbooks/{id}/cells/set-batch`
+- `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
 - `POST /v1/workbooks/{id}/cells/get`
 - `POST /v1/workbooks/{id}/formulas/recalculate`
 - `POST /v1/workbooks/{id}/charts/upsert`
@@ -36,6 +37,18 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/openapi`
 
 > Note: `/v1/workbooks/{id}/duckdb/query` currently returns a guarded `400` response in this build to avoid a known upstream panic in the underlying DuckDB Rust wrapper for ad-hoc SQL execution paths.
+
+### AI Agent multi-operation endpoint
+
+`POST /v1/workbooks/{id}/agent/ops` executes a list of typed operations in order and returns per-operation results.
+
+Supported `op_type` values:
+- `get_workbook`
+- `list_sheets`
+- `set_cells`
+- `get_cells`
+- `recalculate`
+- `upsert_chart`
 
 ## Testing
 

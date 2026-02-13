@@ -111,6 +111,44 @@ pub struct QueryRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsRequest {
+  pub actor: Option<String>,
+  pub operations: Vec<AgentOperation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "op_type", rename_all = "snake_case")]
+pub enum AgentOperation {
+  GetWorkbook,
+  ListSheets,
+  SetCells {
+    sheet: String,
+    cells: Vec<CellMutation>,
+  },
+  GetCells {
+    sheet: String,
+    range: CellRange,
+  },
+  Recalculate,
+  UpsertChart {
+    chart: ChartSpec,
+  },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOperationResult {
+  pub op_index: usize,
+  pub op_type: String,
+  pub ok: bool,
+  pub data: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsResponse {
+  pub results: Vec<AgentOperationResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportResponse {
   pub file_name: String,
   pub compatibility_report: CompatibilityReport,

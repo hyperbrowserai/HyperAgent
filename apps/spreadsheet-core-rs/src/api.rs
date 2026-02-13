@@ -1,7 +1,8 @@
 use crate::{
   error::ApiError,
   models::{
-    CreateWorkbookRequest, CreateWorkbookResponse, ExportResponse, GetCellsRequest,
+    AgentOperation, AgentOperationResult, AgentOpsRequest, AgentOpsResponse,
+    CellMutation, CreateWorkbookRequest, CreateWorkbookResponse, ExportResponse, GetCellsRequest,
     GetCellsResponse, QueryRequest, RecalculateResponse, SetCellsRequest,
     SetCellsResponse, UpsertChartRequest,
   },
@@ -33,6 +34,7 @@ pub fn create_router(state: AppState) -> Router {
     .route("/v1/workbooks/{id}", get(get_workbook))
     .route("/v1/workbooks/{id}/sheets", get(get_sheets))
     .route("/v1/workbooks/{id}/cells/set-batch", post(set_cells_batch))
+    .route("/v1/workbooks/{id}/agent/ops", post(agent_ops))
     .route("/v1/workbooks/{id}/cells/get", post(get_cells_range))
     .route(
       "/v1/workbooks/{id}/formulas/recalculate",
@@ -138,36 +140,36 @@ async fn get_sheets(
   Ok(Json(json!({ "sheets": sheets })))
 }
 
-async fn set_cells_batch(
-  State(state): State<AppState>,
-  Path(workbook_id): Path<Uuid>,
-  Json(payload): Json<SetCellsRequest>,
-) -> Result<Json<SetCellsResponse>, ApiError> {
-  state
-    .register_sheet_if_missing(workbook_id, payload.sheet.as_str())
-    .await?;
+async fn apply_set_cells(
+  state: &AppState,
+  workbook_id: Uuid,
+  sheet: &str,
+  cells: &[CellMutation],
+  actor: &str,
+) -> Result<usize, ApiError> {
+  state.register_sheet_if_missing(workbook_id, sheet).await?;
   let db_path = state.db_path(workbook_id).await?;
-  let updated = set_cells(&db_path, payload.sheet.as_str(), &payload.cells)?;
+  let updated = set_cells(&db_path, sheet, cells)?;
   let (recalculated, unsupported_formulas) = recalculate_formulas(&db_path)?;
 
-  let actor = payload.actor.unwrap_or_else(|| "api".to_string());
   state
     .emit_event(
       workbook_id,
       "cells.updated",
-      actor.as_str(),
+      actor,
       json!({
-        "sheet": payload.sheet,
+        "sheet": sheet,
         "updated": updated
       }),
     )
     .await?;
+
   if recalculated > 0 || !unsupported_formulas.is_empty() {
     state
       .emit_event(
         workbook_id,
         "formula.recalculated",
-        actor.as_str(),
+        actor,
         json!({
           "updated_cells": recalculated,
           "unsupported_formulas": unsupported_formulas
@@ -176,6 +178,44 @@ async fn set_cells_batch(
       .await?;
   }
 
+  Ok(updated)
+}
+
+async fn apply_recalculate(
+  state: &AppState,
+  workbook_id: Uuid,
+  actor: &str,
+) -> Result<(usize, Vec<String>), ApiError> {
+  let db_path = state.db_path(workbook_id).await?;
+  let (updated_cells, unsupported_formulas) = recalculate_formulas(&db_path)?;
+  state
+    .emit_event(
+      workbook_id,
+      "formula.recalculated",
+      actor,
+      json!({
+        "updated_cells": updated_cells,
+        "unsupported_formulas": unsupported_formulas
+      }),
+    )
+    .await?;
+  Ok((updated_cells, unsupported_formulas))
+}
+
+async fn set_cells_batch(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<SetCellsRequest>,
+) -> Result<Json<SetCellsResponse>, ApiError> {
+  let actor = payload.actor.unwrap_or_else(|| "api".to_string());
+  let updated = apply_set_cells(
+    &state,
+    workbook_id,
+    payload.sheet.as_str(),
+    &payload.cells,
+    actor.as_str(),
+  )
+  .await?;
   Ok(Json(SetCellsResponse { updated }))
 }
 
@@ -196,19 +236,8 @@ async fn recalculate_workbook(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
 ) -> Result<Json<RecalculateResponse>, ApiError> {
-  let db_path = state.db_path(workbook_id).await?;
-  let (updated_cells, unsupported_formulas) = recalculate_formulas(&db_path)?;
-  state
-    .emit_event(
-      workbook_id,
-      "formula.recalculated",
-      "api",
-      json!({
-        "updated_cells": updated_cells,
-        "unsupported_formulas": unsupported_formulas
-      }),
-    )
-    .await?;
+  let (updated_cells, unsupported_formulas) =
+    apply_recalculate(&state, workbook_id, "api").await?;
   Ok(Json(RecalculateResponse {
     updated_cells,
     unsupported_formulas,
@@ -234,6 +263,97 @@ async fn upsert_chart(
     )
     .await?;
   Ok(Json(json!({ "status": "ok" })))
+}
+
+async fn agent_ops(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<AgentOpsRequest>,
+) -> Result<Json<AgentOpsResponse>, ApiError> {
+  let actor = payload.actor.unwrap_or_else(|| "agent".to_string());
+  let mut results = Vec::new();
+
+  for (op_index, operation) in payload.operations.into_iter().enumerate() {
+    let (op_type, outcome): (String, Result<serde_json::Value, ApiError>) = match operation {
+      AgentOperation::GetWorkbook => (
+        "get_workbook".to_string(),
+        state
+          .get_workbook(workbook_id)
+          .await
+          .map(|workbook| json!({ "workbook": workbook })),
+      ),
+      AgentOperation::ListSheets => (
+        "list_sheets".to_string(),
+        state
+          .list_sheets(workbook_id)
+          .await
+          .map(|sheets| json!({ "sheets": sheets })),
+      ),
+      AgentOperation::SetCells { sheet, cells } => (
+        "set_cells".to_string(),
+        apply_set_cells(&state, workbook_id, sheet.as_str(), &cells, actor.as_str())
+          .await
+          .map(|updated| json!({ "sheet": sheet, "updated": updated })),
+      ),
+      AgentOperation::GetCells { sheet, range } => {
+        let db_path = state.db_path(workbook_id).await?;
+        (
+          "get_cells".to_string(),
+          get_cells(&db_path, sheet.as_str(), &range)
+            .map(|cells| json!({ "sheet": sheet, "cells": cells })),
+        )
+      }
+      AgentOperation::Recalculate => (
+        "recalculate".to_string(),
+        apply_recalculate(&state, workbook_id, actor.as_str())
+          .await
+          .map(|(updated_cells, unsupported_formulas)| {
+            json!({
+              "updated_cells": updated_cells,
+              "unsupported_formulas": unsupported_formulas
+            })
+          }),
+      ),
+      AgentOperation::UpsertChart { chart } => {
+        let result = async {
+          state
+            .register_sheet_if_missing(workbook_id, chart.sheet.as_str())
+            .await?;
+          state.upsert_chart(workbook_id, chart.clone()).await?;
+          state
+            .emit_event(
+              workbook_id,
+              "chart.updated",
+              actor.as_str(),
+              json!({ "chart_id": chart.id }),
+            )
+            .await?;
+          Ok::<serde_json::Value, ApiError>(json!({ "chart_id": chart.id }))
+        }
+        .await;
+        ("upsert_chart".to_string(), result)
+      }
+    };
+
+    match outcome {
+      Ok(data) => results.push(AgentOperationResult {
+        op_index,
+        op_type,
+        ok: true,
+        data,
+      }),
+      Err(error) => results.push(AgentOperationResult {
+        op_index,
+        op_type,
+        ok: false,
+        data: json!({
+          "error": format!("{error:?}")
+        }),
+      }),
+    }
+  }
+
+  Ok(Json(AgentOpsResponse { results }))
 }
 
 async fn duckdb_query(
@@ -327,10 +447,11 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}": {"get": {"summary": "Get workbook"}},
       "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}},
       "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
+      "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint"}},
       "/v1/workbooks/{id}/cells/get": {"post": {"summary": "Get range cells"}},
       "/v1/workbooks/{id}/formulas/recalculate": {"post": {"summary": "Recalculate formulas"}},
       "/v1/workbooks/{id}/charts/upsert": {"post": {"summary": "Upsert chart metadata"}},
-      "/v1/workbooks/{id}/duckdb/query": {"post": {"summary": "Run read-only SQL query"}},
+      "/v1/workbooks/{id}/duckdb/query": {"post": {"summary": "Reserved (currently guarded for stability)"}},
       "/v1/workbooks/{id}/export": {"post": {"summary": "Export workbook as .xlsx"}},
       "/v1/workbooks/{id}/events": {"get": {"summary": "SSE change stream"}}
     }
