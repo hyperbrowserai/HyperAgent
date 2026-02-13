@@ -68,6 +68,14 @@ function normalizeWaitMs(value: unknown): number {
   return parsed >= 0 ? parsed : 1000;
 }
 
+function normalizeWaitUntil(value: unknown): "domcontentloaded" | "load" | "networkidle" {
+  const parsed = asNonEmptyTrimmedString(value);
+  if (parsed === "load" || parsed === "networkidle") {
+    return parsed;
+  }
+  return "domcontentloaded";
+}
+
 export async function executeReplaySpecialAction(
   params: ReplaySpecialActionInput
 ): Promise<TaskOutput | null> {
@@ -215,12 +223,12 @@ export async function executeReplaySpecialAction(
   }
 
   if (actionType === "waitForLoadState") {
-    const waitUntil = asNonEmptyTrimmedString(actionArgs?.[0]) ?? "domcontentloaded";
+    const waitUntil = normalizeWaitUntil(actionArgs?.[0]);
     const timeoutMs = asFiniteNumber(actionArgs?.[1]);
     const options =
       timeoutMs !== undefined ? { timeout: timeoutMs } : undefined;
     await page.waitForLoadState(
-      waitUntil as "domcontentloaded" | "load" | "networkidle",
+      waitUntil,
       options
     );
     markDomSnapshotDirty(page);

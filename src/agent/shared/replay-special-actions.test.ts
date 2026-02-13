@@ -163,6 +163,21 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toBe("Waited for load state: networkidle");
   });
 
+  it("defaults waitForLoadState to domcontentloaded for unsupported values", async () => {
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-loadstate-invalid",
+      actionType: "waitForLoadState",
+      arguments: ["interactive"],
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForLoadState).toHaveBeenCalledWith("domcontentloaded", undefined);
+    expect(result?.status).toBe("completed");
+    expect(result?.output).toBe("Waited for load state: domcontentloaded");
+  });
+
   it("fails extract replay when extracted object cannot be serialized", async () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
