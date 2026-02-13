@@ -1121,7 +1121,9 @@ async fn get_agent_schema(
     "agent_ops_cache_prefixes_response_shape": {
       "total_prefixes": "total distinct prefix suggestions available",
       "unscoped_total_prefixes": "total distinct prefixes without prefix/age filters",
+      "scoped_total_entries": "total cache entries represented by scoped prefixes before pagination",
       "returned_prefixes": "number of prefixes returned",
+      "returned_entry_count": "total cache entries represented by returned prefixes in this page",
       "request_id_prefix": "echoed filter prefix when provided",
       "min_entry_count": "applied minimum entry count filter (default 1)",
       "sort_by": "applied sort mode: count|recent",
@@ -1714,7 +1716,12 @@ async fn agent_ops_cache_prefixes(
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
     .max(1)
     .min(MAX_AGENT_OPS_CACHE_PREFIXES_LIMIT);
-  let (total_prefixes, unscoped_total_prefixes, prefixes) = state
+  let (
+    total_prefixes,
+    unscoped_total_prefixes,
+    scoped_total_entries,
+    prefixes,
+  ) = state
     .agent_ops_cache_prefixes(
       workbook_id,
       normalized_prefix.as_deref(),
@@ -1736,11 +1743,17 @@ async fn agent_ops_cache_prefixes(
       },
     )
     .collect::<Vec<_>>();
+  let returned_entry_count = mapped_prefixes
+    .iter()
+    .map(|prefix| prefix.entry_count)
+    .sum::<usize>();
   let has_more = offset + mapped_prefixes.len() < total_prefixes;
   Ok(Json(AgentOpsCachePrefixesResponse {
     total_prefixes,
     unscoped_total_prefixes,
+    scoped_total_entries,
     returned_prefixes: mapped_prefixes.len(),
+    returned_entry_count,
     request_id_prefix: normalized_prefix,
     min_entry_count,
     sort_by,
@@ -2977,7 +2990,9 @@ mod tests {
 
     assert_eq!(prefixes.total_prefixes, 2);
     assert_eq!(prefixes.unscoped_total_prefixes, 2);
+    assert_eq!(prefixes.scoped_total_entries, 3);
     assert_eq!(prefixes.returned_prefixes, 2);
+    assert_eq!(prefixes.returned_entry_count, 3);
     assert_eq!(prefixes.request_id_prefix, None);
     assert_eq!(prefixes.min_entry_count, 1);
     assert_eq!(prefixes.sort_by, "count");
@@ -3012,7 +3027,9 @@ mod tests {
     assert_eq!(paged_prefixes.offset, 1);
     assert_eq!(paged_prefixes.limit, 1);
     assert!(!paged_prefixes.has_more);
+    assert_eq!(paged_prefixes.scoped_total_entries, 3);
     assert_eq!(paged_prefixes.returned_prefixes, 1);
+    assert_eq!(paged_prefixes.returned_entry_count, 1);
     assert_eq!(paged_prefixes.prefixes[0].prefix, "preset-");
 
     let min_clamped_prefixes = agent_ops_cache_prefixes(
@@ -3055,6 +3072,7 @@ mod tests {
     assert!(age_filtered.cutoff_timestamp.is_some());
     assert_eq!(age_filtered.total_prefixes, 0);
     assert_eq!(age_filtered.unscoped_total_prefixes, 2);
+    assert_eq!(age_filtered.scoped_total_entries, 0);
     assert_eq!(age_filtered.request_id_prefix, None);
     assert_eq!(age_filtered.offset, 0);
     assert!(!age_filtered.has_more);
@@ -3077,6 +3095,7 @@ mod tests {
     .0;
     assert_eq!(prefix_filtered.total_prefixes, 1);
     assert_eq!(prefix_filtered.unscoped_total_prefixes, 2);
+    assert_eq!(prefix_filtered.scoped_total_entries, 2);
     assert_eq!(
       prefix_filtered.request_id_prefix.as_deref(),
       Some("scenario-"),
@@ -3110,7 +3129,9 @@ mod tests {
     assert_eq!(min_filtered.sort_by, "count");
     assert_eq!(min_filtered.total_prefixes, 1);
     assert_eq!(min_filtered.unscoped_total_prefixes, 2);
+    assert_eq!(min_filtered.scoped_total_entries, 2);
     assert_eq!(min_filtered.returned_prefixes, 1);
+    assert_eq!(min_filtered.returned_entry_count, 2);
     assert_eq!(min_filtered.offset, 0);
     assert!(!min_filtered.has_more);
     assert_eq!(min_filtered.prefixes[0].prefix, "scenario-");
@@ -4132,9 +4153,23 @@ mod tests {
     assert_eq!(
       schema
         .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("scoped_total_entries"))
+        .and_then(serde_json::Value::as_str),
+      Some("total cache entries represented by scoped prefixes before pagination"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
         .and_then(|value| value.get("unscoped_total_prefixes"))
         .and_then(serde_json::Value::as_str),
       Some("total distinct prefixes without prefix/age filters"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("returned_entry_count"))
+        .and_then(serde_json::Value::as_str),
+      Some("total cache entries represented by returned prefixes in this page"),
     );
     assert_eq!(
       schema

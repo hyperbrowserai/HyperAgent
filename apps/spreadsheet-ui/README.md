@@ -60,6 +60,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Prefix suggestion row supports selectable sort mode (`count` or `recent`) for cache triage priorities
 - Prefix suggestion row supports configurable suggestion limit (`prefix limit`) for denser/sparser cache hinting
 - Prefix suggestion row includes pager controls (`Newer`/`Older`) backed by server offset pagination
+- Prefix suggestion summary shows prefix coverage and entry-count coverage for each suggestion page
 - Prefix cache controls include one-click `Reset prefix scope` to clear prefix/min/sort/limit state
 - Prefix suggestion row now shows an explicit empty-scope hint when active prefix/age filters yield zero suggestions
 - Cache age-filter control validates positive integer seconds inline

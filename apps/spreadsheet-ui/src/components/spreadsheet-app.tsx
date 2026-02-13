@@ -3215,6 +3215,12 @@ export function SpreadsheetApp() {
                             {" "}scoped/global)
                           </span>
                         ) : null}
+                      {cachePrefixSuggestionsData ? (
+                        <span className="text-[10px] text-slate-500">
+                          (entries {cachePrefixSuggestionsData.returned_entry_count}/
+                          {cachePrefixSuggestionsData.scoped_total_entries} page/scoped)
+                        </span>
+                      ) : null}
                       {cachePrefixSuggestionsData?.request_id_prefix ? (
                         <span className="text-[10px] text-slate-500">
                           (prefix {cachePrefixSuggestionsData.request_id_prefix})
@@ -3320,7 +3326,14 @@ export function SpreadsheetApp() {
                         <span className="font-mono text-slate-300">
                           {cachePrefixSuggestionsData.total_prefixes}
                         </span>{" "}
-                        scoped prefixes
+                        scoped prefixes · entries{" "}
+                        <span className="font-mono text-slate-300">
+                          {cachePrefixSuggestionsData.returned_entry_count}
+                        </span>
+                        /
+                        <span className="font-mono text-slate-300">
+                          {cachePrefixSuggestionsData.scoped_total_entries}
+                        </span>
                       </p>
                       <div className="flex items-center gap-1">
                         <button
