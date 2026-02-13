@@ -208,8 +208,11 @@ async fn apply_set_cells(
   sheet: &str,
   cells: &[CellMutation],
   actor: &str,
-) -> Result<usize, ApiError> {
-  let created = state.register_sheet_if_missing(workbook_id, sheet).await?;
+) -> Result<(usize, String), ApiError> {
+  let normalized_sheet = normalize_sheet_name(sheet)?;
+  let created = state
+    .register_sheet_if_missing(workbook_id, normalized_sheet.as_str())
+    .await?;
   if created {
     state
       .emit_event(
@@ -217,13 +220,13 @@ async fn apply_set_cells(
         "sheet.added",
         actor,
         json!({
-          "sheet": sheet
+          "sheet": normalized_sheet.as_str()
         }),
       )
       .await?;
   }
   let db_path = state.db_path(workbook_id).await?;
-  let updated = set_cells(&db_path, sheet, cells)?;
+  let updated = set_cells(&db_path, normalized_sheet.as_str(), cells)?;
   let (recalculated, unsupported_formulas) = recalculate_formulas(&db_path)?;
 
   state
@@ -232,7 +235,7 @@ async fn apply_set_cells(
       "cells.updated",
       actor,
       json!({
-        "sheet": sheet,
+        "sheet": normalized_sheet.as_str(),
         "updated": updated
       }),
     )
@@ -252,7 +255,7 @@ async fn apply_set_cells(
       .await?;
   }
 
-  Ok(updated)
+  Ok((updated, normalized_sheet))
 }
 
 async fn apply_recalculate(
@@ -297,7 +300,7 @@ async fn set_cells_batch(
   Json(payload): Json<SetCellsRequest>,
 ) -> Result<Json<SetCellsResponse>, ApiError> {
   let actor = payload.actor.unwrap_or_else(|| "api".to_string());
-  let updated = apply_set_cells(
+  let (updated, _sheet) = apply_set_cells(
     &state,
     workbook_id,
     payload.sheet.as_str(),
@@ -521,7 +524,9 @@ async fn execute_agent_operations(
         "set_cells".to_string(),
         apply_set_cells(state, workbook_id, sheet.as_str(), &cells, actor)
           .await
-          .map(|updated| json!({ "sheet": sheet, "updated": updated })),
+          .map(|(updated, normalized_sheet)| {
+            json!({ "sheet": normalized_sheet, "updated": updated })
+          }),
       ),
       AgentOperation::GetCells { sheet, range } => {
         let outcome = match state.db_path(workbook_id).await {
