@@ -143,3 +143,43 @@ describe("image payload conversion", () => {
     });
   });
 });
+
+describe("system message text extraction", () => {
+  it("extracts system text parts for Anthropic conversion", () => {
+    const { system } = convertToAnthropicMessages([
+      {
+        role: "system",
+        content: [
+          { type: "text", text: "rule one" },
+          { type: "image", url: "https://example.com/img.png" },
+          { type: "text", text: "rule two" },
+        ],
+      },
+      {
+        role: "user",
+        content: "hello",
+      },
+    ]);
+
+    expect(system).toBe("rule one\nrule two");
+  });
+
+  it("extracts system text parts for Gemini conversion", () => {
+    const { systemInstruction } = convertToGeminiMessages([
+      {
+        role: "system",
+        content: [
+          { type: "text", text: "rule one" },
+          { type: "tool_call", toolName: "ignored", arguments: {} },
+          { type: "text", text: "rule two" },
+        ],
+      },
+      {
+        role: "user",
+        content: "hello",
+      },
+    ]);
+
+    expect(systemInstruction).toBe("rule one\nrule two");
+  });
+});

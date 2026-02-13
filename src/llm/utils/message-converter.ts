@@ -50,6 +50,22 @@ function extractBase64Payload(url: string): string {
   return url.slice(commaIndex + 1);
 }
 
+function extractTextContent(
+  content: string | HyperAgentContentPart[]
+): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  return content
+    .filter((part): part is Extract<HyperAgentContentPart, { type: "text" }> =>
+      part.type === "text"
+    )
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
 export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
   return messages.map((msg) => {
     const openAIMessage: Record<string, unknown> = {
@@ -104,7 +120,7 @@ export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
 
   for (const msg of messages) {
     if (msg.role === "system") {
-      systemMessage = typeof msg.content === "string" ? msg.content : "";
+      systemMessage = extractTextContent(msg.content);
       continue;
     }
 
@@ -171,7 +187,7 @@ export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
 
   for (const msg of messages) {
     if (msg.role === "system") {
-      systemInstruction = typeof msg.content === "string" ? msg.content : "";
+      systemInstruction = extractTextContent(msg.content);
       continue;
     }
 
