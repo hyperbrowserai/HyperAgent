@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import "dotenv/config";
-import fs from "node:fs";
 import { Command } from "commander";
 import * as inquirer from "@inquirer/prompts";
 import ora from "ora";
@@ -22,6 +21,7 @@ import { SessionDetail } from "@hyperbrowser/sdk/types";
 import { formatCliError } from "./format-cli-error";
 import { loadMCPServersFromFile } from "./mcp-config";
 import { setRawModeIfSupported } from "./stdin-utils";
+import { loadTaskDescriptionFromFile } from "./task-input";
 import { pauseTaskIfRunning, resumeTaskIfPaused } from "./task-controls";
 
 const program = new Command();
@@ -249,7 +249,7 @@ program
       };
       if (!taskDescription) {
         if (filePath) {
-          taskDescription = (await fs.promises.readFile(filePath)).toString();
+          taskDescription = await loadTaskDescriptionFromFile(filePath);
         } else {
           taskDescription = await inquirer.input({
             message: "What should HyperAgent do for you today?",
