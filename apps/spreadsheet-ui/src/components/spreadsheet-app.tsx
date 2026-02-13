@@ -85,6 +85,16 @@ function parseStringArray(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === "string");
 }
 
+function parseCommaSeparatedList(value: unknown): string[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
 function flattenSchemaShapeEntries(
   value: unknown,
   parentKey?: string,
@@ -812,6 +822,13 @@ export function SpreadsheetApp() {
   );
   const agentFormulaCapabilityFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.formula_capabilities),
+    [agentSchemaQuery.data?.formula_capabilities],
+  );
+  const agentSupportedFormulaFunctions = useMemo(
+    () =>
+      parseCommaSeparatedList(
+        agentSchemaQuery.data?.formula_capabilities?.supported_functions,
+      ),
     [agentSchemaQuery.data?.formula_capabilities],
   );
   const agentWorkbookImportEventFields = useMemo(
@@ -2952,6 +2969,14 @@ export function SpreadsheetApp() {
                 formula capabilities:{" "}
                 <span className="font-mono text-slate-200">
                   {formatSchemaShapeEntries(agentFormulaCapabilityFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentSupportedFormulaFunctions.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                supported formula functions ({agentSupportedFormulaFunctions.length}):{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSupportedFormulaFunctions.join(", ")}
                 </span>
               </p>
             ) : null}
