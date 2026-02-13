@@ -11,11 +11,13 @@ import {
   createSheet,
   createWorkbook,
   exportWorkbook,
+  getAgentPresetOperations,
   getAgentSchema,
   getAgentPresets,
   getAgentScenarioOperations,
   getAgentScenarios,
   getWizardPresets,
+  getWizardPresetOperations,
   getWizardScenarioOperations,
   getWizardSchema,
   getWizardScenarios,
@@ -67,6 +69,7 @@ export function SpreadsheetApp() {
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
   const [wizardScenario, setWizardScenario] = useState("seed_then_export");
+  const [wizardPresetPreview, setWizardPresetPreview] = useState("export_snapshot");
   const [wizardIncludeFileBase64, setWizardIncludeFileBase64] = useState(false);
   const [wizardWorkbookName, setWizardWorkbookName] = useState("Wizard Workbook");
   const [wizardFile, setWizardFile] = useState<File | null>(null);
@@ -163,6 +166,19 @@ export function SpreadsheetApp() {
         : getWizardScenarioOperations(wizardScenario, wizardIncludeFileBase64),
   });
 
+  const wizardPresetOpsQuery = useQuery({
+    queryKey: ["wizard-preset-ops", workbook?.id, wizardPresetPreview, wizardIncludeFileBase64],
+    enabled: wizardPresetPreview.length > 0,
+    queryFn: () =>
+      workbook?.id
+        ? getAgentPresetOperations(
+            workbook.id,
+            wizardPresetPreview,
+            wizardIncludeFileBase64,
+          )
+        : getWizardPresetOperations(wizardPresetPreview, wizardIncludeFileBase64),
+  });
+
   useEffect(() => {
     if (!workbook && !createWorkbookMutation.isPending) {
       createWorkbookMutation.mutate();
@@ -220,6 +236,19 @@ export function SpreadsheetApp() {
     setWizardScenario(wizardScenariosQuery.data[0].scenario);
   }, [wizardScenario, wizardScenariosQuery.data]);
 
+  useEffect(() => {
+    if (!wizardPresetsQuery.data?.length) {
+      return;
+    }
+    const hasSelectedPreset = wizardPresetsQuery.data.some(
+      (presetInfo) => presetInfo.preset === wizardPresetPreview,
+    );
+    if (hasSelectedPreset) {
+      return;
+    }
+    setWizardPresetPreview(wizardPresetsQuery.data[0].preset);
+  }, [wizardPresetPreview, wizardPresetsQuery.data]);
+
   const chartData = useMemo(() => {
     return Array.from({ length: 10 }, (_, index) => {
       const row = index + 1;
@@ -250,6 +279,7 @@ export function SpreadsheetApp() {
     return eventLog.filter((event) => event.event_type === eventFilter);
   }, [eventFilter, eventLog]);
   const wizardScenarioOps = wizardScenarioOpsQuery.data ?? [];
+  const wizardPresetOps = wizardPresetOpsQuery.data ?? [];
 
   const statusText =
     createWorkbookMutation.isPending || importMutation.isPending
@@ -895,6 +925,40 @@ export function SpreadsheetApp() {
                     preset: {presetInfo.preset}
                   </span>
                 ))}
+              </div>
+            ) : null}
+            {(wizardPresetsQuery.data ?? []).length > 0 ? (
+              <div className="mt-2 rounded border border-slate-800 bg-slate-900 p-2">
+                <div className="mb-1 flex items-center gap-2">
+                  <p className="text-[11px] text-slate-500">preset operation preview</p>
+                  <select
+                    value={wizardPresetPreview}
+                    onChange={(event) => setWizardPresetPreview(event.target.value)}
+                    className="rounded border border-slate-700 bg-slate-950 px-2 py-0.5 text-[11px] text-slate-200"
+                  >
+                    {(wizardPresetsQuery.data ?? []).map((presetInfo) => (
+                      <option key={presetInfo.preset} value={presetInfo.preset}>
+                        {presetInfo.preset}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {wizardPresetOps.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {wizardPresetOps.map((operation, index) => (
+                      <span
+                        key={`${operation.op_type}-preset-${index}`}
+                        className="rounded border border-cyan-500/30 bg-cyan-500/15 px-2 py-0.5 text-[11px] text-cyan-100"
+                      >
+                        {index + 1}. {operation.op_type}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500">
+                    No preset operations available for preview.
+                  </p>
+                )}
               </div>
             ) : null}
             {wizardScenarioOps.length > 0 ? (

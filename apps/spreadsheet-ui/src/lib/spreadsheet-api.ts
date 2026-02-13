@@ -238,6 +238,39 @@ export async function getWizardPresets(): Promise<AgentPresetInfo[]> {
   return data.presets;
 }
 
+export async function getWizardPresetOperations(
+  preset: string,
+  includeFileBase64: boolean,
+): Promise<AgentOperationPreview[]> {
+  const query = new URLSearchParams({
+    include_file_base64: String(includeFileBase64),
+  });
+  const response = await fetch(
+    `${API_BASE_URL}/v1/agent/wizard/presets/${preset}/operations?${query.toString()}`,
+  );
+  const data = await parseJsonResponse<{ operations: AgentOperationPreview[] }>(
+    response,
+  );
+  return data.operations;
+}
+
+export async function getAgentPresetOperations(
+  workbookId: string,
+  preset: string,
+  includeFileBase64: boolean,
+): Promise<AgentOperationPreview[]> {
+  const query = new URLSearchParams({
+    include_file_base64: String(includeFileBase64),
+  });
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/presets/${preset}/operations?${query.toString()}`,
+  );
+  const data = await parseJsonResponse<{ operations: AgentOperationPreview[] }>(
+    response,
+  );
+  return data.operations;
+}
+
 export async function getWizardSchema(): Promise<AgentWizardSchemaInfo> {
   const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/schema`);
   return parseJsonResponse<AgentWizardSchemaInfo>(response);

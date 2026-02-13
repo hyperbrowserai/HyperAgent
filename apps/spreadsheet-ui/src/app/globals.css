@@ -5,5 +5,5 @@ body {
   min-height: 100vh;
   background: #020617;
   color: #f8fafc;
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
