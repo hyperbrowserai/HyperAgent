@@ -915,7 +915,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       },
       cancel: () => {
         const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
-        if (status !== TaskStatus.COMPLETED) {
+        if (
+          status === TaskStatus.PENDING ||
+          status === TaskStatus.RUNNING ||
+          status === TaskStatus.PAUSED
+        ) {
           return this.writeTaskStatus(taskState, TaskStatus.CANCELLED, status);
         }
         return status;
