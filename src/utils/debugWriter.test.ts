@@ -179,4 +179,81 @@ describe("writeAiActionDebug", () => {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("normalizes trap-prone debug payload fields without throwing", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-debug-writer-")
+    );
+
+    const trappedData = {
+      get instruction() {
+        throw new Error("instruction trap");
+      },
+      get url() {
+        throw new Error("url trap");
+      },
+      timestamp: new Date().toISOString(),
+      domElementCount: 5,
+      domTree: "dom tree",
+      llmResponse: {
+        get rawText() {
+          throw new Error("rawText trap");
+        },
+        parsed: { ok: true },
+      },
+      success: true,
+    } as unknown as DebugData;
+
+    try {
+      const debugDir = await writeAiActionDebug(trappedData, tempDir);
+      const metadata = await fs.promises.readFile(
+        path.join(debugDir, "metadata.json"),
+        "utf-8"
+      );
+      const llmText = await fs.promises.readFile(
+        path.join(debugDir, "llm-response.txt"),
+        "utf-8"
+      );
+
+      expect(metadata).toContain("unknown instruction");
+      expect(metadata).toContain("about:blank");
+      expect(llmText).toBe("");
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores non-buffer screenshot payloads and truncates oversized text", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-debug-writer-")
+    );
+    const hugeText = "x".repeat(250_000);
+    const debugData = {
+      instruction: "click login",
+      url: "https://example.com",
+      timestamp: new Date().toISOString(),
+      domElementCount: 5,
+      domTree: hugeText,
+      screenshot: "not-a-buffer",
+      llmResponse: {
+        rawText: hugeText,
+        parsed: { ok: true },
+      },
+      success: true,
+    } as unknown as DebugData;
+
+    try {
+      const debugDir = await writeAiActionDebug(debugData, tempDir);
+      const domTree = await fs.promises.readFile(
+        path.join(debugDir, "dom-tree.txt"),
+        "utf-8"
+      );
+      const screenshotPath = path.join(debugDir, "screenshot.png");
+
+      expect(domTree).toContain("[truncated");
+      await expect(fs.promises.stat(screenshotPath)).rejects.toThrow();
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -14,6 +14,202 @@ interface FoundElementDebugData {
   xpath?: string;
 }
 
+const MAX_DEBUG_TEXT_CHARS = 200_000;
+const MAX_DEBUG_ELEMENTS = 500;
+const MAX_DEBUG_FRAME_ITEMS = 100;
+
+function safeReadRecordField(value: unknown, key: string): unknown {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return undefined;
+  }
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeDebugText(
+  value: unknown,
+  fallback: string,
+  maxChars: number = MAX_DEBUG_TEXT_CHARS
+): string {
+  const raw =
+    typeof value === "string"
+      ? value
+      : value == null
+        ? fallback
+        : formatUnknownError(value);
+  const normalized = raw.replace(/\r\n?/g, "\n").trim();
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  const omitted = normalized.length - maxChars;
+  return `${normalized.slice(0, maxChars)}\n... [truncated ${omitted} chars]`;
+}
+
+function normalizeDebugData(input: DebugData): DebugData {
+  const normalizedInstruction = normalizeDebugText(
+    safeReadRecordField(input, "instruction"),
+    "unknown instruction"
+  );
+  const normalizedUrl = normalizeDebugText(
+    safeReadRecordField(input, "url"),
+    "about:blank"
+  );
+  const normalizedTimestamp = normalizeDebugText(
+    safeReadRecordField(input, "timestamp"),
+    new Date().toISOString()
+  );
+  const domElementCountValue = safeReadRecordField(input, "domElementCount");
+  const normalizedDomElementCount =
+    typeof domElementCountValue === "number" &&
+    Number.isFinite(domElementCountValue) &&
+    domElementCountValue >= 0
+      ? Math.floor(domElementCountValue)
+      : 0;
+  const normalizedDomTree = normalizeDebugText(
+    safeReadRecordField(input, "domTree"),
+    ""
+  );
+  const success = safeReadRecordField(input, "success") === true;
+
+  const screenshot = safeReadRecordField(input, "screenshot");
+  const normalizedScreenshot = Buffer.isBuffer(screenshot) ? screenshot : undefined;
+
+  const foundElementRaw = safeReadRecordField(input, "foundElement");
+  let foundElement: FoundElementDebugData | undefined;
+  if (foundElementRaw && typeof foundElementRaw === "object") {
+    const args = safeReadRecordField(foundElementRaw, "arguments");
+    foundElement = {
+      elementId: normalizeDebugText(
+        safeReadRecordField(foundElementRaw, "elementId"),
+        "unknown-element",
+        500
+      ),
+      method: normalizeDebugText(
+        safeReadRecordField(foundElementRaw, "method"),
+        "unknown-method",
+        200
+      ),
+      arguments: Array.isArray(args) ? Array.from(args).slice(0, 50) : [],
+      xpath:
+        typeof safeReadRecordField(foundElementRaw, "xpath") === "string"
+          ? normalizeDebugText(safeReadRecordField(foundElementRaw, "xpath"), "")
+          : undefined,
+    };
+  }
+
+  const llmResponseRaw = safeReadRecordField(input, "llmResponse");
+  const llmResponse =
+    llmResponseRaw && typeof llmResponseRaw === "object"
+      ? {
+          rawText: normalizeDebugText(
+            safeReadRecordField(llmResponseRaw, "rawText"),
+            ""
+          ),
+          parsed: safeReadRecordField(llmResponseRaw, "parsed"),
+        }
+      : undefined;
+
+  let availableElements: DebugData["availableElements"];
+  const availableElementsRaw = safeReadRecordField(input, "availableElements");
+  if (Array.isArray(availableElementsRaw)) {
+    availableElements = availableElementsRaw.slice(0, MAX_DEBUG_ELEMENTS).map((entry) => ({
+      id: normalizeDebugText(safeReadRecordField(entry, "id"), "unknown-id", 200),
+      role: normalizeDebugText(
+        safeReadRecordField(entry, "role"),
+        "unknown-role",
+        100
+      ),
+      label: normalizeDebugText(
+        safeReadRecordField(entry, "label"),
+        "",
+        5_000
+      ),
+    }));
+  }
+
+  const errorRaw = safeReadRecordField(input, "error");
+  const error =
+    errorRaw && typeof errorRaw === "object"
+      ? {
+          message: normalizeDebugText(
+            safeReadRecordField(errorRaw, "message"),
+            "unknown error",
+            10_000
+          ),
+          stack:
+            typeof safeReadRecordField(errorRaw, "stack") === "string"
+              ? normalizeDebugText(safeReadRecordField(errorRaw, "stack"), "", 20_000)
+              : undefined,
+        }
+      : undefined;
+
+  let frameDebugInfo: DebugData["frameDebugInfo"];
+  const frameInfoRaw = safeReadRecordField(input, "frameDebugInfo");
+  if (Array.isArray(frameInfoRaw)) {
+    frameDebugInfo = frameInfoRaw.slice(0, MAX_DEBUG_FRAME_ITEMS).map((frame) => ({
+      frameIndex:
+        typeof safeReadRecordField(frame, "frameIndex") === "number"
+          ? (safeReadRecordField(frame, "frameIndex") as number)
+          : -1,
+      frameUrl: normalizeDebugText(safeReadRecordField(frame, "frameUrl"), "unknown"),
+      totalNodes:
+        typeof safeReadRecordField(frame, "totalNodes") === "number"
+          ? (safeReadRecordField(frame, "totalNodes") as number)
+          : 0,
+      treeElementCount:
+        typeof safeReadRecordField(frame, "treeElementCount") === "number"
+          ? (safeReadRecordField(frame, "treeElementCount") as number)
+          : 0,
+      interactiveCount:
+        typeof safeReadRecordField(frame, "interactiveCount") === "number"
+          ? (safeReadRecordField(frame, "interactiveCount") as number)
+          : 0,
+      sampleNodes: Array.isArray(safeReadRecordField(frame, "sampleNodes"))
+        ? (safeReadRecordField(frame, "sampleNodes") as unknown[]).slice(0, 100).map((node) => ({
+            role:
+              typeof safeReadRecordField(node, "role") === "string"
+                ? (safeReadRecordField(node, "role") as string)
+                : undefined,
+            name:
+              typeof safeReadRecordField(node, "name") === "string"
+                ? (safeReadRecordField(node, "name") as string)
+                : undefined,
+            nodeId:
+              typeof safeReadRecordField(node, "nodeId") === "string"
+                ? (safeReadRecordField(node, "nodeId") as string)
+                : undefined,
+            ignored: safeReadRecordField(node, "ignored") === true,
+            childIds:
+              typeof safeReadRecordField(node, "childIds") === "number"
+                ? (safeReadRecordField(node, "childIds") as number)
+                : undefined,
+          }))
+        : undefined,
+    }));
+  }
+
+  return {
+    instruction: normalizedInstruction,
+    url: normalizedUrl,
+    timestamp: normalizedTimestamp,
+    domElementCount: normalizedDomElementCount,
+    domTree: normalizedDomTree,
+    screenshot: normalizedScreenshot,
+    foundElement,
+    availableElements,
+    llmResponse,
+    error,
+    success,
+    frameDebugInfo,
+  };
+}
+
 export interface DebugData {
   instruction: string;
   url: string;
@@ -125,6 +321,7 @@ export async function writeAiActionDebug(
   debugData: DebugData,
   baseDir: string = "debug/aiAction"
 ): Promise<string> {
+  const normalizedDebugData = normalizeDebugData(debugData);
   const session = getSessionId();
   const actionNum = actionCounter;
   const debugDir = path.join(baseDir, session, `action-${actionNum}`);
@@ -142,11 +339,11 @@ export async function writeAiActionDebug(
   // Write instruction and metadata
   const metadata = {
     actionNumber: actionNum,
-    timestamp: debugData.timestamp,
-    instruction: debugData.instruction,
-    url: debugData.url,
-    domElementCount: debugData.domElementCount,
-    success: debugData.success,
+    timestamp: normalizedDebugData.timestamp,
+    instruction: normalizedDebugData.instruction,
+    url: normalizedDebugData.url,
+    domElementCount: normalizedDebugData.domElementCount,
+    success: normalizedDebugData.success,
   };
   writeDebugFileSafe(
     path.join(debugDir, "metadata.json"),
@@ -154,63 +351,63 @@ export async function writeAiActionDebug(
   );
 
   // Write DOM tree
-  writeDebugFileSafe(path.join(debugDir, "dom-tree.txt"), debugData.domTree);
+  writeDebugFileSafe(path.join(debugDir, "dom-tree.txt"), normalizedDebugData.domTree);
 
   // Write screenshot if available
-  if (debugData.screenshot) {
-    writeDebugFileSafe(path.join(debugDir, "screenshot.png"), debugData.screenshot);
+  if (normalizedDebugData.screenshot) {
+    writeDebugFileSafe(path.join(debugDir, "screenshot.png"), normalizedDebugData.screenshot);
   }
 
   // Write found element info
-  if (debugData.foundElement) {
+  if (normalizedDebugData.foundElement) {
     writeDebugFileSafe(
       path.join(debugDir, "found-element.json"),
-      stringifyDebugJson(debugData.foundElement)
+      stringifyDebugJson(normalizedDebugData.foundElement)
     );
   }
 
   // Write LLM response if available
-  if (debugData.llmResponse) {
+  if (normalizedDebugData.llmResponse) {
     writeDebugFileSafe(
       path.join(debugDir, "llm-response.json"),
-      stringifyDebugJson(debugData.llmResponse)
+      stringifyDebugJson(normalizedDebugData.llmResponse)
     );
     // Also write just the raw text for easy viewing
     writeDebugFileSafe(
       path.join(debugDir, "llm-response.txt"),
-      debugData.llmResponse.rawText
+      normalizedDebugData.llmResponse.rawText
     );
   }
 
   // Write available elements if provided (for debugging failures)
-  if (debugData.availableElements) {
-    const elementsText = debugData.availableElements
+  if (normalizedDebugData.availableElements) {
+    const elementsText = normalizedDebugData.availableElements
       .map((e) => `[${e.id}] ${e.role}: "${e.label}"`)
       .join("\n");
     writeDebugFileSafe(path.join(debugDir, "available-elements.txt"), elementsText);
     writeDebugFileSafe(
       path.join(debugDir, "available-elements.json"),
-      stringifyDebugJson(debugData.availableElements)
+      stringifyDebugJson(normalizedDebugData.availableElements)
     );
   }
 
   // Write error if present
-  if (debugData.error) {
+  if (normalizedDebugData.error) {
     writeDebugFileSafe(
       path.join(debugDir, "error.json"),
-      stringifyDebugJson(debugData.error)
+      stringifyDebugJson(normalizedDebugData.error)
     );
   }
 
   // Write frame debug info if available
-  if (debugData.frameDebugInfo && debugData.frameDebugInfo.length > 0) {
+  if (normalizedDebugData.frameDebugInfo && normalizedDebugData.frameDebugInfo.length > 0) {
     writeDebugFileSafe(
       path.join(debugDir, "frame-debug-info.json"),
-      stringifyDebugJson(debugData.frameDebugInfo)
+      stringifyDebugJson(normalizedDebugData.frameDebugInfo)
     );
 
     // Also write a human-readable summary
-    const frameSummary = debugData.frameDebugInfo
+    const frameSummary = normalizedDebugData.frameDebugInfo
       .map((frame) => {
         const lines = [
           `Frame ${frame.frameIndex}: ${frame.frameUrl}`,
