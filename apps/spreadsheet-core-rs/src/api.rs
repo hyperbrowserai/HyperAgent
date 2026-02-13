@@ -1528,11 +1528,8 @@ async fn agent_ops_cache_stats(
   Query(query): Query<AgentOpsCacheStatsQuery>,
 ) -> Result<Json<AgentOpsCacheStatsResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  let normalized_prefix = query
-    .request_id_prefix
-    .as_deref()
-    .map(str::trim)
-    .filter(|prefix| !prefix.is_empty());
+  let normalized_prefix =
+    normalize_optional_request_id_prefix(query.request_id_prefix.as_deref());
   let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let (
     entries,
@@ -1541,12 +1538,16 @@ async fn agent_ops_cache_stats(
     oldest_cached_at,
     newest_cached_at,
   ) = state
-    .agent_ops_cache_stats(workbook_id, normalized_prefix, cutoff_timestamp)
+    .agent_ops_cache_stats(
+      workbook_id,
+      normalized_prefix.as_deref(),
+      cutoff_timestamp,
+    )
     .await?;
   Ok(Json(AgentOpsCacheStatsResponse {
     entries,
     max_entries: AGENT_OPS_CACHE_MAX_ENTRIES,
-    request_id_prefix: normalized_prefix.map(str::to_string),
+    request_id_prefix: normalized_prefix,
     max_age_seconds: query.max_age_seconds,
     cutoff_timestamp,
     oldest_request_id,
@@ -1562,11 +1563,8 @@ async fn agent_ops_cache_entries(
   Query(query): Query<AgentOpsCacheEntriesQuery>,
 ) -> Result<Json<AgentOpsCacheEntriesResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  let normalized_prefix = query
-    .request_id_prefix
-    .as_deref()
-    .map(str::trim)
-    .filter(|prefix| !prefix.is_empty());
+  let normalized_prefix =
+    normalize_optional_request_id_prefix(query.request_id_prefix.as_deref());
   let offset = query.offset.unwrap_or(0);
   let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let limit = query
@@ -1576,7 +1574,7 @@ async fn agent_ops_cache_entries(
   let (total_entries, entries) = state
     .agent_ops_cache_entries(
       workbook_id,
-      normalized_prefix,
+      normalized_prefix.as_deref(),
       cutoff_timestamp,
       offset,
       limit,
@@ -1604,7 +1602,7 @@ async fn agent_ops_cache_entries(
   Ok(Json(AgentOpsCacheEntriesResponse {
     total_entries,
     returned_entries: mapped_entries.len(),
-    request_id_prefix: normalized_prefix.map(str::to_string),
+    request_id_prefix: normalized_prefix,
     max_age_seconds: query.max_age_seconds,
     cutoff_timestamp,
     offset,
@@ -1841,23 +1839,20 @@ async fn remove_agent_ops_cache_entries_by_prefix(
   Json(payload): Json<RemoveAgentOpsCacheEntriesByPrefixRequest>,
 ) -> Result<Json<RemoveAgentOpsCacheEntriesByPrefixResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  let request_id_prefix = payload.request_id_prefix.trim();
-  if request_id_prefix.is_empty() {
-    return Err(ApiError::bad_request_with_code(
-      "INVALID_REQUEST_ID_PREFIX",
-      "request_id_prefix is required to remove cache entries by prefix.",
-    ));
-  }
+  let request_id_prefix = normalize_required_request_id_prefix(
+    payload.request_id_prefix.as_str(),
+    "request_id_prefix is required to remove cache entries by prefix.",
+  )?;
   let cutoff_timestamp = max_age_cutoff_timestamp(payload.max_age_seconds)?;
   let (removed_entries, remaining_entries) = state
     .remove_agent_ops_cache_entries_by_prefix(
       workbook_id,
-      request_id_prefix,
+      request_id_prefix.as_str(),
       cutoff_timestamp,
     )
     .await?;
   Ok(Json(RemoveAgentOpsCacheEntriesByPrefixResponse {
-    request_id_prefix: request_id_prefix.to_string(),
+    request_id_prefix,
     max_age_seconds: payload.max_age_seconds,
     cutoff_timestamp,
     removed_entries,
@@ -1881,6 +1876,27 @@ fn normalize_sample_limit(
     .min(max_limit)
 }
 
+fn normalize_optional_request_id_prefix(prefix: Option<&str>) -> Option<String> {
+  prefix
+    .map(str::trim)
+    .filter(|value| !value.is_empty())
+    .map(str::to_string)
+}
+
+fn normalize_required_request_id_prefix(
+  prefix: &str,
+  context_message: &str,
+) -> Result<String, ApiError> {
+  let normalized = prefix.trim();
+  if normalized.is_empty() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID_PREFIX",
+      context_message,
+    ));
+  }
+  Ok(normalized.to_string())
+}
+
 fn max_age_cutoff_timestamp(
   max_age_seconds: Option<i64>,
 ) -> Result<Option<chrono::DateTime<Utc>>, ApiError> {
@@ -1900,13 +1916,10 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
   Json(payload): Json<PreviewRemoveAgentOpsCacheEntriesByPrefixRequest>,
 ) -> Result<Json<PreviewRemoveAgentOpsCacheEntriesByPrefixResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  let request_id_prefix = payload.request_id_prefix.trim();
-  if request_id_prefix.is_empty() {
-    return Err(ApiError::bad_request_with_code(
-      "INVALID_REQUEST_ID_PREFIX",
-      "request_id_prefix is required to preview cache removal by prefix.",
-    ));
-  }
+  let request_id_prefix = normalize_required_request_id_prefix(
+    payload.request_id_prefix.as_str(),
+    "request_id_prefix is required to preview cache removal by prefix.",
+  )?;
   let sample_limit = normalize_sample_limit(
     payload.sample_limit,
     DEFAULT_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
@@ -1916,7 +1929,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
   let (matched_entries, entries) = state
     .agent_ops_cache_entries(
       workbook_id,
-      Some(request_id_prefix),
+      Some(request_id_prefix.as_str()),
       cutoff_timestamp,
       0,
       sample_limit,
@@ -1927,7 +1940,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
     .map(|entry| entry.0)
     .collect::<Vec<_>>();
   Ok(Json(PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
-    request_id_prefix: request_id_prefix.to_string(),
+    request_id_prefix,
     max_age_seconds: payload.max_age_seconds,
     cutoff_timestamp,
     matched_entries,
@@ -1942,11 +1955,8 @@ async fn remove_stale_agent_ops_cache_entries(
   Json(payload): Json<RemoveStaleAgentOpsCacheEntriesRequest>,
 ) -> Result<Json<RemoveStaleAgentOpsCacheEntriesResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  let normalized_prefix = payload
-    .request_id_prefix
-    .as_deref()
-    .map(str::trim)
-    .filter(|prefix| !prefix.is_empty());
+  let normalized_prefix =
+    normalize_optional_request_id_prefix(payload.request_id_prefix.as_deref());
   if payload.request_id_prefix.is_some() && normalized_prefix.is_none() {
     return Err(ApiError::bad_request_with_code(
       "INVALID_REQUEST_ID_PREFIX",
@@ -1969,7 +1979,7 @@ async fn remove_stale_agent_ops_cache_entries(
   ) = state
     .remove_stale_agent_ops_cache_entries(
       workbook_id,
-      normalized_prefix,
+      normalized_prefix.as_deref(),
       cutoff_timestamp,
       dry_run,
       sample_limit,
@@ -1977,7 +1987,7 @@ async fn remove_stale_agent_ops_cache_entries(
     .await?;
 
   Ok(Json(RemoveStaleAgentOpsCacheEntriesResponse {
-    request_id_prefix: normalized_prefix.map(str::to_string),
+    request_id_prefix: normalized_prefix,
     max_age_seconds: payload.max_age_seconds,
     dry_run,
     cutoff_timestamp,
