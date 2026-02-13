@@ -65,3 +65,45 @@ impl IntoResponse for ApiError {
     (status, body).into_response()
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::ApiError;
+  use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
+  use serde_json::Value;
+
+  #[tokio::test]
+  async fn should_encode_custom_bad_request_error_codes() {
+    let response = ApiError::bad_request_with_code(
+      "INVALID_SIGNATURE_FORMAT",
+      "bad signature",
+    )
+    .into_response();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+      .await
+      .expect("body should be readable");
+    let payload: Value = serde_json::from_slice(&bytes)
+      .expect("payload should be valid json");
+    assert_eq!(
+      payload["error"]["code"].as_str(),
+      Some("INVALID_SIGNATURE_FORMAT"),
+    );
+    assert_eq!(payload["error"]["message"].as_str(), Some("bad signature"));
+  }
+
+  #[tokio::test]
+  async fn should_fall_back_to_default_bad_request_code() {
+    let response =
+      ApiError::BadRequest("bad request".to_string()).into_response();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+      .await
+      .expect("body should be readable");
+    let payload: Value = serde_json::from_slice(&bytes)
+      .expect("payload should be valid json");
+    assert_eq!(payload["error"]["code"].as_str(), Some("BAD_REQUEST"));
+  }
+}
