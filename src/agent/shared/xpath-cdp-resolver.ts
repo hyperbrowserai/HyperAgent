@@ -1,6 +1,7 @@
 import { CDPClient } from "@/cdp/types";
 import { FrameContextManager } from "@/cdp/frame-context-manager";
 import { HyperagentError } from "../error";
+import { formatUnknownError } from "@/utils";
 
 export interface ResolvedCDPFromXPath {
   backendNodeId: number;
@@ -19,12 +20,22 @@ export interface ResolveXPathWithCDPParams {
 export async function resolveXPathWithCDP(
   params: ResolveXPathWithCDPParams
 ): Promise<ResolvedCDPFromXPath> {
-  const { xpath, frameIndex = 0, cdpClient, frameContextManager, debug } =
-    params;
-  const normalizedFrameIndex = frameIndex ?? 0;
+  const { cdpClient, frameContextManager, debug } = params;
+  const xpath = normalizeXPathInput(params.xpath);
+  const normalizedFrameIndex = normalizeFrameIndex(params.frameIndex);
 
   // Use a DOM session without detaching the shared session; this keeps root session intact.
-  const session = await cdpClient.acquireSession("dom");
+  let session: Awaited<ReturnType<CDPClient["acquireSession"]>>;
+  try {
+    session = await cdpClient.acquireSession("dom");
+  } catch (error) {
+    throw new HyperagentError(
+      `Failed to acquire CDP session for XPath resolution: ${formatUnknownError(
+        error
+      )}`,
+      500
+    );
+  }
   const targetFrameId = resolveTargetFrameId(
     normalizedFrameIndex,
     frameContextManager
@@ -40,7 +51,7 @@ export async function resolveXPathWithCDP(
   }
 
   const executionContextId = frameContextManager
-    ? await frameContextManager.waitForExecutionContext(targetFrameId)
+    ? await safeWaitForExecutionContext(frameContextManager, targetFrameId)
     : undefined;
 
   if (frameContextManager && normalizedFrameIndex !== 0 && !executionContextId) {
@@ -54,39 +65,62 @@ export async function resolveXPathWithCDP(
 
   if (!executionContextId && debug) {
     console.warn(
-      `[resolveXPathWithCDP] Missing executionContextId for frame ${frameIndex} (${targetFrameId}), continuing`
+      `[resolveXPathWithCDP] Missing executionContextId for frame ${normalizedFrameIndex} (${targetFrameId}), continuing`
     );
   }
 
   await session.send("DOM.enable").catch(() => {});
   await session.send("Runtime.enable").catch(() => {});
 
-  const evalResponse = await session.send<{
+  let evalResponse: {
     result: { objectId?: string | null };
     exceptionDetails?: unknown;
-  }>("Runtime.evaluate", {
-    expression: buildXPathEvaluationExpression(xpath),
-    contextId: executionContextId,
-    includeCommandLineAPI: false,
-    returnByValue: false,
-    awaitPromise: false,
-  });
+  };
+  try {
+    evalResponse = await session.send<{
+      result: { objectId?: string | null };
+      exceptionDetails?: unknown;
+    }>("Runtime.evaluate", {
+      expression: buildXPathEvaluationExpression(xpath),
+      contextId: executionContextId,
+      includeCommandLineAPI: false,
+      returnByValue: false,
+      awaitPromise: false,
+    });
+  } catch (error) {
+    throw new HyperagentError(
+      `Failed to evaluate XPath in frame ${normalizedFrameIndex}: ${formatUnknownError(
+        error
+      )}`,
+      500
+    );
+  }
 
   const objectId = evalResponse.result.objectId || undefined;
   if (!objectId) {
     throw new HyperagentError(
-      `Failed to resolve XPath to objectId in frame ${frameIndex}`,
+      `Failed to resolve XPath to objectId in frame ${normalizedFrameIndex}`,
       404
     );
   }
 
-  const describeNode = await session.send<{
-    node?: { backendNodeId?: number };
-  }>("DOM.describeNode", { objectId });
+  let describeNode: { node?: { backendNodeId?: number } };
+  try {
+    describeNode = await session.send<{
+      node?: { backendNodeId?: number };
+    }>("DOM.describeNode", { objectId });
+  } catch (error) {
+    throw new HyperagentError(
+      `Failed to describe resolved XPath node in frame ${normalizedFrameIndex}: ${formatUnknownError(
+        error
+      )}`,
+      500
+    );
+  }
   const backendNodeId = describeNode.node?.backendNodeId;
   if (typeof backendNodeId !== "number") {
     throw new HyperagentError(
-      `DOM.describeNode did not return backendNodeId for frame ${frameIndex}`,
+      `DOM.describeNode did not return backendNodeId for frame ${normalizedFrameIndex}`,
       404
     );
   }
@@ -98,6 +132,43 @@ export async function resolveXPathWithCDP(
   };
 }
 
+function normalizeXPathInput(xpath: unknown): string {
+  if (typeof xpath !== "string") {
+    throw new HyperagentError("XPath must be a non-empty string", 400);
+  }
+  const normalized = xpath.trim();
+  if (normalized.length === 0) {
+    throw new HyperagentError("XPath must be a non-empty string", 400);
+  }
+  return normalized;
+}
+
+function normalizeFrameIndex(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+  if (value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+async function safeWaitForExecutionContext(
+  frameContextManager: FrameContextManager,
+  targetFrameId: string
+): Promise<number | undefined> {
+  try {
+    return await frameContextManager.waitForExecutionContext(targetFrameId);
+  } catch (error) {
+    throw new HyperagentError(
+      `Failed while waiting for execution context (${targetFrameId}): ${formatUnknownError(
+        error
+      )}`,
+      500
+    );
+  }
+}
+
 function resolveTargetFrameId(
   frameIndex: number,
   frameContextManager?: FrameContextManager
@@ -106,15 +177,13 @@ function resolveTargetFrameId(
     return frameIndex === 0 ? "root" : undefined;
   }
 
-  const directMatch = frameContextManager.getFrameByIndex(frameIndex)?.frameId;
+  const directMatch = safeGetFrameByIndex(frameContextManager, frameIndex)?.frameId;
   if (directMatch) {
     return directMatch;
   }
 
   if (frameIndex === 0) {
-    const rootFrame = frameContextManager
-      .frameGraph
-      .getAllFrames()
+    const rootFrame = safeGetAllFrames(frameContextManager)
       .find((frame) => frame.parentFrameId === null);
     return rootFrame?.frameId ?? "root";
   }
@@ -126,12 +195,10 @@ function buildFrameDiagnostics(frameContextManager?: FrameContextManager): strin
   if (!frameContextManager) {
     return "FrameContextManager unavailable.";
   }
-  const mappedIndices = frameContextManager
-    .frameGraph
-    .getAllFrames()
+  const mappedIndices = safeGetAllFrames(frameContextManager)
     .map((frame) => ({
       frameId: frame.frameId,
-      frameIndex: frameContextManager.getFrameIndex(frame.frameId),
+      frameIndex: safeGetFrameIndex(frameContextManager, frame.frameId),
     }))
     .filter(
       (entry): entry is { frameId: string; frameIndex: number } =>
@@ -143,6 +210,38 @@ function buildFrameDiagnostics(frameContextManager?: FrameContextManager): strin
   return mappedIndices.length > 0
     ? `Available frames => ${mappedIndices.join(", ")}`
     : "No frame indices currently tracked.";
+}
+
+function safeGetAllFrames(
+  frameContextManager: FrameContextManager
+): Array<{ frameId: string; parentFrameId: string | null }> {
+  try {
+    return frameContextManager.frameGraph.getAllFrames();
+  } catch {
+    return [];
+  }
+}
+
+function safeGetFrameByIndex(
+  frameContextManager: FrameContextManager,
+  frameIndex: number
+): { frameId: string } | undefined {
+  try {
+    return frameContextManager.getFrameByIndex(frameIndex) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeGetFrameIndex(
+  frameContextManager: FrameContextManager,
+  frameId: string
+): number | undefined {
+  try {
+    return frameContextManager.getFrameIndex(frameId);
+  } catch {
+    return undefined;
+  }
 }
 
 function buildXPathEvaluationExpression(xpath: string): string {
