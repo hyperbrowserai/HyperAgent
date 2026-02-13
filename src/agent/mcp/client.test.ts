@@ -215,6 +215,20 @@ describe("normalizeMCPToolParams", () => {
     });
   });
 
+  it("rejects oversized non-plain object diagnostic values", () => {
+    class CustomPayload {
+      payload = "x".repeat(20_500);
+    }
+
+    expect(() =>
+      normalizeMCPToolParams({
+        metadata: new CustomPayload() as unknown as Record<string, unknown>,
+      })
+    ).toThrow(
+      "MCP tool params cannot include string values longer than 20000 characters"
+    );
+  });
+
   it("rejects duplicate keys when map keys collide after trimming", () => {
     const map = new Map<unknown, unknown>([
       [" key ", "first"],

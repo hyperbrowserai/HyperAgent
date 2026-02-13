@@ -36,6 +36,20 @@ function hasUnsupportedControlChars(value: string): boolean {
   });
 }
 
+function validateParamStringValue(value: string): string {
+  if (hasUnsupportedControlChars(value)) {
+    throw new Error(
+      "MCP tool params cannot include unsupported control characters in string values"
+    );
+  }
+  if (value.length > MAX_MCP_PARAM_STRING_CHARS) {
+    throw new Error(
+      `MCP tool params cannot include string values longer than ${MAX_MCP_PARAM_STRING_CHARS} characters`
+    );
+  }
+  return value;
+}
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -116,18 +130,8 @@ export function normalizeMCPToolParams(
     if (typeof value === "function") {
       return `[Function ${value.name || "anonymous"}]`;
     }
-    if (typeof value === "string" && hasUnsupportedControlChars(value)) {
-      throw new Error(
-        "MCP tool params cannot include unsupported control characters in string values"
-      );
-    }
-    if (
-      typeof value === "string" &&
-      value.length > MAX_MCP_PARAM_STRING_CHARS
-    ) {
-      throw new Error(
-        `MCP tool params cannot include string values longer than ${MAX_MCP_PARAM_STRING_CHARS} characters`
-      );
+    if (typeof value === "string") {
+      return validateParamStringValue(value);
     }
     if (value instanceof Date) {
       return Number.isNaN(value.getTime()) ? value.toString() : value.toISOString();
@@ -202,7 +206,7 @@ export function normalizeMCPToolParams(
         throw new Error("MCP tool params cannot include circular references");
       }
       if (!isPlainRecord(value)) {
-        return formatUnknownError(value);
+        return validateParamStringValue(formatUnknownError(value));
       }
       seen.add(value);
       try {
