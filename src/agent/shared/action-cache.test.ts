@@ -234,4 +234,48 @@ describe("action cache helpers", () => {
 
     expect(script).toContain(`await page.extract(${JSON.stringify(instruction)});`);
   });
+
+  it("trims extract instruction before script generation", () => {
+    const extractEntry: ActionCacheEntry = {
+      stepIndex: 10,
+      instruction: "  extract headline  ",
+      elementId: null,
+      method: null,
+      arguments: [],
+      actionType: "extract",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [extractEntry],
+    });
+
+    expect(script).toContain('await page.extract("extract headline");');
+    expect(script).not.toContain('await page.extract("  extract headline  ");');
+  });
+
+  it("omits performInstruction option when instruction is whitespace", () => {
+    const helperEntry: ActionCacheEntry = {
+      stepIndex: 11,
+      instruction: "   ",
+      elementId: "0-1",
+      method: "click",
+      arguments: [],
+      actionType: "actElement",
+      success: true,
+      message: "ok",
+      frameIndex: 0,
+      xpath: "//button[1]",
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [helperEntry],
+    });
+
+    expect(script).toContain("await page.performClick(");
+    expect(script).not.toContain("performInstruction");
+  });
 });

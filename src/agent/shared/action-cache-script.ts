@@ -108,11 +108,12 @@ ${indent}await page.waitForTimeout(${waitMs});`;
     }
 
     if (step.actionType === "extract") {
-      if (!isNonEmptyString(step.instruction)) {
+      const extractInstruction = asNonEmptyTrimmedString(step.instruction);
+      if (!extractInstruction) {
         return `${indent}// Step ${step.stepIndex} (extract skipped: missing instruction)`;
       }
       return `${indent}// Step ${step.stepIndex}
-${indent}await page.extract(${JSON.stringify(step.instruction)});`;
+${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
     }
 
     const call = step.method ? METHOD_TO_CALL[step.method] : undefined;
@@ -121,8 +122,9 @@ ${indent}await page.extract(${JSON.stringify(step.instruction)});`;
         return `${indent}// Step ${step.stepIndex} (unsupported actionType=${step.actionType}, method=${step.method ?? "N/A"}, reason=missing xpath)`;
       }
       const options: Record<string, unknown> = {};
-      if (step.instruction) {
-        options.performInstruction = step.instruction;
+      const performInstruction = asNonEmptyTrimmedString(step.instruction);
+      if (performInstruction) {
+        options.performInstruction = performInstruction;
       }
       if (
         step.frameIndex !== null &&
