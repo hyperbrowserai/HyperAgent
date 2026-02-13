@@ -1396,7 +1396,11 @@ export function SpreadsheetApp() {
       const response = await clearAgentOpsCache(workbook.id);
       setCacheEntriesOffset(0);
       setSelectedCacheEntryDetail(null);
-      setNotice(`Cleared ${response.cleared_entries} cached request entries.`);
+      setNotice(
+        hasActiveCacheScopeFilters
+          ? `Cleared ${response.cleared_entries} cached request entries across all scopes.`
+          : `Cleared ${response.cleared_entries} cached request entries.`,
+      );
       await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
       applyUiError(error, "Failed to clear agent ops idempotency cache.");
