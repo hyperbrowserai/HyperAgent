@@ -18,6 +18,9 @@ export type ExtractActionType = z.infer<typeof ExtractAction>;
 const EXTRACT_TRUNCATION_NOTICE = "\n[Content truncated due to token limit]";
 
 export function estimateTextTokenCount(text: string): number {
+  if (text.trim().length === 0) {
+    return 0;
+  }
   const wordCount = text.match(/[A-Za-z0-9_]+/g)?.length ?? 0;
   const cjkCount =
     text.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g)
@@ -27,7 +30,7 @@ export function estimateTextTokenCount(text: string): number {
   const lexicalEstimate = Math.ceil(
     wordCount * 1.1 + cjkCount + symbolCount * 0.3
   );
-  return Math.max(1, characterEstimate, lexicalEstimate);
+  return Math.max(characterEstimate, lexicalEstimate);
 }
 
 export function trimMarkdownToTokenLimit(

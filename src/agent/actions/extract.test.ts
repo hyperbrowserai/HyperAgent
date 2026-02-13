@@ -68,6 +68,11 @@ function createContext(
 }
 
 describe("extract action token helpers", () => {
+  it("returns zero tokens for empty or whitespace-only content", () => {
+    expect(estimateTextTokenCount("")).toBe(0);
+    expect(estimateTextTokenCount("   \n\t")).toBe(0);
+  });
+
   it("estimates token count as positive non-zero", () => {
     expect(estimateTextTokenCount("hello world")).toBeGreaterThan(0);
   });
