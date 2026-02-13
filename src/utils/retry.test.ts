@@ -29,6 +29,22 @@ describe("retry", () => {
     expect(func).toHaveBeenCalledTimes(3);
   });
 
+  it("uses default retry count when retry params omit retryCount", async () => {
+    const func = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("one"))
+      .mockRejectedValueOnce(new Error("two"))
+      .mockResolvedValue("ok");
+
+    const result = await retry({
+      func,
+      params: {},
+    });
+
+    expect(result).toBe("ok");
+    expect(func).toHaveBeenCalledTimes(3);
+  });
+
   it("does not sleep after the final failed attempt", async () => {
     const func = jest.fn().mockRejectedValue(new Error("always fails"));
 

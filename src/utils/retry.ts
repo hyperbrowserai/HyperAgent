@@ -16,7 +16,7 @@ export async function retry<T>({
   onError,
 }: {
   func: () => Promise<T>;
-  params?: { retryCount: number };
+  params?: { retryCount?: number };
   onError?: (...err: Array<unknown>) => void;
 }): Promise<T> {
   let lastError: unknown = new Error("Retry operation failed");
