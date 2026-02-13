@@ -622,15 +622,21 @@ class MCPClient {
     if (!server) {
       throw new Error(`Server with ID ${safeServerId()} not found`);
     }
-    if (!server.tools.has(normalizedToolName)) {
+    const registeredTool = server.tools.get(normalizedToolName);
+    if (!registeredTool) {
       throw new Error(
         `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
       );
     }
 
     try {
+      const remoteToolName =
+        typeof registeredTool.name === "string" &&
+        registeredTool.name.length > 0
+          ? registeredTool.name
+          : normalizedToolName;
       const result = await server.client.callTool({
-        name: normalizedToolName,
+        name: remoteToolName,
         arguments: parameters,
       });
 

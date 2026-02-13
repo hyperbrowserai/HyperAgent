@@ -600,6 +600,30 @@ describe("MCPClient.executeTool server selection", () => {
     expect(notesCallTool).not.toHaveBeenCalled();
   });
 
+  it("uses original discovered tool name when calling MCP server", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn().mockResolvedValue({ content: [] });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            tools: new Map([["search", createTool(" search ")]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.executeTool("search", { query: "weather" }, "server-1");
+
+    expect(callTool).toHaveBeenCalledWith({
+      name: " search ",
+      arguments: { query: "weather" },
+    });
+  });
+
   it("throws clear error when multiple servers expose same tool and serverId is omitted", async () => {
     const mcpClient = new MCPClient(false);
     const firstCallTool = jest.fn().mockResolvedValue({ content: [] });
