@@ -349,6 +349,30 @@ describe("dispatchCDPAction argument coercion", () => {
     expect(selectArgs?.[0]?.value).toBe("0");
   });
 
+  it("throws readable error when selectOption value coercion fails", async () => {
+    const session = createSession(async () => ({
+      result: { value: { status: "selected", value: "x" } },
+    }));
+    const badValue = {
+      toString(): string {
+        throw new Error("coercion failure");
+      },
+    };
+
+    await expect(
+      dispatchCDPAction("selectOptionFromDropdown", [badValue], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow(
+      "[CDP][Interactions] Failed to coerce action argument to string"
+    );
+  });
+
   it("still commits Enter for empty type action with commitEnter", async () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session = createSession(async (method, params) => {

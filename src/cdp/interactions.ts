@@ -327,7 +327,10 @@ export async function dispatchCDPAction(
       return;
     case "selectOptionFromDropdown":
       await selectOption(ctx, {
-        value: coerceActionStringArg(args[0]),
+        value:
+          args[0] == null
+            ? ""
+            : coerceActionStringArg(args[0], "", true),
       });
       return;
     case "scrollToElement": {
@@ -363,7 +366,11 @@ export async function dispatchCDPAction(
   }
 }
 
-function coerceActionStringArg(value: unknown, fallback = ""): string {
+function coerceActionStringArg(
+  value: unknown,
+  fallback = "",
+  throwOnCoercionFailure = false
+): string {
   if (value == null) {
     return fallback;
   }
@@ -373,6 +380,11 @@ function coerceActionStringArg(value: unknown, fallback = ""): string {
   try {
     return String(value);
   } catch {
+    if (throwOnCoercionFailure) {
+      throw new Error(
+        "[CDP][Interactions] Failed to coerce action argument to string"
+      );
+    }
     return fallback;
   }
 }
