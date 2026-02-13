@@ -283,6 +283,89 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("executeTaskAsync succeeds when task-state reads trap during task-control creation", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, TaskState>;
+    };
+    const taskRegistryStore: Record<string, TaskState> = {};
+    internalAgent.tasks = new Proxy(taskRegistryStore, {
+      set: (target, property, value) => {
+        target[String(property)] = value as TaskState;
+        return true;
+      },
+      get: () => {
+        throw new Error("task get trap");
+      },
+      deleteProperty: (target, property) => {
+        delete target[String(property)];
+        return true;
+      },
+    }) as Record<string, TaskState>;
+
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.COMPLETED,
+    });
+  });
+
+  it("preserves failed async task result when task-state reads trap during error handling", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockRejectedValue(new Error("trapped read failure"));
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, TaskState>;
+    };
+    const taskRegistryStore: Record<string, TaskState> = {};
+    internalAgent.tasks = new Proxy(taskRegistryStore, {
+      set: (target, property, value) => {
+        target[String(property)] = value as TaskState;
+        return true;
+      },
+      get: () => {
+        throw new Error("task get trap");
+      },
+      deleteProperty: (target, property) => {
+        delete target[String(property)];
+        return true;
+      },
+    }) as Record<string, TaskState>;
+
+    const fakePage = {} as unknown as Page;
+    try {
+      const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+      await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+      expect(task.getStatus()).toBe(TaskStatus.FAILED);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to read task state")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("emits and surfaces task-scoped errors from async execution", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockRejectedValue(new Error("boom"));

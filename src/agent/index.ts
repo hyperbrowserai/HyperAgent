@@ -575,6 +575,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private getTaskStateById(taskId: string): TaskState | undefined {
+    try {
+      return this.tasks[taskId];
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to read task state ${taskId}: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+      return undefined;
+    }
+  }
+
   private isTaskLifecycleGenerationActive(generation: number): boolean {
     return generation === this.lifecycleGeneration;
   }
@@ -1225,13 +1240,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   private getTaskControl(
     taskId: string,
+    taskState: TaskState,
     result: Promise<AgentTaskOutput>,
     taskLifecycleGeneration: number
   ): Task {
-    const taskState = this.tasks[taskId];
-    if (!taskState) {
-      throw new HyperagentError(`Task ${taskId} not found`);
-    }
     const taskEmitter = new ErrorEmitter();
     let settledStatus: TaskStatus | null = null;
     const resolveSettledStatus = (value: unknown): TaskStatus => {
@@ -1433,7 +1445,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         .catch((error: unknown) => {
           cleanup();
           // Retrieve the correct state to update
-          const failedTaskState = this.tasks[taskId];
+          const failedTaskState = this.getTaskStateById(taskId);
           const normalizedTaskError =
             error instanceof Error
               ? error
@@ -1469,6 +1481,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             if (!lifecycleActive) {
               return this.buildCancelledTaskOutput(taskId, taskState);
             }
+            this.writeTaskStatus(taskState, TaskStatus.FAILED);
+            taskState.error = taskFailureError.cause.message;
+            this.emitTaskErrorSafely(taskFailureError);
             if (lifecycleActive) {
               if (this.debug) {
                 console.warn(
@@ -1494,7 +1509,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw error;
     }
     this.storeTaskResultPromise(taskId, taskResult);
-    return this.getTaskControl(taskId, taskResult, taskLifecycleGeneration);
+    return this.getTaskControl(
+      taskId,
+      taskState,
+      taskResult,
+      taskLifecycleGeneration
+    );
   }
 
   /**
