@@ -64,6 +64,7 @@ export function SpreadsheetApp() {
   const [isRunningScenario, setIsRunningScenario] = useState(false);
   const [isRunningSelectedScenario, setIsRunningSelectedScenario] = useState(false);
   const [isRunningPreviewOps, setIsRunningPreviewOps] = useState(false);
+  const [isCopyingPresetOps, setIsCopyingPresetOps] = useState(false);
   const [isCopyingPreviewOps, setIsCopyingPreviewOps] = useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
@@ -589,6 +590,21 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyPresetOperations() {
+    if (wizardPresetOps.length === 0) {
+      return;
+    }
+    setIsCopyingPresetOps(true);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(wizardPresetOps, null, 2));
+      setUiError(null);
+    } catch {
+      setUiError("Failed to copy preset operations to clipboard.");
+    } finally {
+      setIsCopyingPresetOps(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -929,7 +945,8 @@ export function SpreadsheetApp() {
             ) : null}
             {(wizardPresetsQuery.data ?? []).length > 0 ? (
               <div className="mt-2 rounded border border-slate-800 bg-slate-900 p-2">
-                <div className="mb-1 flex items-center gap-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
                   <p className="text-[11px] text-slate-500">preset operation preview</p>
                   <select
                     value={wizardPresetPreview}
@@ -942,6 +959,14 @@ export function SpreadsheetApp() {
                       </option>
                     ))}
                   </select>
+                  </div>
+                  <button
+                    onClick={handleCopyPresetOperations}
+                    disabled={isCopyingPresetOps || wizardPresetOps.length === 0}
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingPresetOps ? "Copying..." : "Copy JSON"}
+                  </button>
                 </div>
                 {wizardPresetOps.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
