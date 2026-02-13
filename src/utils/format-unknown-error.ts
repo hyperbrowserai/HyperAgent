@@ -17,7 +17,8 @@ function stringifyUnknownObject(value: object): string {
 
 export function formatUnknownError(error: unknown): string {
   if (error instanceof Error) {
-    return error.message;
+    const message = error.message?.trim();
+    return message && message.length > 0 ? message : error.name;
   }
   if (typeof error === "string") {
     return error;

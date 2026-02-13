@@ -5,6 +5,10 @@ describe("formatUnknownError", () => {
     expect(formatUnknownError(new Error("boom"))).toBe("boom");
   });
 
+  it("falls back to error name when message is empty", () => {
+    expect(formatUnknownError(new Error("   "))).toBe("Error");
+  });
+
   it("returns strings unchanged", () => {
     expect(formatUnknownError("plain error")).toBe("plain error");
   });
