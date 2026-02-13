@@ -1,5 +1,6 @@
 import {
   AgentOpsResponse,
+  AgentPresetResponse,
   CellSnapshot,
   ChartSpec,
   WorkbookEvent,
@@ -124,6 +125,29 @@ export async function runAgentOps(
     },
   );
   return parseJsonResponse<AgentOpsResponse>(response);
+}
+
+interface AgentPresetRequest {
+  request_id?: string;
+  actor?: string;
+  stop_on_error?: boolean;
+  include_file_base64?: boolean;
+}
+
+export async function runAgentPreset(
+  workbookId: string,
+  preset: "seed_sales_demo" | "export_snapshot",
+  payload: AgentPresetRequest,
+): Promise<AgentPresetResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/presets/${preset}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  return parseJsonResponse<AgentPresetResponse>(response);
 }
 
 export async function upsertChart(

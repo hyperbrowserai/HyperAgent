@@ -45,3 +45,9 @@ export interface AgentOpsResponse {
   request_id?: string;
   results: AgentOperationResult[];
 }
+
+export interface AgentPresetResponse {
+  preset: string;
+  request_id?: string;
+  results: AgentOperationResult[];
+}

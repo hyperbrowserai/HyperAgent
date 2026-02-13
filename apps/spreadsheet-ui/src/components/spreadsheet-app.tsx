@@ -13,6 +13,7 @@ import {
   getCells,
   importWorkbook,
   runAgentOps,
+  runAgentPreset,
   subscribeToWorkbookEvents,
   upsertChart,
 } from "@/lib/spreadsheet-api";
@@ -44,7 +45,9 @@ export function SpreadsheetApp() {
   const [formulaInput, setFormulaInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningAgentFlow, setIsRunningAgentFlow] = useState(false);
+  const [isRunningPreset, setIsRunningPreset] = useState(false);
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
+  const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
 
   const createWorkbookMutation = useMutation({
@@ -257,6 +260,31 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handlePresetRun(
+    preset: "seed_sales_demo" | "export_snapshot",
+  ) {
+    if (!workbook) {
+      return;
+    }
+    setIsRunningPreset(true);
+    try {
+      const response = await runAgentPreset(workbook.id, preset, {
+        request_id: `preset-${preset}-${Date.now()}`,
+        actor: "ui-preset",
+        stop_on_error: true,
+        include_file_base64: false,
+      });
+      setLastPreset(response.preset);
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastAgentOps(response.results);
+      await queryClient.invalidateQueries({
+        queryKey: ["cells", workbook.id, activeSheet],
+      });
+    } finally {
+      setIsRunningPreset(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4">
@@ -296,6 +324,20 @@ export function SpreadsheetApp() {
                 className="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-400"
               >
                 Export .xlsx
+              </button>
+              <button
+                onClick={() => handlePresetRun("seed_sales_demo")}
+                disabled={!workbook || isRunningPreset}
+                className="rounded-md bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-400 disabled:opacity-40"
+              >
+                {isRunningPreset ? "Running preset..." : "Run Seed Preset"}
+              </button>
+              <button
+                onClick={() => handlePresetRun("export_snapshot")}
+                disabled={!workbook || isRunningPreset}
+                className="rounded-md bg-cyan-500 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-400 disabled:opacity-40"
+              >
+                Run Export Preset
               </button>
               <button
                 onClick={handleAgentDemoFlow}
@@ -400,6 +442,11 @@ export function SpreadsheetApp() {
             <h2 className="mb-2 text-sm font-semibold text-slate-200">
               Last Agent Operation Batch
             </h2>
+            {lastPreset && (
+              <p className="mb-2 text-xs text-slate-400">
+                preset: <span className="font-mono text-slate-200">{lastPreset}</span>
+              </p>
+            )}
             {lastAgentRequestId && (
               <p className="mb-2 text-xs text-slate-400">
                 request_id:{" "}
