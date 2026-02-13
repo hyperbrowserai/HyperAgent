@@ -336,10 +336,7 @@ export async function dispatchCDPAction(
     }
     case "scrollToPercentage": {
       const targetArg = args[0];
-      const options =
-        typeof targetArg === "object" && !Array.isArray(targetArg)
-          ? (targetArg as ScrollToOptions)
-          : { target: targetArg as string | number };
+      const options = normalizeScrollOptions(targetArg);
       await scrollToPosition(ctx, options);
       return;
     }
@@ -348,10 +345,7 @@ export async function dispatchCDPAction(
       if (targetArg == null) {
         await scrollElementIntoView(ctx);
       } else {
-        const options =
-          typeof targetArg === "object" && !Array.isArray(targetArg)
-            ? (targetArg as ScrollToOptions)
-            : { target: targetArg as string | number };
+        const options = normalizeScrollOptions(targetArg);
         await scrollToPosition(ctx, options);
       }
       return;
@@ -374,6 +368,33 @@ function coerceActionStringArg(value: unknown, fallback = ""): string {
     return fallback;
   }
   return typeof value === "string" ? value : String(value);
+}
+
+function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
+  if (
+    targetArg &&
+    typeof targetArg === "object" &&
+    !Array.isArray(targetArg)
+  ) {
+    const candidate = targetArg as Record<string, unknown>;
+    const behavior =
+      candidate.behavior === "smooth" || candidate.behavior === "instant"
+        ? candidate.behavior
+        : undefined;
+    return {
+      target:
+        typeof candidate.target === "string" || typeof candidate.target === "number"
+          ? candidate.target
+          : undefined,
+      behavior,
+    };
+  }
+
+  if (typeof targetArg === "string" || typeof targetArg === "number") {
+    return { target: targetArg };
+  }
+
+  return {};
 }
 
 async function clickElement(
@@ -1212,9 +1233,12 @@ function formatScrollNumber(value: number): string {
   return value.toFixed(2);
 }
 
-function normalizeScrollPercent(target: string | number): number {
+function normalizeScrollPercent(target: unknown): number {
   if (typeof target === "number") {
     return clamp(target, 0, 100);
+  }
+  if (typeof target !== "string") {
+    return 50;
   }
   const text = target.trim();
   if (text.endsWith("%")) {
