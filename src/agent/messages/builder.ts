@@ -12,6 +12,7 @@ const MAX_SERIALIZED_PROMPT_VALUE_CHARS = 2000;
 const MAX_DOM_STATE_CHARS = 50_000;
 const MAX_OPEN_TAB_ENTRIES = 20;
 const MAX_TAB_URL_CHARS = 500;
+const MAX_VARIABLE_KEY_CHARS = 120;
 
 function truncatePromptText(value: string): string {
   if (value.length <= MAX_SERIALIZED_PROMPT_VALUE_CHARS) {
@@ -50,6 +51,80 @@ function truncateDomState(domState: string): string {
     domState.slice(0, MAX_DOM_STATE_CHARS) +
     "... [DOM truncated for prompt budget]"
   );
+}
+
+function stripControlChars(value: string): string {
+  return Array.from(value)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    })
+    .join("");
+}
+
+function normalizeVariableKey(value: unknown, index: number): string {
+  const rawValue = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = stripControlChars(rawValue).replace(/\s+/g, " ").trim();
+  const fallback = normalized.length > 0 ? normalized : `variable_${index + 1}`;
+  if (fallback.length <= MAX_VARIABLE_KEY_CHARS) {
+    return fallback;
+  }
+  return `${fallback.slice(0, MAX_VARIABLE_KEY_CHARS)}... [variable key truncated]`;
+}
+
+function normalizeVariableDescription(value: unknown): string {
+  const rawValue = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = stripControlChars(rawValue).replace(/\s+/g, " ").trim();
+  return truncatePromptText(
+    normalized.length > 0 ? normalized : "Variable description unavailable"
+  );
+}
+
+function safeReadVariableField(
+  variable: HyperVariable,
+  field: "key" | "description" | "value"
+): unknown {
+  try {
+    return (variable as unknown as Record<string, unknown>)[field];
+  } catch {
+    if (field === "value") {
+      return "[variable value unavailable]";
+    }
+    if (field === "description") {
+      return "Variable description unavailable";
+    }
+    return "";
+  }
+}
+
+function buildVariablesContent(variables: HyperVariable[]): string {
+  if (variables.length === 0) {
+    return "No variables set";
+  }
+
+  return variables
+    .map((variable, index) => {
+      const key = normalizeVariableKey(safeReadVariableField(variable, "key"), index);
+      const description = normalizeVariableDescription(
+        safeReadVariableField(variable, "description")
+      );
+      const currentValue = safeSerializeForPrompt(
+        safeReadVariableField(variable, "value")
+      );
+      return `<<${key}>> - ${description} | current value: ${currentValue}`;
+    })
+    .join("\n");
+}
+
+function getDomStateSummary(domState: A11yDOMState): string {
+  try {
+    const value = domState.domState;
+    return typeof value === "string"
+      ? value
+      : formatUnknownError(value);
+  } catch {
+    return "DOM state unavailable";
+  }
 }
 
 function safeSerializeForPrompt(value: unknown): string {
@@ -154,15 +229,7 @@ export const buildAgentStepMessages = async (
   });
 
   // Add variables section
-  const variablesContent =
-    variables.length > 0
-      ? variables
-          .map(
-            (v) =>
-              `<<${v.key}>> - ${truncatePromptText(v.description)} | current value: ${safeSerializeForPrompt(v.value)}`
-          )
-          .join("\n")
-      : "No variables set";
+  const variablesContent = buildVariablesContent(variables);
   messages.push({
     role: "user",
     content: `=== Variables ===\n${variablesContent}\n`,
@@ -206,7 +273,7 @@ export const buildAgentStepMessages = async (
   // Add elements section with DOM tree
   messages.push({
     role: "user",
-    content: `=== Elements ===\n${truncateDomState(domState.domState)}\n`,
+    content: `=== Elements ===\n${truncateDomState(getDomStateSummary(domState))}\n`,
   });
 
   // Add page screenshot section (only if screenshot is available)

@@ -545,6 +545,48 @@ describe("buildAgentStepMessages", () => {
     expect(joined).not.toContain("d".repeat(3000));
   });
 
+  it("handles variables with throwing getters without crashing", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const brokenVariable = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "key" || prop === "description" || prop === "value") {
+            throw new Error("variable getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      [brokenVariable as unknown as { key: string; value: string; description: string }]
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("<<variable_1>>");
+    expect(joined).toContain("Variable description unavailable");
+    expect(joined).toContain("[variable value unavailable]");
+  });
+
   it("truncates oversized DOM state payloads", async () => {
     const page = createFakePage("https://example.com/current", [
       "https://example.com/current",
@@ -576,5 +618,45 @@ describe("buildAgentStepMessages", () => {
     const content = elementsMessage?.content as string;
     expect(content).toContain("[DOM truncated for prompt budget]");
     expect(content.length).toBeLessThan(51_000);
+  });
+
+  it("falls back when domState payload getter throws", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const trappedDomState = new Proxy(
+      {
+        elements: new Map(),
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "domState") {
+            throw new Error("domState getter trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      trappedDomState as unknown as Parameters<typeof buildAgentStepMessages>[4],
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("=== Elements ===");
+    expect(joined).toContain("DOM state unavailable");
   });
 });
