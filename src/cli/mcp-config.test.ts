@@ -183,7 +183,7 @@ describe("parseMCPServersConfig", () => {
 
   it("validates args/env/sseHeaders shapes and normalizes record keys", () => {
     const parsed = parseMCPServersConfig(
-      '[{"command":"npx","args":[" -y "," server "],"env":{" KEY ":"value"}},{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{" Authorization ":"Bearer token"}}]'
+      '[{"command":"npx","args":[" -y "," server "],"env":{" KEY ":"value"}},{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{" Authorization ":" Bearer token "}}]'
     );
     expect(parsed[0]).toEqual(
       expect.objectContaining({
@@ -227,6 +227,13 @@ describe("parseMCPServersConfig", () => {
     expect(() =>
       parseMCPServersConfig(
         '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"__proto__":"oops"}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Authorization":"   "}}]'
       )
     ).toThrow(
       'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
