@@ -1095,6 +1095,24 @@ async fn get_agent_schema(
       "content-disposition": "attachment filename for exported workbook",
       "x-export-meta": "json compatibility report with preserved/transformed/unsupported arrays"
     },
+    "workbook_import_event_shape": {
+      "event_type": "workbook.imported",
+      "payload": {
+        "sheets_imported": "number of imported sheets",
+        "cells_imported": "number of imported cells",
+        "formula_cells_imported": "number of imported cells carrying formulas",
+        "formula_cells_with_cached_values": "formula cells with cached scalar values",
+        "formula_cells_without_cached_values": "formula cells without cached scalar values",
+        "warnings": "array of compatibility warning strings"
+      }
+    },
+    "workbook_export_event_shape": {
+      "event_type": "workbook.exported",
+      "payload": {
+        "file_name": "exported workbook filename",
+        "compatibility_report": "compatibility report object matching x-export-meta schema"
+      }
+    },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
@@ -4596,6 +4614,36 @@ mod tests {
         .and_then(|value| value.get("x-export-meta"))
         .and_then(serde_json::Value::as_str),
       Some("json compatibility report with preserved/transformed/unsupported arrays"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_import_event_shape")
+        .and_then(|value| value.get("event_type"))
+        .and_then(serde_json::Value::as_str),
+      Some("workbook.imported"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_import_event_shape")
+        .and_then(|value| value.get("payload"))
+        .and_then(|value| value.get("formula_cells_imported"))
+        .and_then(serde_json::Value::as_str),
+      Some("number of imported cells carrying formulas"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_export_event_shape")
+        .and_then(|value| value.get("event_type"))
+        .and_then(serde_json::Value::as_str),
+      Some("workbook.exported"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_export_event_shape")
+        .and_then(|value| value.get("payload"))
+        .and_then(|value| value.get("compatibility_report"))
+        .and_then(serde_json::Value::as_str),
+      Some("compatibility report object matching x-export-meta schema"),
     );
     assert_eq!(
       schema

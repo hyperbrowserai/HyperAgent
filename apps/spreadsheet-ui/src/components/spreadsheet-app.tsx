@@ -793,6 +793,14 @@ export function SpreadsheetApp() {
       flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
     [agentSchemaQuery.data?.workbook_import_response_shape],
   );
+  const agentWorkbookImportEventFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
+    [agentSchemaQuery.data?.workbook_import_event_shape],
+  );
+  const agentWorkbookExportEventFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_export_event_shape),
+    [agentSchemaQuery.data?.workbook_export_event_shape],
+  );
   const wizardScenarioOps = wizardScenarioOpsQuery.data?.operations ?? [];
   const wizardScenarioOpsSignature =
     wizardScenarioOpsQuery.data?.operations_signature ?? null;
@@ -2940,6 +2948,20 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentWorkbookImportEventFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                workbook import event fields:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentWorkbookImportEventFields
+                    .map((entry) =>
+                      entry.description
+                        ? `${entry.key}: ${entry.description}`
+                        : entry.key
+                    )
+                    .join(", ")}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.workbook_export_endpoint ? (
               <p className="mb-2 text-xs text-slate-400">
                 workbook export endpoint:{" "}
@@ -2953,6 +2975,20 @@ export function SpreadsheetApp() {
                 export headers:{" "}
                 <span className="font-mono text-slate-200">
                   {Object.keys(agentSchemaQuery.data.workbook_export_response_headers_shape).join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {agentWorkbookExportEventFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                workbook export event fields:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentWorkbookExportEventFields
+                    .map((entry) =>
+                      entry.description
+                        ? `${entry.key}: ${entry.description}`
+                        : entry.key
+                    )
+                    .join(", ")}
                 </span>
               </p>
             ) : null}
