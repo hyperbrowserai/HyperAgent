@@ -129,6 +129,41 @@ describe("dispatchCDPAction press key normalization", () => {
     expect(keyDown?.params?.code).toBe("Tab");
     expect(keyDown?.params?.windowsVirtualKeyCode).toBe(9);
   });
+
+  it("normalizes spaced and dashed named keys", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+
+    await dispatchCDPAction("press", ["Arrow Up"], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+    await dispatchCDPAction("press", ["page-down"], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const keyDownCalls = calls.filter(
+      (call) =>
+        call.method === "Input.dispatchKeyEvent" &&
+        call.params?.type === "keyDown"
+    );
+    expect(keyDownCalls[0]?.params?.key).toBe("ArrowUp");
+    expect(keyDownCalls[0]?.params?.windowsVirtualKeyCode).toBe(38);
+    expect(keyDownCalls[1]?.params?.key).toBe("PageDown");
+    expect(keyDownCalls[1]?.params?.windowsVirtualKeyCode).toBe(34);
+  });
 });
 
 describe("dispatchCDPAction argument coercion", () => {

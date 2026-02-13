@@ -1269,6 +1269,7 @@ function getKeyEventData(inputKey: string): KeyEventData {
   const sanitizedKey = stripControlChars((inputKey ?? "").toString()).trim();
   const key = sanitizedKey.length === 0 ? "Enter" : sanitizedKey;
   const lower = key.toLowerCase();
+  const lookupKey = lower.replace(/[\s_-]+/g, "");
   const mapping: Record<
     string,
     { key: string; code: string; keyCode: number; text?: string }
@@ -1284,10 +1285,14 @@ function getKeyEventData(inputKey: string): KeyEventData {
     arrowdown: { key: "ArrowDown", code: "ArrowDown", keyCode: 40 },
     arrowleft: { key: "ArrowLeft", code: "ArrowLeft", keyCode: 37 },
     arrowright: { key: "ArrowRight", code: "ArrowRight", keyCode: 39 },
+    pageup: { key: "PageUp", code: "PageUp", keyCode: 33 },
+    pagedown: { key: "PageDown", code: "PageDown", keyCode: 34 },
+    home: { key: "Home", code: "Home", keyCode: 36 },
+    end: { key: "End", code: "End", keyCode: 35 },
   };
 
-  if (mapping[lower]) {
-    const entry = mapping[lower];
+  if (mapping[lookupKey]) {
+    const entry = mapping[lookupKey];
     return {
       key: entry.key,
       code: entry.code,
