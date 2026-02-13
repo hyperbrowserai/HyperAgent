@@ -95,14 +95,18 @@ export class AnthropicClient implements HyperAgentLLM {
       ...options?.providerOptions,
     });
 
-    const content = response.content.find((block) => block.type === "text");
-    if (!content || typeof content.text !== "string") {
+    const textBlocks = response.content.filter((block) => block.type === "text");
+    const textParts = textBlocks
+      .map((block) => block.text)
+      .filter((value): value is string => typeof value === "string");
+    const content = textParts.join("\n\n");
+    if (content.length === 0) {
       throw new Error("No text response from Anthropic");
     }
 
     return {
       role: "assistant",
-      content: content.text,
+      content,
       usage: {
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,

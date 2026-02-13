@@ -75,6 +75,25 @@ describe("AnthropicClient", () => {
     });
   });
 
+  it("concatenates multiple text blocks in invoke responses", async () => {
+    createMessageMock.mockResolvedValue({
+      content: [
+        { type: "text", text: "first" },
+        { type: "tool_use", name: "ignored", input: {} },
+        { type: "text", text: "second" },
+      ],
+      usage: {
+        input_tokens: 3,
+        output_tokens: 4,
+      },
+    });
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    const result = await client.invoke([{ role: "user", content: "Hi" }]);
+
+    expect(result.content).toBe("first\n\nsecond");
+  });
+
   it("parses simple-tool structured output when tool_use block is not first", async () => {
     createMessageMock.mockResolvedValue({
       content: [
