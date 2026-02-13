@@ -46,6 +46,14 @@ const normalizeWaitUntil = (value: unknown): "domcontentloaded" | "load" | "netw
   return "domcontentloaded";
 };
 
+const normalizeOptionalTimeoutMs = (value: unknown): number | undefined => {
+  const parsed = asNumber(value);
+  if (parsed === undefined) {
+    return undefined;
+  }
+  return parsed >= 0 ? parsed : undefined;
+};
+
 export function createScriptFromActionCache(
   params: CreateScriptFromActionCacheParams
 ): string {
@@ -119,8 +127,12 @@ ${indent}await page.waitForTimeout(${waitMs});`;
       const actionParams = isRecord(step.actionParams)
         ? step.actionParams
         : undefined;
-      const waitUntil = normalizeWaitUntil(step.arguments?.[0]);
-      const timeoutMs = asNumber(step.arguments?.[1] ?? actionParams?.timeout);
+      const waitUntil = normalizeWaitUntil(
+        step.arguments?.[0] ?? actionParams?.waitUntil
+      );
+      const timeoutMs = normalizeOptionalTimeoutMs(
+        step.arguments?.[1] ?? actionParams?.timeout
+      );
       if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs)) {
         return `${indent}// Step ${step.stepIndex}
 ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)}, { timeout: ${timeoutMs} });`;

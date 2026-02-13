@@ -235,6 +235,53 @@ describe("action cache helpers", () => {
     expect(script).not.toContain('await page.waitForLoadState("interactive");');
   });
 
+  it("renders waitForLoadState timeout from actionParams fallback", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 15,
+      instruction: "wait action params",
+      elementId: null,
+      method: null,
+      arguments: [],
+      actionType: "waitForLoadState",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+      actionParams: {
+        waitUntil: "load",
+        timeout: 900,
+      },
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain('await page.waitForLoadState("load", { timeout: 900 });');
+  });
+
+  it("omits negative waitForLoadState timeout in generated script", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 16,
+      instruction: "wait negative timeout",
+      elementId: null,
+      method: null,
+      arguments: ["networkidle", "-10"],
+      actionType: "waitForLoadState",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain('await page.waitForLoadState("networkidle");');
+    expect(script).not.toContain("timeout: -10");
+  });
+
   it("skips helper generation when xpath is missing", () => {
     const actElementEntry: ActionCacheEntry = {
       stepIndex: 3,

@@ -56,16 +56,20 @@ function asNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-function asFiniteNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
 function normalizeWaitMs(value: unknown): number {
   const parsed = asNumber(value);
   if (parsed === undefined) {
     return 1000;
   }
   return parsed >= 0 ? parsed : 1000;
+}
+
+function normalizeOptionalTimeoutMs(value: unknown): number | undefined {
+  const parsed = asNumber(value);
+  if (parsed === undefined) {
+    return undefined;
+  }
+  return parsed >= 0 ? parsed : undefined;
 }
 
 function normalizeWaitUntil(value: unknown): "domcontentloaded" | "load" | "networkidle" {
@@ -223,8 +227,10 @@ export async function executeReplaySpecialAction(
   }
 
   if (actionType === "waitForLoadState") {
-    const waitUntil = normalizeWaitUntil(actionArgs?.[0]);
-    const timeoutMs = asFiniteNumber(actionArgs?.[1]);
+    const waitUntil = normalizeWaitUntil(actionArgs?.[0] ?? actionParams?.waitUntil);
+    const timeoutMs = normalizeOptionalTimeoutMs(
+      actionArgs?.[1] ?? actionParams?.timeout
+    );
     const options =
       timeoutMs !== undefined ? { timeout: timeoutMs } : undefined;
     await page.waitForLoadState(

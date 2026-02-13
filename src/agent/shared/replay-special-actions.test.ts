@@ -178,6 +178,50 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toBe("Waited for load state: domcontentloaded");
   });
 
+  it("parses string timeout for waitForLoadState", async () => {
+    const page = createPage();
+
+    await executeReplaySpecialAction({
+      taskId: "task-loadstate-timeout-string",
+      actionType: "waitForLoadState",
+      arguments: ["load", "1800"],
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForLoadState).toHaveBeenCalledWith("load", { timeout: 1800 });
+  });
+
+  it("uses actionParams fallback for waitForLoadState values", async () => {
+    const page = createPage();
+
+    await executeReplaySpecialAction({
+      taskId: "task-loadstate-actionparams",
+      actionType: "waitForLoadState",
+      actionParams: {
+        waitUntil: "networkidle",
+        timeout: 2200,
+      },
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForLoadState).toHaveBeenCalledWith("networkidle", {
+      timeout: 2200,
+    });
+  });
+
+  it("omits negative waitForLoadState timeout values", async () => {
+    const page = createPage();
+
+    await executeReplaySpecialAction({
+      taskId: "task-loadstate-negative-timeout",
+      actionType: "waitForLoadState",
+      arguments: ["load", -1],
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForLoadState).toHaveBeenCalledWith("load", undefined);
+  });
+
   it("fails extract replay when extracted object cannot be serialized", async () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
