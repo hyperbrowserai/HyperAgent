@@ -12,6 +12,7 @@ import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
 import { normalizeOpenAICompatibleContent } from "../utils/openai-content";
 import { normalizeOpenAIToolCalls } from "../utils/openai-tool-calls";
+import { sanitizeProviderOptions } from "../utils/provider-options";
 import { parseStructuredResponse } from "../utils/structured-response";
 import { getDebugOptions } from "@/debug/options";
 import { formatUnknownError } from "@/utils";
@@ -19,6 +20,15 @@ import { formatUnknownError } from "@/utils";
 const ENV_STRUCTURED_SCHEMA_DEBUG =
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "1" ||
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "true";
+
+const RESERVED_OPENAI_PROVIDER_OPTION_KEYS = new Set([
+  "model",
+  "messages",
+  "temperature",
+  "max_tokens",
+  "maxTokens",
+  "response_format",
+]);
 
 function shouldDebugStructuredSchema(): boolean {
   const opts = getDebugOptions();
@@ -74,6 +84,10 @@ export class OpenAIClient implements HyperAgentLLM {
     usage?: { inputTokens?: number; outputTokens?: number };
   }> {
     const openAIMessages = convertToOpenAIMessages(messages);
+    const providerOptions = sanitizeProviderOptions(
+      options?.providerOptions,
+      RESERVED_OPENAI_PROVIDER_OPTION_KEYS
+    );
 
     // GPT-5 only supports temperature=1 (default), so omit temperature for this model
     const temperature = options?.temperature ?? this.temperature;
@@ -85,7 +99,7 @@ export class OpenAIClient implements HyperAgentLLM {
       messages: openAIMessages as any,
       ...(shouldIncludeTemperature ? { temperature } : {}),
       max_tokens: options?.maxTokens ?? this.maxTokens,
-      ...options?.providerOptions,
+      ...providerOptions,
     });
 
     const choice = response.choices[0];
@@ -112,6 +126,10 @@ export class OpenAIClient implements HyperAgentLLM {
     messages: HyperAgentMessage[]
   ): Promise<HyperAgentStructuredResult<TSchema>> {
     const openAIMessages = convertToOpenAIMessages(messages);
+    const providerOptions = sanitizeProviderOptions(
+      request.options?.providerOptions,
+      RESERVED_OPENAI_PROVIDER_OPTION_KEYS
+    );
     const responseFormat = convertToOpenAIJsonSchema(request.schema);
     if (shouldDebugStructuredSchema()) {
       const schemaPayload =
@@ -134,7 +152,7 @@ export class OpenAIClient implements HyperAgentLLM {
       ...(shouldIncludeTemperature ? { temperature } : {}),
       max_tokens: request.options?.maxTokens ?? this.maxTokens,
       response_format: responseFormat as any,
-      ...request.options?.providerOptions,
+      ...providerOptions,
     });
 
     const choice = response.choices[0];

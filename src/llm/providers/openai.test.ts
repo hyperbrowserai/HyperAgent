@@ -142,6 +142,41 @@ describe("OpenAIClient", () => {
     );
   });
 
+  it("ignores reserved provider options overrides while preserving custom options", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: "ok",
+          },
+        },
+      ],
+    });
+
+    const client = new OpenAIClient({ model: "gpt-test" });
+    await client.invoke([{ role: "user", content: "hello" }], {
+      providerOptions: {
+        model: "override-model",
+        messages: [{ role: "user", content: "bad" }],
+        max_tokens: 999,
+        top_p: 0.7,
+      },
+    });
+
+    expect(createCompletionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-test",
+        messages: [],
+        top_p: 0.7,
+      })
+    );
+    const payload = createCompletionMock.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload?.max_tokens).not.toBe(999);
+  });
+
   it("does not crash structured-schema debug logging on circular schema payloads", async () => {
     const circularSchema: Record<string, unknown> = {};
     circularSchema.self = circularSchema;

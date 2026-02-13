@@ -13,6 +13,7 @@ import {
   convertToAnthropicTool,
   createAnthropicToolChoice,
 } from "../utils/schema-converter";
+import { sanitizeProviderOptions } from "../utils/provider-options";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages/index";
 import { getDebugOptions } from "@/debug/options";
 import { formatUnknownError } from "@/utils";
@@ -20,6 +21,16 @@ import { formatUnknownError } from "@/utils";
 const ENV_STRUCTURED_SCHEMA_DEBUG =
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "1" ||
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "true";
+
+const RESERVED_ANTHROPIC_PROVIDER_OPTION_KEYS = new Set([
+  "model",
+  "messages",
+  "system",
+  "temperature",
+  "max_tokens",
+  "tools",
+  "tool_choice",
+]);
 
 function shouldDebugStructuredSchema(): boolean {
   const opts = getDebugOptions();
@@ -85,6 +96,10 @@ export class AnthropicClient implements HyperAgentLLM {
   }> {
     const { messages: anthropicMessages, system } =
       convertToAnthropicMessages(messages);
+    const providerOptions = sanitizeProviderOptions(
+      options?.providerOptions,
+      RESERVED_ANTHROPIC_PROVIDER_OPTION_KEYS
+    );
 
     const response = await this.client.messages.create({
       model: this.model,
@@ -92,7 +107,7 @@ export class AnthropicClient implements HyperAgentLLM {
       system,
       temperature: options?.temperature ?? this.temperature,
       max_tokens: options?.maxTokens ?? this.maxTokens,
-      ...options?.providerOptions,
+      ...providerOptions,
     });
 
     const textBlocks = response.content.filter((block) => block.type === "text");
@@ -166,6 +181,10 @@ export class AnthropicClient implements HyperAgentLLM {
     }
 
     const tools = convertActionsToAnthropicTools(request.actions);
+    const providerOptions = sanitizeProviderOptions(
+      request.options?.providerOptions,
+      RESERVED_ANTHROPIC_PROVIDER_OPTION_KEYS
+    );
 
     const toolChoice =
       tools.length === 1
@@ -180,7 +199,7 @@ export class AnthropicClient implements HyperAgentLLM {
       max_tokens: request.options?.maxTokens ?? this.maxTokens,
       tools: tools as any,
       tool_choice: toolChoice as any,
-      ...request.options?.providerOptions,
+      ...providerOptions,
     });
 
     const toolContent = response.content.find(
@@ -277,7 +296,10 @@ export class AnthropicClient implements HyperAgentLLM {
       max_tokens: request.options?.maxTokens ?? this.maxTokens,
       tools: [tool as any],
       tool_choice: toolChoice as any,
-      ...request.options?.providerOptions,
+      ...sanitizeProviderOptions(
+        request.options?.providerOptions,
+        RESERVED_ANTHROPIC_PROVIDER_OPTION_KEYS
+      ),
     });
 
     const content = response.content.find((block) => block.type === "tool_use");

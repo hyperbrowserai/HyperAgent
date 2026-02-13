@@ -235,4 +235,37 @@ describe("AnthropicClient", () => {
       logSpy.mockRestore();
     }
   });
+
+  it("ignores reserved provider option overrides while preserving custom options", async () => {
+    createMessageMock.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      usage: {
+        input_tokens: 1,
+        output_tokens: 2,
+      },
+    });
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    await client.invoke([{ role: "user", content: "hello" }], {
+      providerOptions: {
+        model: "override-model",
+        messages: [{ role: "user", content: "bad" }],
+        max_tokens: 999,
+        top_p: 0.7,
+      },
+    });
+
+    expect(createMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "claude-test",
+        messages: [],
+        top_p: 0.7,
+      })
+    );
+    const payload = createMessageMock.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload?.max_tokens).not.toBe(999);
+  });
 });

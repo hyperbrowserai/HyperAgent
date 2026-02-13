@@ -115,4 +115,39 @@ describe("DeepSeekClient", () => {
       '[LLM][DeepSeek] Unknown tool call type: {"id":"tc-1","type":"mystery","data":{"reason":"unknown type"}}'
     );
   });
+
+  it("ignores reserved provider options overrides while preserving custom options", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: "ok",
+          },
+        },
+      ],
+    });
+
+    const client = new DeepSeekClient({ model: "deepseek-test" });
+    await client.invoke([{ role: "user", content: "hello" }], {
+      providerOptions: {
+        model: "override-model",
+        messages: [{ role: "user", content: "bad" }],
+        max_tokens: 999,
+        top_p: 0.7,
+      },
+    });
+
+    expect(createCompletionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "deepseek-test",
+        messages: [],
+        top_p: 0.7,
+      })
+    );
+    const payload = createCompletionMock.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload?.max_tokens).not.toBe(999);
+  });
 });

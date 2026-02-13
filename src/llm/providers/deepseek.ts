@@ -12,6 +12,7 @@ import { convertToOpenAIMessages } from "../utils/message-converter";
 import { normalizeOpenAICompatibleContent } from "../utils/openai-content";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
 import { normalizeOpenAIToolCalls } from "../utils/openai-tool-calls";
+import { sanitizeProviderOptions } from "../utils/provider-options";
 import { parseStructuredResponse } from "../utils/structured-response";
 import { z } from "zod";
 
@@ -22,6 +23,15 @@ export interface DeepSeekClientConfig {
   maxTokens?: number;
   baseURL?: string;
 }
+
+const RESERVED_DEEPSEEK_PROVIDER_OPTION_KEYS = new Set([
+  "model",
+  "messages",
+  "temperature",
+  "max_tokens",
+  "maxTokens",
+  "response_format",
+]);
 
 export class DeepSeekClient implements HyperAgentLLM {
   private client: OpenAI;
@@ -65,13 +75,17 @@ export class DeepSeekClient implements HyperAgentLLM {
     usage?: { inputTokens?: number; outputTokens?: number };
   }> {
     const openAIMessages = convertToOpenAIMessages(messages);
+    const providerOptions = sanitizeProviderOptions(
+      options?.providerOptions,
+      RESERVED_DEEPSEEK_PROVIDER_OPTION_KEYS
+    );
 
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: openAIMessages as any,
       temperature: options?.temperature ?? this.temperature,
       max_tokens: options?.maxTokens ?? this.maxTokens,
-      ...options?.providerOptions,
+      ...providerOptions,
     });
 
     const choice = response.choices[0];
@@ -101,6 +115,10 @@ export class DeepSeekClient implements HyperAgentLLM {
     messages: HyperAgentMessage[]
   ): Promise<HyperAgentStructuredResult<TSchema>> {
     const openAIMessages = convertToOpenAIMessages(messages);
+    const providerOptions = sanitizeProviderOptions(
+      request.options?.providerOptions,
+      RESERVED_DEEPSEEK_PROVIDER_OPTION_KEYS
+    );
     const responseFormat = convertToOpenAIJsonSchema(request.schema);
 
     const response = await this.client.chat.completions.create({
@@ -109,7 +127,7 @@ export class DeepSeekClient implements HyperAgentLLM {
       temperature: request.options?.temperature ?? this.temperature,
       max_tokens: request.options?.maxTokens ?? this.maxTokens,
       response_format: responseFormat as any,
-      ...request.options?.providerOptions,
+      ...providerOptions,
     });
 
     const choice = response.choices[0];
