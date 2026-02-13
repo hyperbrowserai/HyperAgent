@@ -281,6 +281,7 @@ export async function getAgentOpsCachePrefixes(
   maxAgeSeconds?: number,
   minEntryCount?: number,
   minSpanSeconds?: number,
+  maxSpanSeconds?: number,
   sortBy: "count" | "recent" | "alpha" | "span" = "count",
 ): Promise<AgentOpsCachePrefixesResponse> {
   const safeLimit = Math.max(1, Math.min(limit, 100));
@@ -304,6 +305,10 @@ export async function getAgentOpsCachePrefixes(
   const normalizedMinSpanSeconds = normalizePositiveInteger(minSpanSeconds);
   if (typeof normalizedMinSpanSeconds === "number") {
     params.set("min_span_seconds", String(normalizedMinSpanSeconds));
+  }
+  const normalizedMaxSpanSeconds = normalizePositiveInteger(maxSpanSeconds);
+  if (typeof normalizedMaxSpanSeconds === "number") {
+    params.set("max_span_seconds", String(normalizedMaxSpanSeconds));
   }
   params.set("sort_by", sortBy);
   const response = await fetch(

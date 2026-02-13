@@ -58,17 +58,19 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Prefix suggestion row shows scoped/global prefix totals and active prefix scope echo when filters narrow suggestions
 - Prefix suggestion row supports optional minimum-match filtering (`min prefix count`) for high-signal cache triage
 - Prefix suggestion row supports optional minimum-timespan filtering (`min span (s)`) to focus on long-lived request-id families
+- Prefix suggestion row supports optional maximum-timespan filtering (`max span (s)`) to focus on bursty/short-lived request-id families
 - Prefix suggestion row supports selectable sort mode (`count`, `recent`, `alpha`, or `span`) for cache triage priorities
 - Prefix suggestion row supports configurable suggestion limit (`prefix limit`) for denser/sparser cache hinting
 - Prefix suggestion row includes pager controls (`Newer`/`Older`) backed by server offset pagination
 - Prefix suggestion summary shows prefix coverage plus entry coverage (`page/scoped/global`) for each suggestion page
-- Prefix cache controls include one-click `Reset prefix scope` to clear prefix/min-count/min-span/sort/limit state
+- Prefix cache controls include one-click `Reset prefix scope` to clear prefix/min-count/min-span/max-span/sort/limit state
 - Prefix suggestion row now shows an explicit empty-scope hint when active prefix/age filters yield zero suggestions
 - Cache age-filter control validates positive integer seconds inline
 - Prefix preview/remove actions are blocked while age-filter input is invalid
 - Cache entries/prefix suggestion queries pause while age-filter input is invalid
 - Prefix suggestion queries also pause while min-prefix-count input is invalid
 - Prefix suggestion queries also pause while min-span input is invalid
+- Prefix suggestion queries also pause while max-span input is invalid
 - Prefix suggestion queries also pause while prefix-limit input is invalid
 - Cache entries list and prefix suggestions are hidden while age-filter input is invalid
 - Stale preview/remove actions are blocked while stale-age input is invalid

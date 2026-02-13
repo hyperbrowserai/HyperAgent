@@ -162,6 +162,7 @@ export function SpreadsheetApp() {
   );
   const [cachePrefixMinEntryCount, setCachePrefixMinEntryCount] = useState("");
   const [cachePrefixMinSpanSeconds, setCachePrefixMinSpanSeconds] = useState("");
+  const [cachePrefixMaxSpanSeconds, setCachePrefixMaxSpanSeconds] = useState("");
   const [cachePrefixSortBy, setCachePrefixSortBy] = useState<
     "count" | "recent" | "alpha" | "span"
   >(
@@ -218,6 +219,12 @@ export function SpreadsheetApp() {
   const hasInvalidCachePrefixMinSpanSecondsInput =
     cachePrefixMinSpanSeconds.trim().length > 0
     && typeof normalizedCachePrefixMinSpanSeconds !== "number";
+  const normalizedCachePrefixMaxSpanSeconds = parsePositiveIntegerInput(
+    cachePrefixMaxSpanSeconds,
+  );
+  const hasInvalidCachePrefixMaxSpanSecondsInput =
+    cachePrefixMaxSpanSeconds.trim().length > 0
+    && typeof normalizedCachePrefixMaxSpanSeconds !== "number";
   const normalizedCachePrefixSuggestionLimit = parsePositiveIntegerInput(
     cachePrefixSuggestionLimit,
   );
@@ -374,6 +381,7 @@ export function SpreadsheetApp() {
       normalizedCachePrefixSuggestionLimit,
       normalizedCachePrefixMinEntryCount,
       normalizedCachePrefixMinSpanSeconds,
+      normalizedCachePrefixMaxSpanSeconds,
       cachePrefixSortBy,
       cachePrefixSuggestionsOffset,
     ],
@@ -381,6 +389,7 @@ export function SpreadsheetApp() {
       && !hasInvalidCacheEntriesMaxAgeInput
       && !hasInvalidCachePrefixMinEntryCountInput
       && !hasInvalidCachePrefixMinSpanSecondsInput
+      && !hasInvalidCachePrefixMaxSpanSecondsInput
       && !hasInvalidCachePrefixSuggestionLimitInput,
     queryFn: () =>
       getAgentOpsCachePrefixes(
@@ -391,6 +400,7 @@ export function SpreadsheetApp() {
         normalizedCacheEntriesMaxAgeSeconds,
         normalizedCachePrefixMinEntryCount,
         normalizedCachePrefixMinSpanSeconds,
+        normalizedCachePrefixMaxSpanSeconds,
         cachePrefixSortBy,
       ),
   });
@@ -448,6 +458,7 @@ export function SpreadsheetApp() {
     setCachePrefixSuggestionLimit(CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT);
     setCachePrefixMinEntryCount("");
     setCachePrefixMinSpanSeconds("");
+    setCachePrefixMaxSpanSeconds("");
     setCachePrefixSortBy(CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT);
     setCachePrefixRemovalPreview(null);
     setCacheRemovePreviewSampleLimit("10");
@@ -466,6 +477,7 @@ export function SpreadsheetApp() {
     cacheEntriesMaxAgeSeconds,
     cachePrefixMinEntryCount,
     cachePrefixMinSpanSeconds,
+    cachePrefixMaxSpanSeconds,
     cachePrefixSortBy,
     cachePrefixSuggestionLimit,
   ]);
@@ -505,6 +517,7 @@ export function SpreadsheetApp() {
       !hasInvalidCacheEntriesMaxAgeInput
       && !hasInvalidCachePrefixMinEntryCountInput
       && !hasInvalidCachePrefixMinSpanSecondsInput
+      && !hasInvalidCachePrefixMaxSpanSecondsInput
       && !hasInvalidCachePrefixSuggestionLimitInput
       && cachePrefixSuggestionsOffset > 0
       && agentOpsCachePrefixesQuery.data
@@ -521,6 +534,7 @@ export function SpreadsheetApp() {
     hasInvalidCacheEntriesMaxAgeInput,
     hasInvalidCachePrefixMinEntryCountInput,
     hasInvalidCachePrefixMinSpanSecondsInput,
+    hasInvalidCachePrefixMaxSpanSecondsInput,
     hasInvalidCachePrefixSuggestionLimitInput,
   ]);
 
@@ -626,6 +640,7 @@ export function SpreadsheetApp() {
     hasInvalidCacheEntriesMaxAgeInput
     || hasInvalidCachePrefixMinEntryCountInput
     || hasInvalidCachePrefixMinSpanSecondsInput
+    || hasInvalidCachePrefixMaxSpanSecondsInput
     || hasInvalidCachePrefixSuggestionLimitInput
       ? null
       : agentOpsCachePrefixesQuery.data;
@@ -633,6 +648,7 @@ export function SpreadsheetApp() {
     hasInvalidCacheEntriesMaxAgeInput
     || hasInvalidCachePrefixMinEntryCountInput
     || hasInvalidCachePrefixMinSpanSecondsInput
+    || hasInvalidCachePrefixMaxSpanSecondsInput
     || hasInvalidCachePrefixSuggestionLimitInput
     ? []
     : (agentOpsCachePrefixesQuery.data?.prefixes ?? []);
@@ -641,7 +657,8 @@ export function SpreadsheetApp() {
     || typeof normalizedCacheEntriesMaxAgeSeconds === "number"
     || (typeof normalizedCachePrefixMinEntryCount === "number"
       && normalizedCachePrefixMinEntryCount > 1)
-    || typeof normalizedCachePrefixMinSpanSeconds === "number";
+    || typeof normalizedCachePrefixMinSpanSeconds === "number"
+    || typeof normalizedCachePrefixMaxSpanSeconds === "number";
   const selectedCacheEntryPrefix = selectedCacheEntryDetail
     ? extractRequestIdPrefix(selectedCacheEntryDetail.request_id)
     : null;
@@ -748,6 +765,7 @@ export function SpreadsheetApp() {
     setCacheRequestIdPrefix("");
     setCachePrefixMinEntryCount("");
     setCachePrefixMinSpanSeconds("");
+    setCachePrefixMaxSpanSeconds("");
     setCachePrefixSortBy(CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT);
     setCachePrefixSuggestionLimit(CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT);
     setCachePrefixSuggestionsOffset(0);
@@ -2975,6 +2993,29 @@ export function SpreadsheetApp() {
                       Clear span
                     </button>
                     <label className="text-[10px] text-slate-500">
+                      max span (s)
+                    </label>
+                    <input
+                      value={cachePrefixMaxSpanSeconds}
+                      onChange={(event) =>
+                        setCachePrefixMaxSpanSeconds(event.target.value)
+                      }
+                      placeholder="optional"
+                      inputMode="numeric"
+                      className={`h-6 w-20 rounded bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 ${
+                        hasInvalidCachePrefixMaxSpanSecondsInput
+                          ? "border border-rose-500/80 focus:border-rose-400"
+                          : "border border-slate-700 focus:border-indigo-500"
+                      }`}
+                    />
+                    <button
+                      onClick={() => setCachePrefixMaxSpanSeconds("")}
+                      disabled={!cachePrefixMaxSpanSeconds}
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Clear max
+                    </button>
+                    <label className="text-[10px] text-slate-500">
                       prefix sort
                     </label>
                     <select
@@ -3001,6 +3042,7 @@ export function SpreadsheetApp() {
                         cacheRequestIdPrefix.trim().length === 0
                         && cachePrefixMinEntryCount.trim().length === 0
                         && cachePrefixMinSpanSeconds.trim().length === 0
+                        && cachePrefixMaxSpanSeconds.trim().length === 0
                         && cachePrefixSortBy === CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT
                         && cachePrefixSuggestionLimit.trim()
                         === CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT
@@ -3139,6 +3181,12 @@ export function SpreadsheetApp() {
                   {hasInvalidCachePrefixMinSpanSecondsInput ? (
                     <p className="mb-2 text-[10px] text-rose-300">
                       min span must be a positive integer (seconds). Prefix queries are
+                      paused until corrected.
+                    </p>
+                  ) : null}
+                  {hasInvalidCachePrefixMaxSpanSecondsInput ? (
+                    <p className="mb-2 text-[10px] text-rose-300">
+                      max span must be a positive integer (seconds). Prefix queries are
                       paused until corrected.
                     </p>
                   ) : null}
@@ -3323,6 +3371,16 @@ export function SpreadsheetApp() {
                             (min count {cachePrefixSuggestionsData.min_entry_count})
                           </span>
                         ) : null}
+                      {typeof cachePrefixSuggestionsData?.min_span_seconds === "number" ? (
+                        <span className="text-[10px] text-slate-500">
+                          (min span {cachePrefixSuggestionsData.min_span_seconds}s)
+                        </span>
+                      ) : null}
+                      {typeof cachePrefixSuggestionsData?.max_span_seconds === "number" ? (
+                        <span className="text-[10px] text-slate-500">
+                          (max span {cachePrefixSuggestionsData.max_span_seconds}s)
+                        </span>
+                      ) : null}
                       {cachePrefixSuggestionsData ? (
                         <span className="text-[10px] text-slate-500">
                           (sort {cachePrefixSuggestionsData.sort_by})
@@ -3416,6 +3474,9 @@ export function SpreadsheetApp() {
                       ) : null}
                       {typeof normalizedCachePrefixMinSpanSeconds === "number" ? (
                         <> (min span {normalizedCachePrefixMinSpanSeconds}s)</>
+                      ) : null}
+                      {typeof normalizedCachePrefixMaxSpanSeconds === "number" ? (
+                        <> (max span {normalizedCachePrefixMaxSpanSeconds}s)</>
                       ) : null}
                       <> (sort {cachePrefixSortBy})</>
                       {typeof normalizedCachePrefixSuggestionLimit === "number" ? (

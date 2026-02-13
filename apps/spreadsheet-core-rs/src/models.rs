@@ -316,6 +316,7 @@ pub struct AgentOpsCachePrefixesResponse {
   pub request_id_prefix: Option<String>,
   pub min_entry_count: usize,
   pub min_span_seconds: Option<i64>,
+  pub max_span_seconds: Option<i64>,
   pub sort_by: String,
   pub max_age_seconds: Option<i64>,
   pub cutoff_timestamp: Option<DateTime<Utc>>,

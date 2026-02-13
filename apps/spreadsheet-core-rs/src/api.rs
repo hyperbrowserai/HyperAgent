@@ -1055,7 +1055,7 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
-    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&min_span_seconds=60&sort_by=recent&offset=0&limit=8&max_age_seconds=3600",
+    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&min_span_seconds=60&max_span_seconds=86400&sort_by=recent&offset=0&limit=8&max_age_seconds=3600",
     "agent_ops_cache_stats_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter stats to entries older than or equal to this age)"
@@ -1070,6 +1070,7 @@ async fn get_agent_schema(
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
       "min_span_seconds": "optional number > 0 (filter out prefixes with narrower time spans)",
+      "max_span_seconds": "optional number > 0 (filter out prefixes with wider time spans)",
       "sort_by": "optional string enum: count|recent|alpha|span (default count)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
       "offset": "optional number, default 0",
@@ -1129,6 +1130,7 @@ async fn get_agent_schema(
       "request_id_prefix": "echoed filter prefix when provided",
       "min_entry_count": "applied minimum entry count filter (default 1)",
       "min_span_seconds": "echoed minimum span filter when provided",
+      "max_span_seconds": "echoed maximum span filter when provided",
       "sort_by": "applied sort mode: count|recent|alpha|span",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
@@ -1242,6 +1244,7 @@ async fn get_agent_schema(
       "INVALID_MAX_AGE_SECONDS",
       "INVALID_MIN_ENTRY_COUNT",
       "INVALID_MIN_SPAN_SECONDS",
+      "INVALID_MAX_SPAN_SECONDS",
       "INVALID_PREFIX_SORT_BY",
       "INVALID_REQUEST_ID_PREFIX",
       "CACHE_ENTRY_NOT_FOUND"
@@ -1547,6 +1550,7 @@ struct AgentOpsCachePrefixesQuery {
   request_id_prefix: Option<String>,
   min_entry_count: Option<usize>,
   min_span_seconds: Option<i64>,
+  max_span_seconds: Option<i64>,
   sort_by: Option<String>,
   max_age_seconds: Option<i64>,
   offset: Option<usize>,
@@ -1723,6 +1727,12 @@ async fn agent_ops_cache_prefixes(
       "min_span_seconds must be greater than zero when provided.",
     ));
   }
+  if query.max_span_seconds.is_some_and(|value| value <= 0) {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MAX_SPAN_SECONDS",
+      "max_span_seconds must be greater than zero when provided.",
+    ));
+  }
   let sort_by = normalize_prefix_sort_by(query.sort_by.as_deref())?;
   let offset = query.offset.unwrap_or(0);
   let limit = query
@@ -1743,6 +1753,7 @@ async fn agent_ops_cache_prefixes(
       cutoff_timestamp,
       min_entry_count,
       query.min_span_seconds,
+      query.max_span_seconds,
       sort_by.as_str(),
       offset,
       limit,
@@ -1792,6 +1803,7 @@ async fn agent_ops_cache_prefixes(
     request_id_prefix: normalized_prefix,
     min_entry_count,
     min_span_seconds: query.min_span_seconds,
+    max_span_seconds: query.max_span_seconds,
     sort_by,
     max_age_seconds: query.max_age_seconds,
     cutoff_timestamp,
@@ -2973,6 +2985,7 @@ mod tests {
         request_id_prefix: Some("   ".to_string()),
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: None,
         offset: None,
@@ -3022,6 +3035,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: None,
         offset: None,
@@ -3041,6 +3055,7 @@ mod tests {
     assert_eq!(prefixes.request_id_prefix, None);
     assert_eq!(prefixes.min_entry_count, 1);
     assert_eq!(prefixes.min_span_seconds, None);
+    assert_eq!(prefixes.max_span_seconds, None);
     assert_eq!(prefixes.sort_by, "count");
     assert_eq!(prefixes.max_age_seconds, None);
     assert!(prefixes.cutoff_timestamp.is_none());
@@ -3068,6 +3083,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: Some("count".to_string()),
         max_age_seconds: None,
         offset: Some(1),
@@ -3093,6 +3109,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: None,
         offset: None,
@@ -3113,6 +3130,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: Some(86_400),
         offset: None,
@@ -3125,6 +3143,7 @@ mod tests {
     assert_eq!(age_filtered.max_age_seconds, Some(86_400));
     assert_eq!(age_filtered.min_entry_count, 1);
     assert_eq!(age_filtered.min_span_seconds, None);
+    assert_eq!(age_filtered.max_span_seconds, None);
     assert_eq!(age_filtered.sort_by, "count");
     assert!(age_filtered.cutoff_timestamp.is_some());
     assert_eq!(age_filtered.total_prefixes, 0);
@@ -3143,6 +3162,7 @@ mod tests {
         request_id_prefix: Some("scenario-".to_string()),
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: None,
         offset: None,
@@ -3162,6 +3182,7 @@ mod tests {
     );
     assert_eq!(prefix_filtered.min_entry_count, 1);
     assert_eq!(prefix_filtered.min_span_seconds, None);
+    assert_eq!(prefix_filtered.max_span_seconds, None);
     assert_eq!(prefix_filtered.sort_by, "count");
     assert_eq!(prefix_filtered.offset, 0);
     assert!(!prefix_filtered.has_more);
@@ -3181,6 +3202,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: Some(2),
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: None,
         offset: None,
@@ -3192,6 +3214,7 @@ mod tests {
     .0;
     assert_eq!(min_filtered.min_entry_count, 2);
     assert_eq!(min_filtered.min_span_seconds, None);
+    assert_eq!(min_filtered.max_span_seconds, None);
     assert_eq!(min_filtered.sort_by, "count");
     assert_eq!(min_filtered.total_prefixes, 1);
     assert_eq!(min_filtered.unscoped_total_prefixes, 2);
@@ -3211,6 +3234,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: Some(1),
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: None,
         offset: None,
@@ -3221,8 +3245,30 @@ mod tests {
     .expect("min-span filtered prefixes should load")
     .0;
     assert_eq!(span_filtered.min_span_seconds, Some(1));
+    assert_eq!(span_filtered.max_span_seconds, None);
     assert_eq!(span_filtered.total_prefixes, 0);
     assert!(span_filtered.prefixes.is_empty());
+
+    let max_span_filtered = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        min_span_seconds: None,
+        max_span_seconds: Some(1),
+        sort_by: None,
+        max_age_seconds: None,
+        offset: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect("max-span filtered prefixes should load")
+    .0;
+    assert_eq!(max_span_filtered.max_span_seconds, Some(1));
+    assert_eq!(max_span_filtered.total_prefixes, 2);
+    assert_eq!(max_span_filtered.prefixes.len(), 2);
 
     let invalid_error = agent_ops_cache_prefixes(
       State(state.clone()),
@@ -3231,6 +3277,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: Some(0),
         offset: None,
@@ -3253,6 +3300,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: Some(0),
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: None,
         offset: None,
@@ -3275,6 +3323,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: Some(0),
+        max_span_seconds: None,
         sort_by: None,
         max_age_seconds: None,
         offset: None,
@@ -3290,6 +3339,29 @@ mod tests {
       _ => panic!("expected invalid min span to use custom error code"),
     }
 
+    let invalid_max_span_error = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        min_span_seconds: None,
+        max_span_seconds: Some(0),
+        sort_by: None,
+        max_age_seconds: None,
+        offset: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect_err("non-positive max span should fail");
+    match invalid_max_span_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_MAX_SPAN_SECONDS");
+      }
+      _ => panic!("expected invalid max span to use custom error code"),
+    }
+
     let recent_sorted = agent_ops_cache_prefixes(
       State(state.clone()),
       Path(workbook.id),
@@ -3297,6 +3369,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: Some("recent".to_string()),
         max_age_seconds: None,
         offset: None,
@@ -3308,6 +3381,7 @@ mod tests {
     .0;
     assert_eq!(recent_sorted.sort_by, "recent");
     assert_eq!(recent_sorted.min_span_seconds, None);
+    assert_eq!(recent_sorted.max_span_seconds, None);
     assert_eq!(recent_sorted.prefixes[0].prefix, "preset-");
     assert_eq!(recent_sorted.prefixes[1].prefix, "scenario-");
 
@@ -3318,6 +3392,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: Some("alpha".to_string()),
         max_age_seconds: None,
         offset: None,
@@ -3329,6 +3404,7 @@ mod tests {
     .0;
     assert_eq!(alpha_sorted.sort_by, "alpha");
     assert_eq!(alpha_sorted.min_span_seconds, None);
+    assert_eq!(alpha_sorted.max_span_seconds, None);
     assert_eq!(alpha_sorted.prefixes[0].prefix, "preset-");
     assert_eq!(alpha_sorted.prefixes[1].prefix, "scenario-");
 
@@ -3339,6 +3415,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: Some("span".to_string()),
         max_age_seconds: None,
         offset: None,
@@ -3350,6 +3427,7 @@ mod tests {
     .0;
     assert_eq!(span_sorted.sort_by, "span");
     assert_eq!(span_sorted.min_span_seconds, None);
+    assert_eq!(span_sorted.max_span_seconds, None);
     assert_eq!(span_sorted.prefixes[0].prefix, "scenario-");
     assert_eq!(span_sorted.prefixes[1].prefix, "preset-");
 
@@ -3360,6 +3438,7 @@ mod tests {
         request_id_prefix: None,
         min_entry_count: None,
         min_span_seconds: None,
+        max_span_seconds: None,
         sort_by: Some("mystery".to_string()),
         max_age_seconds: None,
         offset: None,
@@ -4241,7 +4320,7 @@ mod tests {
         .get("agent_ops_cache_prefixes_endpoint")
         .and_then(serde_json::Value::as_str),
       Some(
-        "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&min_span_seconds=60&sort_by=recent&offset=0&limit=8&max_age_seconds=3600",
+        "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&min_span_seconds=60&max_span_seconds=86400&sort_by=recent&offset=0&limit=8&max_age_seconds=3600",
       ),
     );
     assert_eq!(
@@ -4264,6 +4343,13 @@ mod tests {
         .and_then(|value| value.get("min_span_seconds"))
         .and_then(serde_json::Value::as_str),
       Some("optional number > 0 (filter out prefixes with narrower time spans)"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_query_shape")
+        .and_then(|value| value.get("max_span_seconds"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional number > 0 (filter out prefixes with wider time spans)"),
     );
     assert_eq!(
       schema
@@ -4361,6 +4447,13 @@ mod tests {
         .and_then(|value| value.get("min_span_seconds"))
         .and_then(serde_json::Value::as_str),
       Some("echoed minimum span filter when provided"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("max_span_seconds"))
+        .and_then(serde_json::Value::as_str),
+      Some("echoed maximum span filter when provided"),
     );
     assert_eq!(
       schema
@@ -4527,6 +4620,10 @@ mod tests {
     assert!(
       cache_validation_error_codes.contains(&"INVALID_MIN_SPAN_SECONDS"),
       "schema should advertise invalid min-span-seconds error code",
+    );
+    assert!(
+      cache_validation_error_codes.contains(&"INVALID_MAX_SPAN_SECONDS"),
+      "schema should advertise invalid max-span-seconds error code",
     );
     assert!(
       cache_validation_error_codes.contains(&"INVALID_PREFIX_SORT_BY"),
