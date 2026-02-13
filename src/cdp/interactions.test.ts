@@ -373,6 +373,40 @@ describe("dispatchCDPAction argument coercion", () => {
     );
   });
 
+  it("sanitizes oversized selectOption values in failure diagnostics", async () => {
+    const session = createSession(async () => ({
+      result: { value: { status: "notfound" } },
+    }));
+    const noisyValue = `\u0007${"x".repeat(500)}`;
+
+    await expect(
+      dispatchCDPAction("selectOptionFromDropdown", [noisyValue], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow(/\[truncated \d+ chars\]/);
+
+    try {
+      await dispatchCDPAction("selectOptionFromDropdown", [noisyValue], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      });
+      throw new Error("Expected selectOptionFromDropdown to throw");
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).not.toContain("\u0007");
+      expect(message).toContain("Failed to select");
+    }
+  });
+
   it("still commits Enter for empty type action with commitEnter", async () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session = createSession(async (method, params) => {

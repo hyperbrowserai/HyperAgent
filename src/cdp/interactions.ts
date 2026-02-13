@@ -94,6 +94,7 @@ function createScrollIntoViewFailureMessage(
 type SelectOptionResult =
   | { status: "selected"; value: string }
   | { status: "notfound" };
+const MAX_INTERACTION_DIAGNOSTIC_CHARS = 200;
 
 interface ScrollDebugMetrics {
   targetTagName: string | null;
@@ -805,7 +806,17 @@ async function selectOption(
 
   const selection = (result.result?.value ?? {}) as SelectOptionResult;
   if (selection.status !== "selected") {
-    throw new Error(`Failed to select "${value}" (no matching option)`);
+    const normalizedValue = stripControlChars(String(value ?? "")).trim();
+    const boundedValue =
+      normalizedValue.length <= MAX_INTERACTION_DIAGNOSTIC_CHARS
+        ? normalizedValue
+        : `${normalizedValue.slice(
+            0,
+            MAX_INTERACTION_DIAGNOSTIC_CHARS
+          )}... [truncated ${
+            normalizedValue.length - MAX_INTERACTION_DIAGNOSTIC_CHARS
+          } chars]`;
+    throw new Error(`Failed to select "${boundedValue}" (no matching option)`);
   }
 }
 
