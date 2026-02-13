@@ -53,6 +53,7 @@ const MAX_SCHEMA_ERROR_SUMMARY_CHARS = 3_000;
 const MAX_SCHEMA_ERROR_HISTORY = 20;
 const MAX_RUNTIME_ACTION_TYPE_CHARS = 120;
 const MAX_RUNTIME_ACTION_MESSAGE_CHARS = 4_000;
+const MAX_RUNTIME_URL_CHARS = 1_000;
 
 function truncateDiagnosticText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -105,6 +106,60 @@ function normalizeRuntimeActionMessage(value: unknown): string {
     return "Action failed without an error message.";
   }
   return truncateDiagnosticText(normalized, MAX_RUNTIME_ACTION_MESSAGE_CHARS);
+}
+
+function safeGetPageUrl(page: Page): string {
+  try {
+    const url = page.url();
+    if (typeof url !== "string") {
+      return "about:blank";
+    }
+    const normalized = url.replace(/\s+/g, " ").trim();
+    if (normalized.length === 0) {
+      return "about:blank";
+    }
+    return truncateDiagnosticText(normalized, MAX_RUNTIME_URL_CHARS);
+  } catch {
+    return "about:blank";
+  }
+}
+
+function normalizeWaitStats(value: unknown): {
+  durationMs: number;
+  lifecycleMs: number;
+  networkMs: number;
+  requestsSeen: number;
+  peakInflight: number;
+  resolvedByTimeout: boolean;
+  forcedDrops: number;
+} {
+  if (!value || typeof value !== "object") {
+    return {
+      durationMs: 0,
+      lifecycleMs: 0,
+      networkMs: 0,
+      requestsSeen: 0,
+      peakInflight: 0,
+      resolvedByTimeout: false,
+      forcedDrops: 0,
+    };
+  }
+  const readNumber = (key: string): number => {
+    const field = safeReadRecordField(value, key);
+    if (typeof field !== "number" || !Number.isFinite(field)) {
+      return 0;
+    }
+    return field;
+  };
+  return {
+    durationMs: readNumber("durationMs"),
+    lifecycleMs: readNumber("lifecycleMs"),
+    networkMs: readNumber("networkMs"),
+    requestsSeen: readNumber("requestsSeen"),
+    peakInflight: readNumber("peakInflight"),
+    resolvedByTimeout: safeReadRecordField(value, "resolvedByTimeout") === true,
+    forcedDrops: readNumber("forcedDrops"),
+  };
 }
 
 function normalizeActionOutput(
@@ -441,6 +496,9 @@ export const runAgentTask = async (
   taskState: TaskState,
   params?: TaskParams
 ): Promise<AgentTaskOutput> => {
+  if (!taskState || typeof taskState !== "object") {
+    throw new HyperagentError("Task state not found");
+  }
   const taskStart = performance.now();
   const taskId = taskState.id;
   const debugDir = params?.debugDir || `debug/${taskId}`;
@@ -452,10 +510,6 @@ export const runAgentTask = async (
   if (debugArtifactsEnabled) {
     debugArtifactsEnabled = ensureDirectorySafe(debugDir, ctx.debug);
   }
-  if (!taskState) {
-    throw new HyperagentError(`Task ${taskId} not found`);
-  }
-
   taskState.status = TaskStatus.RUNNING as TaskStatus;
   if (!ctx.llm) {
     throw new HyperagentError("LLM not initialized");
@@ -485,15 +539,43 @@ export const runAgentTask = async (
   };
 
   const setupDomListeners = (p: Page) => {
-    p.on("framenavigated", navigationDirtyHandler);
-    p.on("framedetached", navigationDirtyHandler);
-    p.on("load", navigationDirtyHandler);
+    const on = safeReadRecordField(p, "on");
+    if (typeof on !== "function") {
+      return;
+    }
+    try {
+      on.call(p, "framenavigated", navigationDirtyHandler);
+      on.call(p, "framedetached", navigationDirtyHandler);
+      on.call(p, "load", navigationDirtyHandler);
+    } catch (error) {
+      if (ctx.debug) {
+        console.warn(
+          `[Agent] Failed to attach DOM listeners: ${normalizeRuntimeActionMessage(
+            error
+          )}`
+        );
+      }
+    }
   };
 
   const cleanupDomListeners = (p: Page) => {
-    p.off?.("framenavigated", navigationDirtyHandler);
-    p.off?.("framedetached", navigationDirtyHandler);
-    p.off?.("load", navigationDirtyHandler);
+    const off = safeReadRecordField(p, "off");
+    if (typeof off !== "function") {
+      return;
+    }
+    try {
+      off.call(p, "framenavigated", navigationDirtyHandler);
+      off.call(p, "framedetached", navigationDirtyHandler);
+      off.call(p, "load", navigationDirtyHandler);
+    } catch (error) {
+      if (ctx.debug) {
+        console.warn(
+          `[Agent] Failed to detach DOM listeners: ${normalizeRuntimeActionMessage(
+            error
+          )}`
+        );
+      }
+    }
   };
 
   setupDomListeners(page);
@@ -528,7 +610,7 @@ export const runAgentTask = async (
         if (newPage && newPage !== page) {
           if (ctx.debug) {
             console.log(
-              `[Agent] Switching active page context to ${newPage.url()}`
+              `[Agent] Switching active page context to ${safeGetPageUrl(newPage)}`
             );
           }
           cleanupDomListeners(page);
@@ -920,7 +1002,7 @@ export const runAgentTask = async (
           {
           actionType,
           params: actionParams,
-          url: page.url(),
+          url: safeGetPageUrl(page),
           },
           0
         );
@@ -1005,7 +1087,7 @@ export const runAgentTask = async (
       }
 
       // Wait for DOM to settle after action
-      const waitStats = await waitForSettledDOM(page);
+      const waitStats = normalizeWaitStats(await waitForSettledDOM(page));
       stepMetrics.waitForSettledMs = Math.round(waitStats.durationMs);
       stepMetrics.waitForSettled = {
         totalMs: Math.round(waitStats.durationMs),

@@ -665,6 +665,108 @@ describe("runAgentTask completion behavior", () => {
     expect(result.output).toContain("cdp init failed");
   });
 
+  it("continues when page listener accessors trap during setup/cleanup", async () => {
+    const trappedPage = new Proxy(
+      {
+        url: () => "https://example.com",
+      },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "on" || prop === "off") {
+            throw new Error("listener trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    ) as unknown as Page;
+
+    const result = await runAgentTask(
+      createAgentCtx({ success: true, text: "final answer" }),
+      createTaskState(trappedPage)
+    );
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toBe("final answer");
+  });
+
+  it("handles malformed waitForSettledDOM stats without crashing", async () => {
+    let waitCallCount = 0;
+    waitForSettledDOM.mockImplementation(async () => {
+      waitCallCount += 1;
+      if (waitCallCount === 2) {
+        return null;
+      }
+      return {
+        durationMs: 1,
+        lifecycleMs: 0,
+        networkMs: 1,
+        requestsSeen: 0,
+        peakInflight: 0,
+        resolvedByTimeout: false,
+        forcedDrops: 0,
+      };
+    });
+
+    const page = createMockPage();
+    const result = await runAgentTask(
+      createCircularParamsStepCtx(),
+      createTaskState(page)
+    );
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toBe("final answer");
+  });
+
+  it("handles page.url traps in repeated-action fingerprinting", async () => {
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      url: () => {
+        throw new Error("url trap");
+      },
+    } as unknown as Page;
+
+    const result = await runAgentTask(
+      createCircularParamsStepCtx(),
+      createTaskState(page)
+    );
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toBe("final answer");
+  });
+
+  it("handles active-page URL getter traps in debug logging", async () => {
+    const page = createMockPage();
+    const nextPage = {
+      on: jest.fn(),
+      off: jest.fn(),
+      url: () => {
+        throw new Error("active page url trap");
+      },
+    } as unknown as Page;
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.debug = true;
+    ctx.activePage = jest.fn().mockResolvedValueOnce(nextPage).mockResolvedValue(nextPage);
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page));
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(result.output).toBe("final answer");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("throws readable errors for invalid task state input", async () => {
+    await expect(
+      runAgentTask(
+        createAgentCtx({ success: true, text: "final answer" }),
+        undefined as unknown as TaskState
+      )
+    ).rejects.toThrow("Task state not found");
+  });
+
   it("does not fail task when debug artifact IO throws", async () => {
     const page = createMockPage();
     const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
