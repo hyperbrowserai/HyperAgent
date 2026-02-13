@@ -1560,6 +1560,17 @@ describe("MCPClient.executeTool server selection", () => {
     ).rejects.toThrow("MCP serverId contains unsupported control characters");
   });
 
+  it("rejects non-string server ids before lookup", async () => {
+    const mcpClient = new MCPClient(false);
+    await expect(
+      mcpClient.executeTool(
+        "search",
+        { query: "missing" },
+        42 as unknown as string
+      )
+    ).rejects.toThrow("MCP serverId must be a string when provided");
+  });
+
   it("rejects oversized server ids before lookup", async () => {
     const mcpClient = new MCPClient(false);
     await expect(

@@ -126,8 +126,11 @@ function normalizeMCPExecutionToolName(toolName: unknown): string {
 function normalizeMCPExecutionServerId(
   serverId?: string
 ): string | undefined {
-  if (typeof serverId !== "string") {
+  if (typeof serverId === "undefined") {
     return undefined;
+  }
+  if (typeof serverId !== "string") {
+    throw new Error("MCP serverId must be a string when provided");
   }
   const normalized = serverId.trim();
   if (normalized.length === 0) {
