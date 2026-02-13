@@ -197,7 +197,7 @@ describe("parseMCPServersConfig", () => {
 
   it("returns normalized trimmed id/command/sseUrl fields", () => {
     const parsed = parseMCPServersConfig(
-      '[{"id":"  stdio-1  ","command":"  npx  ","includeTools":["  search  ","lookup"],"excludeTools":[" notes " ]},{"connectionType":"sse","id":"  ","sseUrl":"  https://example.com/sse  "}]'
+      '[{"id":"  stdio-1  ","command":"  npx  ","includeTools":["  search  ","lookup  records"],"excludeTools":[" notes  list " ]},{"connectionType":"sse","id":"  ","sseUrl":"  https://example.com/sse  "}]'
     );
 
     expect(parsed).toEqual([
@@ -205,8 +205,8 @@ describe("parseMCPServersConfig", () => {
         id: "stdio-1",
         command: "npx",
         connectionType: "stdio",
-        includeTools: ["search", "lookup"],
-        excludeTools: ["notes"],
+        includeTools: ["search", "lookup records"],
+        excludeTools: ["notes list"],
       },
       {
         connectionType: "sse",
@@ -289,6 +289,14 @@ describe("parseMCPServersConfig", () => {
       )
     ).toThrow(
       'MCP server entry at index 0 contains duplicate "includeTools" value "search" after trimming.'
+    );
+
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"command":"npx","includeTools":["lookup   records","lookup records"]}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 contains duplicate "includeTools" value "lookup records" after trimming.'
     );
   });
 

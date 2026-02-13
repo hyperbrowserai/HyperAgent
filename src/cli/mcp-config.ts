@@ -189,16 +189,22 @@ function normalizeOptionalStringArray(
       `MCP server entry at index ${index} must provide no more than ${MAX_MCP_TOOL_LIST_ENTRIES} "${field}" entries.`
     );
   }
-  const normalized = value
+  const trimmedValues = value
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 
-  if (normalized.length !== value.length) {
+  if (trimmedValues.length !== value.length) {
     throw new Error(
       `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
     );
   }
+  if (trimmedValues.some((entry) => hasAnyControlChars(entry))) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
+    );
+  }
+  const normalized = trimmedValues.map((entry) => entry.replace(/\s+/g, " "));
   if (
     normalized.some(
       (entry) =>
