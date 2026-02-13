@@ -1,4 +1,5 @@
 import {
+  AgentOpsResponse,
   CellSnapshot,
   ChartSpec,
   WorkbookEvent,
@@ -101,6 +102,26 @@ export async function setCellBatch(
       }),
     }),
   );
+}
+
+interface AgentOpsRequest {
+  actor?: string;
+  operations: Array<Record<string, unknown>>;
+}
+
+export async function runAgentOps(
+  workbookId: string,
+  payload: AgentOpsRequest,
+): Promise<AgentOpsResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  return parseJsonResponse<AgentOpsResponse>(response);
 }
 
 export async function upsertChart(

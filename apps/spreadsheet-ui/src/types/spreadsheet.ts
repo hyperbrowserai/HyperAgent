@@ -33,3 +33,14 @@ export interface WorkbookEvent {
   actor: string;
   payload: Record<string, unknown>;
 }
+
+export interface AgentOperationResult {
+  op_index: number;
+  op_type: string;
+  ok: boolean;
+  data: Record<string, unknown>;
+}
+
+export interface AgentOpsResponse {
+  results: AgentOperationResult[];
+}

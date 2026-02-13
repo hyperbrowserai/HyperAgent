@@ -12,12 +12,13 @@ import {
   exportWorkbook,
   getCells,
   importWorkbook,
-  setCellBatch,
+  runAgentOps,
   subscribeToWorkbookEvents,
   upsertChart,
 } from "@/lib/spreadsheet-api";
 import { buildAddress, indexToColumn, TOTAL_COLS, TOTAL_ROWS } from "@/lib/cell-address";
 import { useWorkbookStore } from "@/store/workbook-store";
+import { AgentOperationResult } from "@/types/spreadsheet";
 
 const ChartPreview = dynamic(
   () => import("@/components/chart-preview").then((module) => module.ChartPreview),
@@ -42,6 +43,8 @@ export function SpreadsheetApp() {
   } = useWorkbookStore();
   const [formulaInput, setFormulaInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isRunningAgentFlow, setIsRunningAgentFlow] = useState(false);
+  const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
 
   const createWorkbookMutation = useMutation({
     mutationFn: () => createWorkbook("Agent Workbook"),
@@ -137,15 +140,34 @@ export function SpreadsheetApp() {
     setIsSaving(true);
     try {
       const isFormula = formulaInput.trim().startsWith("=");
-      await setCellBatch(workbook.id, activeSheet, [
-        {
-          row,
-          col,
-          ...(isFormula
-            ? { formula: formulaInput.trim() }
-            : { value: formulaInput }),
-        },
-      ]);
+      await runAgentOps(workbook.id, {
+        actor: "ui-formula-bar",
+        operations: [
+          {
+            op_type: "set_cells",
+            sheet: activeSheet,
+            cells: [
+              {
+                row,
+                col,
+                ...(isFormula
+                  ? { formula: formulaInput.trim() }
+                  : { value: formulaInput }),
+              },
+            ],
+          },
+          {
+            op_type: "get_cells",
+            sheet: activeSheet,
+            range: {
+              start_row: row,
+              end_row: row,
+              start_col: col,
+              end_col: col,
+            },
+          },
+        ],
+      });
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
@@ -179,6 +201,52 @@ export function SpreadsheetApp() {
       categories_range: `${activeSheet}!$A$1:$A$10`,
       values_range: `${activeSheet}!$B$1:$B$10`,
     });
+  }
+
+  async function handleAgentDemoFlow() {
+    if (!workbook) {
+      return;
+    }
+    setIsRunningAgentFlow(true);
+    try {
+      const response = await runAgentOps(workbook.id, {
+        actor: "ui-agent-demo",
+        operations: [
+          {
+            op_type: "set_cells",
+            sheet: activeSheet,
+            cells: [
+              { row: 1, col: 1, value: "North" },
+              { row: 2, col: 1, value: "South" },
+              { row: 3, col: 1, value: "West" },
+              { row: 1, col: 2, value: 120 },
+              { row: 2, col: 2, value: 90 },
+              { row: 3, col: 2, value: 75 },
+              { row: 4, col: 2, formula: "=SUM(B1:B3)" },
+            ],
+          },
+          { op_type: "recalculate" },
+          {
+            op_type: "upsert_chart",
+            chart: {
+              id: "chart-agent-demo",
+              sheet: activeSheet,
+              chart_type: "bar",
+              title: "Regional Totals",
+              categories_range: `${activeSheet}!$A$1:$A$3`,
+              values_range: `${activeSheet}!$B$1:$B$3`,
+            },
+          },
+          { op_type: "export_workbook", include_file_base64: false },
+        ],
+      });
+      setLastAgentOps(response.results);
+      await queryClient.invalidateQueries({
+        queryKey: ["cells", workbook.id, activeSheet],
+      });
+    } finally {
+      setIsRunningAgentFlow(false);
+    }
   }
 
   return (
@@ -220,6 +288,13 @@ export function SpreadsheetApp() {
                 className="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-400"
               >
                 Export .xlsx
+              </button>
+              <button
+                onClick={handleAgentDemoFlow}
+                disabled={!workbook || isRunningAgentFlow}
+                className="rounded-md bg-fuchsia-500 px-3 py-2 text-sm font-medium text-white hover:bg-fuchsia-400 disabled:opacity-40"
+              >
+                {isRunningAgentFlow ? "Running agent..." : "Run Agent Demo Flow"}
               </button>
             </div>
           </div>
@@ -311,6 +386,50 @@ export function SpreadsheetApp() {
             </table>
           </div>
         </section>
+
+        {lastAgentOps.length > 0 && (
+          <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+            <h2 className="mb-2 text-sm font-semibold text-slate-200">
+              Last Agent Operation Batch
+            </h2>
+            <div className="overflow-auto rounded-lg border border-slate-800 bg-slate-950">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-900 text-slate-300">
+                    <th className="px-2 py-2 text-left">#</th>
+                    <th className="px-2 py-2 text-left">Operation</th>
+                    <th className="px-2 py-2 text-left">Status</th>
+                    <th className="px-2 py-2 text-left">Data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lastAgentOps.map((result) => (
+                    <tr key={`${result.op_index}-${result.op_type}`} className="border-t border-slate-800">
+                      <td className="px-2 py-2 font-mono text-slate-400">{result.op_index}</td>
+                      <td className="px-2 py-2 text-slate-200">{result.op_type}</td>
+                      <td className="px-2 py-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 ${
+                            result.ok
+                              ? "bg-emerald-500/20 text-emerald-200"
+                              : "bg-rose-500/20 text-rose-200"
+                          }`}
+                        >
+                          {result.ok ? "ok" : "error"}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-slate-400">
+                        <pre className="whitespace-pre-wrap break-all">
+                          {JSON.stringify(result.data)}
+                        </pre>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
