@@ -85,19 +85,26 @@ function parseStringArray(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === "string");
 }
 
-function flattenSchemaShapeKeys(
+function flattenSchemaShapeEntries(
   value: unknown,
   parentKey?: string,
-): string[] {
+): Array<{ key: string; description: string | null }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return parentKey ? [parentKey] : [];
+    if (!parentKey) {
+      return [];
+    }
+    return [{
+      key: parentKey,
+      description:
+        typeof value === "string" ? value : value === undefined ? null : String(value),
+    }];
   }
   const entries = Object.entries(value as Record<string, unknown>);
   if (entries.length === 0) {
-    return parentKey ? [parentKey] : [];
+    return parentKey ? [{ key: parentKey, description: null }] : [];
   }
   return entries.flatMap(([entryKey, entryValue]) =>
-    flattenSchemaShapeKeys(
+    flattenSchemaShapeEntries(
       entryValue,
       parentKey ? `${parentKey}.${entryKey}` : entryKey,
     ),
@@ -774,15 +781,16 @@ export function SpreadsheetApp() {
     return eventLog.filter((event) => event.event_type === eventFilter);
   }, [eventFilter, eventLog]);
   const wizardRunResponseFields = useMemo(
-    () => flattenSchemaShapeKeys(wizardSchemaQuery.data?.run_response_shape),
+    () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.run_response_shape),
     [wizardSchemaQuery.data?.run_response_shape],
   );
   const wizardImportResponseFields = useMemo(
-    () => flattenSchemaShapeKeys(wizardSchemaQuery.data?.import_response_shape),
+    () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.import_response_shape),
     [wizardSchemaQuery.data?.import_response_shape],
   );
   const agentWorkbookImportResponseFields = useMemo(
-    () => flattenSchemaShapeKeys(agentSchemaQuery.data?.workbook_import_response_shape),
+    () =>
+      flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
     [agentSchemaQuery.data?.workbook_import_response_shape],
   );
   const wizardScenarioOps = wizardScenarioOpsQuery.data?.operations ?? [];
@@ -2460,7 +2468,13 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-[11px] text-slate-500">
                 run response fields:{" "}
                 <span className="font-mono text-slate-300">
-                  {wizardRunResponseFields.join(", ")}
+                  {wizardRunResponseFields
+                    .map((entry) =>
+                      entry.description
+                        ? `${entry.key}: ${entry.description}`
+                        : entry.key
+                    )
+                    .join(", ")}
                 </span>
               </p>
             ) : null}
@@ -2468,7 +2482,13 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-[11px] text-slate-500">
                 import response fields:{" "}
                 <span className="font-mono text-slate-300">
-                  {wizardImportResponseFields.join(", ")}
+                  {wizardImportResponseFields
+                    .map((entry) =>
+                      entry.description
+                        ? `${entry.key}: ${entry.description}`
+                        : entry.key
+                    )
+                    .join(", ")}
                 </span>
               </p>
             ) : null}
@@ -2910,7 +2930,13 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-xs text-slate-400">
                 workbook import response fields:{" "}
                 <span className="font-mono text-slate-200">
-                  {agentWorkbookImportResponseFields.join(", ")}
+                  {agentWorkbookImportResponseFields
+                    .map((entry) =>
+                      entry.description
+                        ? `${entry.key}: ${entry.description}`
+                        : entry.key
+                    )
+                    .join(", ")}
                 </span>
               </p>
             ) : null}
