@@ -228,6 +228,34 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     }
   });
 
+  it("truncates oversized aiAction debug writer diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+      screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
+    } as unknown as Page;
+    writeAiActionDebug.mockRejectedValue(new Error("x".repeat(2_000)));
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const result = await agent.executeSingleAction("click login", page, {
+        maxElementRetries: 1,
+      });
+
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      const errorMessage = String(errorSpy.mock.calls[0]?.[0] ?? "");
+      expect(errorMessage).toContain("[truncated");
+    } finally {
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
   it("preserves not-found diagnostics when page.url getter throws in debug mode", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

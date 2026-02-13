@@ -2400,7 +2400,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     } catch (debugError) {
       console.error(
-        `[aiAction] Failed to write debug data: ${formatUnknownError(debugError)}`
+        `[aiAction] Failed to write debug data: ${this.formatHelperDiagnostic(
+          debugError
+        )}`
       );
     }
   }
