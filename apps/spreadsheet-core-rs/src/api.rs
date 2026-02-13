@@ -800,7 +800,8 @@ async fn build_export_artifacts(
     file_name: format!("{}.xlsx", summary.name),
     compatibility_report,
   };
-  let report_json = serde_json::to_string(&response_payload).map_err(ApiError::internal)?;
+  let report_json = serde_json::to_string(&response_payload.compatibility_report)
+    .map_err(ApiError::internal)?;
   Ok((bytes, response_payload, report_json))
 }
 
@@ -2433,7 +2434,8 @@ mod tests {
     remove_stale_agent_ops_cache_entries,
     preview_remove_agent_ops_cache_entries_by_prefix,
     replay_agent_ops_cache_entry, reexecute_agent_ops_cache_entry,
-    build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
+    build_export_artifacts, build_preset_operations, build_scenario_operations,
+    ensure_non_empty_operations,
     import_bytes_into_workbook,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
@@ -2668,6 +2670,35 @@ mod tests {
         .get("formula_cells_without_cached_values")
         .and_then(serde_json::Value::as_u64),
       Some(import_result.formula_cells_without_cached_values as u64),
+    );
+  }
+
+  #[tokio::test]
+  async fn should_encode_compatibility_report_only_in_export_meta_payload() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("export-meta-schema".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let (_, export_response, report_json) = build_export_artifacts(&state, workbook.id)
+      .await
+      .expect("export artifacts should build");
+    let report_value: serde_json::Value =
+      serde_json::from_str(report_json.as_str()).expect("export report json should parse");
+    assert!(
+      report_value.get("preserved").is_some(),
+      "export meta should include compatibility report arrays",
+    );
+    assert!(
+      report_value.get("file_name").is_none(),
+      "export meta should not include top-level file_name envelope",
+    );
+    assert!(
+      !export_response.file_name.is_empty(),
+      "export response should still carry file name separately",
     );
   }
 

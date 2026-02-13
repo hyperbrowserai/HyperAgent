@@ -748,20 +748,32 @@ function parseExportCompatibilityReport(
   if (!rawHeaderValue) {
     return null;
   }
-  let parsed: Partial<ExportCompatibilityReport>;
+  let parsed:
+    | Partial<ExportCompatibilityReport>
+    | { compatibility_report?: Partial<ExportCompatibilityReport> };
   try {
-    parsed = JSON.parse(rawHeaderValue) as Partial<ExportCompatibilityReport>;
+    parsed = JSON.parse(rawHeaderValue) as
+      | Partial<ExportCompatibilityReport>
+      | { compatibility_report?: Partial<ExportCompatibilityReport> };
   } catch {
     return null;
   }
-  const preserved = Array.isArray(parsed.preserved)
-    ? parsed.preserved.filter((entry): entry is string => typeof entry === "string")
+  const normalizedReport = (
+    "compatibility_report" in parsed
+      ? parsed.compatibility_report
+      : parsed
+  ) as Partial<ExportCompatibilityReport> | undefined;
+  if (!normalizedReport) {
+    return null;
+  }
+  const preserved = Array.isArray(normalizedReport.preserved)
+    ? normalizedReport.preserved.filter((entry): entry is string => typeof entry === "string")
     : [];
-  const transformed = Array.isArray(parsed.transformed)
-    ? parsed.transformed.filter((entry): entry is string => typeof entry === "string")
+  const transformed = Array.isArray(normalizedReport.transformed)
+    ? normalizedReport.transformed.filter((entry): entry is string => typeof entry === "string")
     : [];
-  const unsupported = Array.isArray(parsed.unsupported)
-    ? parsed.unsupported.filter((entry): entry is string => typeof entry === "string")
+  const unsupported = Array.isArray(normalizedReport.unsupported)
+    ? normalizedReport.unsupported.filter((entry): entry is string => typeof entry === "string")
     : [];
   if (
     preserved.length === 0
