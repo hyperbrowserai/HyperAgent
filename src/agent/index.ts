@@ -554,6 +554,33 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const stepsResult: ActionCacheReplayResult["steps"] = [];
     let replayStatus: TaskStatus.COMPLETED | TaskStatus.FAILED =
       TaskStatus.COMPLETED;
+    const recordReplayStep = (
+      step: ActionCacheOutput["steps"][number],
+      result: TaskOutput
+    ): boolean => {
+      const finalMeta = result.replayStepMeta;
+      const finalSuccess = result.status === TaskStatus.COMPLETED;
+
+      stepsResult.push({
+        stepIndex: step.stepIndex,
+        actionType: step.actionType,
+        usedXPath: finalMeta?.usedCachedAction ?? false,
+        fallbackUsed: finalMeta?.fallbackUsed ?? false,
+        cachedXPath: finalMeta?.cachedXPath ?? null,
+        fallbackXPath: finalMeta?.fallbackXPath ?? null,
+        fallbackElementId: finalMeta?.fallbackElementId ?? null,
+        retries: finalMeta?.retries ?? 0,
+        success: finalSuccess,
+        message:
+          result.output ||
+          (finalSuccess ? "Completed" : "Failed to execute cached action"),
+      });
+
+      if (!finalSuccess) {
+        replayStatus = TaskStatus.FAILED;
+      }
+      return finalSuccess;
+    };
 
     /**
      * Type-safe dispatch for HyperPage perform* methods.
@@ -811,28 +838,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
                 },
               };
             }
-            const finalMeta = result.replayStepMeta;
-            const finalSuccess = result.status === TaskStatus.COMPLETED;
-
-            stepsResult.push({
-              stepIndex: step.stepIndex,
-              actionType: step.actionType,
-              usedXPath: finalMeta?.usedCachedAction ?? false,
-              fallbackUsed: finalMeta?.fallbackUsed ?? false,
-              cachedXPath: finalMeta?.cachedXPath ?? null,
-              fallbackXPath: finalMeta?.fallbackXPath ?? null,
-              fallbackElementId: finalMeta?.fallbackElementId ?? null,
-              retries: finalMeta?.retries ?? 0,
-              success: finalSuccess,
-              message:
-                result.output ||
-                (finalSuccess
-                  ? "Completed"
-                  : "Failed to execute cached action"),
-            });
-
-            if (!finalSuccess) {
-              replayStatus = TaskStatus.FAILED;
+            if (!recordReplayStep(step, result)) {
               break;
             }
             continue;
@@ -872,26 +878,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
       }
 
-      const finalMeta = result.replayStepMeta;
-      const finalSuccess = result.status === TaskStatus.COMPLETED;
-
-      stepsResult.push({
-        stepIndex: step.stepIndex,
-        actionType: step.actionType,
-        usedXPath: finalMeta?.usedCachedAction ?? false,
-        fallbackUsed: finalMeta?.fallbackUsed ?? false,
-        cachedXPath: finalMeta?.cachedXPath ?? null,
-        fallbackXPath: finalMeta?.fallbackXPath ?? null,
-        fallbackElementId: finalMeta?.fallbackElementId ?? null,
-        retries: finalMeta?.retries ?? 0,
-        success: finalSuccess,
-        message:
-          result.output ||
-          (finalSuccess ? "Completed" : "Failed to execute cached action"),
-      });
-
-      if (!finalSuccess) {
-        replayStatus = TaskStatus.FAILED;
+      if (!recordReplayStep(step, result)) {
         break;
       }
     }
