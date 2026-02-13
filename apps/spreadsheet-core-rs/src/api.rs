@@ -1518,18 +1518,7 @@ async fn agent_ops_cache_stats(
   Query(query): Query<AgentOpsCacheStatsQuery>,
 ) -> Result<Json<AgentOpsCacheStatsResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  if query
-    .max_age_seconds
-    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
-  {
-    return Err(ApiError::bad_request_with_code(
-      "INVALID_MAX_AGE_SECONDS",
-      "max_age_seconds must be greater than 0.",
-    ));
-  }
-  let cutoff_timestamp = query
-    .max_age_seconds
-    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
+  let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let (
     entries,
     oldest_request_id,
@@ -1562,18 +1551,7 @@ async fn agent_ops_cache_entries(
     .map(str::trim)
     .filter(|prefix| !prefix.is_empty());
   let offset = query.offset.unwrap_or(0);
-  if query
-    .max_age_seconds
-    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
-  {
-    return Err(ApiError::bad_request_with_code(
-      "INVALID_MAX_AGE_SECONDS",
-      "max_age_seconds must be greater than 0.",
-    ));
-  }
-  let cutoff_timestamp = query
-    .max_age_seconds
-    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
+  let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_ENTRIES_LIMIT)
@@ -1655,18 +1633,7 @@ async fn agent_ops_cache_prefixes(
   Query(query): Query<AgentOpsCachePrefixesQuery>,
 ) -> Result<Json<AgentOpsCachePrefixesResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  if query
-    .max_age_seconds
-    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
-  {
-    return Err(ApiError::bad_request_with_code(
-      "INVALID_MAX_AGE_SECONDS",
-      "max_age_seconds must be greater than 0.",
-    ));
-  }
-  let cutoff_timestamp = query
-    .max_age_seconds
-    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
+  let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
@@ -1862,18 +1829,7 @@ async fn remove_agent_ops_cache_entries_by_prefix(
       "request_id_prefix is required to remove cache entries by prefix.",
     ));
   }
-  if payload
-    .max_age_seconds
-    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
-  {
-    return Err(ApiError::bad_request_with_code(
-      "INVALID_MAX_AGE_SECONDS",
-      "max_age_seconds must be greater than 0.",
-    ));
-  }
-  let cutoff_timestamp = payload
-    .max_age_seconds
-    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
+  let cutoff_timestamp = max_age_cutoff_timestamp(payload.max_age_seconds)?;
   let (removed_entries, remaining_entries) = state
     .remove_agent_ops_cache_entries_by_prefix(
       workbook_id,
@@ -1905,6 +1861,19 @@ fn normalize_sample_limit(
     .min(max_limit)
 }
 
+fn max_age_cutoff_timestamp(
+  max_age_seconds: Option<i64>,
+) -> Result<Option<chrono::DateTime<Utc>>, ApiError> {
+  if max_age_seconds.is_some_and(|value| value <= 0) {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MAX_AGE_SECONDS",
+      "max_age_seconds must be greater than 0.",
+    ));
+  }
+  Ok(max_age_seconds
+    .map(|value| Utc::now() - ChronoDuration::seconds(value)))
+}
+
 async fn preview_remove_agent_ops_cache_entries_by_prefix(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
@@ -1923,18 +1892,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
     DEFAULT_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
     MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
   );
-  if payload
-    .max_age_seconds
-    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
-  {
-    return Err(ApiError::bad_request_with_code(
-      "INVALID_MAX_AGE_SECONDS",
-      "max_age_seconds must be greater than 0.",
-    ));
-  }
-  let cutoff_timestamp = payload
-    .max_age_seconds
-    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
+  let cutoff_timestamp = max_age_cutoff_timestamp(payload.max_age_seconds)?;
   let (matched_entries, entries) = state
     .agent_ops_cache_entries(
       workbook_id,
@@ -1963,20 +1921,14 @@ async fn remove_stale_agent_ops_cache_entries(
   Json(payload): Json<RemoveStaleAgentOpsCacheEntriesRequest>,
 ) -> Result<Json<RemoveStaleAgentOpsCacheEntriesResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  if payload.max_age_seconds <= 0 {
-    return Err(ApiError::bad_request_with_code(
-      "INVALID_MAX_AGE_SECONDS",
-      "max_age_seconds must be greater than 0.",
-    ));
-  }
   let dry_run = payload.dry_run.unwrap_or(false);
   let sample_limit = normalize_sample_limit(
     payload.sample_limit,
     DEFAULT_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT,
     MAX_REMOVE_STALE_PREVIEW_SAMPLE_LIMIT,
   );
-  let cutoff_timestamp =
-    Utc::now() - ChronoDuration::seconds(payload.max_age_seconds);
+  let cutoff_timestamp = max_age_cutoff_timestamp(Some(payload.max_age_seconds))?
+    .expect("required max_age_seconds should always produce cutoff");
   let (
     matched_entries,
     removed_entries,
