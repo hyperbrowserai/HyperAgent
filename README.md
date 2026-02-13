@@ -131,6 +131,18 @@ task.result.catch((error) => {
 });
 ```
 
+### Migration Notes (Current Runtime Contract)
+
+- **`page.perform()` is the canonical single-action API.**
+  - `page.aiAction()` is still available as a compatibility alias.
+  - Prefer `perform` for all new code and docs.
+- **`executeTaskAsync()` now has a first-class completion promise.**
+  - Use `task.result` to await the final output deterministically.
+- **Top-level type exports are available from `@hyperbrowser/agent`.**
+  - You can import common task/cache/config types from the package root instead of internal paths.
+- **CDP remains configurable per agent.**
+  - If needed for a workflow, disable CDP with `cdpActions: false` to force Playwright fallback.
+
 ### Importing Public Types
 
 Core workflow types are available directly from the package entrypoint:
