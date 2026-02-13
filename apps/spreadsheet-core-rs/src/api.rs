@@ -1123,7 +1123,11 @@ async fn get_agent_schema(
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "limit": "applied limit (default 8, max 100)",
-      "prefixes": [{ "prefix": "string", "entry_count": "number of matching cache entries" }]
+      "prefixes": [{
+        "prefix": "string",
+        "entry_count": "number of matching cache entries",
+        "newest_request_id": "newest request_id observed for this prefix within active scope"
+      }]
     },
     "agent_ops_cache_entry_detail_response_shape": {
       "request_id": "string",
@@ -1696,9 +1700,10 @@ async fn agent_ops_cache_prefixes(
     .await?;
   let mapped_prefixes = prefixes
     .into_iter()
-    .map(|(prefix, entry_count)| AgentOpsCachePrefix {
+    .map(|(prefix, entry_count, newest_request_id)| AgentOpsCachePrefix {
       prefix,
       entry_count,
+      newest_request_id,
     })
     .collect::<Vec<_>>();
   Ok(Json(AgentOpsCachePrefixesResponse {
@@ -2904,8 +2909,10 @@ mod tests {
     assert!(prefixes.cutoff_timestamp.is_none());
     assert_eq!(prefixes.prefixes[0].prefix, "scenario-");
     assert_eq!(prefixes.prefixes[0].entry_count, 2);
+    assert_eq!(prefixes.prefixes[0].newest_request_id, "scenario-b");
     assert_eq!(prefixes.prefixes[1].prefix, "preset-");
     assert_eq!(prefixes.prefixes[1].entry_count, 1);
+    assert_eq!(prefixes.prefixes[1].newest_request_id, "preset-a");
 
     let age_filtered = agent_ops_cache_prefixes(
       State(state.clone()),
@@ -2947,6 +2954,7 @@ mod tests {
     assert_eq!(prefix_filtered.prefixes.len(), 1);
     assert_eq!(prefix_filtered.prefixes[0].prefix, "scenario-");
     assert_eq!(prefix_filtered.prefixes[0].entry_count, 2);
+    assert_eq!(prefix_filtered.prefixes[0].newest_request_id, "scenario-b");
 
     let invalid_error = agent_ops_cache_prefixes(
       State(state),
@@ -3896,6 +3904,17 @@ mod tests {
         .and_then(|value| value.get("cutoff_timestamp"))
         .and_then(serde_json::Value::as_str),
       Some("optional iso timestamp used for max_age_seconds filtering"),
+    );
+    let newest_prefix_request_id_shape = schema
+      .get("agent_ops_cache_prefixes_response_shape")
+      .and_then(|value| value.get("prefixes"))
+      .and_then(serde_json::Value::as_array)
+      .and_then(|items| items.first())
+      .and_then(|item| item.get("newest_request_id"))
+      .and_then(serde_json::Value::as_str);
+    assert_eq!(
+      newest_prefix_request_id_shape,
+      Some("newest request_id observed for this prefix within active scope"),
     );
     assert_eq!(
       schema

@@ -77,6 +77,7 @@ export interface AgentOpsCacheEntry {
 export interface AgentOpsCachePrefix {
   prefix: string;
   entry_count: number;
+  newest_request_id: string;
 }
 
 export interface AgentOpsCachePrefixesResponse {
