@@ -272,6 +272,7 @@ fn evaluate_formula(
       "MIN" => "MIN",
       "MAX" => "MAX",
       "COUNT" => "COUNT",
+      "MEDIAN" => "MEDIAN",
       "SUMSQ" => "SUM",
       _ => return Ok(None),
     };
@@ -3349,12 +3350,18 @@ mod tests {
         value: None,
         formula: Some("=COLUMNS(A1:C3)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 129,
+        value: None,
+        formula: Some("=MEDIAN(A1:A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 126);
+    assert_eq!(updated_cells, 127);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3368,7 +3375,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 128,
+        end_col: 129,
       },
     )
     .expect("cells should be fetched");
@@ -3553,6 +3560,7 @@ mod tests {
     assert_eq!(by_position(1, 126).evaluated_value.as_deref(), Some("28"));
     assert_eq!(by_position(1, 127).evaluated_value.as_deref(), Some("3"));
     assert_eq!(by_position(1, 128).evaluated_value.as_deref(), Some("3"));
+    assert_eq!(by_position(1, 129).evaluated_value.as_deref(), Some("100.0"));
   }
 
   #[test]

@@ -107,7 +107,7 @@ pub fn parse_cell_address(value: &str) -> Option<(u32, u32)> {
 
 pub fn parse_aggregate_formula(formula: &str) -> Option<(String, (u32, u32), (u32, u32))> {
   let re =
-    Regex::new(r"^=\s*(SUM|AVERAGE|MIN|MAX|COUNT|PRODUCT|SUMSQ)\s*\(\s*([A-Za-z]+\d+)\s*:\s*([A-Za-z]+\d+)\s*\)\s*$")
+    Regex::new(r"^=\s*(SUM|AVERAGE|MIN|MAX|COUNT|MEDIAN|PRODUCT|SUMSQ)\s*\(\s*([A-Za-z]+\d+)\s*:\s*([A-Za-z]+\d+)\s*\)\s*$")
       .ok()?;
   let captures = re.captures(formula.trim())?;
   let function = captures.get(1)?.as_str().to_uppercase();
@@ -1222,6 +1222,12 @@ mod tests {
     assert_eq!(product.0, "PRODUCT");
     assert_eq!(product.1, (1, 3));
     assert_eq!(product.2, (3, 3));
+
+    let median = parse_aggregate_formula("=MEDIAN(D1:D4)")
+      .expect("median should parse");
+    assert_eq!(median.0, "MEDIAN");
+    assert_eq!(median.1, (1, 4));
+    assert_eq!(median.2, (4, 4));
   }
 
   #[test]
