@@ -134,6 +134,7 @@ interface AgentOpsRequest {
   request_id?: string;
   actor?: string;
   stop_on_error?: boolean;
+  expected_operations_signature?: string;
   operations: Array<Record<string, unknown>>;
 }
 

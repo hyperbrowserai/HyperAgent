@@ -43,6 +43,7 @@ export interface AgentOperationResult {
 
 export interface AgentOpsResponse {
   request_id?: string;
+  operations_signature?: string;
   results: AgentOperationResult[];
 }
 

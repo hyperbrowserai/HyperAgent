@@ -912,6 +912,7 @@ async fn get_agent_schema(
       "request_id": "optional string",
       "actor": "optional string",
       "stop_on_error": "optional boolean (default false)",
+      "expected_operations_signature": "optional string for payload integrity checks",
       "operations": [
         {
           "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | recalculate | upsert_chart | export_workbook",
@@ -942,6 +943,11 @@ async fn get_agent_schema(
       "export_workbook": {
         "include_file_base64": "optional boolean (default true)"
       }
+    },
+    "agent_ops_response_shape": {
+      "request_id": "optional string",
+      "operations_signature": "sha256 signature over submitted operations",
+      "results": "array of operation results"
     },
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
     "preset_run_request_shape": {
@@ -1156,6 +1162,11 @@ async fn agent_ops(
   let request_id = payload.request_id.clone();
   let actor = payload.actor.unwrap_or_else(|| "agent".to_string());
   let stop_on_error = payload.stop_on_error.unwrap_or(false);
+  let operation_signature = operations_signature(&payload.operations)?;
+  validate_expected_operations_signature(
+    payload.expected_operations_signature.as_deref(),
+    operation_signature.as_str(),
+  )?;
   let results = execute_agent_operations(
     &state,
     workbook_id,
@@ -1165,7 +1176,11 @@ async fn agent_ops(
   )
   .await;
 
-  Ok(Json(AgentOpsResponse { request_id, results }))
+  Ok(Json(AgentOpsResponse {
+    request_id,
+    operations_signature: Some(operation_signature),
+    results,
+  }))
 }
 
 async fn run_agent_preset(

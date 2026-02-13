@@ -343,6 +343,7 @@ export function SpreadsheetApp() {
         ],
       });
       setLastAgentRequestId(response.request_id ?? null);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentOps(response.results);
       setLastPreset(null);
       setLastScenario(null);
@@ -442,6 +443,7 @@ export function SpreadsheetApp() {
         ],
       });
       setLastAgentRequestId(response.request_id ?? null);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentOps(response.results);
       setLastOperationsSignature(null);
       setLastWizardImportSummary(null);
@@ -570,11 +572,12 @@ export function SpreadsheetApp() {
         request_id: `scenario-preview-ops-${wizardScenario}-${Date.now()}`,
         actor: "ui-scenario-preview-ops",
         stop_on_error: true,
+        expected_operations_signature: wizardScenarioOpsSignature ?? undefined,
         operations: wizardScenarioOps,
       });
       setLastScenario(wizardScenario);
       setLastPreset(null);
-      setLastOperationsSignature(wizardScenarioOpsSignature);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -637,11 +640,12 @@ export function SpreadsheetApp() {
         request_id: `preset-preview-ops-${wizardPresetPreview}-${Date.now()}`,
         actor: "ui-preset-preview-ops",
         stop_on_error: true,
+        expected_operations_signature: wizardPresetOpsSignature ?? undefined,
         operations: wizardPresetOps,
       });
       setLastPreset(wizardPresetPreview);
       setLastScenario(null);
-      setLastOperationsSignature(wizardPresetOpsSignature);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -666,7 +670,14 @@ export function SpreadsheetApp() {
     setIsCopyingPreviewOps(true);
     try {
       await navigator.clipboard.writeText(
-        JSON.stringify(wizardScenarioOps, null, 2),
+        JSON.stringify(
+          {
+            operations_signature: wizardScenarioOpsSignature,
+            operations: wizardScenarioOps,
+          },
+          null,
+          2,
+        ),
       );
       setUiError(null);
     } catch {
@@ -682,7 +693,16 @@ export function SpreadsheetApp() {
     }
     setIsCopyingPresetOps(true);
     try {
-      await navigator.clipboard.writeText(JSON.stringify(wizardPresetOps, null, 2));
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            operations_signature: wizardPresetOpsSignature,
+            operations: wizardPresetOps,
+          },
+          null,
+          2,
+        ),
+      );
       setUiError(null);
     } catch {
       setUiError("Failed to copy preset operations to clipboard.");
@@ -1056,7 +1076,7 @@ export function SpreadsheetApp() {
                     disabled={isCopyingPresetOps || wizardPresetOps.length === 0}
                     className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                   >
-                    {isCopyingPresetOps ? "Copying..." : "Copy JSON"}
+                    {isCopyingPresetOps ? "Copying..." : "Copy Plan JSON"}
                   </button>
                 </div>
                 {wizardPresetOpsSignature ? (
@@ -1110,7 +1130,14 @@ export function SpreadsheetApp() {
                         Show preset operation JSON payload
                       </summary>
                       <pre className="mt-2 whitespace-pre-wrap break-all text-[11px] text-slate-300">
-                        {JSON.stringify(wizardPresetOps, null, 2)}
+                        {JSON.stringify(
+                          {
+                            operations_signature: wizardPresetOpsSignature,
+                            operations: wizardPresetOps,
+                          },
+                          null,
+                          2,
+                        )}
                       </pre>
                     </details>
                   </div>
@@ -1135,7 +1162,7 @@ export function SpreadsheetApp() {
                     disabled={isCopyingPreviewOps}
                     className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                   >
-                    {isCopyingPreviewOps ? "Copying..." : "Copy JSON"}
+                    {isCopyingPreviewOps ? "Copying..." : "Copy Plan JSON"}
                   </button>
                 </div>
                 {wizardScenarioOpsSignature ? (
@@ -1161,7 +1188,14 @@ export function SpreadsheetApp() {
                     Show operation JSON payload
                   </summary>
                   <pre className="mt-2 whitespace-pre-wrap break-all text-[11px] text-slate-300">
-                    {JSON.stringify(wizardScenarioOps, null, 2)}
+                    {JSON.stringify(
+                      {
+                        operations_signature: wizardScenarioOpsSignature,
+                        operations: wizardScenarioOps,
+                      },
+                      null,
+                      2,
+                    )}
                   </pre>
                 </details>
               </div>
