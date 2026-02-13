@@ -25,6 +25,7 @@ import { setRawModeIfSupported } from "./stdin-utils";
 import { loadTaskDescriptionFromFile, normalizeTaskDescription } from "./task-input";
 import { pauseTaskIfRunning, resumeTaskIfPaused } from "./task-controls";
 import { attachTaskErrorHandler } from "./task-error-handler";
+import { handleCliFatalError } from "./error-reporting";
 
 const program = new Command();
 
@@ -50,6 +51,7 @@ program
     let taskDescription = (options.command as string) || undefined;
     const filePath = (options.file as string) || undefined;
     const mcpPath = (options.mcp as string) || undefined;
+    let agent: HyperAgent<"Local" | "Hyperbrowser"> | undefined;
 
     console.log(chalk.blue("HyperAgent CLI"));
     currentSpinner.info(
@@ -79,7 +81,7 @@ program
         );
       }
 
-      const agent = new HyperAgent({
+      const createdAgent = new HyperAgent({
         debug: debug,
         browserProvider: useHB ? "Hyperbrowser" : "Local",
         customActions: [
@@ -147,6 +149,7 @@ program
           ),
         ],
       });
+      agent = createdAgent;
 
       let task: Task;
       const onTaskError = (error: unknown): void => {
@@ -183,7 +186,7 @@ program
             currentSpinner.stopAndPersist();
           }
           console.log("\nShutting down HyperAgent");
-          const shutdown = await closeAgentSafely(agent);
+          const shutdown = await closeAgentSafely(createdAgent);
           if (!shutdown.success) {
             console.error(`Error during shutdown: ${shutdown.message}`);
             process.exit(1);
@@ -199,7 +202,7 @@ program
         const output = params.actionOutput;
 
         const actionDisplay = output.success
-          ? `  └── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`
+          ? `  └── [${chalk.yellow(action.type)}] ${createdAgent.pprintAction(action as ActionType)}`
           : `  └── [${chalk.red(action.type)}] ${chalk.red(output.message)}`;
 
         currentSpinner.succeed(
@@ -212,7 +215,7 @@ program
 
       const debugAgentOutput = (params: AgentOutput) => {
         const action = params.action;
-        const actionDisplay = `  └── [${chalk.yellow(action.type)}] ${agent.pprintAction(action as ActionType)}`;
+        const actionDisplay = `  └── [${chalk.yellow(action.type)}] ${createdAgent.pprintAction(action as ActionType)}`;
 
         currentSpinner.start(
           `[${chalk.yellow("planning")}]: ${params.thoughts}\n${actionDisplay}`
@@ -252,14 +255,14 @@ program
           setRawModeIfSupported(true);
           process.stdin.resume();
 
-          task = await agent.executeTaskAsync(nextTaskDescription, {
+          task = await createdAgent.executeTaskAsync(nextTaskDescription, {
             onStep: onStep,
             debugOnAgentOutput: debugAgentOutput,
             onComplete: onComplete,
           });
           attachTaskErrorHandler(task, onTaskError);
         } else {
-          const shutdown = await closeAgentSafely(agent);
+          const shutdown = await closeAgentSafely(createdAgent);
           if (!shutdown.success) {
             console.error(`Error during shutdown: ${shutdown.message}`);
             process.exit(1);
@@ -284,26 +287,27 @@ program
 
       if (mcpPath) {
         const mcpServers = await loadMCPServersFromFile(mcpPath);
-        await agent.initializeMCPClient({ servers: mcpServers });
+        await createdAgent.initializeMCPClient({ servers: mcpServers });
       }
 
       if (useHB && !debug) {
-        await agent.initBrowser();
-        const session = agent.getSession() as SessionDetail;
+        await createdAgent.initBrowser();
+        const session = createdAgent.getSession() as SessionDetail;
         console.log(`Hyperbrowser Live URL: ${session.liveUrl}\n`);
       }
 
-      task = await agent.executeTaskAsync(taskDescription, {
+      task = await createdAgent.executeTaskAsync(taskDescription, {
         onStep: onStep,
         onComplete: onComplete,
         debugOnAgentOutput: debugAgentOutput,
       });
       attachTaskErrorHandler(task, onTaskError);
     } catch (err) {
-      console.log(chalk.red(formatCliError(err)));
-      if (debug) {
-        console.trace(err);
-      }
+      await handleCliFatalError({
+        error: err,
+        debug,
+        agent,
+      });
     }
   });
 
