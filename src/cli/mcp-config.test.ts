@@ -40,4 +40,26 @@ describe("parseMCPServersConfig", () => {
       "MCP server entry at index 0 must be an object."
     );
   });
+
+  it("throws when stdio server command is missing or blank", () => {
+    expect(() => parseMCPServersConfig('[{"connectionType":"stdio"}]')).toThrow(
+      'MCP server entry at index 0 must include a non-empty "command" for stdio connections.'
+    );
+    expect(() =>
+      parseMCPServersConfig('[{"connectionType":"stdio","command":"   "}]')
+    ).toThrow(
+      'MCP server entry at index 0 must include a non-empty "command" for stdio connections.'
+    );
+  });
+
+  it("throws when sse server sseUrl is missing or blank", () => {
+    expect(() => parseMCPServersConfig('[{"connectionType":"sse"}]')).toThrow(
+      'MCP server entry at index 0 must include a non-empty "sseUrl" for SSE connections.'
+    );
+    expect(() =>
+      parseMCPServersConfig('[{"connectionType":"sse","sseUrl":"   "}]')
+    ).toThrow(
+      'MCP server entry at index 0 must include a non-empty "sseUrl" for SSE connections.'
+    );
+  });
 });

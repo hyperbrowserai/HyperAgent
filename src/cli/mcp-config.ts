@@ -5,6 +5,9 @@ import { formatUnknownError } from "@/utils";
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+
 function normalizeServersPayload(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
@@ -29,8 +32,26 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 
   const servers = normalizeServersPayload(parsed);
   for (let i = 0; i < servers.length; i += 1) {
-    if (!isRecord(servers[i])) {
+    const entry = servers[i];
+    if (!isRecord(entry)) {
       throw new Error(`MCP server entry at index ${i} must be an object.`);
+    }
+
+    const connectionType =
+      entry.connectionType === "sse" ? "sse" : "stdio";
+    if (connectionType === "sse") {
+      if (!isNonEmptyString(entry.sseUrl)) {
+        throw new Error(
+          `MCP server entry at index ${i} must include a non-empty "sseUrl" for SSE connections.`
+        );
+      }
+      continue;
+    }
+
+    if (!isNonEmptyString(entry.command)) {
+      throw new Error(
+        `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`
+      );
     }
   }
   return servers as MCPServerConfig[];
