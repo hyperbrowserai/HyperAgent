@@ -10,6 +10,34 @@ import type {
  * Utility functions for converting between different message formats
  */
 
+function stringifyToolArguments(value: unknown): string {
+  if (typeof value === "undefined") {
+    return "{}";
+  }
+
+  const seen = new WeakSet<object>();
+  try {
+    const serialized = JSON.stringify(value, (_key, candidate: unknown) => {
+      if (typeof candidate === "bigint") {
+        return `${candidate.toString()}n`;
+      }
+
+      if (typeof candidate === "object" && candidate !== null) {
+        if (seen.has(candidate)) {
+          return "[Circular]";
+        }
+        seen.add(candidate);
+      }
+
+      return candidate;
+    });
+
+    return typeof serialized === "string" ? serialized : "{}";
+  } catch {
+    return "{}";
+  }
+}
+
 export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
   return messages.map((msg) => {
     const openAIMessage: Record<string, unknown> = {
@@ -33,7 +61,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
             id: part.toolName,
             function: {
               name: part.toolName,
-              arguments: JSON.stringify(part.arguments),
+              arguments: stringifyToolArguments(part.arguments),
             },
           };
         }
@@ -48,7 +76,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
           type: "function",
           function: {
             name: tc.name,
-            arguments: JSON.stringify(tc.arguments),
+            arguments: stringifyToolArguments(tc.arguments),
           },
         })
       );
