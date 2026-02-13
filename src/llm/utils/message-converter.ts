@@ -67,11 +67,26 @@ function extractTextContent(
     .trim();
 }
 
+function buildToolMessageLabel(toolName: string): string {
+  return `[Tool ${toolName}]`;
+}
+
 export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
   return messages.map((msg) => {
     const openAIMessage: Record<string, unknown> = {
       role: msg.role,
     };
+
+    if (msg.role === "tool") {
+      const textContent =
+        typeof msg.content === "string"
+          ? msg.content
+          : extractTextContent(msg.content);
+      openAIMessage.content =
+        textContent.length > 0 ? textContent : formatUnknownError(msg.content);
+      openAIMessage.tool_call_id = msg.toolCallId ?? msg.toolName;
+      return openAIMessage;
+    }
 
     if (typeof msg.content === "string") {
       openAIMessage.content = msg.content;
@@ -129,12 +144,22 @@ export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
     }
 
     const role = msg.role === "assistant" ? "assistant" : "user";
+    const isToolMessage = msg.role === "tool";
 
     let content: string | ContentBlockParam[];
     if (typeof msg.content === "string") {
-      content = msg.content;
+      const baseContent = msg.content;
+      content = isToolMessage
+        ? `${buildToolMessageLabel(msg.toolName)}\n${baseContent}`
+        : baseContent;
     } else {
       const blocks: ContentBlockParam[] = [];
+      if (isToolMessage) {
+        blocks.push({
+          type: "text",
+          text: buildToolMessageLabel(msg.toolName),
+        });
+      }
       for (const part of msg.content) {
         if (part.type === "text") {
           const textBlock: TextBlockParam = { type: "text", text: part.text };
@@ -211,11 +236,19 @@ export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
     const geminiMessage: Record<string, unknown> = {
       role: msg.role === "assistant" ? "model" : "user",
     };
+    const isToolMessage = msg.role === "tool";
 
     if (typeof msg.content === "string") {
-      geminiMessage.parts = [{ text: msg.content }];
+      const baseText = msg.content;
+      geminiMessage.parts = [
+        {
+          text: isToolMessage
+            ? `${buildToolMessageLabel(msg.toolName)}\n${baseText}`
+            : baseText,
+        },
+      ];
     } else {
-      geminiMessage.parts = msg.content.map((part: HyperAgentContentPart) => {
+      const parts = msg.content.map((part: HyperAgentContentPart) => {
         if (part.type === "text") {
           return { text: part.text };
         } else if (part.type === "image") {
@@ -229,6 +262,9 @@ export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
         }
         return { text: formatUnknownError(part) };
       });
+      geminiMessage.parts = isToolMessage
+        ? [{ text: buildToolMessageLabel(msg.toolName) }, ...parts]
+        : parts;
     }
 
     geminiMessages.push(geminiMessage);

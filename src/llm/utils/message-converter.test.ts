@@ -104,6 +104,23 @@ describe("convertToOpenAIMessages", () => {
       },
     ]);
   });
+
+  it("normalizes tool-role messages with tool_call_id and text content", () => {
+    const result = convertToOpenAIMessages([
+      {
+        role: "tool",
+        toolName: "lookup-user",
+        toolCallId: "call-1",
+        content: [{ type: "text", text: "tool result payload" }],
+      },
+    ]);
+
+    expect(result[0]).toEqual({
+      role: "tool",
+      tool_call_id: "call-1",
+      content: "tool result payload",
+    });
+  });
 });
 
 describe("image payload conversion", () => {
@@ -280,5 +297,35 @@ describe("system message text extraction", () => {
         text: '{"type":"tool_call","toolName":"lookup","arguments":{"id":"123"}}',
       },
     ]);
+  });
+
+  it("prefixes Anthropic tool-role messages with tool label", () => {
+    const { messages } = convertToAnthropicMessages([
+      {
+        role: "tool",
+        toolName: "lookup-user",
+        content: "tool response",
+      },
+    ]);
+
+    expect(messages[0]).toEqual({
+      role: "user",
+      content: "[Tool lookup-user]\ntool response",
+    });
+  });
+
+  it("prefixes Gemini tool-role messages with tool label", () => {
+    const { messages } = convertToGeminiMessages([
+      {
+        role: "tool",
+        toolName: "lookup-user",
+        content: "tool response",
+      },
+    ]);
+
+    expect(messages[0]).toEqual({
+      role: "user",
+      parts: [{ text: "[Tool lookup-user]\ntool response" }],
+    });
   });
 });
