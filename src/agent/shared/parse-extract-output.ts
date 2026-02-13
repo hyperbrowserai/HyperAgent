@@ -2,6 +2,7 @@ import { z } from "zod";
 import { formatUnknownError } from "@/utils";
 
 const MAX_EXTRACT_DIAGNOSTIC_CHARS = 400;
+const MAX_EXTRACT_PARSE_CHARS = 100_000;
 
 function truncateExtractDiagnostic(value: string): string {
   if (value.length <= MAX_EXTRACT_DIAGNOSTIC_CHARS) {
@@ -29,6 +30,12 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
   rawOutput: string,
   outputSchema: TSchema
 ): z.infer<TSchema> {
+  if (rawOutput.length > MAX_EXTRACT_PARSE_CHARS) {
+    throw new Error(
+      `Extract failed: output exceeds ${MAX_EXTRACT_PARSE_CHARS} characters and cannot be parsed safely.`
+    );
+  }
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawOutput);
@@ -43,9 +50,11 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
 
   const validationResult = outputSchema.safeParse(parsed);
   if (!validationResult.success) {
-    const issues = validationResult.error.issues
+    const issues = truncateExtractDiagnostic(
+      validationResult.error.issues
       .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
-      .join("; ");
+      .join("; ")
+    );
     throw new Error(
       `Extract failed: output does not match schema (${issues}). Parsed output: ${safeStringify(
         parsed

@@ -65,6 +65,17 @@ describe("parseExtractOutput", () => {
     ).toThrow("does not match schema");
   });
 
+  it("rejects oversized structured outputs before JSON parsing", () => {
+    const schema = z.object({
+      total: z.number(),
+    });
+    const oversized = `{"total":${"1".repeat(100_100)}}`;
+
+    expect(() =>
+      parseExtractOutput(oversized, "completed", schema)
+    ).toThrow("output exceeds 100000 characters");
+  });
+
   it("handles primitive parsed output without crashing schema error rendering", () => {
     const schema = z.object({
       total: z.number(),
