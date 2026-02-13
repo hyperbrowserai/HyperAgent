@@ -41,6 +41,7 @@ pub fn create_router(state: AppState) -> Router {
     )
     .route("/v1/workbooks/{id}/cells/set-batch", post(set_cells_batch))
     .route("/v1/workbooks/{id}/agent/ops", post(agent_ops))
+    .route("/v1/workbooks/{id}/agent/schema", get(get_agent_schema))
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
     .route(
       "/v1/workbooks/{id}/agent/presets/{preset}",
@@ -469,6 +470,53 @@ async fn list_agent_presets(
   })))
 }
 
+async fn get_agent_schema(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  Ok(Json(json!({
+    "endpoint": "/v1/workbooks/{id}/agent/ops",
+    "request_shape": {
+      "request_id": "optional string",
+      "actor": "optional string",
+      "stop_on_error": "optional boolean (default false)",
+      "operations": [
+        {
+          "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | recalculate | upsert_chart | export_workbook",
+          "payload": "operation-specific object"
+        }
+      ]
+    },
+    "operation_payloads": {
+      "create_sheet": { "sheet": "string" },
+      "set_cells": {
+        "sheet": "string",
+        "cells": [{ "row": 1, "col": 1, "value": "scalar or null", "formula": "optional string" }]
+      },
+      "get_cells": {
+        "sheet": "string",
+        "range": { "start_row": 1, "end_row": 50, "start_col": 1, "end_col": 12 }
+      },
+      "upsert_chart": {
+        "chart": {
+          "id": "string",
+          "sheet": "string",
+          "chart_type": "line|bar|pie|area|scatter",
+          "title": "string",
+          "categories_range": "Sheet1!$A$1:$A$10",
+          "values_range": "Sheet1!$B$1:$B$10"
+        }
+      },
+      "export_workbook": {
+        "include_file_base64": "optional boolean (default true)"
+      }
+    },
+    "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
+    "presets": preset_catalog()
+  })))
+}
+
 async fn execute_agent_operations(
   state: &AppState,
   workbook_id: Uuid,
@@ -770,6 +818,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}, "post": {"summary": "Create sheet"}},
       "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
       "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports create_sheet/export_workbook ops)"}},
+      "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}": {"post": {"summary": "Run built-in AI operation preset (seed_sales_demo/export_snapshot)"}},
       "/v1/workbooks/{id}/cells/get": {"post": {"summary": "Get range cells"}},
