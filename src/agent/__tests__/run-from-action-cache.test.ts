@@ -995,6 +995,54 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toContain("steps trap");
   });
 
+  it("falls back to unknown source task id when cache taskId getter traps", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      taskId: "perform-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "performed",
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache = {
+      get taskId(): string {
+        throw new Error("taskId trap");
+      },
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "fallback source id",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    } as unknown as ActionCacheOutput;
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.sourceTaskId).toBe("unknown-task");
+    expect(replay.status).toBe(TaskStatus.COMPLETED);
+    expect(perform).toHaveBeenCalledWith("fallback source id");
+  });
+
   it("truncates oversized cached-step read diagnostics", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

@@ -1577,7 +1577,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     );
     const debug = params?.debug ?? this.debug;
     const sourceTaskId =
-      this.normalizeVariableKey((cache as { taskId?: unknown })?.taskId) ??
+      this.normalizeVariableKey(this.safeReadField(cache, "taskId")) ??
       "unknown-task";
     const shouldWriteReplayDebug = (): boolean =>
       debug && this.isTaskLifecycleGenerationActive(replayLifecycleGeneration);
