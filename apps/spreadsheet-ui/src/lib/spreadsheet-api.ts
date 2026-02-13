@@ -210,6 +210,7 @@ export async function getAgentOpsCacheEntries(
   limit: number = 20,
   offset: number = 0,
   requestIdPrefix?: string,
+  maxAgeSeconds?: number,
 ): Promise<AgentOpsCacheEntriesResponse> {
   const safeLimit = Math.max(1, Math.min(limit, 200));
   const safeOffset = Math.max(0, offset);
@@ -220,6 +221,13 @@ export async function getAgentOpsCacheEntries(
   const normalizedPrefix = requestIdPrefix?.trim();
   if (normalizedPrefix) {
     params.set("request_id_prefix", normalizedPrefix);
+  }
+  const normalizedMaxAgeSeconds =
+    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
+      ? Math.floor(maxAgeSeconds)
+      : undefined;
+  if (normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0) {
+    params.set("max_age_seconds", String(normalizedMaxAgeSeconds));
   }
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/entries?${params.toString()}`,

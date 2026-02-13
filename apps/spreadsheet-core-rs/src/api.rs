@@ -1058,6 +1058,7 @@ async fn get_agent_schema(
     "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8",
     "agent_ops_cache_entries_query_shape": {
       "request_id_prefix": "optional string filter (prefix match)",
+      "max_age_seconds": "optional number > 0 (filter to entries older than or equal to this age)",
       "offset": "optional number, default 0",
       "limit": "optional number, default 20, max 200"
     },
@@ -1087,6 +1088,7 @@ async fn get_agent_schema(
       "total_entries": "total cache entries available",
       "returned_entries": "number of entries returned in this response",
       "request_id_prefix": "echoed filter prefix when provided",
+      "max_age_seconds": "echoed age filter when provided",
       "offset": "start index in newest-first order",
       "limit": "applied limit (default 20, max 200)",
       "has_more": "true when another page exists after this response",
@@ -1476,6 +1478,7 @@ async fn agent_ops_preview(
 #[derive(Debug, Clone, serde::Deserialize)]
 struct AgentOpsCacheEntriesQuery {
   request_id_prefix: Option<String>,
+  max_age_seconds: Option<i64>,
   offset: Option<usize>,
   limit: Option<usize>,
 }
@@ -1526,12 +1529,30 @@ async fn agent_ops_cache_entries(
     .map(str::trim)
     .filter(|prefix| !prefix.is_empty());
   let offset = query.offset.unwrap_or(0);
+  if query
+    .max_age_seconds
+    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
+  {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MAX_AGE_SECONDS",
+      "max_age_seconds must be greater than 0.",
+    ));
+  }
+  let cutoff_timestamp = query
+    .max_age_seconds
+    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_ENTRIES_LIMIT)
     .min(MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT);
   let (total_entries, entries) = state
-    .agent_ops_cache_entries(workbook_id, normalized_prefix, offset, limit)
+    .agent_ops_cache_entries(
+      workbook_id,
+      normalized_prefix,
+      cutoff_timestamp,
+      offset,
+      limit,
+    )
     .await?;
   let mapped_entries = entries
     .into_iter()
@@ -1556,6 +1577,7 @@ async fn agent_ops_cache_entries(
     total_entries,
     returned_entries: mapped_entries.len(),
     request_id_prefix: normalized_prefix.map(str::to_string),
+    max_age_seconds: query.max_age_seconds,
     offset,
     limit,
     has_more,
@@ -1830,6 +1852,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
     .agent_ops_cache_entries(
       workbook_id,
       Some(request_id_prefix),
+      None,
       0,
       sample_limit,
     )
@@ -2449,6 +2472,7 @@ mod tests {
       Path(workbook.id),
       Query(AgentOpsCacheEntriesQuery {
         request_id_prefix: None,
+        max_age_seconds: None,
         offset: Some(0),
         limit: Some(2),
       }),
@@ -2473,6 +2497,7 @@ mod tests {
       Path(workbook.id),
       Query(AgentOpsCacheEntriesQuery {
         request_id_prefix: None,
+        max_age_seconds: None,
         offset: Some(2),
         limit: Some(9_999),
       }),
@@ -2488,10 +2513,11 @@ mod tests {
     assert_eq!(capped_response.entries[0].request_id, "handler-entries-1");
 
     let filtered_response = agent_ops_cache_entries(
-      State(state),
+      State(state.clone()),
       Path(workbook.id),
       Query(AgentOpsCacheEntriesQuery {
         request_id_prefix: Some("handler-entries-2".to_string()),
+        max_age_seconds: None,
         offset: Some(0),
         limit: Some(5),
       }),
@@ -2510,6 +2536,54 @@ mod tests {
       filtered_response.entries[0].request_id,
       "handler-entries-2",
     );
+
+    let age_filtered_response = agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCacheEntriesQuery {
+        request_id_prefix: None,
+        max_age_seconds: Some(86_400),
+        offset: Some(0),
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect("age-filtered entries should load")
+    .0;
+    assert_eq!(age_filtered_response.max_age_seconds, Some(86_400));
+    assert_eq!(age_filtered_response.total_entries, 0);
+    assert!(age_filtered_response.entries.is_empty());
+  }
+
+  #[tokio::test]
+  async fn should_reject_non_positive_max_age_when_listing_cache_entries() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-entries-invalid-max-age".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let error = agent_ops_cache_entries(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCacheEntriesQuery {
+        request_id_prefix: None,
+        max_age_seconds: Some(0),
+        offset: Some(0),
+        limit: Some(20),
+      }),
+    )
+    .await
+    .expect_err("non-positive max age should fail");
+
+    match error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_MAX_AGE_SECONDS");
+      }
+      _ => panic!("expected invalid max age to use custom error code"),
+    }
   }
 
   #[tokio::test]
@@ -2663,6 +2737,7 @@ mod tests {
       Path(workbook.id),
       Query(AgentOpsCacheEntriesQuery {
         request_id_prefix: None,
+        max_age_seconds: None,
         offset: Some(0),
         limit: Some(10),
       }),
@@ -2719,6 +2794,7 @@ mod tests {
       Path(workbook.id),
       Query(AgentOpsCacheEntriesQuery {
         request_id_prefix: None,
+        max_age_seconds: None,
         offset: Some(0),
         limit: Some(10),
       }),

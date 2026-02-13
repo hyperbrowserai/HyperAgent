@@ -86,6 +86,7 @@ export interface AgentOpsCacheEntriesResponse {
   total_entries: number;
   returned_entries: number;
   request_id_prefix: string | null;
+  max_age_seconds: number | null;
   offset: number;
   limit: number;
   has_more: boolean;

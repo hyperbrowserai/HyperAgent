@@ -132,6 +132,7 @@ export function SpreadsheetApp() {
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
+  const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
   const [cacheRemovePreviewSampleLimit, setCacheRemovePreviewSampleLimit] = useState("10");
   const [cacheStalePreviewSampleLimit, setCacheStalePreviewSampleLimit] = useState("10");
   const [cacheStaleMaxAgeSeconds, setCacheStaleMaxAgeSeconds] = useState("3600");
@@ -258,17 +259,25 @@ export function SpreadsheetApp() {
       "agent-ops-cache-entries",
       workbook?.id,
       cacheRequestIdPrefix,
+      cacheEntriesMaxAgeSeconds,
       cacheEntriesOffset,
       CACHE_ENTRIES_PREVIEW_LIMIT,
     ],
     enabled: Boolean(workbook?.id),
-    queryFn: () =>
-      getAgentOpsCacheEntries(
+    queryFn: () => {
+      const parsedMaxAgeSeconds = Number.parseInt(cacheEntriesMaxAgeSeconds, 10);
+      const normalizedMaxAgeSeconds =
+        Number.isNaN(parsedMaxAgeSeconds) || parsedMaxAgeSeconds <= 0
+          ? undefined
+          : parsedMaxAgeSeconds;
+      return getAgentOpsCacheEntries(
         workbook!.id,
         CACHE_ENTRIES_PREVIEW_LIMIT,
         cacheEntriesOffset,
         cacheRequestIdPrefix,
-      ),
+        normalizedMaxAgeSeconds,
+      );
+    },
   });
 
   const agentOpsCachePrefixesQuery = useQuery({
@@ -325,6 +334,7 @@ export function SpreadsheetApp() {
     setCacheEntriesOffset(0);
     setSelectedCacheEntryDetail(null);
     setCacheRerunRequestId("");
+    setCacheEntriesMaxAgeSeconds("");
     setCachePrefixRemovalPreview(null);
     setCacheRemovePreviewSampleLimit("10");
     setCacheStalePreviewSampleLimit("10");
@@ -335,7 +345,7 @@ export function SpreadsheetApp() {
   useEffect(() => {
     setCacheEntriesOffset(0);
     setCachePrefixRemovalPreview(null);
-  }, [cacheRequestIdPrefix]);
+  }, [cacheRequestIdPrefix, cacheEntriesMaxAgeSeconds]);
 
   useEffect(() => {
     setCacheStaleRemovalPreview(null);
@@ -2597,6 +2607,25 @@ export function SpreadsheetApp() {
                     >
                       Clear
                     </button>
+                    <label className="ml-2 text-[10px] text-slate-500">
+                      older than (sec)
+                    </label>
+                    <input
+                      value={cacheEntriesMaxAgeSeconds}
+                      onChange={(event) =>
+                        setCacheEntriesMaxAgeSeconds(event.target.value)
+                      }
+                      placeholder="optional"
+                      inputMode="numeric"
+                      className="h-6 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 focus:border-indigo-500"
+                    />
+                    <button
+                      onClick={() => setCacheEntriesMaxAgeSeconds("")}
+                      disabled={!cacheEntriesMaxAgeSeconds}
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Clear age
+                    </button>
                     <button
                       onClick={handlePreviewRemoveCacheEntriesByPrefix}
                       disabled={
@@ -2840,6 +2869,15 @@ export function SpreadsheetApp() {
                           filtered by{" "}
                           <span className="font-mono text-indigo-300">
                             {agentOpsCacheEntriesQuery.data.request_id_prefix}
+                          </span>
+                        </>
+                      ) : null}
+                      {typeof agentOpsCacheEntriesQuery.data.max_age_seconds === "number" ? (
+                        <>
+                          {" "}
+                          older than{" "}
+                          <span className="font-mono text-amber-300">
+                            {agentOpsCacheEntriesQuery.data.max_age_seconds}s
                           </span>
                         </>
                       ) : null}

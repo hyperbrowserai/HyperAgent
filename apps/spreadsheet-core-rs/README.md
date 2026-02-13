@@ -99,7 +99,7 @@ Plan-preview helper:
 
 Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache`
-- `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20` (newest-first paged request-id summaries, optional prefix filter, max `limit=200`, includes operation/result counts and `cached_at`)
+- `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&max_age_seconds=3600&offset=0&limit=20` (newest-first paged request-id summaries, optional prefix filter, optional age filter for stale-only browsing, max `limit=200`, includes operation/result counts and `cached_at`)
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries/{request_id}` (full cached detail: response + operations + counts + `cached_at`)
 - `GET /v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8` (prefix suggestions with counts for filter UX)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
