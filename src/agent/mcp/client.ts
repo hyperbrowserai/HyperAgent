@@ -328,7 +328,9 @@ class MCPClient {
       try {
         await this.disconnectServer(serverId);
       } catch (error) {
-        console.error(`Failed to disconnect MCP server ${serverId}:`, error);
+        console.error(
+          `Failed to disconnect MCP server ${serverId}: ${formatUnknownError(error)}`
+        );
       }
     }
   }

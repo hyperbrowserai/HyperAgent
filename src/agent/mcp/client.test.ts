@@ -309,7 +309,35 @@ describe("MCPClient disconnect lifecycle", () => {
       expect(closeA).toHaveBeenCalledTimes(1);
       expect(closeB).toHaveBeenCalledTimes(1);
       expect(mcpClient.hasConnections()).toBe(false);
-      expect(errorSpy).toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Failed to disconnect MCP server server-a: close A failed"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("disconnect formats non-Error close failures", async () => {
+    const mcpClient = new MCPClient(false);
+    const closeA = jest.fn().mockRejectedValue({ reason: "close object failed" });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            transport: { close: closeA },
+          },
+        ],
+      ])
+    );
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await mcpClient.disconnect();
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Failed to disconnect MCP server server-a: {"reason":"close object failed"}'
+      );
     } finally {
       errorSpy.mockRestore();
     }
