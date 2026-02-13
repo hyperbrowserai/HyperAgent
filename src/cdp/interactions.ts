@@ -371,27 +371,45 @@ function coerceActionStringArg(value: unknown, fallback = ""): string {
 }
 
 function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
+  const normalizeScrollTarget = (
+    value: unknown
+  ): string | number | undefined => {
+    if (typeof value === "number") {
+      return value;
+    }
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const normalized = stripControlChars(value).trim();
+    return normalized.length > 0 ? normalized : undefined;
+  };
+  const normalizeScrollBehavior = (
+    value: unknown
+  ): ScrollToOptions["behavior"] | undefined => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const normalized = stripControlChars(value).trim().toLowerCase();
+    if (normalized === "smooth" || normalized === "instant") {
+      return normalized;
+    }
+    return undefined;
+  };
+
   if (
     targetArg &&
     typeof targetArg === "object" &&
     !Array.isArray(targetArg)
   ) {
     const candidate = targetArg as Record<string, unknown>;
-    const behavior =
-      candidate.behavior === "smooth" || candidate.behavior === "instant"
-        ? candidate.behavior
-        : undefined;
     return {
-      target:
-        typeof candidate.target === "string" || typeof candidate.target === "number"
-          ? candidate.target
-          : undefined,
-      behavior,
+      target: normalizeScrollTarget(candidate.target),
+      behavior: normalizeScrollBehavior(candidate.behavior),
     };
   }
 
   if (typeof targetArg === "string" || typeof targetArg === "number") {
-    return { target: targetArg };
+    return { target: normalizeScrollTarget(targetArg) };
   }
 
   return {};

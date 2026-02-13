@@ -405,4 +405,48 @@ describe("dispatchCDPAction argument coercion", () => {
     expect(firstArgs?.[0]?.value).toBe(75);
     expect(secondArgs?.[0]?.value).toBe(50);
   });
+
+  it("normalizes scroll behavior and target strings from object options", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {
+        result: {
+          value: { status: "done", finalTop: 0, maxScroll: 100 },
+        },
+      };
+    });
+
+    await dispatchCDPAction(
+      "scrollTo",
+      [
+        {
+          target: "  80%\u0007 ",
+          behavior: "  SMOOTH\u0007 ",
+        },
+      ],
+      {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      }
+    );
+
+    const scrollCall = calls.find(
+      (call) =>
+        call.method === "Runtime.callFunctionOn" &&
+        typeof call.params?.functionDeclaration === "string" &&
+        (call.params.functionDeclaration as string).includes(
+          "function(percent, behavior)"
+        )
+    );
+    const args = scrollCall?.params?.arguments as
+      | Array<{ value?: unknown }>
+      | undefined;
+    expect(args?.[0]?.value).toBe(80);
+    expect(args?.[1]?.value).toBe("smooth");
+  });
 });
