@@ -66,6 +66,8 @@ export function SpreadsheetApp() {
   const [isRunningPreviewOps, setIsRunningPreviewOps] = useState(false);
   const [isRunningSelectedPreset, setIsRunningSelectedPreset] = useState(false);
   const [isRunningPresetPreviewOps, setIsRunningPresetPreviewOps] = useState(false);
+  const [isCopyingPresetRunPayload, setIsCopyingPresetRunPayload] = useState(false);
+  const [isCopyingScenarioRunPayload, setIsCopyingScenarioRunPayload] = useState(false);
   const [isCopyingPresetOps, setIsCopyingPresetOps] = useState(false);
   const [isCopyingPreviewOps, setIsCopyingPreviewOps] = useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
@@ -762,6 +764,60 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyPresetRunPayload() {
+    if (!wizardPresetPreview || !wizardPresetOpsSignature) {
+      return;
+    }
+    setIsCopyingPresetRunPayload(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            request_id: "replace-with-request-id",
+            actor: "agent",
+            stop_on_error: true,
+            include_file_base64: wizardIncludeFileBase64,
+            expected_operations_signature: wizardPresetOpsSignature,
+          },
+          null,
+          2,
+        ),
+      );
+      setUiError(null);
+    } catch {
+      setUiError("Failed to copy preset run payload to clipboard.");
+    } finally {
+      setIsCopyingPresetRunPayload(false);
+    }
+  }
+
+  async function handleCopyScenarioRunPayload() {
+    if (!wizardScenario || !wizardScenarioOpsSignature) {
+      return;
+    }
+    setIsCopyingScenarioRunPayload(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            request_id: "replace-with-request-id",
+            actor: "agent",
+            stop_on_error: true,
+            include_file_base64: wizardIncludeFileBase64,
+            expected_operations_signature: wizardScenarioOpsSignature,
+          },
+          null,
+          2,
+        ),
+      );
+      setUiError(null);
+    } catch {
+      setUiError("Failed to copy scenario run payload to clipboard.");
+    } finally {
+      setIsCopyingScenarioRunPayload(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -1135,6 +1191,17 @@ export function SpreadsheetApp() {
                   >
                     {isCopyingPresetOps ? "Copying..." : "Copy Plan JSON"}
                   </button>
+                  <button
+                    onClick={handleCopyPresetRunPayload}
+                    disabled={
+                      isCopyingPresetRunPayload || !wizardPresetOpsSignature
+                    }
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingPresetRunPayload
+                      ? "Copying..."
+                      : "Copy Run Payload"}
+                  </button>
                 </div>
                 {wizardPresetOpsSignature ? (
                   <p className="mb-1 text-[11px] text-slate-500">
@@ -1220,6 +1287,17 @@ export function SpreadsheetApp() {
                     className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                   >
                     {isCopyingPreviewOps ? "Copying..." : "Copy Plan JSON"}
+                  </button>
+                  <button
+                    onClick={handleCopyScenarioRunPayload}
+                    disabled={
+                      isCopyingScenarioRunPayload || !wizardScenarioOpsSignature
+                    }
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingScenarioRunPayload
+                      ? "Copying..."
+                      : "Copy Run Payload"}
                   </button>
                 </div>
                 {wizardScenarioOpsSignature ? (
