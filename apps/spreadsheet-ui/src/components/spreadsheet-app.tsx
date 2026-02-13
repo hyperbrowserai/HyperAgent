@@ -1541,6 +1541,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_preview_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                ops preview endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_preview_endpoint}
+                </span>
+              </p>
+            ) : null}
             {lastPreset && (
               <p className="mb-2 text-xs text-slate-400">
                 preset: <span className="font-mono text-slate-200">{lastPreset}</span>

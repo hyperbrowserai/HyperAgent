@@ -27,6 +27,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard preview panels indicate whether operation plans are global or workbook-scoped
 - Wizard execution can pass preview signatures (`operations_signature`) to guard against stale plan drift
 - Signature mismatch responses trigger automatic preview refresh to reduce stale-plan retries
+- Agent integration panel surfaces discovered `agent/ops/preview` endpoint metadata
 - Event stream viewer with per-event-type filtering
 
 ## Run
