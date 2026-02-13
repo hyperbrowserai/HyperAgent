@@ -21,6 +21,7 @@ import {
   AgentScenarioResponse,
   AgentWizardSchemaInfo,
   AgentWizardRunResponse,
+  ImportWorkbookResponse,
   CellSnapshot,
   ChartSpec,
   WorkbookEvent,
@@ -92,7 +93,7 @@ export async function createWorkbook(
   return data.workbook;
 }
 
-export async function importWorkbook(file: File): Promise<WorkbookSummary> {
+export async function importWorkbook(file: File): Promise<ImportWorkbookResponse> {
   const form = new FormData();
   form.append("file", file);
 
@@ -100,8 +101,7 @@ export async function importWorkbook(file: File): Promise<WorkbookSummary> {
     method: "POST",
     body: form,
   });
-  const data = await parseJsonResponse<{ workbook: WorkbookSummary }>(response);
-  return data.workbook;
+  return parseJsonResponse<ImportWorkbookResponse>(response);
 }
 
 export async function getWorkbook(workbookId: string): Promise<WorkbookSummary> {

@@ -240,6 +240,11 @@ export interface AgentWizardImportResult {
   warnings: string[];
 }
 
+export interface ImportWorkbookResponse {
+  workbook: WorkbookSummary;
+  import: AgentWizardImportResult;
+}
+
 export interface AgentWizardRunResponse {
   workbook: WorkbookSummary;
   scenario: string;

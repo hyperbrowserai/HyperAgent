@@ -278,10 +278,16 @@ export function SpreadsheetApp() {
 
   const importMutation = useMutation({
     mutationFn: (file: File) => importWorkbook(file),
-    onSuccess: (importedWorkbook) => {
+    onSuccess: (response) => {
+      const importedWorkbook = response.workbook;
       clearUiError();
       setWorkbook(importedWorkbook);
-      setNotice(`Imported workbook ${importedWorkbook.name}.`);
+      const formulaSummary = response.import.formula_cells_imported > 0
+        ? `, ${response.import.formula_cells_imported} formulas (${response.import.formula_cells_with_cached_values} cached)`
+        : "";
+      setNotice(
+        `Imported workbook ${importedWorkbook.name} (${response.import.sheets_imported} sheets, ${response.import.cells_imported} cells${formulaSummary}).`,
+      );
       setLastAgentRequestId(null);
       setLastPreset(null);
       setLastScenario(null);
@@ -289,7 +295,14 @@ export function SpreadsheetApp() {
       setLastServedFromCache(null);
       setLastExecutedOperations([]);
       setLastAgentOps([]);
-      setLastWizardImportSummary(null);
+      setLastWizardImportSummary({
+        sheetsImported: response.import.sheets_imported,
+        cellsImported: response.import.cells_imported,
+        formulaCellsImported: response.import.formula_cells_imported,
+        formulaCellsWithCachedValues:
+          response.import.formula_cells_with_cached_values,
+        warnings: response.import.warnings,
+      });
       queryClient.invalidateQueries({ queryKey: ["cells", importedWorkbook.id] });
     },
     onError: (error) => {
@@ -3909,7 +3922,7 @@ export function SpreadsheetApp() {
             )}
             {lastWizardImportSummary && (
               <div className="mb-2 text-xs text-slate-400">
-                wizard import:{" "}
+                latest import:{" "}
                 <span className="font-mono text-slate-200">
                   {lastWizardImportSummary.sheetsImported} sheets /{" "}
                   {lastWizardImportSummary.cellsImported} cells /{" "}
