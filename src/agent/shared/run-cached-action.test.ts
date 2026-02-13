@@ -204,4 +204,37 @@ describe("runCachedStep", () => {
       logSpy.mockRestore();
     }
   });
+
+  it("returns failed replay metadata when cached attempts exhaust", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));
+
+    const result = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "click",
+        frameIndex: 0,
+        arguments: [],
+      },
+      maxSteps: 2,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("xpath resolution failed");
+    expect(result.replayStepMeta).toEqual(
+      expect.objectContaining({
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 2,
+        cachedXPath: "//button[1]",
+      })
+    );
+  });
 });
