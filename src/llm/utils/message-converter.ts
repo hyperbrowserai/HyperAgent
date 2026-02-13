@@ -138,68 +138,85 @@ function buildToolMessageLabel(toolName: string): string {
   return `[Tool ${normalizeToolNameForLabel(toolName)}]`;
 }
 
+function safeToMessageArray(messages: HyperAgentMessage[]): HyperAgentMessage[] {
+  try {
+    return Array.from(messages);
+  } catch {
+    return [];
+  }
+}
+
 export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
-  return messages.map((msg) => {
-    const openAIMessage: Record<string, unknown> = {
-      role: msg.role,
-    };
+  return safeToMessageArray(messages).map((msg) => {
+    try {
+      const openAIMessage: Record<string, unknown> = {
+        role: msg.role,
+      };
 
-    if (msg.role === "tool") {
-      const textContent =
-        typeof msg.content === "string"
-          ? msg.content
-          : extractTextContent(msg.content);
-      openAIMessage.content =
-        textContent.length > 0
-          ? textContent
-          : formatConverterFallback(msg.content);
-      openAIMessage.tool_call_id = normalizeToolCallId(
-        msg.toolCallId,
-        msg.toolName
-      );
-      return openAIMessage;
-    }
+      if (msg.role === "tool") {
+        const textContent =
+          typeof msg.content === "string"
+            ? msg.content
+            : extractTextContent(msg.content);
+        openAIMessage.content =
+          textContent.length > 0
+            ? textContent
+            : formatConverterFallback(msg.content);
+        openAIMessage.tool_call_id = normalizeToolCallId(
+          msg.toolCallId,
+          msg.toolName
+        );
+        return openAIMessage;
+      }
 
-    if (typeof msg.content === "string") {
-      openAIMessage.content = msg.content;
-    } else {
-      openAIMessage.content = msg.content.map((part: HyperAgentContentPart) => {
-        if (part.type === "text") {
-          return { type: "text", text: part.text };
-        } else if (part.type === "image") {
-          return {
-            type: "image_url",
-            image_url: { url: part.url },
-          };
-        } else if (part.type === "tool_call") {
-          const normalizedToolName = normalizeOpenAIToolName(part.toolName);
-          return {
-            type: "tool_call",
-            id: normalizedToolName,
+      if (typeof msg.content === "string") {
+        openAIMessage.content = msg.content;
+      } else {
+        const parts = Array.isArray(msg.content) ? Array.from(msg.content) : [];
+        openAIMessage.content = parts.map((part: HyperAgentContentPart) => {
+          if (part.type === "text") {
+            return { type: "text", text: part.text };
+          } else if (part.type === "image") {
+            return {
+              type: "image_url",
+              image_url: { url: part.url },
+            };
+          } else if (part.type === "tool_call") {
+            const normalizedToolName = normalizeOpenAIToolName(part.toolName);
+            return {
+              type: "tool_call",
+              id: normalizedToolName,
+              function: {
+                name: normalizedToolName,
+                arguments: stringifyToolArguments(part.arguments),
+              },
+            };
+          }
+          return { type: "text", text: formatConverterFallback(part) };
+        });
+      }
+
+      if (msg.role === "assistant" && msg.toolCalls) {
+        const toolCalls = Array.isArray(msg.toolCalls) ? Array.from(msg.toolCalls) : [];
+        openAIMessage.tool_calls = toolCalls.map(
+          (tc: { id?: string; name: string; arguments: unknown }) => ({
+            id: normalizeToolCallId(tc.id, tc.name),
+            type: "function",
             function: {
-              name: normalizedToolName,
-              arguments: stringifyToolArguments(part.arguments),
+              name: normalizeOpenAIToolName(tc.name),
+              arguments: stringifyToolArguments(tc.arguments),
             },
-          };
-        }
-        return { type: "text", text: formatConverterFallback(part) };
-      });
-    }
+          })
+        );
+      }
 
-    if (msg.role === "assistant" && msg.toolCalls) {
-      openAIMessage.tool_calls = msg.toolCalls.map(
-        (tc: { id?: string; name: string; arguments: unknown }) => ({
-          id: normalizeToolCallId(tc.id, tc.name),
-          type: "function",
-          function: {
-            name: normalizeOpenAIToolName(tc.name),
-            arguments: stringifyToolArguments(tc.arguments),
-          },
-        })
-      );
+      return openAIMessage;
+    } catch {
+      return {
+        role: "user",
+        content: formatConverterFallback(msg),
+      };
     }
-
-    return openAIMessage;
   });
 }
 
@@ -207,63 +224,71 @@ export function convertToAnthropicMessages(messages: HyperAgentMessage[]) {
   const anthropicMessages: MessageParam[] = [];
   const systemMessageParts: string[] = [];
 
-  for (const msg of messages) {
-    if (msg.role === "system") {
-      const systemText = extractTextContent(msg.content);
-      if (systemText.length > 0) {
-        systemMessageParts.push(systemText);
-      }
-      continue;
-    }
-
-    const role = msg.role === "assistant" ? "assistant" : "user";
-    const isToolMessage = msg.role === "tool";
-
-    let content: string | ContentBlockParam[];
-    if (typeof msg.content === "string") {
-      const baseContent = msg.content;
-      content = isToolMessage
-        ? `${buildToolMessageLabel(msg.toolName)}\n${baseContent}`
-        : baseContent;
-    } else {
-      const blocks: ContentBlockParam[] = [];
-      if (isToolMessage) {
-        blocks.push({
-          type: "text",
-          text: buildToolMessageLabel(msg.toolName),
-        });
-      }
-      for (const part of msg.content) {
-        if (part.type === "text") {
-          const textBlock: TextBlockParam = { type: "text", text: part.text };
-          blocks.push(textBlock);
-        } else if (part.type === "image") {
-          const base64Data = extractBase64Payload(part.url);
-          const mediaType = normalizeImageMimeType(part.mimeType);
-          const imageBlock: ImageBlockParam = {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType,
-              data: base64Data,
-            },
-          };
-          blocks.push(imageBlock);
-        } else {
-          const textBlock: TextBlockParam = {
-            type: "text",
-            text: formatConverterFallback(part),
-          };
-          blocks.push(textBlock);
+  for (const msg of safeToMessageArray(messages)) {
+    try {
+      if (msg.role === "system") {
+        const systemText = extractTextContent(msg.content);
+        if (systemText.length > 0) {
+          systemMessageParts.push(systemText);
         }
+        continue;
       }
-      content = blocks;
-    }
 
-    anthropicMessages.push({
-      role,
-      content,
-    });
+      const role = msg.role === "assistant" ? "assistant" : "user";
+      const isToolMessage = msg.role === "tool";
+
+      let content: string | ContentBlockParam[];
+      if (typeof msg.content === "string") {
+        const baseContent = msg.content;
+        content = isToolMessage
+          ? `${buildToolMessageLabel(msg.toolName)}\n${baseContent}`
+          : baseContent;
+      } else {
+        const blocks: ContentBlockParam[] = [];
+        if (isToolMessage) {
+          blocks.push({
+            type: "text",
+            text: buildToolMessageLabel(msg.toolName),
+          });
+        }
+        const parts = Array.isArray(msg.content) ? Array.from(msg.content) : [];
+        for (const part of parts) {
+          if (part.type === "text") {
+            const textBlock: TextBlockParam = { type: "text", text: part.text };
+            blocks.push(textBlock);
+          } else if (part.type === "image") {
+            const base64Data = extractBase64Payload(part.url);
+            const mediaType = normalizeImageMimeType(part.mimeType);
+            const imageBlock: ImageBlockParam = {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mediaType,
+                data: base64Data,
+              },
+            };
+            blocks.push(imageBlock);
+          } else {
+            const textBlock: TextBlockParam = {
+              type: "text",
+              text: formatConverterFallback(part),
+            };
+            blocks.push(textBlock);
+          }
+        }
+        content = blocks;
+      }
+
+      anthropicMessages.push({
+        role,
+        content,
+      });
+    } catch {
+      anthropicMessages.push({
+        role: "user",
+        content: formatConverterFallback(msg),
+      });
+    }
   }
 
   const systemMessage =
@@ -297,50 +322,58 @@ export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
   const geminiMessages: Record<string, unknown>[] = [];
   const systemInstructionParts: string[] = [];
 
-  for (const msg of messages) {
-    if (msg.role === "system") {
-      const systemText = extractTextContent(msg.content);
-      if (systemText.length > 0) {
-        systemInstructionParts.push(systemText);
-      }
-      continue;
-    }
-
-    const geminiMessage: Record<string, unknown> = {
-      role: msg.role === "assistant" ? "model" : "user",
-    };
-    const isToolMessage = msg.role === "tool";
-
-    if (typeof msg.content === "string") {
-      const baseText = msg.content;
-      geminiMessage.parts = [
-        {
-          text: isToolMessage
-            ? `${buildToolMessageLabel(msg.toolName)}\n${baseText}`
-            : baseText,
-        },
-      ];
-    } else {
-      const parts = msg.content.map((part: HyperAgentContentPart) => {
-        if (part.type === "text") {
-          return { text: part.text };
-        } else if (part.type === "image") {
-          const base64Data = extractBase64Payload(part.url);
-          return {
-            inlineData: {
-              mimeType: part.mimeType || "image/png",
-              data: base64Data,
-            },
-          };
+  for (const msg of safeToMessageArray(messages)) {
+    try {
+      if (msg.role === "system") {
+        const systemText = extractTextContent(msg.content);
+        if (systemText.length > 0) {
+          systemInstructionParts.push(systemText);
         }
-        return { text: formatConverterFallback(part) };
-      });
-      geminiMessage.parts = isToolMessage
-        ? [{ text: buildToolMessageLabel(msg.toolName) }, ...parts]
-        : parts;
-    }
+        continue;
+      }
 
-    geminiMessages.push(geminiMessage);
+      const geminiMessage: Record<string, unknown> = {
+        role: msg.role === "assistant" ? "model" : "user",
+      };
+      const isToolMessage = msg.role === "tool";
+
+      if (typeof msg.content === "string") {
+        const baseText = msg.content;
+        geminiMessage.parts = [
+          {
+            text: isToolMessage
+              ? `${buildToolMessageLabel(msg.toolName)}\n${baseText}`
+              : baseText,
+          },
+        ];
+      } else {
+        const contentParts = Array.isArray(msg.content) ? Array.from(msg.content) : [];
+        const parts = contentParts.map((part: HyperAgentContentPart) => {
+          if (part.type === "text") {
+            return { text: part.text };
+          } else if (part.type === "image") {
+            const base64Data = extractBase64Payload(part.url);
+            return {
+              inlineData: {
+                mimeType: part.mimeType || "image/png",
+                data: base64Data,
+              },
+            };
+          }
+          return { text: formatConverterFallback(part) };
+        });
+        geminiMessage.parts = isToolMessage
+          ? [{ text: buildToolMessageLabel(msg.toolName) }, ...parts]
+          : parts;
+      }
+
+      geminiMessages.push(geminiMessage);
+    } catch {
+      geminiMessages.push({
+        role: "user",
+        parts: [{ text: formatConverterFallback(msg) }],
+      });
+    }
   }
 
   const systemInstruction =

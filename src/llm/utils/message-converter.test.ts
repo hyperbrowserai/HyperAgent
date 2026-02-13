@@ -566,3 +566,109 @@ describe("system message text extraction", () => {
     });
   });
 });
+
+describe("message converter trap resilience", () => {
+  it("falls back to user text message when OpenAI conversion hits getter traps", () => {
+    const trappedMessage = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "role" || prop === "content") {
+            throw new Error("message getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    const result = convertToOpenAIMessages([
+      trappedMessage as unknown as HyperAgentMessage,
+    ]);
+
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: "{}",
+      },
+    ]);
+  });
+
+  it("falls back to user text block when Anthropic conversion hits getter traps", () => {
+    const trappedMessage = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "content") {
+            throw new Error("content getter trap");
+          }
+          if (prop === "role") {
+            return "user";
+          }
+          return undefined;
+        },
+      }
+    );
+
+    const result = convertToAnthropicMessages([
+      trappedMessage as unknown as HyperAgentMessage,
+    ]);
+
+    expect(result.messages).toEqual([
+      {
+        role: "user",
+        content: "{}",
+      },
+    ]);
+  });
+
+  it("falls back to user parts when Gemini conversion hits getter traps", () => {
+    const trappedMessage = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "content") {
+            throw new Error("content getter trap");
+          }
+          if (prop === "role") {
+            return "user";
+          }
+          return undefined;
+        },
+      }
+    );
+
+    const result = convertToGeminiMessages([
+      trappedMessage as unknown as HyperAgentMessage,
+    ]);
+
+    expect(result.messages).toEqual([
+      {
+        role: "user",
+        parts: [{ text: "{}" }],
+      },
+    ]);
+  });
+
+  it("returns empty payloads when message-list traversal traps throw", () => {
+    const trappedMessages = new Proxy([{}], {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.iterator) {
+          throw new Error("messages iterator trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    expect(
+      convertToOpenAIMessages(trappedMessages as unknown as HyperAgentMessage[])
+    ).toEqual([]);
+    expect(
+      convertToAnthropicMessages(
+        trappedMessages as unknown as HyperAgentMessage[]
+      )
+    ).toEqual({ messages: [], system: undefined });
+    expect(
+      convertToGeminiMessages(trappedMessages as unknown as HyperAgentMessage[])
+    ).toEqual({ messages: [], systemInstruction: undefined });
+  });
+});
