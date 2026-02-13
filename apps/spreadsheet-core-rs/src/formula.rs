@@ -107,6 +107,86 @@ pub fn parse_vlookup_formula(formula: &str) -> Option<VLookupFormula> {
   })
 }
 
+pub fn parse_and_formula(formula: &str) -> Option<Vec<String>> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "AND" && !args.is_empty() {
+    return Some(args);
+  }
+  None
+}
+
+pub fn parse_or_formula(formula: &str) -> Option<Vec<String>> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "OR" && !args.is_empty() {
+    return Some(args);
+  }
+  None
+}
+
+pub fn parse_not_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "NOT" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_len_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "LEN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_left_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "LEFT" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_right_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "RIGHT" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_date_formula(formula: &str) -> Option<(String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DATE" && args.len() == 3 {
+    return Some((args[0].clone(), args[1].clone(), args[2].clone()));
+  }
+  None
+}
+
+pub fn parse_year_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "YEAR" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_month_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "MONTH" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_day_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DAY" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 fn parse_function_arguments(formula: &str) -> Option<(String, Vec<String>)> {
   let expression = formula.trim();
   if !expression.starts_with('=') {
@@ -199,8 +279,12 @@ fn parse_range_reference(value: &str) -> Option<((u32, u32), (u32, u32))> {
 #[cfg(test)]
 mod tests {
   use super::{
-    address_from_row_col, parse_aggregate_formula, parse_cell_address,
-    parse_concat_formula, parse_if_formula, parse_today_formula, parse_vlookup_formula,
+    address_from_row_col, parse_aggregate_formula, parse_and_formula,
+    parse_concat_formula, parse_date_formula, parse_day_formula,
+    parse_left_formula, parse_len_formula, parse_month_formula,
+    parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
+    parse_if_formula, parse_today_formula, parse_vlookup_formula,
+    parse_year_formula,
   };
 
   #[test]
@@ -245,5 +329,43 @@ mod tests {
     assert_eq!(parsed.table_end, (6, 5));
     assert_eq!(parsed.result_col_index, 2);
     assert_eq!(parsed.range_lookup.as_deref(), Some("FALSE"));
+  }
+
+  #[test]
+  fn should_parse_logical_text_and_date_function_shapes() {
+    let and_args = parse_and_formula("=AND(A1>0,B1<10)").expect("and should parse");
+    assert_eq!(and_args, vec!["A1>0", "B1<10"]);
+
+    let or_args = parse_or_formula("=OR(A1=0,B1=0)").expect("or should parse");
+    assert_eq!(or_args, vec!["A1=0", "B1=0"]);
+
+    let not_arg = parse_not_formula("=NOT(A1=0)").expect("not should parse");
+    assert_eq!(not_arg, "A1=0");
+
+    let len_arg = parse_len_formula(r#"=LEN("abc")"#).expect("len should parse");
+    assert_eq!(len_arg, r#""abc""#);
+
+    let left_args =
+      parse_left_formula(r#"=LEFT("spreadsheet", 6)"#).expect("left should parse");
+    assert_eq!(left_args.0, r#""spreadsheet""#);
+    assert_eq!(left_args.1.as_deref(), Some("6"));
+
+    let right_args =
+      parse_right_formula(r#"=RIGHT("spreadsheet", 5)"#).expect("right should parse");
+    assert_eq!(right_args.0, r#""spreadsheet""#);
+    assert_eq!(right_args.1.as_deref(), Some("5"));
+
+    let date_parts = parse_date_formula("=DATE(2026,2,13)").expect("date should parse");
+    assert_eq!(date_parts, ("2026".to_string(), "2".to_string(), "13".to_string()));
+
+    assert_eq!(
+      parse_year_formula("=YEAR(A1)").as_deref(),
+      Some("A1"),
+    );
+    assert_eq!(
+      parse_month_formula("=MONTH(A1)").as_deref(),
+      Some("A1"),
+    );
+    assert_eq!(parse_day_formula("=DAY(A1)").as_deref(), Some("A1"));
   }
 }

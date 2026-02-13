@@ -1,13 +1,16 @@
 use crate::{
   error::ApiError,
   formula::{
-    address_from_row_col, parse_aggregate_formula, parse_cell_address,
-    parse_concat_formula, parse_if_formula, parse_single_ref_formula,
-    parse_today_formula, parse_vlookup_formula, VLookupFormula,
+    address_from_row_col, parse_aggregate_formula, parse_and_formula,
+    parse_cell_address, parse_concat_formula, parse_date_formula, parse_day_formula,
+    parse_if_formula, parse_left_formula, parse_len_formula, parse_month_formula,
+    parse_not_formula, parse_or_formula, parse_right_formula,
+    parse_single_ref_formula, parse_today_formula, parse_vlookup_formula,
+    parse_year_formula, VLookupFormula,
   },
   models::{CellMutation, CellRange, CellSnapshot},
 };
-use chrono::Utc;
+use chrono::{Datelike, NaiveDate, Utc};
 use duckdb::{params, Connection};
 use regex::Regex;
 use serde_json::Value;
@@ -282,6 +285,78 @@ fn evaluate_formula(
     return evaluate_vlookup_formula(connection, sheet, &vlookup_formula);
   }
 
+  if let Some(and_args) = parse_and_formula(formula) {
+    let result = and_args
+      .iter()
+      .map(|arg| evaluate_if_condition(connection, sheet, arg))
+      .collect::<Result<Vec<bool>, ApiError>>()?
+      .into_iter()
+      .all(|value| value);
+    return Ok(Some(result.to_string()));
+  }
+
+  if let Some(or_args) = parse_or_formula(formula) {
+    let result = or_args
+      .iter()
+      .map(|arg| evaluate_if_condition(connection, sheet, arg))
+      .collect::<Result<Vec<bool>, ApiError>>()?
+      .into_iter()
+      .any(|value| value);
+    return Ok(Some(result.to_string()));
+  }
+
+  if let Some(not_arg) = parse_not_formula(formula) {
+    return Ok(Some((!evaluate_if_condition(connection, sheet, &not_arg)?).to_string()));
+  }
+
+  if let Some(len_arg) = parse_len_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &len_arg)?;
+    return Ok(Some(text.chars().count().to_string()));
+  }
+
+  if let Some((text_arg, count_arg)) = parse_left_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &text_arg)?;
+    let char_count = parse_optional_char_count(connection, sheet, count_arg)?;
+    let value = text.chars().take(char_count).collect::<String>();
+    return Ok(Some(value));
+  }
+
+  if let Some((text_arg, count_arg)) = parse_right_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &text_arg)?;
+    let char_count = parse_optional_char_count(connection, sheet, count_arg)?;
+    let total = text.chars().count();
+    let skip_count = total.saturating_sub(char_count);
+    let value = text.chars().skip(skip_count).collect::<String>();
+    return Ok(Some(value));
+  }
+
+  if let Some((year_arg, month_arg, day_arg)) = parse_date_formula(formula) {
+    let year = parse_required_integer(connection, sheet, &year_arg)?;
+    let month = parse_required_unsigned(connection, sheet, &month_arg)?;
+    let day = parse_required_unsigned(connection, sheet, &day_arg)?;
+    let value = NaiveDate::from_ymd_opt(year, month, day)
+      .map(|date| date.to_string())
+      .unwrap_or_default();
+    return Ok(Some(value));
+  }
+
+  if let Some(year_arg) = parse_year_formula(formula) {
+    let date = parse_date_operand(connection, sheet, &year_arg)?;
+    return Ok(Some(date.map(|value| value.year().to_string()).unwrap_or_default()));
+  }
+
+  if let Some(month_arg) = parse_month_formula(formula) {
+    let date = parse_date_operand(connection, sheet, &month_arg)?;
+    return Ok(Some(
+      date.map(|value| value.month().to_string()).unwrap_or_default(),
+    ));
+  }
+
+  if let Some(day_arg) = parse_day_formula(formula) {
+    let date = parse_date_operand(connection, sheet, &day_arg)?;
+    return Ok(Some(date.map(|value| value.day().to_string()).unwrap_or_default()));
+  }
+
   if formula.starts_with('=') {
     return evaluate_expression_formula(connection, sheet, formula);
   }
@@ -342,9 +417,44 @@ fn evaluate_if_condition(
     }
   }
 
+  if let Some(logical_result) = evaluate_inline_logical_condition(connection, sheet, condition)?
+  {
+    return Ok(logical_result);
+  }
+
   Ok(resolve_truthy_operand(
     &resolve_scalar_operand(connection, sheet, condition)?,
   ))
+}
+
+fn evaluate_inline_logical_condition(
+  connection: &Connection,
+  sheet: &str,
+  condition: &str,
+) -> Result<Option<bool>, ApiError> {
+  let normalized = format!("={}", condition.trim());
+  if let Some(and_args) = parse_and_formula(&normalized) {
+    let values = and_args
+      .iter()
+      .map(|arg| evaluate_if_condition(connection, sheet, arg))
+      .collect::<Result<Vec<bool>, ApiError>>()?;
+    return Ok(Some(values.into_iter().all(|value| value)));
+  }
+
+  if let Some(or_args) = parse_or_formula(&normalized) {
+    let values = or_args
+      .iter()
+      .map(|arg| evaluate_if_condition(connection, sheet, arg))
+      .collect::<Result<Vec<bool>, ApiError>>()?;
+    return Ok(Some(values.into_iter().any(|value| value)));
+  }
+
+  if let Some(not_arg) = parse_not_formula(&normalized) {
+    let value = evaluate_if_condition(connection, sheet, &not_arg)?;
+    return Ok(Some(!value));
+  }
+
+  Ok(None)
 }
 
 fn split_condition(condition: &str, operator: &str) -> Option<(String, String)> {
@@ -472,6 +582,68 @@ fn resolve_scalar_operand(
   }
 
   Ok(trimmed.to_string())
+}
+
+fn parse_optional_char_count(
+  connection: &Connection,
+  sheet: &str,
+  maybe_operand: Option<String>,
+) -> Result<usize, ApiError> {
+  match maybe_operand {
+    Some(operand) => {
+      let value = resolve_scalar_operand(connection, sheet, &operand)?;
+      let parsed = value.trim().parse::<usize>().unwrap_or(0);
+      Ok(parsed)
+    }
+    None => Ok(1),
+  }
+}
+
+fn parse_required_integer(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<i32, ApiError> {
+  let resolved = resolve_scalar_operand(connection, sheet, operand)?;
+  let value = resolved
+    .trim()
+    .parse::<f64>()
+    .map(|number| number as i32)
+    .unwrap_or_default();
+  Ok(value)
+}
+
+fn parse_required_unsigned(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<u32, ApiError> {
+  let resolved = resolve_scalar_operand(connection, sheet, operand)?;
+  let value = resolved
+    .trim()
+    .parse::<f64>()
+    .map(|number| number.max(0.0) as u32)
+    .unwrap_or_default();
+  Ok(value)
+}
+
+fn parse_date_operand(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<Option<NaiveDate>, ApiError> {
+  let resolved = resolve_scalar_operand(connection, sheet, operand)?;
+  let trimmed = resolved.trim();
+  if trimmed.is_empty() {
+    return Ok(None);
+  }
+
+  let iso_parsed = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d").ok();
+  if iso_parsed.is_some() {
+    return Ok(iso_parsed);
+  }
+
+  Ok(NaiveDate::parse_from_str(trimmed, "%m/%d/%Y").ok())
 }
 
 fn evaluate_vlookup_formula(
@@ -695,12 +867,78 @@ mod tests {
         value: None,
         formula: Some(r#"=VLOOKUP("missing",E1:F2,2,FALSE)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 9,
+        value: None,
+        formula: Some(r#"=LEN("spreadsheet")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 10,
+        value: None,
+        formula: Some(r#"=LEFT("spreadsheet",6)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 11,
+        value: None,
+        formula: Some(r#"=RIGHT("spreadsheet",5)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 12,
+        value: None,
+        formula: Some("=DATE(2026,2,13)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 13,
+        value: None,
+        formula: Some("=YEAR(L1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 14,
+        value: None,
+        formula: Some("=MONTH(L1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 15,
+        value: None,
+        formula: Some("=DAY(L1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 16,
+        value: None,
+        formula: Some("=AND(A1>=100,A2<100)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 17,
+        value: None,
+        formula: Some("=OR(A1<100,A2<100)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 18,
+        value: None,
+        formula: Some("=NOT(A2>=100)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 19,
+        value: None,
+        formula: Some(r#"=IF(AND(A1>=100,A2<100),"eligible","ineligible")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 6);
+    assert_eq!(updated_cells, 17);
     assert!(unsupported_formulas.is_empty());
 
     let snapshots = get_cells(
@@ -710,7 +948,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 8,
+        end_col: 19,
       },
     )
     .expect("cells should be fetched");
@@ -747,6 +985,17 @@ mod tests {
       Some("Southeast"),
     );
     assert_eq!(by_position(1, 8).evaluated_value.as_deref(), Some(""));
+    assert_eq!(by_position(1, 9).evaluated_value.as_deref(), Some("11"));
+    assert_eq!(by_position(1, 10).evaluated_value.as_deref(), Some("spread"));
+    assert_eq!(by_position(1, 11).evaluated_value.as_deref(), Some("sheet"));
+    assert_eq!(by_position(1, 12).evaluated_value.as_deref(), Some("2026-02-13"));
+    assert_eq!(by_position(1, 13).evaluated_value.as_deref(), Some("2026"));
+    assert_eq!(by_position(1, 14).evaluated_value.as_deref(), Some("2"));
+    assert_eq!(by_position(1, 15).evaluated_value.as_deref(), Some("13"));
+    assert_eq!(by_position(1, 16).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 17).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 18).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 19).evaluated_value.as_deref(), Some("eligible"));
   }
 
   #[test]
