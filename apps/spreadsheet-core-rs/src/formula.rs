@@ -604,6 +604,22 @@ pub fn parse_trunc_formula(formula: &str) -> Option<(String, Option<String>)> {
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_even_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "EVEN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_odd_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ODD" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_exact_formula(formula: &str) -> Option<(String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "EXACT" && args.len() == 2 {
@@ -1109,7 +1125,7 @@ mod tests {
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
-    parse_trunc_formula,
+    parse_trunc_formula, parse_even_formula, parse_odd_formula,
     parse_sqrt_formula,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_counta_formula, parse_countblank_formula,
@@ -1313,6 +1329,8 @@ mod tests {
       parse_int_formula("=INT(-12.5)").as_deref(),
       Some("-12.5"),
     );
+    assert_eq!(parse_even_formula("=EVEN(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_odd_formula("=ODD(A1)").as_deref(), Some("A1"));
     let trunc = parse_trunc_formula("=TRUNC(12.345,2)").expect("trunc should parse");
     assert_eq!(trunc.0, "12.345");
     assert_eq!(trunc.1.as_deref(), Some("2"));

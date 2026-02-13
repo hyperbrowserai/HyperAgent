@@ -107,6 +107,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "MOD",
   "SIGN",
   "INT",
+  "EVEN",
+  "ODD",
   "TRUNC",
   "EXACT",
   "LEFT",

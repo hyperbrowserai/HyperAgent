@@ -29,6 +29,7 @@ use crate::{
     parse_find_formula,
     parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
+    parse_even_formula, parse_odd_formula,
     parse_single_ref_formula,
     parse_xor_formula,
     parse_sign_formula,
@@ -875,6 +876,36 @@ fn evaluate_formula(
   if let Some(int_arg) = parse_int_formula(formula) {
     let value = parse_required_float(connection, sheet, &int_arg)?;
     return Ok(Some(value.floor().to_string()));
+  }
+
+  if let Some(even_arg) = parse_even_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &even_arg)?;
+    let Some(parsed) = value.trim().parse::<f64>().ok() else {
+      return Ok(None);
+    };
+    let rounded = parsed.abs().ceil() as i64;
+    let candidate = if rounded % 2 == 0 { rounded } else { rounded + 1 };
+    let result = if parsed.is_sign_negative() {
+      -candidate
+    } else {
+      candidate
+    };
+    return Ok(Some(result.to_string()));
+  }
+
+  if let Some(odd_arg) = parse_odd_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &odd_arg)?;
+    let Some(parsed) = value.trim().parse::<f64>().ok() else {
+      return Ok(None);
+    };
+    let rounded = parsed.abs().ceil() as i64;
+    let candidate = if rounded % 2 == 1 { rounded } else { rounded + 1 };
+    let result = if parsed.is_sign_negative() {
+      -candidate
+    } else {
+      candidate
+    };
+    return Ok(Some(result.to_string()));
   }
 
   if let Some((value_arg, digits_arg)) = parse_trunc_formula(formula) {
@@ -3093,12 +3124,24 @@ mod tests {
         value: None,
         formula: Some("=COUNTBLANK(A1:A3)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 117,
+        value: None,
+        formula: Some("=EVEN(-1.2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 118,
+        value: None,
+        formula: Some("=ODD(1.2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 114);
+    assert_eq!(updated_cells, 116);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3112,7 +3155,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 116,
+        end_col: 118,
       },
     )
     .expect("cells should be fetched");
@@ -3285,6 +3328,8 @@ mod tests {
     assert_eq!(by_position(1, 114).evaluated_value.as_deref(), Some("36"));
     assert_eq!(by_position(1, 115).evaluated_value.as_deref(), Some("2"));
     assert_eq!(by_position(1, 116).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 117).evaluated_value.as_deref(), Some("-2"));
+    assert_eq!(by_position(1, 118).evaluated_value.as_deref(), Some("3"));
   }
 
   #[test]
@@ -3535,6 +3580,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec![r#"=ISODD("north")"#.to_string()]);
+  }
+
+  #[test]
+  fn should_leave_even_non_numeric_input_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=EVEN("north")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=EVEN("north")"#.to_string()]);
   }
 
   #[test]
