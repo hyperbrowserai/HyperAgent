@@ -294,6 +294,22 @@ export function SpreadsheetApp() {
   const wizardPresetOpsSignature =
     wizardPresetOpsQuery.data?.operations_signature ?? null;
   const wizardPreviewSource = workbook ? "workbook-scoped" : "global";
+  const scenarioSignatureStatus =
+    lastScenario === wizardScenario &&
+    lastOperationsSignature &&
+    wizardScenarioOpsSignature
+      ? lastOperationsSignature === wizardScenarioOpsSignature
+        ? "in-sync"
+        : "stale"
+      : null;
+  const presetSignatureStatus =
+    lastPreset === wizardPresetPreview &&
+    lastOperationsSignature &&
+    wizardPresetOpsSignature
+      ? lastOperationsSignature === wizardPresetOpsSignature
+        ? "in-sync"
+        : "stale"
+      : null;
 
   const statusText =
     createWorkbookMutation.isPending || importMutation.isPending
@@ -1313,12 +1329,25 @@ export function SpreadsheetApp() {
                   </button>
                 </div>
                 {wizardPresetOpsSignature ? (
-                  <p className="mb-1 text-[11px] text-slate-500">
-                    signature:{" "}
-                    <span className="font-mono text-slate-300">
-                      {wizardPresetOpsSignature}
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                    <span>
+                      signature:{" "}
+                      <span className="font-mono text-slate-300">
+                        {wizardPresetOpsSignature}
+                      </span>
                     </span>
-                  </p>
+                    {presetSignatureStatus ? (
+                      <span
+                        className={`rounded border px-1.5 py-0.5 ${
+                          presetSignatureStatus === "in-sync"
+                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
+                            : "border-amber-500/40 bg-amber-500/15 text-amber-200"
+                        }`}
+                      >
+                        {presetSignatureStatus}
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
                 {wizardPresetOpsQuery.isFetching ? (
                   <p className="text-[11px] text-slate-500">Loading preset operations…</p>
@@ -1421,12 +1450,25 @@ export function SpreadsheetApp() {
                   </button>
                 </div>
                 {wizardScenarioOpsSignature ? (
-                  <p className="mb-1 text-[11px] text-slate-500">
-                    signature:{" "}
-                    <span className="font-mono text-slate-300">
-                      {wizardScenarioOpsSignature}
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                    <span>
+                      signature:{" "}
+                      <span className="font-mono text-slate-300">
+                        {wizardScenarioOpsSignature}
+                      </span>
                     </span>
-                  </p>
+                    {scenarioSignatureStatus ? (
+                      <span
+                        className={`rounded border px-1.5 py-0.5 ${
+                          scenarioSignatureStatus === "in-sync"
+                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
+                            : "border-amber-500/40 bg-amber-500/15 text-amber-200"
+                        }`}
+                      >
+                        {scenarioSignatureStatus}
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
                 <div className="flex flex-wrap gap-1">
                   {wizardScenarioOps.map((operation, index) => (

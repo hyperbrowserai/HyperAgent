@@ -29,6 +29,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Signature mismatch responses trigger automatic preview refresh to reduce stale-plan retries
 - Agent integration panel surfaces discovered `agent/ops/preview` endpoint metadata
 - Top-level preset/scenario run buttons also prefetch signatures before execution
+- Preview panels show signature sync status (`in-sync` / `stale`) against latest execution
 - Event stream viewer with per-event-type filtering
 
 ## Run
