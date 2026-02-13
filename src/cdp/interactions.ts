@@ -278,6 +278,11 @@ function ensureActionContext(ctx: CDPActionContext): void {
       "[CDP][Interactions] Action context missing element handle"
     );
   }
+  if (!ctx.element.session || typeof ctx.element.session.send !== "function") {
+    throw new Error(
+      "[CDP][Interactions] Action context missing valid CDP session"
+    );
+  }
 }
 
 export async function dispatchCDPAction(
@@ -286,6 +291,9 @@ export async function dispatchCDPAction(
   ctx: CDPActionContext
 ): Promise<void> {
   ensureActionContext(ctx);
+  if (!Array.isArray(args)) {
+    throw new Error("[CDP][Interactions] Action args must be an array");
+  }
 
   switch (method) {
     case "click":

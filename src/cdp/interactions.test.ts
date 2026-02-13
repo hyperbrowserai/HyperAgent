@@ -20,6 +20,36 @@ function createSession(
   };
 }
 
+describe("dispatchCDPAction input guards", () => {
+  it("throws when action args are not an array", async () => {
+    const session = createSession(async () => ({}));
+
+    await expect(
+      dispatchCDPAction("click", null as unknown as unknown[], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow("[CDP][Interactions] Action args must be an array");
+  });
+
+  it("throws when action context has no valid session", async () => {
+    await expect(
+      dispatchCDPAction("click", [], {
+        element: {
+          session: {} as unknown as CDPSession,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow("[CDP][Interactions] Action context missing valid CDP session");
+  });
+});
+
 describe("dispatchCDPAction scroll fallback failures", () => {
   it("formats non-Error primary/fallback failures for scrollToElement", async () => {
     const session = createSession(async (method) => {
