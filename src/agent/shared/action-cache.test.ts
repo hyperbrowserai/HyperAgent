@@ -99,6 +99,93 @@ describe("action cache helpers", () => {
     ).not.toThrow();
   });
 
+  it("handles trap-prone action and actionOutput getters safely", () => {
+    const action = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "type" || prop === "params") {
+            throw new Error("action getter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as ActionType;
+    const actionOutput = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "success" || prop === "message" || prop === "debug") {
+            throw new Error("output getter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as ActionOutput;
+    const domState: A11yDOMState = {
+      elements: new Map(),
+      domState: "",
+      xpathMap: {},
+      backendNodeMap: {},
+    };
+
+    const entry = buildActionCacheEntry({
+      stepIndex: 99,
+      action,
+      actionOutput,
+      domState,
+    });
+
+    expect(entry.actionType).toBe("unknown");
+    expect(entry.success).toBe(false);
+    expect(entry.message).toBe("undefined");
+    expect(entry.arguments).toEqual([]);
+  });
+
+  it("handles trap-prone domState xpath maps safely", () => {
+    const action = {
+      type: "actElement",
+      params: {
+        elementId: "0-123",
+        method: "click",
+        arguments: [],
+      },
+    } as unknown as ActionType;
+    const actionOutput: ActionOutput = {
+      success: true,
+      message: "ok",
+      debug: {
+        elementMetadata: {
+          xpath: "//button[1]",
+        },
+      },
+    };
+    const domState = new Proxy(
+      {
+        elements: new Map(),
+        domState: "",
+        backendNodeMap: {},
+      },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "xpathMap") {
+            throw new Error("xpath map trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    ) as unknown as A11yDOMState;
+
+    const entry = buildActionCacheEntry({
+      stepIndex: 100,
+      action,
+      actionOutput,
+      domState,
+    });
+
+    expect(entry.xpath).toBe("//button[1]");
+  });
+
   it("uses actionParams url when goToUrl argument is whitespace", () => {
     const goToEntry: ActionCacheEntry = {
       stepIndex: 1,
