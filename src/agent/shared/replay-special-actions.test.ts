@@ -256,6 +256,23 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toContain("could not serialize extracted output");
   });
 
+  it("fails extract replay when serialization returns undefined", async () => {
+    const extract = jest.fn().mockResolvedValue(undefined);
+    const page = createPage({
+      extract,
+    });
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-undefined-extract",
+      actionType: "extract",
+      instruction: "extract undefined",
+      page: page as unknown as Page,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.output).toContain("could not serialize extracted output");
+  });
+
   it("formats object-thrown extract errors as readable JSON", async () => {
     const extract = jest.fn().mockRejectedValue({ reason: "bad extract" });
     const page = createPage({

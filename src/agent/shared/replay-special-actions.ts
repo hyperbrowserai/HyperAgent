@@ -97,6 +97,14 @@ function formatUnknownError(error: unknown): string {
   return String(error);
 }
 
+function serializeUnknown(value: unknown): string {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new Error("serialization produced undefined");
+  }
+  return serialized;
+}
+
 export async function executeReplaySpecialAction(
   params: ReplaySpecialActionInput
 ): Promise<TaskOutput | null> {
@@ -202,7 +210,7 @@ export async function executeReplaySpecialAction(
         serializedExtracted = extracted;
       } else {
         try {
-          serializedExtracted = JSON.stringify(extracted);
+          serializedExtracted = serializeUnknown(extracted);
         } catch (error) {
           const message = formatUnknownError(error);
           return {
