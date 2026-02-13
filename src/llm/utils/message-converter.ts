@@ -1,4 +1,5 @@
 import { HyperAgentMessage, HyperAgentContentPart } from "../types";
+import { formatUnknownError } from "@/utils";
 import type {
   MessageParam,
   ContentBlockParam,
@@ -93,7 +94,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
             },
           };
         }
-        return part;
+        return { type: "text", text: formatUnknownError(part) };
       });
     }
 
@@ -210,7 +211,7 @@ export function convertToGeminiMessages(messages: HyperAgentMessage[]) {
             },
           };
         }
-        return part;
+        return { text: formatUnknownError(part) };
       });
     }
 

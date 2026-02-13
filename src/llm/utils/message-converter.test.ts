@@ -85,6 +85,25 @@ describe("convertToOpenAIMessages", () => {
 
     expect(serialized).toBe("{}");
   });
+
+  it("normalizes unknown content parts to text payloads", () => {
+    const circularPart: Record<string, unknown> = { type: "mystery" };
+    circularPart.self = circularPart;
+
+    const result = convertToOpenAIMessages([
+      {
+        role: "assistant",
+        content: [circularPart as unknown as never],
+      },
+    ]);
+
+    expect(result[0]?.content).toEqual([
+      {
+        type: "text",
+        text: '{"type":"mystery","self":"[Circular]"}',
+      },
+    ]);
+  });
 });
 
 describe("image payload conversion", () => {
@@ -181,5 +200,23 @@ describe("system message text extraction", () => {
     ]);
 
     expect(systemInstruction).toBe("rule one\nrule two");
+  });
+
+  it("normalizes unknown Gemini content parts into text blocks", () => {
+    const circularPart: Record<string, unknown> = { type: "mystery" };
+    circularPart.self = circularPart;
+
+    const { messages } = convertToGeminiMessages([
+      {
+        role: "user",
+        content: [circularPart as unknown as never],
+      },
+    ]);
+
+    expect(messages[0]?.parts).toEqual([
+      {
+        text: '{"type":"mystery","self":"[Circular]"}',
+      },
+    ]);
   });
 });
