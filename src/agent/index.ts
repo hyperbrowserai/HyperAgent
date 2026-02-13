@@ -485,6 +485,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       })
       .finally(() => {
         delete this.taskResults[taskId];
+        delete this.tasks[taskId];
       });
     this.taskResults[taskId] = taskResult;
     return this.getTaskControl(taskId, taskResult);
@@ -549,10 +550,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       );
       this.context?.off("page", onPage);
       this.actionCacheByTaskId[taskId] = result.actionCache;
+      delete this.tasks[taskId];
       return result;
     } catch (error) {
       this.context?.off("page", onPage);
       taskState.status = TaskStatus.FAILED;
+      delete this.tasks[taskId];
       throw error;
     }
   }

@@ -108,6 +108,12 @@ describe("HyperAgent constructor and task controls", () => {
       status: TaskStatus.COMPLETED,
       output: "done",
     });
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, unknown>;
+      taskResults: Record<string, unknown>;
+    };
+    expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
+    expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
   });
 
   it("emits and surfaces task-scoped errors from async execution", async () => {
@@ -129,5 +135,39 @@ describe("HyperAgent constructor and task controls", () => {
     expect(emittedError).toBeInstanceOf(HyperagentTaskError);
     expect((emittedError as HyperagentTaskError).taskId).toBe(task.id);
     expect((emittedError as HyperagentTaskError).cause.message).toBe("boom");
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, unknown>;
+      taskResults: Record<string, unknown>;
+    };
+    expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
+    expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
+  });
+
+  it("cleans internal task state after synchronous executeTask completion", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+
+    await agent.executeTask("sync task", undefined, fakePage);
+
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, unknown>;
+    };
+    expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
   });
 });
