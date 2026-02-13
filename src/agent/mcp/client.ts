@@ -696,6 +696,32 @@ function safeGetConnectedServerEntries(
   }
 }
 
+function readServerTools(server: ServerConnection): Map<string, Tool> {
+  let tools: unknown;
+  try {
+    tools = (server as { tools?: unknown }).tools;
+  } catch (error) {
+    throw new Error(
+      `MCP server tools are unavailable: ${formatMCPIdentifier(
+        error,
+        "unknown-error"
+      )}`
+    );
+  }
+  if (!tools || typeof tools !== "object") {
+    throw new Error("MCP server tools are unavailable: invalid tools registry");
+  }
+  return tools as Map<string, Tool>;
+}
+
+function safeReadServerTools(server: ServerConnection): Map<string, Tool> | undefined {
+  try {
+    return readServerTools(server);
+  } catch {
+    return undefined;
+  }
+}
+
 function safeGetServerActions(server: ServerConnection): AgentActionDefinition[] {
   try {
     const actions = (server as { actions?: unknown }).actions;
@@ -712,12 +738,12 @@ function safeGetServerActions(server: ServerConnection): AgentActionDefinition[]
 }
 
 function safeGetServerToolNames(server: ServerConnection): string[] {
+  const tools = safeReadServerTools(server);
+  if (!tools) {
+    return [];
+  }
   try {
-    const tools = (server as { tools?: unknown }).tools;
-    if (!tools || typeof tools !== "object") {
-      return [];
-    }
-    return Array.from((tools as Map<string, Tool>).keys())
+    return Array.from(tools.keys())
       .filter((name): name is string => typeof name === "string")
       .map((name) => formatMCPIdentifier(name, "unknown-tool"));
   } catch {
@@ -1368,10 +1394,19 @@ class MCPClient {
     if (!normalizedServerId && connectedServerCount > 1) {
       const matchingServers: Array<{ serverId: string; toolName: string }> = [];
       for (const [id, server] of safeGetConnectedServerEntries(this.servers)) {
-        const resolvedTool = resolveMCPToolNameOnServer(
-          server.tools,
-          normalizedToolName
-        );
+        const serverTools = safeReadServerTools(server);
+        if (!serverTools) {
+          continue;
+        }
+        let resolvedTool: { toolName?: string; ambiguousMatches?: string[] };
+        try {
+          resolvedTool = resolveMCPToolNameOnServer(
+            serverTools,
+            normalizedToolName
+          );
+        } catch {
+          continue;
+        }
         if (resolvedTool.ambiguousMatches) {
           throw new Error(
             `Tool "${safeToolName}" matches multiple tools on server "${formatMCPIdentifier(
@@ -1412,9 +1447,10 @@ class MCPClient {
     if (!server) {
       throw new Error(`Server with ID ${safeServerId()} not found`);
     }
+    const serverTools = readServerTools(server);
     const resolvedTool = resolvedToolNameForServer
       ? { toolName: resolvedToolNameForServer }
-      : resolveMCPToolNameOnServer(server.tools, normalizedToolName);
+      : resolveMCPToolNameOnServer(serverTools, normalizedToolName);
     if (resolvedTool.ambiguousMatches) {
       throw new Error(
         `Tool "${safeToolName}" matches multiple tools on server "${safeServerId()}" (${summarizeMCPToolNames(
@@ -1428,7 +1464,7 @@ class MCPClient {
         `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
       );
     }
-    const registeredTool = safeGetMCPToolByName(server.tools, resolvedToolName);
+    const registeredTool = safeGetMCPToolByName(serverTools, resolvedToolName);
     if (!registeredTool) {
       throw new Error(
         `Tool "${safeToolName}" is not registered on server "${safeServerId()}"`
@@ -1560,9 +1596,13 @@ class MCPClient {
     const matchingServerIds: string[] = [];
     const ambiguousServerIds: string[] = [];
     for (const [serverId, server] of safeGetConnectedServerEntries(this.servers)) {
+      const serverTools = safeReadServerTools(server);
+      if (!serverTools) {
+        continue;
+      }
       try {
         const resolvedTool = resolveMCPToolNameOnServer(
-          server.tools,
+          serverTools,
           normalizedToolName
         );
         if (resolvedTool.ambiguousMatches) {

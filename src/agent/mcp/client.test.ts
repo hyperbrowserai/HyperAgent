@@ -1691,6 +1691,47 @@ describe("MCPClient.executeTool server selection", () => {
     expect(notesCallTool).not.toHaveBeenCalled();
   });
 
+  it("skips trap-prone tool registries when selecting server by tool name", async () => {
+    const mcpClient = new MCPClient(false);
+    const searchCallTool = jest.fn().mockResolvedValue({ content: [] });
+    const throwingTools = new Proxy(new Map(), {
+      get(target, prop, receiver): unknown {
+        if (prop === "has") {
+          return () => {
+            throw new Error("tools getter trap");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: throwingTools as unknown as Map<string, {}>,
+            client: { callTool: jest.fn() },
+          },
+        ],
+        [
+          "server-b",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool: searchCallTool },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.executeTool("search", { query: "coffee" });
+
+    expect(searchCallTool).toHaveBeenCalledWith({
+      name: "search",
+      arguments: { query: "coffee" },
+    });
+  });
+
   it("matches tool names case-insensitively within a server", async () => {
     const mcpClient = new MCPClient(false);
     const callTool = jest.fn().mockResolvedValue({ content: [] });
@@ -2077,6 +2118,33 @@ describe("MCPClient.executeTool server selection", () => {
     await expect(
       mcpClient.executeTool("search", { query: "missing" }, "server-a")
     ).rejects.toThrow("MCP tool registry lookup failed: tool retrieval unavailable");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("throws readable errors when server tool registry is unavailable", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn();
+    const trapServer = new Proxy(
+      {
+        client: { callTool },
+      },
+      {
+        get(target, prop, receiver): unknown {
+          if (prop === "tools") {
+            throw new Error("tools access trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+    setServersForClient(
+      mcpClient,
+      new Map([["server-a", trapServer]]) as unknown as Map<string, unknown>
+    );
+
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "server-a")
+    ).rejects.toThrow("MCP server tools are unavailable: tools access trap");
     expect(callTool).not.toHaveBeenCalled();
   });
 
@@ -2637,6 +2705,38 @@ describe("MCPClient.hasTool", () => {
           },
         ],
       ])
+    );
+
+    expect(mcpClient.hasTool("search")).toEqual({
+      exists: true,
+      serverId: "server-b",
+    });
+  });
+
+  it("continues hasTool lookup when one server tools registry getter traps", () => {
+    const mcpClient = new MCPClient(false);
+    const trapServer = new Proxy(
+      {},
+      {
+        get(target, prop, receiver): unknown {
+          if (prop === "tools") {
+            throw new Error("tools getter trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+    setServersForClient(
+      mcpClient,
+      new Map([
+        ["server-a", trapServer],
+        [
+          "server-b",
+          {
+            tools: new Map([["search", {}]]),
+          },
+        ],
+      ]) as unknown as Map<string, unknown>
     );
 
     expect(mcpClient.hasTool("search")).toEqual({
