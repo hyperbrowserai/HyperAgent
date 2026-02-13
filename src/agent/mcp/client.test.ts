@@ -109,6 +109,40 @@ describe("normalizeMCPToolParams", () => {
     );
   });
 
+  it("normalizes non-JSON primitive values in object params", () => {
+    const token = Symbol("token");
+    const sampleFunction = function sampleFunction(): void {
+      // noop
+    };
+
+    expect(
+      normalizeMCPToolParams({
+        bigintValue: BigInt(42),
+        symbolValue: token,
+        functionValue: sampleFunction,
+      })
+    ).toEqual({
+      bigintValue: "42n",
+      symbolValue: "Symbol(token)",
+      functionValue: "[Function sampleFunction]",
+    });
+  });
+
+  it("normalizes Date values and non-plain objects safely", () => {
+    const date = new Date("2025-01-01T00:00:00.000Z");
+    const map = new Map([["key", "value"]]);
+
+    expect(
+      normalizeMCPToolParams({
+        createdAt: date,
+        metadata: map as unknown as Record<string, unknown>,
+      })
+    ).toEqual({
+      createdAt: "2025-01-01T00:00:00.000Z",
+      metadata: "{}",
+    });
+  });
+
   it("rejects circular references in direct object params", () => {
     const circular: { self?: unknown } = {};
     circular.self = circular;

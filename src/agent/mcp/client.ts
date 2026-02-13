@@ -33,6 +33,14 @@ function hasUnsupportedControlChars(value: string): boolean {
   });
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 const MCPToolActionParams = z.object({
   params: z
     .union([z.string(), z.record(z.string(), z.unknown())])
@@ -88,14 +96,29 @@ export function normalizeMCPToolParams(
         seen.delete(value);
       }
     }
+    if (typeof value === "bigint") {
+      return `${value.toString()}n`;
+    }
+    if (typeof value === "symbol") {
+      return value.toString();
+    }
+    if (typeof value === "function") {
+      return `[Function ${value.name || "anonymous"}]`;
+    }
     if (typeof value === "string" && hasUnsupportedControlChars(value)) {
       throw new Error(
         "MCP tool params cannot include unsupported control characters in string values"
       );
     }
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? value.toString() : value.toISOString();
+    }
     if (typeof value === "object" && value !== null) {
       if (seen.has(value)) {
         throw new Error("MCP tool params cannot include circular references");
+      }
+      if (!isPlainRecord(value)) {
+        return formatUnknownError(value);
       }
       seen.add(value);
       try {
