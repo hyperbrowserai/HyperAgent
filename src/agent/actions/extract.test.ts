@@ -269,6 +269,29 @@ describe("ExtractActionDefinition.run", () => {
     expect(estimateTextTokenCount(promptText)).toBeLessThanOrEqual(4000);
   });
 
+  it("handles extremely small token limits without oversized markdown payload", async () => {
+    getCDPClient.mockRejectedValue(new Error("cdp unavailable"));
+    parseMarkdown.mockResolvedValue("token ".repeat(3000));
+    const invoke = jest.fn().mockResolvedValue({
+      role: "assistant",
+      content: "small-limit extraction",
+    });
+    const ctx = createContext(createMockLLM(invoke), { tokenLimit: 10 });
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "x",
+    });
+
+    expect(result.success).toBe(true);
+    const messages = invoke.mock.calls[0]?.[0] as Array<{
+      role: string;
+      content: Array<{ type: string; text?: string }>;
+    }>;
+    const promptText = messages[0]?.content?.[0]?.text ?? "";
+    expect(promptText).toContain("[Content truncated due to token limit]");
+    expect(promptText.length).toBeLessThan(500);
+  });
+
   it("falls back to plain text extraction when markdown conversion fails", async () => {
     parseMarkdown.mockRejectedValue(new Error("markdown parse failed"));
     const invoke = jest.fn().mockResolvedValue({

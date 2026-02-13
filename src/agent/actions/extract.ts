@@ -118,7 +118,7 @@ function computeMarkdownTokenBudget(params: {
     : `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n\nNo screenshot was available. Use the page content to extract the answer.`;
   const templateTokens = estimateTextTokenCount(templateText);
   const available = Math.floor(tokenLimit * 0.9) - templateTokens;
-  return Math.max(32, available);
+  return Math.max(0, available);
 }
 
 function normalizeTokenLimit(value: number): number {
