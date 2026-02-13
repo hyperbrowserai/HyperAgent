@@ -6,7 +6,8 @@ use crate::{
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_ln_formula, parse_log10_formula, parse_pi_formula,
-    parse_sin_formula, parse_cos_formula, parse_tan_formula,
+    parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_asin_formula,
+    parse_acos_formula, parse_atan_formula, parse_atan2_formula,
     parse_choose_formula, parse_left_formula,
     parse_ceiling_formula, parse_exact_formula, parse_floor_formula,
     parse_index_formula,
@@ -594,6 +595,33 @@ fn evaluate_formula(
   if let Some(tan_arg) = parse_tan_formula(formula) {
     let value = parse_required_float(connection, sheet, &tan_arg)?;
     return Ok(Some(value.tan().to_string()));
+  }
+
+  if let Some(asin_arg) = parse_asin_formula(formula) {
+    let value = parse_required_float(connection, sheet, &asin_arg)?;
+    if !(-1.0..=1.0).contains(&value) {
+      return Ok(None);
+    }
+    return Ok(Some(value.asin().to_string()));
+  }
+
+  if let Some(acos_arg) = parse_acos_formula(formula) {
+    let value = parse_required_float(connection, sheet, &acos_arg)?;
+    if !(-1.0..=1.0).contains(&value) {
+      return Ok(None);
+    }
+    return Ok(Some(value.acos().to_string()));
+  }
+
+  if let Some(atan_arg) = parse_atan_formula(formula) {
+    let value = parse_required_float(connection, sheet, &atan_arg)?;
+    return Ok(Some(value.atan().to_string()));
+  }
+
+  if let Some((x_arg, y_arg)) = parse_atan2_formula(formula) {
+    let x = parse_required_float(connection, sheet, &x_arg)?;
+    let y = parse_required_float(connection, sheet, &y_arg)?;
+    return Ok(Some(y.atan2(x).to_string()));
   }
 
   if let Some(abs_arg) = parse_abs_formula(formula) {
@@ -2800,12 +2828,36 @@ mod tests {
         value: None,
         formula: Some("=TAN(0)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 100,
+        value: None,
+        formula: Some("=ASIN(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 101,
+        value: None,
+        formula: Some("=ACOS(1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 102,
+        value: None,
+        formula: Some("=ATAN(1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 103,
+        value: None,
+        formula: Some("=ATAN2(0,1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 97);
+    assert_eq!(updated_cells, 101);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2819,7 +2871,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 99,
+        end_col: 103,
       },
     )
     .expect("cells should be fetched");
@@ -2963,6 +3015,16 @@ mod tests {
     assert_eq!(by_position(1, 97).evaluated_value.as_deref(), Some("0"));
     assert_eq!(by_position(1, 98).evaluated_value.as_deref(), Some("1"));
     assert_eq!(by_position(1, 99).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 100).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 101).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(
+      by_position(1, 102).evaluated_value.as_deref(),
+      Some("0.7853981633974483"),
+    );
+    assert_eq!(
+      by_position(1, 103).evaluated_value.as_deref(),
+      Some("1.5707963267948966"),
+    );
   }
 
   #[test]
@@ -3099,6 +3161,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=LN(0)".to_string(), "=LOG10(-1)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_inverse_trig_out_of_domain_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=ASIN(2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=ACOS(-2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=ASIN(2)".to_string(), "=ACOS(-2)".to_string()],
     );
   }
 
