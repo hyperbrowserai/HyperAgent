@@ -157,13 +157,14 @@ fn validate_expected_operations_signature(
         .to_string(),
     ));
   }
-  if expected == actual_signature {
+  let normalized_expected = expected.to_ascii_lowercase();
+  if normalized_expected == actual_signature {
     return Ok(());
   }
   Err(ApiError::bad_request_with_code(
     "OPERATION_SIGNATURE_MISMATCH",
     format!(
-      "Operation signature mismatch. expected={expected} actual={actual_signature}",
+      "Operation signature mismatch. expected={normalized_expected} actual={actual_signature}",
     ),
   ))
 }
@@ -1543,6 +1544,15 @@ mod tests {
       validate_expected_operations_signature(Some(signature.as_str()), signature.as_str())
         .is_ok(),
       "matching signature should validate",
+    );
+    let uppercase_signature = signature.to_ascii_uppercase();
+    assert!(
+      validate_expected_operations_signature(
+        Some(uppercase_signature.as_str()),
+        signature.as_str(),
+      )
+      .is_ok(),
+      "signature validation should be case-insensitive for hex digests",
     );
     assert!(
       validate_expected_operations_signature(Some("mismatch"), signature.as_str())
