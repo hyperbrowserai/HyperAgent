@@ -499,13 +499,19 @@ export function SpreadsheetApp() {
     setIsRunningPreset(true);
     try {
       setUiError(null);
+      const includeFileBase64 =
+        preset === "export_snapshot" ? false : wizardIncludeFileBase64;
+      const presetPlan = await getAgentPresetOperations(
+        workbook.id,
+        preset,
+        includeFileBase64,
+      );
       const response = await runAgentPreset(workbook.id, preset, {
         request_id: `preset-${preset}-${Date.now()}`,
         actor: "ui-preset",
         stop_on_error: true,
-        include_file_base64: preset === "export_snapshot" ? false : undefined,
-        expected_operations_signature:
-          preset === wizardPresetPreview ? wizardPresetOpsSignature ?? undefined : undefined,
+        include_file_base64: includeFileBase64,
+        expected_operations_signature: presetPlan.operations_signature,
       });
       setLastPreset(response.preset);
       setLastScenario(null);
@@ -538,13 +544,17 @@ export function SpreadsheetApp() {
     setIsRunningScenario(true);
     try {
       setUiError(null);
+      const scenarioPlan = await getAgentScenarioOperations(
+        workbook.id,
+        scenario,
+        false,
+      );
       const response = await runAgentScenario(workbook.id, scenario, {
         request_id: `scenario-${scenario}-${Date.now()}`,
         actor: "ui-scenario",
         stop_on_error: true,
         include_file_base64: false,
-        expected_operations_signature:
-          scenario === wizardScenario ? wizardScenarioOpsSignature ?? undefined : undefined,
+        expected_operations_signature: scenarioPlan.operations_signature,
       });
       setLastScenario(response.scenario);
       setLastPreset(null);
