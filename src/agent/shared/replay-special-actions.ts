@@ -39,6 +39,11 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function asNonEmptyTrimmedString(value: unknown): string | undefined {
+  const parsed = asString(value)?.trim();
+  return parsed && parsed.length > 0 ? parsed : undefined;
+}
+
 function asNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -73,8 +78,8 @@ export async function executeReplaySpecialAction(
 
   if (actionType === "goToUrl") {
     const url =
-      asString(actionArgs?.[0]) ??
-      asString(actionParams?.url) ??
+      asNonEmptyTrimmedString(actionArgs?.[0]) ??
+      asNonEmptyTrimmedString(actionParams?.url) ??
       "";
     if (!url) {
       return {

@@ -55,6 +55,21 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.replayStepMeta?.retries).toBe(1);
   });
 
+  it("fails goToUrl replay when url is empty after trimming", async () => {
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-empty-url",
+      actionType: "goToUrl",
+      arguments: ["   "],
+      page: page as unknown as Page,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.output).toContain("Missing URL for goToUrl");
+    expect(page.goto).not.toHaveBeenCalled();
+  });
+
   it("replays wait using duration from actionParams", async () => {
     const page = createPage();
 
