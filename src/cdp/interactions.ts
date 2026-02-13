@@ -378,6 +378,7 @@ function coerceActionStringArg(value: unknown, fallback = ""): string {
 }
 
 function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
+  const maxScrollTargetChars = 64;
   const normalizeScrollTarget = (
     value: unknown
   ): string | number | undefined => {
@@ -391,7 +392,10 @@ function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
       return undefined;
     }
     const normalized = stripControlChars(value).trim();
-    return normalized.length > 0 ? normalized : undefined;
+    if (normalized.length === 0 || normalized.length > maxScrollTargetChars) {
+      return undefined;
+    }
+    return normalized;
   };
   const normalizeScrollBehavior = (
     value: unknown
@@ -1271,6 +1275,7 @@ function stripControlChars(value: string): string {
 }
 
 function normalizeScrollPercent(target: unknown): number {
+  const maxScrollTargetChars = 64;
   if (typeof target === "number") {
     if (!Number.isFinite(target)) {
       return 50;
@@ -1281,7 +1286,7 @@ function normalizeScrollPercent(target: unknown): number {
     return 50;
   }
   const text = stripControlChars(target).trim();
-  if (text.length === 0) {
+  if (text.length === 0 || text.length > maxScrollTargetChars) {
     return 50;
   }
   if (text.endsWith("%")) {

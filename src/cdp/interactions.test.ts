@@ -552,4 +552,40 @@ describe("dispatchCDPAction argument coercion", () => {
     expect(firstArgs?.[0]?.value).toBe(50);
     expect(secondArgs?.[0]?.value).toBe(50);
   });
+
+  it("falls back to 50% for oversized scroll target strings", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {
+        result: {
+          value: { status: "done", finalTop: 0, maxScroll: 100 },
+        },
+      };
+    });
+    const oversizedTarget = "9".repeat(200);
+
+    await dispatchCDPAction("scrollToPercentage", [oversizedTarget], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const scrollCall = calls.find(
+      (call) =>
+        call.method === "Runtime.callFunctionOn" &&
+        typeof call.params?.functionDeclaration === "string" &&
+        (call.params.functionDeclaration as string).includes(
+          "function(percent, behavior)"
+        )
+    );
+    const args = scrollCall?.params?.arguments as
+      | Array<{ value?: unknown }>
+      | undefined;
+
+    expect(args?.[0]?.value).toBe(50);
+  });
 });
