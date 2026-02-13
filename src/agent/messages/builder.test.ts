@@ -488,4 +488,37 @@ describe("buildAgentStepMessages", () => {
     expect(joined).not.toContain("g".repeat(3000));
     expect(joined).not.toContain("d".repeat(3000));
   });
+
+  it("truncates oversized DOM state payloads", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const hugeDomState = "d".repeat(70_000);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: hugeDomState,
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const elementsMessage = messages.find(
+      (message) =>
+        typeof message.content === "string" &&
+        message.content.includes("=== Elements ===")
+    );
+
+    expect(typeof elementsMessage?.content).toBe("string");
+    const content = elementsMessage?.content as string;
+    expect(content).toContain("[DOM truncated for prompt budget]");
+    expect(content.length).toBeLessThan(51_000);
+  });
 });

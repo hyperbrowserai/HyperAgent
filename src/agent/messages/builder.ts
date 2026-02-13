@@ -9,6 +9,7 @@ import { formatUnknownError } from "@/utils";
 
 const MAX_HISTORY_STEPS = 10;
 const MAX_SERIALIZED_PROMPT_VALUE_CHARS = 2000;
+const MAX_DOM_STATE_CHARS = 50_000;
 const MAX_OPEN_TAB_ENTRIES = 20;
 const MAX_TAB_URL_CHARS = 500;
 
@@ -27,6 +28,16 @@ function truncateTabUrl(url: string): string {
     return url;
   }
   return `${url.slice(0, MAX_TAB_URL_CHARS)}... [tab url truncated]`;
+}
+
+function truncateDomState(domState: string): string {
+  if (domState.length <= MAX_DOM_STATE_CHARS) {
+    return domState;
+  }
+  return (
+    domState.slice(0, MAX_DOM_STATE_CHARS) +
+    "... [DOM truncated for prompt budget]"
+  );
 }
 
 function safeSerializeForPrompt(value: unknown): string {
@@ -183,7 +194,7 @@ export const buildAgentStepMessages = async (
   // Add elements section with DOM tree
   messages.push({
     role: "user",
-    content: `=== Elements ===\n${domState.domState}\n`,
+    content: `=== Elements ===\n${truncateDomState(domState.domState)}\n`,
   });
 
   // Add page screenshot section (only if screenshot is available)
