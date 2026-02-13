@@ -121,12 +121,13 @@ function normalizeOptionalStringArray(
 
   const seen = new Set<string>();
   for (const toolName of normalized) {
-    if (seen.has(toolName)) {
+    const normalizedKey = toolName.toLowerCase();
+    if (seen.has(normalizedKey)) {
       throw new Error(
         `MCP server entry at index ${index} contains duplicate "${field}" value "${toolName}" after trimming.`
       );
     }
-    seen.add(toolName);
+    seen.add(normalizedKey);
   }
 
   return normalized;
@@ -222,7 +223,10 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       normalizedEntry.sseHeaders = sseHeaders;
     }
     if (includeTools && excludeTools) {
-      const overlap = includeTools.filter((tool) => excludeTools.includes(tool));
+      const excludeLookup = new Set(excludeTools.map((tool) => tool.toLowerCase()));
+      const overlap = includeTools.filter((tool) =>
+        excludeLookup.has(tool.toLowerCase())
+      );
       if (overlap.length > 0) {
         throw new Error(
           `MCP server entry at index ${i} has tools present in both includeTools and excludeTools: ${overlap.join(", ")}.`

@@ -172,6 +172,14 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 contains duplicate "excludeTools" value "notes" after trimming.'
     );
+
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"command":"npx","includeTools":["Search","search"]}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 contains duplicate "includeTools" value "search" after trimming.'
+    );
   });
 
   it("normalizes connectionType casing/whitespace and rejects unsupported values", () => {
@@ -320,6 +328,14 @@ describe("parseMCPServersConfig", () => {
       )
     ).toThrow(
       "MCP server entry at index 0 has tools present in both includeTools and excludeTools: notes."
+    );
+
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"command":"npx","includeTools":["Search"],"excludeTools":["search"]}]'
+      )
+    ).toThrow(
+      "MCP server entry at index 0 has tools present in both includeTools and excludeTools: Search."
     );
   });
 });
