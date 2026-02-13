@@ -1059,7 +1059,10 @@ async fn openapi() -> Json<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
-  use super::{build_preset_operations, build_scenario_operations, normalize_sheet_name};
+  use super::{
+    build_preset_operations, build_scenario_operations, normalize_sheet_name,
+    parse_optional_bool,
+  };
 
   #[test]
   fn should_validate_sheet_name_rules() {
@@ -1090,5 +1093,27 @@ mod tests {
     assert!(seed_then_export.len() > refresh_then_export.len());
     assert!(!refresh_then_export.is_empty());
     assert!(build_scenario_operations("unknown_scenario", None).is_err());
+  }
+
+  #[test]
+  fn should_parse_optional_boolean_fields() {
+    assert_eq!(
+      parse_optional_bool(Some("true".to_string()), "flag")
+        .expect("true should parse"),
+      Some(true),
+    );
+    assert_eq!(
+      parse_optional_bool(Some("0".to_string()), "flag")
+        .expect("0 should parse"),
+      Some(false),
+    );
+    assert_eq!(
+      parse_optional_bool(None, "flag").expect("none should parse"),
+      None,
+    );
+    assert!(
+      parse_optional_bool(Some("not-a-bool".to_string()), "flag").is_err(),
+      "invalid bool-like value should fail",
+    );
   }
 }
