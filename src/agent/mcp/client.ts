@@ -794,7 +794,12 @@ class MCPClient {
     serverIds?: string[];
     isAmbiguous?: boolean;
   } {
-    const normalizedToolName = normalizeMCPExecutionToolName(toolName);
+    let normalizedToolName: string;
+    try {
+      normalizedToolName = normalizeMCPExecutionToolName(toolName);
+    } catch {
+      return { exists: false };
+    }
     const matchingServerIds: string[] = [];
     for (const [serverId, server] of this.servers.entries()) {
       if (server.tools.has(normalizedToolName)) {

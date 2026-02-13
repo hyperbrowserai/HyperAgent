@@ -1146,4 +1146,10 @@ describe("MCPClient.hasTool", () => {
 
     expect(mcpClient.hasTool("search")).toEqual({ exists: false });
   });
+
+  it("returns exists false for invalid lookup inputs", () => {
+    const mcpClient = new MCPClient(false);
+    expect(mcpClient.hasTool("   ")).toEqual({ exists: false });
+    expect(mcpClient.hasTool("sea\nrch")).toEqual({ exists: false });
+  });
 });
