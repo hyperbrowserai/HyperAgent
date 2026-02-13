@@ -1,4 +1,5 @@
 import type { Page } from "playwright-core";
+import { formatUnknownError } from "@/utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import { TaskOutput, TaskStatus } from "@/types/agent/types";
@@ -78,23 +79,6 @@ function normalizeWaitUntil(value: unknown): "domcontentloaded" | "load" | "netw
     return parsed;
   }
   return "domcontentloaded";
-}
-
-function formatUnknownError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
 }
 
 function serializeUnknown(value: unknown): string {

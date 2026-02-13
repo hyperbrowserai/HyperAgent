@@ -5,6 +5,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { Tool } from "@modelcontextprotocol/sdk/types";
 import { MCPServerConfig } from "@/types/config";
 import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
+import { formatUnknownError } from "@/utils";
 import { v4 as uuidv4 } from "uuid";
 
 interface ServerConnection {
@@ -27,23 +28,6 @@ const MCPToolActionParams = z.object({
 });
 
 type MCPToolActionInput = z.infer<typeof MCPToolActionParams>;
-
-const formatUnknownError = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
-};
 
 export function normalizeMCPToolParams(
   input: MCPToolActionInput["params"]

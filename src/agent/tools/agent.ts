@@ -19,6 +19,7 @@ import {
   getCDPClient,
   getOrCreateFrameContextManager,
 } from "@/cdp";
+import { formatUnknownError } from "@/utils";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
@@ -63,23 +64,6 @@ const writeFrameGraphSnapshot = async (
       );
     }
   }
-};
-
-const formatUnknownError = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
 };
 
 const ensureDirectorySafe = (dir: string, debug?: boolean): boolean => {

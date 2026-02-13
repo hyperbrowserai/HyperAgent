@@ -3,6 +3,7 @@ import { ActionContext } from "@/types";
 import { performAction } from "@/agent/actions/shared/perform-action";
 import { captureDOMState } from "@/agent/shared/dom-capture";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
+import { formatUnknownError } from "@/utils";
 import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import { initializeRuntimeContext } from "@/agent/shared/runtime-context";
 import { resolveXPathWithCDP } from "@/agent/shared/xpath-cdp-resolver";
@@ -39,23 +40,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const normalizeMaxSteps = (value: number): number =>
   Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
-
-const formatUnknownError = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
-};
 
 export async function runCachedStep(
   params: RunCachedStepParams

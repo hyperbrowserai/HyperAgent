@@ -50,7 +50,7 @@ import type {
   PerformTaskParams,
 } from "../types/agent/types";
 import { z } from "zod";
-import { ErrorEmitter } from "../utils";
+import { ErrorEmitter, formatUnknownError } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { performance } from "perf_hooks";
 import { ExamineDomResult } from "./examine-dom/types";
@@ -71,23 +71,6 @@ import {
   executeReplaySpecialAction,
   REPLAY_SPECIAL_ACTION_TYPES,
 } from "./shared/replay-special-actions";
-
-const formatUnknownError = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
-};
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants

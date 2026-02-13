@@ -2,6 +2,7 @@ import { performance } from "perf_hooks";
 import { ActionContext, ActionOutput } from "@/types";
 import type { ResolvedCDPElement, CDPActionMethod } from "@/cdp";
 import { isEncodedId, type EncodedId } from "@/context-providers/a11y-dom/types";
+import { formatUnknownError } from "@/utils";
 import { getElementLocator } from "../../shared/element-locator";
 import { executePlaywrightMethod } from "../../shared/execute-playwright-method";
 
@@ -14,23 +15,6 @@ export interface PerformActionParams {
 }
 
 const VARIABLE_TOKEN_PATTERN = /<<([^>]+)>>/g;
-
-function formatUnknownError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
-}
 
 function interpolateVariables(value: string, ctx: ActionContext): string {
   return value.replace(VARIABLE_TOKEN_PATTERN, (match, key) => {
