@@ -95,6 +95,7 @@ export function SpreadsheetApp() {
   >([]);
   const [isCopyingLastExecutionPayload, setIsCopyingLastExecutionPayload] =
     useState(false);
+  const [isReplayingLastRequest, setIsReplayingLastRequest] = useState(false);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -1065,6 +1066,36 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleReplayLastRequestId() {
+    if (!workbook || !lastAgentRequestId || lastExecutedOperations.length === 0) {
+      return;
+    }
+    setIsReplayingLastRequest(true);
+    try {
+      clearUiError();
+      const response = await runAgentOps(workbook.id, {
+        request_id: lastAgentRequestId,
+        actor: "ui-replay-last-request",
+        stop_on_error: true,
+        expected_operations_signature: lastOperationsSignature ?? undefined,
+        operations: lastExecutedOperations,
+      });
+      setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(response.served_from_cache ?? null);
+      setLastAgentOps(response.results);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error))
+      ) {
+        return;
+      }
+      applyUiError(error, "Failed to replay last request.");
+    } finally {
+      setIsReplayingLastRequest(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -1822,15 +1853,30 @@ export function SpreadsheetApp() {
                     {lastExecutedOperations.length}
                   </span>
                 </span>
-                <button
-                  onClick={handleCopyLastExecutionOpsPayload}
-                  disabled={isCopyingLastExecutionPayload || !workbook}
-                  className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-                >
-                  {isCopyingLastExecutionPayload
-                    ? "Copying..."
-                    : "Copy Last Plan as agent/ops"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleReplayLastRequestId}
+                    disabled={
+                      isReplayingLastRequest ||
+                      !workbook ||
+                      !lastAgentRequestId
+                    }
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isReplayingLastRequest
+                      ? "Replaying..."
+                      : "Replay Last request_id"}
+                  </button>
+                  <button
+                    onClick={handleCopyLastExecutionOpsPayload}
+                    disabled={isCopyingLastExecutionPayload || !workbook}
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingLastExecutionPayload
+                      ? "Copying..."
+                      : "Copy Last Plan as agent/ops"}
+                  </button>
+                </div>
               </div>
             ) : null}
             {lastAgentOps.length ? (
