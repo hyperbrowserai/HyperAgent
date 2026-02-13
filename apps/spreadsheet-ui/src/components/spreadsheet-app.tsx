@@ -145,6 +145,7 @@ export function SpreadsheetApp() {
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
+  const [cachePrefixSuggestionLimit, setCachePrefixSuggestionLimit] = useState("12");
   const [cachePrefixMinEntryCount, setCachePrefixMinEntryCount] = useState("");
   const [cachePrefixSortBy, setCachePrefixSortBy] = useState<"count" | "recent">(
     "count",
@@ -194,6 +195,12 @@ export function SpreadsheetApp() {
   const hasInvalidCachePrefixMinEntryCountInput =
     cachePrefixMinEntryCount.trim().length > 0
     && typeof normalizedCachePrefixMinEntryCount !== "number";
+  const normalizedCachePrefixSuggestionLimit = parsePositiveIntegerInput(
+    cachePrefixSuggestionLimit,
+  );
+  const hasInvalidCachePrefixSuggestionLimitInput =
+    cachePrefixSuggestionLimit.trim().length > 0
+    && typeof normalizedCachePrefixSuggestionLimit !== "number";
   const normalizedCacheRemovePreviewSampleLimit = parsePositiveIntegerInput(
     cacheRemovePreviewSampleLimit,
   );
@@ -341,16 +348,18 @@ export function SpreadsheetApp() {
       workbook?.id,
       cacheRequestIdPrefix,
       normalizedCacheEntriesMaxAgeSeconds,
+      normalizedCachePrefixSuggestionLimit,
       normalizedCachePrefixMinEntryCount,
       cachePrefixSortBy,
     ],
     enabled: Boolean(workbook?.id)
       && !hasInvalidCacheEntriesMaxAgeInput
-      && !hasInvalidCachePrefixMinEntryCountInput,
+      && !hasInvalidCachePrefixMinEntryCountInput
+      && !hasInvalidCachePrefixSuggestionLimitInput,
     queryFn: () =>
       getAgentOpsCachePrefixes(
         workbook!.id,
-        12,
+        normalizedCachePrefixSuggestionLimit ?? 12,
         cacheRequestIdPrefix,
         normalizedCacheEntriesMaxAgeSeconds,
         normalizedCachePrefixMinEntryCount,
@@ -549,7 +558,9 @@ export function SpreadsheetApp() {
     ? null
     : agentOpsCacheEntriesQuery.data;
   const cachePrefixSuggestions =
-    hasInvalidCacheEntriesMaxAgeInput || hasInvalidCachePrefixMinEntryCountInput
+    hasInvalidCacheEntriesMaxAgeInput
+    || hasInvalidCachePrefixMinEntryCountInput
+    || hasInvalidCachePrefixSuggestionLimitInput
     ? []
     : (agentOpsCachePrefixesQuery.data?.prefixes ?? []);
   const hasActiveCacheScopeFilters =
@@ -2783,6 +2794,29 @@ export function SpreadsheetApp() {
                       Clear age
                     </button>
                     <label className="text-[10px] text-slate-500">
+                      prefix limit
+                    </label>
+                    <input
+                      value={cachePrefixSuggestionLimit}
+                      onChange={(event) =>
+                        setCachePrefixSuggestionLimit(event.target.value)
+                      }
+                      placeholder="12"
+                      inputMode="numeric"
+                      className={`h-6 w-16 rounded bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 ${
+                        hasInvalidCachePrefixSuggestionLimitInput
+                          ? "border border-rose-500/80 focus:border-rose-400"
+                          : "border border-slate-700 focus:border-indigo-500"
+                      }`}
+                    />
+                    <button
+                      onClick={() => setCachePrefixSuggestionLimit("12")}
+                      disabled={cachePrefixSuggestionLimit.trim() === "12"}
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Reset limit
+                    </button>
+                    <label className="text-[10px] text-slate-500">
                       min prefix count
                     </label>
                     <input
@@ -2940,6 +2974,12 @@ export function SpreadsheetApp() {
                   {hasInvalidCachePrefixMinEntryCountInput ? (
                     <p className="mb-2 text-[10px] text-rose-300">
                       min prefix count must be a positive integer. Prefix queries are
+                      paused until corrected.
+                    </p>
+                  ) : null}
+                  {hasInvalidCachePrefixSuggestionLimitInput ? (
+                    <p className="mb-2 text-[10px] text-rose-300">
+                      prefix limit must be a positive integer. Prefix queries are
                       paused until corrected.
                     </p>
                   ) : null}
@@ -3115,6 +3155,11 @@ export function SpreadsheetApp() {
                           (sort {agentOpsCachePrefixesQuery.data.sort_by})
                         </span>
                       ) : null}
+                      {agentOpsCachePrefixesQuery.data ? (
+                        <span className="text-[10px] text-slate-500">
+                          (limit {agentOpsCachePrefixesQuery.data.limit})
+                        </span>
+                      ) : null}
                       {typeof agentOpsCachePrefixesQuery.data?.max_age_seconds === "number" ? (
                         <span className="text-[10px] text-slate-500">
                           (older than {agentOpsCachePrefixesQuery.data.max_age_seconds}s)
@@ -3175,6 +3220,9 @@ export function SpreadsheetApp() {
                         <> (min count {normalizedCachePrefixMinEntryCount})</>
                       ) : null}
                       <> (sort {cachePrefixSortBy})</>
+                      {typeof normalizedCachePrefixSuggestionLimit === "number" ? (
+                        <> (limit {normalizedCachePrefixSuggestionLimit})</>
+                      ) : null}
                       .
                     </div>
                   ) : null}
