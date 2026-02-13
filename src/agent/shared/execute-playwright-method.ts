@@ -6,9 +6,25 @@
 import type { Page } from "playwright-core";
 import { formatUnknownError } from "@/utils";
 
+const DEFAULT_CLICK_TIMEOUT_MS = 3_500;
+const MAX_CLICK_TIMEOUT_MS = 120_000;
+const MAX_METHOD_ARG_CHARS = 20_000;
+const MAX_SCROLL_PERCENT_ARG_CHARS = 64;
+const MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS = 240;
+
+function truncatePlaywrightDiagnostic(value: string): string {
+  if (value.length <= MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  return `${value.slice(
+    0,
+    MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS
+  )}... [truncated ${value.length - MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS} chars]`;
+}
+
 function stringifyMethodArgs(args: unknown[]): string {
   try {
-    return formatUnknownError(args);
+    return truncatePlaywrightDiagnostic(formatUnknownError(args));
   } catch {
     return "[args unavailable]";
   }
@@ -16,12 +32,98 @@ function stringifyMethodArgs(args: unknown[]): string {
 
 function coerceStringArg(value: unknown, fallback: string): string {
   if (typeof value === "string") {
-    return value.length > 0 ? value : fallback;
+    const normalized = value.length > 0 ? value : fallback;
+    if (normalized.length <= MAX_METHOD_ARG_CHARS) {
+      return normalized;
+    }
+    return normalized.slice(0, MAX_METHOD_ARG_CHARS);
   }
   if (value == null) {
     return fallback;
   }
-  return String(value);
+  let coerced: string;
+  try {
+    coerced = String(value);
+  } catch {
+    return fallback;
+  }
+  if (coerced.length === 0) {
+    return fallback;
+  }
+  if (coerced.length <= MAX_METHOD_ARG_CHARS) {
+    return coerced;
+  }
+  return coerced.slice(0, MAX_METHOD_ARG_CHARS);
+}
+
+function normalizeMethod(method: unknown): string {
+  if (typeof method !== "string") {
+    return "";
+  }
+  return method.trim();
+}
+
+function normalizeArgs(args: unknown): unknown[] {
+  if (!Array.isArray(args)) {
+    throw new Error("[executePlaywrightMethod] args must be an array");
+  }
+  try {
+    return Array.from(args);
+  } catch {
+    throw new Error("[executePlaywrightMethod] args must be an array");
+  }
+}
+
+function normalizeClickTimeout(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_CLICK_TIMEOUT_MS;
+  }
+  return Math.min(Math.floor(value), MAX_CLICK_TIMEOUT_MS);
+}
+
+function getLocatorMethod(
+  locator: ReturnType<Page["locator"]>,
+  methodName: string
+): (...args: unknown[]) => Promise<unknown> {
+  let method: unknown;
+  try {
+    method = (locator as unknown as Record<string, unknown>)[methodName];
+  } catch (error) {
+    throw new Error(
+      `[executePlaywrightMethod] Failed to access locator.${methodName}: ${truncatePlaywrightDiagnostic(
+        formatUnknownError(error)
+      )}`
+    );
+  }
+  if (typeof method !== "function") {
+    throw new Error(`[executePlaywrightMethod] Missing locator.${methodName} method`);
+  }
+  return method.bind(locator) as (...args: unknown[]) => Promise<unknown>;
+}
+
+async function invokeLocatorMethod(
+  locator: ReturnType<Page["locator"]>,
+  methodName: string,
+  args: unknown[]
+): Promise<unknown> {
+  const method = getLocatorMethod(locator, methodName);
+  try {
+    return await method(...args);
+  } catch (error) {
+    throw new Error(
+      `[executePlaywrightMethod] locator.${methodName} failed: ${truncatePlaywrightDiagnostic(
+        formatUnknownError(error)
+      )}`
+    );
+  }
+}
+
+function normalizeScrollArg(value: unknown): string {
+  const normalized = coerceStringArg(value ?? "50%", "50%");
+  if (normalized.length <= MAX_SCROLL_PERCENT_ARG_CHARS) {
+    return normalized;
+  }
+  return normalized.slice(0, MAX_SCROLL_PERCENT_ARG_CHARS);
 }
 
 /**
@@ -40,12 +142,15 @@ export async function executePlaywrightMethod(
   locator: ReturnType<Page["locator"]>,
   options: { clickTimeout?: number; debug?: boolean } = {}
 ): Promise<void> {
-  const { clickTimeout = 3500, debug = false } = options;
+  const clickTimeout = normalizeClickTimeout(options?.clickTimeout);
+  const debug = options?.debug === true;
+  const normalizedMethod = normalizeMethod(method);
+  const normalizedArgs = normalizeArgs(args);
 
-  switch (method) {
+  switch (normalizedMethod) {
     case "click":
       try {
-        await locator.click({ timeout: clickTimeout });
+        await invokeLocatorMethod(locator, "click", [{ timeout: clickTimeout }]);
       } catch (e) {
         const errorMsg = formatUnknownError(e);
         if (debug) {
@@ -54,11 +159,10 @@ export async function executePlaywrightMethod(
           );
         }
         try {
-          await locator.evaluate(
-            (el) => (el as HTMLElement).click(),
+          await invokeLocatorMethod(locator, "evaluate", [
+            (el: HTMLElement) => (el as HTMLElement).click(),
             undefined,
-            { timeout: clickTimeout }
-          );
+          ]);
         } catch (jsClickError) {
           const jsErrorMsg = formatUnknownError(jsClickError);
           throw new Error(
@@ -69,42 +173,48 @@ export async function executePlaywrightMethod(
       break;
     case "type":
     case "fill":
-      await locator.fill(coerceStringArg(args[0], ""));
+      await invokeLocatorMethod(locator, "fill", [
+        coerceStringArg(normalizedArgs[0], ""),
+      ]);
       break;
     case "selectOptionFromDropdown":
-      await locator.selectOption(coerceStringArg(args[0], ""));
+      await invokeLocatorMethod(locator, "selectOption", [
+        coerceStringArg(normalizedArgs[0], ""),
+      ]);
       break;
     case "hover":
-      await locator.hover();
+      await invokeLocatorMethod(locator, "hover", []);
       break;
     case "press":
-      await locator.press(coerceStringArg(args[0], "Enter"));
+      await invokeLocatorMethod(locator, "press", [
+        coerceStringArg(normalizedArgs[0], "Enter"),
+      ]);
       break;
     case "check":
-      await locator.check();
+      await invokeLocatorMethod(locator, "check", []);
       break;
     case "uncheck":
-      await locator.uncheck();
+      await invokeLocatorMethod(locator, "uncheck", []);
       break;
     case "scrollToElement":
-      await locator.evaluate((element) => {
+      await invokeLocatorMethod(locator, "evaluate", [(element: Element) => {
         if (typeof element.scrollIntoView === "function") {
           element.scrollIntoView({ behavior: "smooth", block: "center" });
         }
-      });
+      }]);
       break;
     case "scrollToPercentage":
       {
-        const scrollArg = (args[0] ?? "50%").toString();
-        await locator.evaluate(
-          (element, { yArg }) => {
+        const scrollArg = normalizeScrollArg(normalizedArgs[0]);
+        await invokeLocatorMethod(locator, "evaluate", [
+          (element: HTMLElement | Element, args: { yArg: string }) => {
             function parsePercent(val: string): number {
               const cleaned = val.trim().replace("%", "");
               const num = parseFloat(cleaned);
               return Number.isNaN(num) ? 0 : Math.max(0, Math.min(num, 100));
             }
 
-            const yPct = parsePercent(yArg);
+            const yPct = parsePercent(args.yArg);
 
             if (element.tagName.toLowerCase() === "html") {
               const scrollHeight = document.body.scrollHeight;
@@ -135,13 +245,13 @@ export async function executePlaywrightMethod(
               }
             }
           },
-          { yArg: scrollArg }
-        );
+          { yArg: scrollArg },
+        ]);
       }
       break;
     case "scrollTo":
       {
-        const target = args[0];
+        const target = normalizedArgs[0];
         if (target == null) {
           await executePlaywrightMethod("scrollToElement", [], locator);
         } else {
@@ -155,7 +265,7 @@ export async function executePlaywrightMethod(
       break;
     case "nextChunk":
       // Scroll down by one viewport/element height
-      await locator.evaluate((element) => {
+      await invokeLocatorMethod(locator, "evaluate", [(element: HTMLElement | Element) => {
         const waitForScrollEnd = (el: HTMLElement | Element) =>
           new Promise<void>((resolve) => {
             let last = el.scrollTop ?? 0;
@@ -185,11 +295,11 @@ export async function executePlaywrightMethod(
           behavior: "smooth",
         });
         return waitForScrollEnd(element);
-      });
+      }]);
       break;
     case "prevChunk":
       // Scroll up by one viewport/element height
-      await locator.evaluate((element) => {
+      await invokeLocatorMethod(locator, "evaluate", [(element: HTMLElement | Element) => {
         const waitForScrollEnd = (el: HTMLElement | Element) =>
           new Promise<void>((resolve) => {
             let last = el.scrollTop ?? 0;
@@ -219,10 +329,10 @@ export async function executePlaywrightMethod(
           behavior: "smooth",
         });
         return waitForScrollEnd(element);
-      });
+      }]);
       break;
     default: {
-      const errorMsg = `Unknown method: ${method}`;
+      const errorMsg = `Unknown method: ${normalizedMethod || formatUnknownError(method)}`;
       if (debug) {
         console.error(`[executePlaywrightMethod] ${errorMsg}`);
       }
@@ -232,7 +342,7 @@ export async function executePlaywrightMethod(
 
   if (debug) {
     console.log(
-      `[executePlaywrightMethod] Successfully executed ${method}(${stringifyMethodArgs(args)})`
+      `[executePlaywrightMethod] Successfully executed ${normalizedMethod}(${stringifyMethodArgs(normalizedArgs)})`
     );
   }
 }

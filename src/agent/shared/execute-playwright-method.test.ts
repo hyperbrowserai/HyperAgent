@@ -26,13 +26,21 @@ describe("executePlaywrightMethod", () => {
     const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
 
     try {
-      await expect(
-        executePlaywrightMethod("click", [], locator, { debug: true })
-      ).rejects.toThrow(
-        'Failed to click element. Playwright error: {"reason":"click failed"}. JS click error: {"reason":"js click failed"}'
-      );
+      let thrown: unknown;
+      try {
+        await executePlaywrightMethod("click", [], locator, { debug: true });
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeDefined();
+      const message = (thrown as Error).message;
+      expect(message).toContain("Failed to click element. Playwright error:");
+      expect(message).toContain("locator.click failed");
+      expect(message).toContain("locator.evaluate failed");
       expect(logSpy).toHaveBeenCalledWith(
-        '[executePlaywrightMethod] Playwright click failed, falling back to JS click: {"reason":"click failed"}'
+        expect.stringContaining(
+          "Playwright click failed, falling back to JS click: [executePlaywrightMethod] locator.click failed"
+        )
       );
     } finally {
       logSpy.mockRestore();
@@ -95,5 +103,83 @@ describe("executePlaywrightMethod", () => {
     await executePlaywrightMethod("press", [""], locator);
 
     expect(pressSpy).toHaveBeenCalledWith("Enter");
+  });
+
+  it("rejects non-array args with readable message", async () => {
+    const locator = createMockLocator();
+
+    await expect(
+      executePlaywrightMethod(
+        "click",
+        null as unknown as unknown[],
+        locator
+      )
+    ).rejects.toThrow("[executePlaywrightMethod] args must be an array");
+  });
+
+  it("handles locator method getter traps with readable diagnostics", async () => {
+    const locator = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "press") {
+            throw new Error("press getter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as LocatorLike;
+
+    await expect(
+      executePlaywrightMethod("press", ["Enter"], locator)
+    ).rejects.toThrow(
+      "[executePlaywrightMethod] Failed to access locator.press: press getter trap"
+    );
+  });
+
+  it("falls back to Enter when key coercion throws", async () => {
+    const pressSpy = jest.fn().mockResolvedValue(undefined);
+    const locator = createMockLocator({
+      press: pressSpy,
+    });
+    const badValue = {
+      toString(): string {
+        throw new Error("coercion trap");
+      },
+    };
+
+    await executePlaywrightMethod("press", [badValue], locator);
+
+    expect(pressSpy).toHaveBeenCalledWith("Enter");
+  });
+
+  it("normalizes clickTimeout bounds for click actions", async () => {
+    const clickSpy = jest.fn().mockResolvedValue(undefined);
+    const locator = createMockLocator({
+      click: clickSpy,
+    });
+
+    await executePlaywrightMethod("click", [], locator, {
+      clickTimeout: -1,
+    });
+    await executePlaywrightMethod("click", [], locator, {
+      clickTimeout: 999_999,
+    });
+
+    expect(clickSpy).toHaveBeenNthCalledWith(1, { timeout: 3500 });
+    expect(clickSpy).toHaveBeenNthCalledWith(2, { timeout: 120000 });
+  });
+
+  it("caps oversized text arguments before forwarding to fill", async () => {
+    const fillSpy = jest.fn().mockResolvedValue(undefined);
+    const locator = createMockLocator({
+      fill: fillSpy,
+    });
+    const huge = "x".repeat(25_000);
+
+    await executePlaywrightMethod("fill", [huge], locator);
+
+    expect(fillSpy).toHaveBeenCalled();
+    expect((fillSpy.mock.calls[0]?.[0] as string).length).toBe(20_000);
   });
 });
