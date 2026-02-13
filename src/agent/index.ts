@@ -447,6 +447,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private getTaskEntriesForClose(): Array<[string, TaskState]> {
+    try {
+      return Object.entries(this.tasks) as Array<[string, TaskState]>;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to enumerate tasks during close: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+      return [];
+    }
+  }
+
   private attachBrowserPageListener(context: BrowserContext): void {
     const contextOn = this.safeReadField(context, "on");
     if (typeof contextOn !== "function") {
@@ -844,8 +859,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         `[HyperAgent] Failed to dispose CDP clients: ${formatUnknownError(error)}`
       );
     });
-    for (const taskId in this.tasks) {
-      const task = this.tasks[taskId];
+    for (const [, task] of this.getTaskEntriesForClose()) {
       const currentStatus = this.readTaskStatus(task, TaskStatus.FAILED);
       if (!endTaskStatuses.has(currentStatus)) {
         this.writeTaskStatus(task, TaskStatus.CANCELLED, currentStatus);

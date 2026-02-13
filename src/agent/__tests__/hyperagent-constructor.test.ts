@@ -1519,4 +1519,48 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(agent.closeAgent()).resolves.toBeUndefined();
     expect(internalAgent.taskResults).toEqual({});
   });
+
+  it("closeAgent tolerates trapped task-registry enumeration", async () => {
+    const close = jest.fn(async () => undefined);
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, { status: TaskStatus }>;
+      browserProvider: {
+        close: typeof close;
+        getSession: () => unknown;
+      };
+      browser: null;
+      context: null;
+    };
+    internalAgent.tasks = new Proxy(
+      {
+        "task-a": { status: TaskStatus.RUNNING },
+      },
+      {
+        ownKeys: () => {
+          throw new Error("task entries trap");
+        },
+      }
+    ) as unknown as Record<string, { status: TaskStatus }>;
+    internalAgent.browserProvider = {
+      close,
+      getSession: () => ({ id: "session-1" }),
+    };
+    internalAgent.browser = null;
+    internalAgent.context = null;
+
+    try {
+      await expect(agent.closeAgent()).resolves.toBeUndefined();
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to enumerate tasks during close")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
