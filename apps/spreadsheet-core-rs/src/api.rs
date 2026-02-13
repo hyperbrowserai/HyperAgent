@@ -1064,14 +1064,14 @@ async fn get_agent_schema(
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter to entries older than or equal to this age)",
       "offset": "optional number, default 0",
-      "limit": "optional number, default 20, max 200"
+      "limit": "optional number, default 20, min 1, max 200"
     },
     "agent_ops_cache_prefixes_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
       "sort_by": "optional string enum: count|recent (default count)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
-      "limit": "optional number, default 8, max 100"
+      "limit": "optional number, default 8, min 1, max 100"
     },
     "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
     "agent_ops_cache_replay_endpoint": "/v1/workbooks/{id}/agent/ops/cache/replay",
@@ -1606,6 +1606,7 @@ async fn agent_ops_cache_entries(
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_ENTRIES_LIMIT)
+    .max(1)
     .min(MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT);
   let (total_entries, unscoped_total_entries, entries) = state
     .agent_ops_cache_entries(
@@ -1706,6 +1707,7 @@ async fn agent_ops_cache_prefixes(
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
+    .max(1)
     .min(MAX_AGENT_OPS_CACHE_PREFIXES_LIMIT);
   let (total_prefixes, unscoped_total_prefixes, prefixes) = state
     .agent_ops_cache_prefixes(
@@ -2760,6 +2762,23 @@ mod tests {
     assert!(!capped_response.has_more);
     assert_eq!(capped_response.entries[0].request_id, "handler-entries-1");
 
+    let min_clamped_response = agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCacheEntriesQuery {
+        request_id_prefix: None,
+        max_age_seconds: None,
+        offset: Some(0),
+        limit: Some(0),
+      }),
+    )
+    .await
+    .expect("zero limit should clamp to one")
+    .0;
+    assert_eq!(min_clamped_response.limit, 1);
+    assert_eq!(min_clamped_response.returned_entries, 1);
+    assert_eq!(min_clamped_response.entries[0].request_id, "handler-entries-3");
+
     let filtered_response = agent_ops_cache_entries(
       State(state.clone()),
       Path(workbook.id),
@@ -2961,6 +2980,24 @@ mod tests {
     assert_eq!(prefixes.prefixes[1].entry_count, 1);
     assert_eq!(prefixes.prefixes[1].newest_request_id, "preset-a");
     assert!(prefixes.prefixes[1].newest_cached_at.is_some());
+
+    let min_clamped_prefixes = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        sort_by: None,
+        max_age_seconds: None,
+        limit: Some(0),
+      }),
+    )
+    .await
+    .expect("zero prefix limit should clamp to one")
+    .0;
+    assert_eq!(min_clamped_prefixes.limit, 1);
+    assert_eq!(min_clamped_prefixes.returned_prefixes, 1);
+    assert_eq!(min_clamped_prefixes.prefixes[0].prefix, "scenario-");
 
     let age_filtered = agent_ops_cache_prefixes(
       State(state.clone()),
