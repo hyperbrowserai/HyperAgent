@@ -2552,6 +2552,42 @@ describe("MCPClient.hasTool", () => {
 
     expect(mcpClient.hasTool("search")).toEqual({ exists: false });
   });
+
+  it("continues hasTool lookup when one server tool registry traps", () => {
+    const mcpClient = new MCPClient(false);
+    const throwingTools = new Proxy(new Map([["search", {}]]), {
+      get(target, prop, receiver): unknown {
+        if (prop === "has") {
+          return () => {
+            throw new Error("tool registry unavailable");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: throwingTools as unknown as Map<string, unknown>,
+          },
+        ],
+        [
+          "server-b",
+          {
+            tools: new Map([["search", {}]]),
+          },
+        ],
+      ])
+    );
+
+    expect(mcpClient.hasTool("search")).toEqual({
+      exists: true,
+      serverId: "server-b",
+    });
+  });
 });
 
 describe("MCPClient server metadata accessors", () => {

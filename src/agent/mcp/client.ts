@@ -1533,8 +1533,8 @@ class MCPClient {
     }
     const matchingServerIds: string[] = [];
     const ambiguousServerIds: string[] = [];
-    try {
-      for (const [serverId, server] of this.servers.entries()) {
+    for (const [serverId, server] of safeGetConnectedServerEntries(this.servers)) {
+      try {
         const resolvedTool = resolveMCPToolNameOnServer(
           server.tools,
           normalizedToolName
@@ -1544,9 +1544,9 @@ class MCPClient {
         } else if (resolvedTool.toolName) {
           matchingServerIds.push(serverId);
         }
+      } catch {
+        continue;
       }
-    } catch {
-      return { exists: false };
     }
     const allMatchedServerIds = [...matchingServerIds, ...ambiguousServerIds];
     if (allMatchedServerIds.length === 0) {
