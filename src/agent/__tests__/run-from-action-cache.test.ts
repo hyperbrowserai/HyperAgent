@@ -407,6 +407,75 @@ describe("runFromActionCache hardening", () => {
     }
   });
 
+  it("prioritizes shutdown-stop diagnostics over replay-limit diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    let resolveWait!: () => void;
+    const waitForTimeout = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWait = resolve;
+        })
+    );
+    const perform = jest.fn();
+    const page = {
+      waitForTimeout,
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const maxReplaySteps = (
+      HyperAgent as unknown as { MAX_REPLAY_STEPS: number }
+    ).MAX_REPLAY_STEPS;
+    const steps: ActionCacheOutput["steps"] = [
+      {
+        stepIndex: 0,
+        instruction: "wait",
+        elementId: null,
+        method: null,
+        arguments: [],
+        actionParams: { duration: 10 },
+        frameIndex: null,
+        xpath: null,
+        actionType: "wait",
+        success: true,
+        message: "cached wait",
+      },
+      ...Array.from({ length: maxReplaySteps + 5 }, (_, index) => ({
+        stepIndex: index + 1,
+        instruction: `step ${index + 1}`,
+        elementId: null,
+        method: null,
+        arguments: [],
+        frameIndex: null,
+        xpath: null,
+        actionType: "unknown-action",
+        success: true,
+        message: "cached",
+      })),
+    ];
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps,
+    };
+
+    const replayPromise = agent.runFromActionCache(cache, page);
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    resolveWait();
+
+    const replay = await replayPromise;
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(perform).not.toHaveBeenCalled();
+    expect(replay.steps.some((step) => step.actionType === "replay-limit")).toBe(
+      false
+    );
+    expect(replay.steps[replay.steps.length - 1]?.message).toBe(
+      "Replay stopped because agent was closed"
+    );
+  });
+
   it("fails replay step cleanly when special action execution throws", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

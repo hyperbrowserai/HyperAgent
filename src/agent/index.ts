@@ -1513,9 +1513,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return replayResult;
     }
 
+    let replayStoppedByLifecycle = false;
     for (const step of sortedSteps) {
       if (!this.isTaskLifecycleGenerationActive(replayLifecycleGeneration)) {
         replayStatus = TaskStatus.FAILED;
+        replayStoppedByLifecycle = true;
         stepsResult.push({
           stepIndex: getSafeStepIndex(getStepIndexValue(step)),
           actionType: getActionType(step),
@@ -1705,7 +1707,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     }
 
-    if (omittedReplaySteps > 0) {
+    if (omittedReplaySteps > 0 && !replayStoppedByLifecycle) {
       replayStatus = TaskStatus.FAILED;
       stepsResult.push({
         stepIndex: -1,
