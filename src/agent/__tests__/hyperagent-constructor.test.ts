@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Page } from "playwright-core";
 import { HyperAgent } from "@/agent";
 import { getDebugOptions, setDebugOptions } from "@/debug/options";
-import type { AgentActionDefinition } from "@/types";
+import type { AgentActionDefinition, TaskState } from "@/types";
 import type { HyperAgentLLM } from "@/llm/types";
 import { runAgentTask } from "@/agent/tools/agent";
 import { TaskStatus, type AgentTaskOutput } from "@/types/agent/types";
@@ -165,6 +165,62 @@ describe("HyperAgent constructor and task controls", () => {
     expect((emittedError as HyperagentTaskError).cause.message).toBe(
       '{"reason":"object boom"}'
     );
+  });
+
+  it("preserves cancelled status when async task rejects after cancel", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let rejectTask!: (error: unknown) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((_, reject) => {
+          rejectTask = reject;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("cancel me", undefined, fakePage);
+    const emitterSpy = jest.spyOn(task.emitter, "emit");
+
+    expect(task.cancel()).toBe(TaskStatus.CANCELLED);
+    rejectTask(new Error("async cancel rejection"));
+
+    await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+    expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
+    expect(emitterSpy).not.toHaveBeenCalledWith(
+      "error",
+      expect.any(HyperagentTaskError)
+    );
+  });
+
+  it("preserves cancelled status when executeTask rejects after external cancellation", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let rejectTask!: (error: unknown) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((_, reject) => {
+          rejectTask = reject;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const execution = agent.executeTask("sync cancel", undefined, fakePage);
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, TaskState>;
+    };
+    const activeTaskState = Object.values(internalAgent.tasks)[0];
+    expect(activeTaskState).toBeDefined();
+    activeTaskState.status = TaskStatus.CANCELLED;
+
+    rejectTask(new Error("sync cancel rejection"));
+
+    await expect(execution).rejects.toThrow("sync cancel rejection");
+    expect(activeTaskState.status).toBe(TaskStatus.CANCELLED);
   });
 
   it("cleans internal task state after synchronous executeTask completion", async () => {

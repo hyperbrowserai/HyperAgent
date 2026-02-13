@@ -1000,10 +1000,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         const taskFailureError =
           new HyperagentTaskError(taskId, normalizedTaskError);
         if (failedTaskState) {
-          this.writeTaskStatus(failedTaskState, TaskStatus.FAILED);
-          failedTaskState.error = taskFailureError.cause.message;
-          // Emit error on the central emitter, including the taskId
-          this.errorEmitter.emit("error", taskFailureError);
+          const currentStatus = this.readTaskStatus(
+            failedTaskState,
+            TaskStatus.FAILED
+          );
+          const nextStatus =
+            currentStatus === TaskStatus.CANCELLED
+              ? TaskStatus.CANCELLED
+              : TaskStatus.FAILED;
+          this.writeTaskStatus(failedTaskState, nextStatus);
+          if (nextStatus !== TaskStatus.CANCELLED) {
+            failedTaskState.error = taskFailureError.cause.message;
+            // Emit error on the central emitter, including the taskId
+            this.errorEmitter.emit("error", taskFailureError);
+          }
         } else {
           // Fallback if task state somehow doesn't exist
           console.error(
@@ -1086,7 +1096,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return result;
     } catch (error) {
       cleanup();
-      this.writeTaskStatus(taskState, TaskStatus.FAILED);
+      const currentStatus = this.readTaskStatus(taskState, TaskStatus.FAILED);
+      const nextStatus =
+        currentStatus === TaskStatus.CANCELLED
+          ? TaskStatus.CANCELLED
+          : TaskStatus.FAILED;
+      this.writeTaskStatus(taskState, nextStatus);
       delete this.tasks[taskId];
       throw error;
     }
