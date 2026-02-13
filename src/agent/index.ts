@@ -201,6 +201,62 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return normalized.length > 0 ? normalized : null;
   }
 
+  private normalizeSingleActionInstruction(value: unknown): string {
+    if (typeof value !== "string") {
+      throw new HyperagentError(
+        "Action instruction must be a non-empty string",
+        400
+      );
+    }
+    const normalized = value.trim();
+    if (normalized.length === 0) {
+      throw new HyperagentError(
+        "Action instruction must be a non-empty string",
+        400
+      );
+    }
+    return normalized;
+  }
+
+  private normalizeRetryCount(
+    value: unknown,
+    fallback: number,
+    max: number = 20
+  ): number {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      return fallback;
+    }
+    return Math.min(Math.floor(value), max);
+  }
+
+  private normalizeRetryDelayMs(
+    value: unknown,
+    fallback: number,
+    max: number = 30_000
+  ): number {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return fallback;
+    }
+    return Math.min(Math.floor(value), max);
+  }
+
+  private resolveActionPageInput(pageOrGetter: Page | (() => Page)): Page {
+    let pageCandidate: unknown;
+    try {
+      pageCandidate =
+        typeof pageOrGetter === "function" ? pageOrGetter() : pageOrGetter;
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to resolve action page: ${formatUnknownError(error)}`,
+        400
+      );
+    }
+    if (!pageCandidate || typeof pageCandidate !== "object") {
+      throw new HyperagentError("Failed to resolve action page", 400);
+    }
+    return pageCandidate as Page;
+  }
+
   private getSafeMCPServerIds(): string[] {
     if (!this.mcpClient) {
       return [];
@@ -613,6 +669,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     params?: TaskParams,
     initPage?: Page
   ): Promise<Task> {
+    const normalizedTask = this.normalizeSingleActionInstruction(task);
     const taskId = uuidv4();
     let activeTaskPage = initPage || (await this.getCurrentPage());
 
@@ -638,7 +695,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const taskState: TaskState = {
       id: taskId,
-      task: task,
+      task: normalizedTask,
       status: TaskStatus.PENDING,
       startingPage: activeTaskPage,
       steps: [],
@@ -707,6 +764,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     params?: TaskParams,
     initPage?: Page
   ): Promise<AgentTaskOutput> {
+    const normalizedTask = this.normalizeSingleActionInstruction(task);
     const taskId = uuidv4();
     let activeTaskPage = initPage || (await this.getCurrentPage());
 
@@ -732,7 +790,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const taskState: TaskState = {
       id: taskId,
-      task: task,
+      task: normalizedTask,
       status: TaskStatus.PENDING,
       startingPage: activeTaskPage,
       steps: [],
@@ -1227,26 +1285,37 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     pageOrGetter: Page | (() => Page),
     params?: PerformTaskParams
   ): Promise<TaskOutput> {
+    const normalizedInstruction = this.normalizeSingleActionInstruction(
+      instruction
+    );
     const taskId = uuidv4();
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
     if (this.debug) {
-      console.log(`[aiAction] Instruction: ${instruction}`);
+      console.log(`[aiAction] Instruction: ${normalizedInstruction}`);
     }
 
-    const getPage = () =>
-      typeof pageOrGetter === "function" ? pageOrGetter() : pageOrGetter;
+    const getPage = (): Page => this.resolveActionPageInput(pageOrGetter);
     const initialPage = getPage();
+    const hasPageContextSwitched = (): boolean => {
+      try {
+        return getPage() !== initialPage;
+      } catch {
+        return true;
+      }
+    };
 
     let domState: A11yDOMState | null = null;
     let elementMap: Map<string, AccessibilityNode> | null = null;
 
-    const maxRetries =
-      params?.maxElementRetries ??
-      params?.maxSteps ??
-      HyperAgent.AIACTION_CONFIG.MAX_RETRIES;
-    const retryDelayMs =
-      params?.retryDelayMs ?? HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS;
+    const maxRetries = this.normalizeRetryCount(
+      params?.maxElementRetries ?? params?.maxSteps,
+      HyperAgent.AIACTION_CONFIG.MAX_RETRIES
+    );
+    const retryDelayMs = this.normalizeRetryDelayMs(
+      params?.retryDelayMs,
+      HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS
+    );
 
     try {
       // Find element with retry logic
@@ -1257,7 +1326,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         elementMap: foundElementMap,
         llmResponse,
       } = await this.findElementWithRetry(
-        instruction,
+        normalizedInstruction,
         initialPage,
         maxRetries,
         retryDelayMs,
@@ -1265,7 +1334,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       );
 
       // Check if page context switched during findElement (e.g. new tab opened by previous action)
-      if (getPage() !== initialPage) {
+      if (hasPageContextSwitched()) {
         throw new HyperagentError(
           "Page context switched during execution",
           409
@@ -1310,7 +1379,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       );
 
       // Check context switch again before action
-      if (getPage() !== initialPage) {
+      if (hasPageContextSwitched()) {
         throw new HyperagentError(
           "Page context switched during execution",
           409
@@ -1341,7 +1410,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         // These are required by ActionContext but not used by performAction
         debugDir: undefined,
         mcpClient: this.mcpClient,
-        variables: Object.values(this._variables),
+        variables: this.getVariableValues(),
         invalidateDomCache: () => markDomSnapshotDirty(initialPage),
       };
 
@@ -1350,7 +1419,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         elementId: element.elementId,
         method,
         arguments: args,
-        instruction,
+        instruction: normalizedInstruction,
         confidence: 1, // Implicit confidence for single action
       });
 
@@ -1375,7 +1444,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       // Write debug data on success
       await this.writeDebugData({
-        instruction,
+        instruction: normalizedInstruction,
         page: initialPage,
         startTime,
         domState,
@@ -1395,7 +1464,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         taskId,
         status: TaskStatus.COMPLETED,
         steps: [],
-        output: `Successfully executed: ${instruction}`,
+        output: `Successfully executed: ${normalizedInstruction}`,
         actionCache: {
           taskId,
           createdAt: startTime,
@@ -1414,7 +1483,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch (error) {
       // If page switched during execution, prioritize that over the error
       // This catches cases where findElement failed because the old page closed/navigated
-      if (getPage() !== initialPage) {
+      if (hasPageContextSwitched()) {
         throw new HyperagentError(
           "Page context switched during execution",
           409
@@ -1423,7 +1492,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       // Write debug data on error
       await this.writeDebugData({
-        instruction,
+        instruction: normalizedInstruction,
         page: initialPage,
         startTime,
         domState,
@@ -1770,7 +1839,37 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     // History Stack: [Root, Tab1, Tab2, ...]
     const pageStack: Page[] = [page];
-    const getActivePage = () => pageStack[pageStack.length - 1];
+    const getActivePage = (): Page => {
+      for (let i = pageStack.length - 1; i >= 0; i--) {
+        const candidate = pageStack[i];
+        try {
+          if (candidate && !candidate.isClosed()) {
+            return candidate;
+          }
+        } catch {
+          // keep scanning
+        }
+      }
+
+      let contextPages: Page[] = [];
+      try {
+        contextPages = Array.from(page.context().pages());
+      } catch {
+        contextPages = [];
+      }
+      for (let i = contextPages.length - 1; i >= 0; i--) {
+        const candidate = contextPages[i];
+        try {
+          if (candidate && !candidate.isClosed()) {
+            return candidate;
+          }
+        } catch {
+          // keep scanning
+        }
+      }
+
+      return page;
+    };
 
     // Handle tab closing (Pop)
     const handleClose = (p: Page) => {
@@ -1864,7 +1963,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       instruction: string,
       params?: PerformTaskParams
     ) => {
-      const maxRetries = params?.maxContextSwitchRetries ?? 3;
+      const maxRetries = this.normalizeRetryCount(
+        params?.maxContextSwitchRetries,
+        3,
+        10
+      );
       for (let i = 0; i < maxRetries; i++) {
         try {
           return await this.executeSingleAction(

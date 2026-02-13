@@ -6,7 +6,7 @@ import type { AgentActionDefinition } from "@/types";
 import type { HyperAgentLLM } from "@/llm/types";
 import { runAgentTask } from "@/agent/tools/agent";
 import { TaskStatus } from "@/types/agent/types";
-import { HyperagentTaskError } from "@/agent/error";
+import { HyperagentError, HyperagentTaskError } from "@/agent/error";
 
 jest.mock("@/agent/tools/agent", () => ({
   runAgentTask: jest.fn(),
@@ -473,6 +473,87 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(
       agent.connectToMCPServer(null as unknown as never)
     ).resolves.toBeNull();
+  });
+
+  it("rejects blank task descriptions for async and sync task execution", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+
+    await expect(
+      agent.executeTaskAsync("   ", undefined, fakePage)
+    ).rejects.toThrow("Action instruction must be a non-empty string");
+    await expect(
+      agent.executeTask("   ", undefined, fakePage)
+    ).rejects.toThrow("Action instruction must be a non-empty string");
+  });
+
+  it("rejects invalid single-action instruction inputs", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+
+    await expect(
+      agent.executeSingleAction("   ", fakePage)
+    ).rejects.toThrow("Action instruction must be a non-empty string");
+  });
+
+  it("surfaces readable errors when single-action page getter traps throw", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+
+    await expect(
+      agent.executeSingleAction("click submit", () => {
+        throw new Error("page getter trap");
+      })
+    ).rejects.toThrow("Failed to resolve action page: page getter trap");
+  });
+
+  it("normalizes invalid maxContextSwitchRetries for hyperPage.perform retries", async () => {
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: jest.fn(),
+        off: jest.fn(),
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+      executeSingleAction: jest.Mock;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+    internalAgent.executeSingleAction = jest
+      .fn()
+      .mockRejectedValueOnce(
+        new HyperagentError("Page context switched during execution", 409)
+      )
+      .mockResolvedValue({
+        taskId: "task-id",
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: "done",
+      });
+
+    const [hyperPage] = await agent.getPages();
+    const result = await hyperPage.perform("click submit", {
+      maxContextSwitchRetries: 0,
+    });
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(internalAgent.executeSingleAction).toHaveBeenCalledTimes(2);
   });
 
   it("executeTaskAsync tolerates context listener attachment failures", async () => {
