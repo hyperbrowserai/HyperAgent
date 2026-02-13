@@ -1,6 +1,7 @@
 import type { Page } from "playwright-core";
 import { HyperAgent } from "@/agent";
 import type { HyperAgentLLM } from "@/llm/types";
+import { TaskStatus } from "@/types";
 
 jest.mock("@/agent/shared/find-element", () => ({
   findElementWithInstruction: jest.fn(),
@@ -16,6 +17,10 @@ jest.mock("@/agent/shared/runtime-context", () => ({
 
 jest.mock("@/utils/waitForSettledDOM", () => ({
   waitForSettledDOM: jest.fn(),
+}));
+
+jest.mock("@/utils/debugWriter", () => ({
+  writeAiActionDebug: jest.fn(),
 }));
 
 jest.mock("@/context-providers/a11y-dom/dom-cache", () => ({
@@ -44,6 +49,12 @@ const { waitForSettledDOM } = jest.requireMock(
   "@/utils/waitForSettledDOM"
 ) as {
   waitForSettledDOM: jest.Mock;
+};
+
+const { writeAiActionDebug } = jest.requireMock(
+  "@/utils/debugWriter"
+) as {
+  writeAiActionDebug: jest.Mock;
 };
 
 function createMockLLM(): HyperAgentLLM {
@@ -149,5 +160,70 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     ).rejects.toThrow(
       'Failed to execute action: {"reason":"perform crashed"}'
     );
+  });
+
+  it("formats non-Error failure payloads written to aiAction debug artifacts", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+      screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
+    } as unknown as Page;
+    performAction.mockRejectedValue({ reason: "perform crashed" });
+    writeAiActionDebug.mockResolvedValue(undefined);
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await expect(
+        agent.executeSingleAction("click login", page, {
+          maxElementRetries: 1,
+        })
+      ).rejects.toThrow(
+        'Failed to execute action: {"reason":"perform crashed"}'
+      );
+
+      expect(writeAiActionDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            message: '{"reason":"perform crashed"}',
+          }),
+        })
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("formats non-Error aiAction debug writer failures", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+      screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
+    } as unknown as Page;
+    writeAiActionDebug.mockRejectedValue({ reason: "debug writer crashed" });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const result = await agent.executeSingleAction("click login", page, {
+        maxElementRetries: 1,
+      });
+
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[aiAction] Failed to write debug data: {"reason":"debug writer crashed"}'
+      );
+    } finally {
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
   });
 });

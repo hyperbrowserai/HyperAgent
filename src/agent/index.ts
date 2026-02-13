@@ -914,10 +914,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           availableElements,
           llmResponse: params.llmResponse,
           error: {
-            message:
-              params.error instanceof Error
-                ? params.error.message
-                : String(params.error),
+            message: formatUnknownError(params.error),
             stack:
               params.error instanceof Error ? params.error.stack : undefined,
           },
@@ -926,7 +923,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         });
       }
     } catch (debugError) {
-      console.error(`[aiAction] Failed to write debug data:`, debugError);
+      console.error(
+        `[aiAction] Failed to write debug data: ${formatUnknownError(debugError)}`
+      );
     }
   }
 
