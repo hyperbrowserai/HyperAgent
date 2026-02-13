@@ -42,7 +42,8 @@ use crate::{
     parse_sqrt_formula, parse_hour_formula, parse_minute_formula,
     parse_second_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
-    parse_today_formula, parse_now_formula, parse_true_formula,
+    parse_today_formula, parse_now_formula, parse_rand_formula,
+    parse_randbetween_formula, parse_true_formula,
     parse_false_formula, parse_upper_formula,
     parse_vlookup_formula,
     parse_xlookup_formula, parse_year_formula, parse_weekday_formula,
@@ -586,6 +587,27 @@ fn evaluate_formula(
 
   if parse_now_formula(formula).is_some() {
     return Ok(Some(Utc::now().to_rfc3339()));
+  }
+
+  if parse_rand_formula(formula).is_some() {
+    let random = connection
+      .query_row("SELECT RANDOM()", [], |row| row.get::<_, f64>(0))
+      .map_err(ApiError::internal)?;
+    return Ok(Some(random.to_string()));
+  }
+
+  if let Some((min_arg, max_arg)) = parse_randbetween_formula(formula) {
+    let min_value = parse_required_integer(connection, sheet, &min_arg)?;
+    let max_value = parse_required_integer(connection, sheet, &max_arg)?;
+    if min_value > max_value {
+      return Ok(None);
+    }
+    let random = connection
+      .query_row("SELECT RANDOM()", [], |row| row.get::<_, f64>(0))
+      .map_err(ApiError::internal)?;
+    let span = f64::from(max_value - min_value + 1);
+    let sampled = f64::from(min_value) + (random * span).floor();
+    return Ok(Some((sampled as i32).to_string()));
   }
 
   if parse_true_formula(formula).is_some() {
@@ -3482,12 +3504,24 @@ mod tests {
         value: None,
         formula: Some("=WEEKNUM(L1,2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 136,
+        value: None,
+        formula: Some("=RAND()".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 137,
+        value: None,
+        formula: Some("=RANDBETWEEN(1,6)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 133);
+    assert_eq!(updated_cells, 135);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3501,7 +3535,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 135,
+        end_col: 137,
       },
     )
     .expect("cells should be fetched");
@@ -3693,6 +3727,26 @@ mod tests {
     assert_eq!(by_position(1, 133).evaluated_value.as_deref(), Some("5"));
     assert_eq!(by_position(1, 134).evaluated_value.as_deref(), Some("7"));
     assert_eq!(by_position(1, 135).evaluated_value.as_deref(), Some("7"));
+    let rand_value = by_position(1, 136)
+      .evaluated_value
+      .as_deref()
+      .expect("rand formula should evaluate")
+      .parse::<f64>()
+      .expect("rand formula should produce numeric output");
+    assert!(
+      (0.0..1.0).contains(&rand_value),
+      "rand formula should be within [0, 1): {rand_value}",
+    );
+    let randbetween_value = by_position(1, 137)
+      .evaluated_value
+      .as_deref()
+      .expect("randbetween formula should evaluate")
+      .parse::<i32>()
+      .expect("randbetween formula should produce numeric output");
+    assert!(
+      (1..=6).contains(&randbetween_value),
+      "randbetween formula should be within [1, 6]: {randbetween_value}",
+    );
   }
 
   #[test]
@@ -4245,6 +4299,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=TRUE(1)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_randbetween_invalid_bounds_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=RANDBETWEEN(6,1)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=RANDBETWEEN(6,1)".to_string()]);
   }
 
   #[test]

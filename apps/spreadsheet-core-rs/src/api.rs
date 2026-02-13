@@ -144,6 +144,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "ISODD",
   "TODAY",
   "NOW",
+  "RAND",
+  "RANDBETWEEN",
   "DATE",
   "YEAR",
   "MONTH",

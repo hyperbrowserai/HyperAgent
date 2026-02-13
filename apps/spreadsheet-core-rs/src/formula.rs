@@ -173,6 +173,22 @@ pub fn parse_now_formula(formula: &str) -> Option<()> {
   None
 }
 
+pub fn parse_rand_formula(formula: &str) -> Option<()> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "RAND" && args.is_empty() {
+    return Some(());
+  }
+  None
+}
+
+pub fn parse_randbetween_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "RANDBETWEEN" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_true_formula(formula: &str) -> Option<()> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "TRUE" && args.is_empty() {
@@ -1238,7 +1254,8 @@ mod tests {
     parse_large_formula, parse_small_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
-    parse_today_formula, parse_now_formula, parse_true_formula,
+    parse_today_formula, parse_now_formula, parse_rand_formula,
+    parse_randbetween_formula, parse_true_formula,
     parse_false_formula, parse_pi_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
     parse_year_formula, parse_weekday_formula, parse_weeknum_formula,
@@ -1304,6 +1321,12 @@ mod tests {
     assert!(parse_today_formula("=TODAY(1)").is_none());
     assert!(parse_now_formula("=NOW()").is_some());
     assert!(parse_now_formula("=NOW(1)").is_none());
+    assert!(parse_rand_formula("=RAND()").is_some());
+    assert!(parse_rand_formula("=RAND(1)").is_none());
+    let randbetween = parse_randbetween_formula("=RANDBETWEEN(1,6)")
+      .expect("randbetween should parse");
+    assert_eq!(randbetween.0, "1");
+    assert_eq!(randbetween.1, "6");
     assert!(parse_true_formula("=TRUE()").is_some());
     assert!(parse_true_formula("=TRUE(1)").is_none());
     assert!(parse_false_formula("=FALSE()").is_some());
