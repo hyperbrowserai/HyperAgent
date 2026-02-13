@@ -6,7 +6,7 @@ use crate::{
     SetCellsResponse, UpsertChartRequest,
   },
   state::AppState,
-  store::{get_cells, recalculate_formulas, run_query, set_cells},
+  store::{get_cells, recalculate_formulas, set_cells},
   xlsx::{export_xlsx, import_xlsx},
 };
 use axum::{
@@ -237,13 +237,14 @@ async fn upsert_chart(
 }
 
 async fn duckdb_query(
-  State(state): State<AppState>,
-  Path(workbook_id): Path<Uuid>,
+  State(_state): State<AppState>,
+  Path(_workbook_id): Path<Uuid>,
   Json(payload): Json<QueryRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-  let db_path = state.db_path(workbook_id).await?;
-  let result = run_query(&db_path, payload.sql.as_str())?;
-  Ok(Json(json!({ "result": result })))
+  Err(ApiError::BadRequest(format!(
+    "Ad-hoc SQL is temporarily disabled in this build to ensure stability. Received query: {}. Use /cells/get and /cells/set-batch endpoints for agent-safe operations.",
+    payload.sql
+  )))
 }
 
 async fn export_workbook(

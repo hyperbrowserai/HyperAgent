@@ -18,6 +18,7 @@ pids
 *.seed
 *.pid.lock
 target/
+apps/spreadsheet-core-rs/data/
 
 .DS_Store
 

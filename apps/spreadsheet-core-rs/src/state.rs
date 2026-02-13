@@ -194,7 +194,7 @@ fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
         raw_value TEXT,
         formula TEXT,
         evaluated_value TEXT,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT now(),
         PRIMARY KEY(sheet, row_index, col_index)
       );
       "#,

@@ -111,12 +111,6 @@ pub struct QueryRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryResponse {
-  pub columns: Vec<String>,
-  pub rows: Vec<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportResponse {
   pub file_name: String,
   pub compatibility_report: CompatibilityReport,

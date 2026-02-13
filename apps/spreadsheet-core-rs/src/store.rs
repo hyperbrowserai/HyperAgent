@@ -4,9 +4,9 @@ use crate::{
     address_from_row_col, parse_aggregate_formula, parse_cell_address,
     parse_single_ref_formula,
   },
-  models::{CellMutation, CellRange, CellSnapshot, QueryResponse},
+  models::{CellMutation, CellRange, CellSnapshot},
 };
-use duckdb::{params, Connection, Value as DuckValue};
+use duckdb::{params, Connection};
 use regex::Regex;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -31,7 +31,7 @@ pub fn set_cells(
             raw_value = excluded.raw_value,
             formula = excluded.formula,
             evaluated_value = excluded.evaluated_value,
-            updated_at = CURRENT_TIMESTAMP
+            updated_at = now()
         "#,
         params![
           sheet,
@@ -137,7 +137,7 @@ pub fn recalculate_formulas(
           .execute(
             r#"
             UPDATE cells
-            SET evaluated_value = ?1, updated_at = CURRENT_TIMESTAMP
+            SET evaluated_value = ?1, updated_at = now()
             WHERE sheet = ?2 AND row_index = ?3 AND col_index = ?4
             "#,
             params![value, sheet, row_index, col_index],
@@ -151,36 +151,6 @@ pub fn recalculate_formulas(
   }
 
   Ok((updated_cells, unsupported_formulas))
-}
-
-pub fn run_query(db_path: &PathBuf, sql: &str) -> Result<QueryResponse, ApiError> {
-  validate_query(sql)?;
-  let connection = Connection::open(db_path).map_err(ApiError::internal)?;
-  let mut statement = connection.prepare(sql).map_err(ApiError::internal)?;
-  let columns = statement
-    .column_names()
-    .iter()
-    .map(|name| (*name).to_string())
-    .collect::<Vec<String>>();
-
-  let mut rows = statement.query([]).map_err(ApiError::internal)?;
-  let mut row_values = Vec::new();
-  while let Some(row) = rows.next().map_err(ApiError::internal)? {
-    let mut values = Vec::new();
-    for index in 0..columns.len() {
-      let value = row
-        .get::<_, DuckValue>(index)
-        .map_err(ApiError::internal)
-        .map(duck_value_to_string)?;
-      values.push(value);
-    }
-    row_values.push(values);
-  }
-
-  Ok(QueryResponse {
-    columns,
-    rows: row_values,
-  })
 }
 
 pub fn load_sheet_snapshot(
@@ -332,28 +302,6 @@ fn evaluate_expression_formula(
   Ok(Some(result.to_string()))
 }
 
-fn validate_query(sql: &str) -> Result<(), ApiError> {
-  let trimmed = sql.trim();
-  if trimmed.is_empty() {
-    return Err(ApiError::BadRequest(
-      "SQL query cannot be empty.".to_string(),
-    ));
-  }
-
-  let normalized = trimmed.to_uppercase();
-  if !normalized.starts_with("SELECT") && !normalized.starts_with("WITH") {
-    return Err(ApiError::BadRequest(
-      "Only SELECT/WITH queries are allowed.".to_string(),
-    ));
-  }
-  if normalized.contains(';') {
-    return Err(ApiError::BadRequest(
-      "Only single-statement SQL is allowed.".to_string(),
-    ));
-  }
-  Ok(())
-}
-
 fn normalize_cell_payload(
   cell: &CellMutation,
 ) -> Result<(Option<String>, Option<String>, Option<String>), ApiError> {
@@ -385,21 +333,3 @@ fn json_value_to_string(value: &Value) -> Result<String, String> {
   }
 }
 
-fn duck_value_to_string(value: DuckValue) -> String {
-  match value {
-    DuckValue::Null => String::new(),
-    DuckValue::Boolean(v) => v.to_string(),
-    DuckValue::TinyInt(v) => v.to_string(),
-    DuckValue::SmallInt(v) => v.to_string(),
-    DuckValue::Int(v) => v.to_string(),
-    DuckValue::BigInt(v) => v.to_string(),
-    DuckValue::UTinyInt(v) => v.to_string(),
-    DuckValue::USmallInt(v) => v.to_string(),
-    DuckValue::UInt(v) => v.to_string(),
-    DuckValue::UBigInt(v) => v.to_string(),
-    DuckValue::Float(v) => v.to_string(),
-    DuckValue::Double(v) => v.to_string(),
-    DuckValue::Text(v) => v,
-    other => format!("{other:?}"),
-  }
-}
