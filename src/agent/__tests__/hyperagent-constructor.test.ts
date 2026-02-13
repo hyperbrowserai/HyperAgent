@@ -733,6 +733,100 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("executeTaskAsync succeeds when action-cache order access traps throw", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      actionCacheTaskOrder: string[];
+    };
+    Object.defineProperty(internalAgent, "actionCacheTaskOrder", {
+      configurable: true,
+      get: () => {
+        throw new Error("cache order get trap");
+      },
+      set: () => {
+        throw new Error("cache order set trap");
+      },
+    });
+
+    const fakePage = {} as unknown as Page;
+    try {
+      const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.COMPLETED,
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to update action-cache order")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("executeTask succeeds when action-cache order access traps throw", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      actionCacheTaskOrder: string[];
+    };
+    Object.defineProperty(internalAgent, "actionCacheTaskOrder", {
+      configurable: true,
+      get: () => {
+        throw new Error("cache order get trap");
+      },
+      set: () => {
+        throw new Error("cache order set trap");
+      },
+    });
+
+    const fakePage = {} as unknown as Page;
+    try {
+      await expect(agent.executeTask("sync task", undefined, fakePage)).resolves
+        .toMatchObject({
+          status: TaskStatus.COMPLETED,
+        });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to update action-cache order")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("evicts oldest action caches when cache history exceeds limit", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockImplementation((_, taskState) =>

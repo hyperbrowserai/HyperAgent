@@ -409,28 +409,40 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return;
     }
 
-    this.actionCacheTaskOrder = this.actionCacheTaskOrder.filter(
-      (cachedTaskId) => cachedTaskId !== normalizedTaskId
-    );
-    this.actionCacheTaskOrder.push(normalizedTaskId);
+    try {
+      const currentOrder = Array.isArray(this.actionCacheTaskOrder)
+        ? this.actionCacheTaskOrder
+        : [];
+      const nextOrder = currentOrder.filter(
+        (cachedTaskId) => cachedTaskId !== normalizedTaskId
+      );
+      nextOrder.push(normalizedTaskId);
 
-    while (
-      this.actionCacheTaskOrder.length > HyperAgent.MAX_ACTION_CACHE_ENTRIES
-    ) {
-      const evictedTaskId = this.actionCacheTaskOrder.shift();
-      if (!evictedTaskId) {
-        continue;
-      }
-      try {
-        delete this.actionCacheByTaskId[evictedTaskId];
-      } catch (error) {
-        if (this.debug) {
-          console.warn(
-            `[HyperAgent] Failed to evict action cache for task ${evictedTaskId}: ${formatUnknownError(
-              error
-            )}`
-          );
+      while (nextOrder.length > HyperAgent.MAX_ACTION_CACHE_ENTRIES) {
+        const evictedTaskId = nextOrder.shift();
+        if (!evictedTaskId) {
+          continue;
         }
+        try {
+          delete this.actionCacheByTaskId[evictedTaskId];
+        } catch (error) {
+          if (this.debug) {
+            console.warn(
+              `[HyperAgent] Failed to evict action cache for task ${evictedTaskId}: ${formatUnknownError(
+                error
+              )}`
+            );
+          }
+        }
+      }
+      this.actionCacheTaskOrder = nextOrder;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to update action-cache order for task ${normalizedTaskId}: ${formatUnknownError(
+            error
+          )}`
+        );
       }
     }
   }
