@@ -11,13 +11,34 @@ type ResumableTask = {
   resume: () => void;
 };
 
+function readTaskMethod<T extends "getStatus" | "pause" | "resume">(
+  task: unknown,
+  method: T
+): () => unknown {
+  if (!task || typeof task !== "object") {
+    throw new Error("task instance is unavailable");
+  }
+  let value: unknown;
+  try {
+    value = (task as Record<string, unknown>)[method];
+  } catch (error) {
+    throw new Error(
+      `task.${method} is inaccessible (${formatUnknownError(error)})`
+    );
+  }
+  if (typeof value !== "function") {
+    throw new Error(`task.${method} is not callable`);
+  }
+  return value.bind(task);
+}
+
 export function pauseTaskIfRunning(task?: PauseableTask): boolean {
   if (!task) {
     return false;
   }
   let status: TaskStatus;
   try {
-    status = task.getStatus();
+    status = readTaskMethod(task, "getStatus")() as TaskStatus;
   } catch (error) {
     console.warn(
       `[CLI] Failed to read task status for pause: ${formatUnknownError(error)}`
@@ -28,7 +49,7 @@ export function pauseTaskIfRunning(task?: PauseableTask): boolean {
     return false;
   }
   try {
-    task.pause();
+    readTaskMethod(task, "pause")();
   } catch (error) {
     console.warn(
       `[CLI] Failed to pause task: ${formatUnknownError(error)}`
@@ -44,7 +65,7 @@ export function resumeTaskIfPaused(task?: ResumableTask): boolean {
   }
   let status: TaskStatus;
   try {
-    status = task.getStatus();
+    status = readTaskMethod(task, "getStatus")() as TaskStatus;
   } catch (error) {
     console.warn(
       `[CLI] Failed to read task status for resume: ${formatUnknownError(error)}`
@@ -55,7 +76,7 @@ export function resumeTaskIfPaused(task?: ResumableTask): boolean {
     return false;
   }
   try {
-    task.resume();
+    readTaskMethod(task, "resume")();
   } catch (error) {
     console.warn(
       `[CLI] Failed to resume task: ${formatUnknownError(error)}`
