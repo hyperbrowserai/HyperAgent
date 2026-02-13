@@ -637,7 +637,11 @@ function resolveConnectedServerIdForManagement(
   if (normalized.length === 0 || hasAnyControlChars(normalized)) {
     return undefined;
   }
-  return findConnectedServerId(servers, normalized);
+  try {
+    return findConnectedServerId(servers, normalized);
+  } catch {
+    return undefined;
+  }
 }
 
 function resolveMCPToolNameOnServer(
