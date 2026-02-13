@@ -17,12 +17,12 @@ import {
   AgentStep,
   Task,
   TaskOutput,
-  TaskStatus,
 } from "@/types";
 import { SessionDetail } from "@hyperbrowser/sdk/types";
 import { formatCliError } from "./format-cli-error";
 import { loadMCPServersFromFile } from "./mcp-config";
 import { setRawModeIfSupported } from "./stdin-utils";
+import { pauseTaskIfRunning, resumeTaskIfPaused } from "./task-controls";
 
 const program = new Command();
 
@@ -156,16 +156,12 @@ program
           currentSpinner.stopAndPersist({ symbol: "⏸" });
           currentSpinner = ora();
 
-          if (task.getStatus() == TaskStatus.RUNNING) {
-            task.pause();
-          }
+          pauseTaskIfRunning(task);
         } else if (key && key.ctrl && key.name == "r") {
-          if (task.getStatus() == TaskStatus.PAUSED) {
+          if (resumeTaskIfPaused(task)) {
             currentSpinner.start(chalk.blue("Hyperagent will resume"));
             currentSpinner.stopAndPersist({ symbol: "⏵" });
             currentSpinner = ora();
-
-            task.resume();
           }
         } else if (key && key.ctrl && key.name == "c") {
           if (currentSpinner.isSpinning) {
