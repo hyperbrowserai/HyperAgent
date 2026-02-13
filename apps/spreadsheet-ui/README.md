@@ -79,6 +79,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Cache timestamps also display relative age labels (e.g., `2m ago`) for quick freshness checks
 - Cache prefix filter offers backend-derived suggestions with entry counts, newest cached request-id metadata, and relative freshness labels; Shift+click a prefix chip to inspect its newest cached request id directly (scoped by active prefix + age filters when applied)
 - Cache detail inspector supports copy actions for full detail JSON and operations-only payload
+- Cache detail inspector includes a one-click `Use prefix` action to apply the selected request-id prefix as the active cache filter
 - Prefix-filtered cache view supports one-click bulk removal of matching cached request IDs
 - Prefix-filtered cache view includes a preview action that shows matched counts/sample IDs before bulk removal
 - Prefix preview/removal actions now inherit active age filter scope for stale-only cleanup

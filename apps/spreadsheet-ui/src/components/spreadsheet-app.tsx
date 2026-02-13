@@ -75,6 +75,14 @@ function parsePositiveIntegerInput(value: string): number | undefined {
   return parsedValue;
 }
 
+function extractRequestIdPrefix(requestId: string): string | null {
+  const delimiterIndex = requestId.indexOf("-");
+  if (delimiterIndex <= 0) {
+    return null;
+  }
+  return requestId.slice(0, delimiterIndex + 1);
+}
+
 export function SpreadsheetApp() {
   const queryClient = useQueryClient();
   const {
@@ -614,6 +622,9 @@ export function SpreadsheetApp() {
     || typeof normalizedCacheEntriesMaxAgeSeconds === "number"
     || (typeof normalizedCachePrefixMinEntryCount === "number"
       && normalizedCachePrefixMinEntryCount > 1);
+  const selectedCacheEntryPrefix = selectedCacheEntryDetail
+    ? extractRequestIdPrefix(selectedCacheEntryDetail.request_id)
+    : null;
   const scenarioSignatureStatus =
     lastScenario === wizardScenario &&
     lastOperationsSignature &&
@@ -3620,6 +3631,22 @@ export function SpreadsheetApp() {
                           </span>
                         </span>
                         <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              if (!selectedCacheEntryPrefix) {
+                                return;
+                              }
+                              clearUiError();
+                              setCacheRequestIdPrefix(selectedCacheEntryPrefix);
+                              setNotice(
+                                `Applied prefix filter ${selectedCacheEntryPrefix} from ${selectedCacheEntryDetail.request_id}.`,
+                              );
+                            }}
+                            disabled={!selectedCacheEntryPrefix}
+                            className="rounded border border-cyan-700/70 px-1.5 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-900/40 disabled:opacity-50"
+                          >
+                            Use prefix
+                          </button>
                           <button
                             onClick={handleCopySelectedCacheOperations}
                             disabled={isCopyingCacheDetailOperations}
