@@ -625,6 +625,75 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("infers SSE connection type when only sseUrl is provided", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          sseUrl: "ftp://example.com/events",
+        })
+      ).rejects.toThrow("SSE URL must use http:// or https://");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects mixed stdio and SSE fields when connection type is implicit", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+          sseUrl: "https://example.com/events",
+        })
+      ).rejects.toThrow(
+        "MCP config mixes stdio and sse fields. Set connectionType and provide only matching fields."
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects stdio connections that include SSE-only fields", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "stdio",
+          command: "npx",
+          sseHeaders: {
+            Authorization: "Bearer token",
+          },
+        })
+      ).rejects.toThrow(
+        "MCP stdio connection cannot include sse fields: sseHeaders"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects SSE connections that include stdio-only fields", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "sse",
+          sseUrl: "https://example.com/events",
+          command: "npx",
+        })
+      ).rejects.toThrow(
+        "MCP SSE connection cannot include stdio fields: command"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("rejects stdio command values that are blank after trimming", async () => {
     const mcpClient = new MCPClient(false);
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});

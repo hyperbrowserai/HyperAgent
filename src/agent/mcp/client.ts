@@ -174,6 +174,70 @@ function normalizeMCPConnectionType(
   );
 }
 
+function hasNonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasNonEmptyArray(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function hasNonEmptyRecord(value: unknown): boolean {
+  return isPlainRecord(value) && Object.keys(value).length > 0;
+}
+
+function resolveMCPConnectionType(serverConfig: MCPServerConfig): "stdio" | "sse" {
+  if (typeof serverConfig.connectionType !== "undefined") {
+    return normalizeMCPConnectionType(serverConfig.connectionType);
+  }
+  const hasCommand = hasNonEmptyString(serverConfig.command);
+  const hasSSEUrl = hasNonEmptyString(serverConfig.sseUrl);
+  if (hasCommand && hasSSEUrl) {
+    throw new Error(
+      "MCP config mixes stdio and sse fields. Set connectionType and provide only matching fields."
+    );
+  }
+  if (hasSSEUrl) {
+    return "sse";
+  }
+  return "stdio";
+}
+
+function validateMCPConnectionFieldMix(
+  serverConfig: MCPServerConfig,
+  connectionType: "stdio" | "sse"
+): void {
+  const stdioFields: string[] = [];
+  if (hasNonEmptyString(serverConfig.command)) {
+    stdioFields.push("command");
+  }
+  if (hasNonEmptyArray(serverConfig.args)) {
+    stdioFields.push("args");
+  }
+  if (hasNonEmptyRecord(serverConfig.env)) {
+    stdioFields.push("env");
+  }
+
+  const sseFields: string[] = [];
+  if (hasNonEmptyString(serverConfig.sseUrl)) {
+    sseFields.push("sseUrl");
+  }
+  if (hasNonEmptyRecord(serverConfig.sseHeaders)) {
+    sseFields.push("sseHeaders");
+  }
+
+  if (connectionType === "sse" && stdioFields.length > 0) {
+    throw new Error(
+      `MCP SSE connection cannot include stdio fields: ${stdioFields.join(", ")}`
+    );
+  }
+  if (connectionType === "stdio" && sseFields.length > 0) {
+    throw new Error(
+      `MCP stdio connection cannot include sse fields: ${sseFields.join(", ")}`
+    );
+  }
+}
+
 function normalizeMCPConnectionCommand(command?: string): string {
   if (typeof command !== "string") {
     throw new Error("Command is required for stdio connection type");
@@ -733,9 +797,8 @@ class MCPClient {
 
       // Create transport for this server
       let transport;
-      const connectionType = normalizeMCPConnectionType(
-        serverConfig?.connectionType
-      );
+      const connectionType = resolveMCPConnectionType(serverConfig);
+      validateMCPConnectionFieldMix(serverConfig, connectionType);
       const env = normalizeMCPConnectionStringRecord("env", serverConfig.env);
       const sseHeaders = normalizeMCPConnectionStringRecord(
         "sseHeaders",
