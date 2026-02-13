@@ -570,6 +570,22 @@ pub fn parse_code_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_unichar_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "UNICHAR" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_unicode_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "UNICODE" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_search_formula(
   formula: &str,
 ) -> Option<(String, String, Option<String>)> {
@@ -895,7 +911,7 @@ mod tests {
     parse_find_formula, parse_mid_formula, parse_rept_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
-    parse_code_formula,
+    parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
@@ -1146,6 +1162,14 @@ mod tests {
     assert_eq!(
       parse_code_formula(r#"=CODE("Apple")"#).as_deref(),
       Some(r#""Apple""#),
+    );
+    assert_eq!(
+      parse_unichar_formula("=UNICHAR(9731)").as_deref(),
+      Some("9731"),
+    );
+    assert_eq!(
+      parse_unicode_formula(r#"=UNICODE("⚡")"#).as_deref(),
+      Some(r#""⚡""#),
     );
 
     let search_args = parse_search_formula(r#"=SEARCH("sheet","spreadsheet",2)"#)

@@ -97,6 +97,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "T",
   "CHAR",
   "CODE",
+  "UNICHAR",
+  "UNICODE",
   "SEARCH",
   "FIND",
   "UPPER",

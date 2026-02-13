@@ -20,7 +20,7 @@ use crate::{
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_find_formula,
     parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
-    parse_code_formula,
+    parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_single_ref_formula,
     parse_xor_formula,
     parse_sign_formula,
@@ -534,6 +534,25 @@ fn evaluate_formula(
 
   if let Some(code_arg) = parse_code_formula(formula) {
     let value = resolve_scalar_operand(connection, sheet, &code_arg)?;
+    let Some(first_char) = value.chars().next() else {
+      return Ok(None);
+    };
+    return Ok(Some((first_char as u32).to_string()));
+  }
+
+  if let Some(unichar_arg) = parse_unichar_formula(formula) {
+    let code = parse_required_integer(connection, sheet, &unichar_arg)?;
+    if !(1..=1_114_111).contains(&code) {
+      return Ok(None);
+    }
+    let Some(character) = char::from_u32(code as u32) else {
+      return Ok(None);
+    };
+    return Ok(Some(character.to_string()));
+  }
+
+  if let Some(unicode_arg) = parse_unicode_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &unicode_arg)?;
     let Some(first_char) = value.chars().next() else {
       return Ok(None);
     };
@@ -2696,12 +2715,24 @@ mod tests {
         value: None,
         formula: Some("=T(A1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 92,
+        value: None,
+        formula: Some("=UNICHAR(9731)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 93,
+        value: None,
+        formula: Some(r#"=UNICODE("⚡")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 89);
+    assert_eq!(updated_cells, 91);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2715,7 +2746,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 91,
+        end_col: 93,
       },
     )
     .expect("cells should be fetched");
@@ -2848,6 +2879,8 @@ mod tests {
     assert_eq!(by_position(1, 89).evaluated_value.as_deref(), Some("north"));
     assert_eq!(by_position(1, 90).evaluated_value.as_deref(), Some("0"));
     assert_eq!(by_position(1, 91).evaluated_value.as_deref(), Some(""));
+    assert_eq!(by_position(1, 92).evaluated_value.as_deref(), Some("☃"));
+    assert_eq!(by_position(1, 93).evaluated_value.as_deref(), Some("9889"));
   }
 
   #[test]
@@ -3108,6 +3141,38 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec![r#"=CODE("")"#.to_string()]);
+  }
+
+  #[test]
+  fn should_leave_unichar_out_of_range_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=UNICHAR(1114112)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=UNICHAR(1114112)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_unicode_empty_text_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=UNICODE("")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=UNICODE("")"#.to_string()]);
   }
 
   #[test]
