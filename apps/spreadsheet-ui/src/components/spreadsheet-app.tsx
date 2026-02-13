@@ -107,6 +107,9 @@ export function SpreadsheetApp() {
   const [replayingCacheRequestId, setReplayingCacheRequestId] = useState<string | null>(null);
   const [isClearingOpsCache, setIsClearingOpsCache] = useState(false);
   const [copyingCacheRequestId, setCopyingCacheRequestId] = useState<string | null>(null);
+  const [copyingCacheOpsPayloadRequestId, setCopyingCacheOpsPayloadRequestId] = useState<
+    string | null
+  >(null);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
@@ -1224,6 +1227,34 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyCacheEntryAsOpsPayload(requestId: string) {
+    if (!workbook) {
+      return;
+    }
+    setCopyingCacheOpsPayloadRequestId(requestId);
+    try {
+      clearUiError();
+      const replay = await replayAgentOpsCacheEntry(workbook.id, requestId);
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            request_id: replay.cached_response.request_id ?? requestId,
+            expected_operations_signature:
+              replay.cached_response.operations_signature ?? undefined,
+            operations: replay.operations,
+          },
+          null,
+          2,
+        ),
+      );
+      setNotice(`Copied agent/ops payload for cached request_id ${requestId}.`);
+    } catch (error) {
+      applyUiError(error, "Failed to copy cache entry as agent/ops payload.");
+    } finally {
+      setCopyingCacheOpsPayloadRequestId(null);
+    }
+  }
+
   async function handleReplayCacheRequestId(requestId: string) {
     if (!workbook) {
       return;
@@ -2154,6 +2185,7 @@ export function SpreadsheetApp() {
                                 replayingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
+                                || copyingCacheOpsPayloadRequestId === entry.request_id
                               }
                               className="rounded border border-emerald-700/70 px-1.5 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-50"
                             >
@@ -2162,11 +2194,28 @@ export function SpreadsheetApp() {
                                 : "Replay"}
                             </button>
                             <button
+                              onClick={() =>
+                                handleCopyCacheEntryAsOpsPayload(entry.request_id)
+                              }
+                              disabled={
+                                copyingCacheOpsPayloadRequestId === entry.request_id
+                                || replayingCacheRequestId === entry.request_id
+                                || removingCacheRequestId === entry.request_id
+                                || copyingCacheRequestId === entry.request_id
+                              }
+                              className="rounded border border-indigo-700/70 px-1.5 py-0.5 text-[10px] text-indigo-200 hover:bg-indigo-900/40 disabled:opacity-50"
+                            >
+                              {copyingCacheOpsPayloadRequestId === entry.request_id
+                                ? "Payload..."
+                                : "Copy Ops"}
+                            </button>
+                            <button
                               onClick={() => handleCopyCacheRequestId(entry.request_id)}
                               disabled={
                                 copyingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
+                                || copyingCacheOpsPayloadRequestId === entry.request_id
                               }
                               className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
                             >
@@ -2180,6 +2229,7 @@ export function SpreadsheetApp() {
                                 removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
                                 || replayingCacheRequestId === entry.request_id
+                                || copyingCacheOpsPayloadRequestId === entry.request_id
                               }
                               className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
                             >
