@@ -681,6 +681,23 @@ export function SpreadsheetApp() {
     return `${deltaDays}d ago`;
   }
 
+  function formatDurationSeconds(durationSeconds: number): string {
+    const safeSeconds = Math.max(0, Math.floor(durationSeconds));
+    if (safeSeconds < 60) {
+      return `${safeSeconds}s`;
+    }
+    const minutes = Math.floor(safeSeconds / 60);
+    if (minutes < 60) {
+      return `${minutes}m`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return `${hours}h`;
+    }
+    const days = Math.floor(hours / 24);
+    return `${days}d`;
+  }
+
   function applyUiError(error: unknown, fallback: string): void {
     setUiNotice(null);
     if (error instanceof SpreadsheetApiError) {
@@ -3296,6 +3313,10 @@ export function SpreadsheetApp() {
                             suggestion.oldest_cached_at
                               ? ` @ ${formatIsoTimestamp(suggestion.oldest_cached_at)} (${formatRelativeAge(suggestion.oldest_cached_at)})`
                               : ""
+                          }${
+                            typeof suggestion.span_seconds === "number"
+                              ? ` · span ${formatDurationSeconds(suggestion.span_seconds)}`
+                              : ""
                           } (Shift+click inspect, Alt+click preview remove)`}
                           className={`rounded border px-1.5 py-0.5 text-[10px] ${
                             cacheRequestIdPrefix.trim() === suggestion.prefix
@@ -3310,6 +3331,12 @@ export function SpreadsheetApp() {
                           {suggestion.newest_cached_at ? (
                             <span className="ml-1 text-slate-500">
                               {formatRelativeAge(suggestion.newest_cached_at)}
+                            </span>
+                          ) : null}
+                          {typeof suggestion.span_seconds === "number"
+                          && suggestion.span_seconds > 0 ? (
+                            <span className="ml-1 text-slate-500">
+                              Δ{formatDurationSeconds(suggestion.span_seconds)}
                             </span>
                           ) : null}
                         </button>

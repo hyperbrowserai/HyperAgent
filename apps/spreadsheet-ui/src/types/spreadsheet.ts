@@ -81,6 +81,7 @@ export interface AgentOpsCachePrefix {
   newest_cached_at: string | null;
   oldest_request_id: string;
   oldest_cached_at: string | null;
+  span_seconds: number | null;
 }
 
 export interface AgentOpsCachePrefixesResponse {
