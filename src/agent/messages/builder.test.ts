@@ -130,6 +130,48 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain('"self":"[Circular]"');
   });
 
+  it("handles step payloads with throwing getters", async () => {
+    const trappedStep = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "agentOutput" || prop === "actionOutput") {
+            throw new Error("step getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [trappedStep as unknown as AgentStep],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("Thoughts unavailable");
+    expect(joined).toContain("Memory unavailable");
+    expect(joined).toContain("Action output unavailable");
+  });
+
   it("falls back to zeroed page state when scroll info lookup fails", async () => {
     retry.mockRejectedValue({ reason: "scroll failed" });
     const page = createFakePage("https://example.com/current", [

@@ -97,6 +97,27 @@ function safeReadVariableField(
   }
 }
 
+function safeReadRecordField(source: unknown, field: string): unknown {
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+  try {
+    return (source as Record<string, unknown>)[field];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeStepText(value: unknown, fallback: string): string {
+  if (typeof value === "string") {
+    return truncatePromptText(value);
+  }
+  if (typeof value === "undefined") {
+    return fallback;
+  }
+  return truncatePromptText(formatUnknownError(value));
+}
+
 function buildVariablesContent(variables: HyperVariable[]): string {
   if (variables.length === 0) {
     return "No variables set";
@@ -114,6 +135,42 @@ function buildVariablesContent(variables: HyperVariable[]): string {
       return `<<${key}>> - ${description} | current value: ${currentValue}`;
     })
     .join("\n");
+}
+
+function getStepPromptData(step: AgentStep): {
+  thoughts: string;
+  memory: string;
+  action: unknown;
+  message: string;
+  extract: unknown;
+  hasExtract: boolean;
+} {
+  const agentOutput = safeReadRecordField(step, "agentOutput");
+  const actionOutput = safeReadRecordField(step, "actionOutput");
+
+  const thoughts = normalizeStepText(
+    safeReadRecordField(agentOutput, "thoughts"),
+    "Thoughts unavailable"
+  );
+  const memory = normalizeStepText(
+    safeReadRecordField(agentOutput, "memory"),
+    "Memory unavailable"
+  );
+  const action = safeReadRecordField(agentOutput, "action");
+  const message = normalizeStepText(
+    safeReadRecordField(actionOutput, "message"),
+    "Action output unavailable"
+  );
+  const extract = safeReadRecordField(actionOutput, "extract");
+
+  return {
+    thoughts,
+    memory,
+    action,
+    message,
+    extract,
+    hasExtract: typeof extract !== "undefined",
+  };
 }
 
 function getDomStateSummary(domState: A11yDOMState): string {
@@ -251,21 +308,23 @@ export const buildAgentStepMessages = async (
           : "=== Previous Actions ===\n",
     });
     for (const step of relevantSteps) {
-      const { thoughts, memory, action } = step.agentOutput;
+      const {
+        thoughts,
+        memory,
+        action,
+        message,
+        extract,
+        hasExtract,
+      } = getStepPromptData(step);
       messages.push({
         role: "assistant",
-        content: `Thoughts: ${truncatePromptText(thoughts)}\nMemory: ${truncatePromptText(
-          memory
-        )}\nAction: ${safeSerializeForPrompt(
-          action
-        )}`,
+        content: `Thoughts: ${thoughts}\nMemory: ${memory}\nAction: ${safeSerializeForPrompt(action)}`,
       });
-      const actionResult = step.actionOutput;
       messages.push({
         role: "user",
-        content: actionResult.extract
-          ? `${truncatePromptText(actionResult.message)} :\n ${safeSerializeForPrompt(actionResult.extract)}`
-          : truncatePromptText(actionResult.message),
+        content: hasExtract
+          ? `${message} :\n ${safeSerializeForPrompt(extract)}`
+          : message,
       });
     }
   }
