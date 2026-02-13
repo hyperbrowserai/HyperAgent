@@ -9,6 +9,18 @@ pub struct VLookupFormula {
   pub range_lookup: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XLookupFormula {
+  pub lookup_value: String,
+  pub lookup_array_start: (u32, u32),
+  pub lookup_array_end: (u32, u32),
+  pub return_array_start: (u32, u32),
+  pub return_array_end: (u32, u32),
+  pub if_not_found: Option<String>,
+  pub match_mode: Option<String>,
+  pub search_mode: Option<String>,
+}
+
 pub fn address_from_row_col(row: u32, col: u32) -> String {
   format!("{}{}", index_to_col(col), row)
 }
@@ -104,6 +116,25 @@ pub fn parse_vlookup_formula(formula: &str) -> Option<VLookupFormula> {
     table_end,
     result_col_index,
     range_lookup: args.get(3).cloned(),
+  })
+}
+
+pub fn parse_xlookup_formula(formula: &str) -> Option<XLookupFormula> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "XLOOKUP" || !(3..=6).contains(&args.len()) {
+    return None;
+  }
+  let (lookup_array_start, lookup_array_end) = parse_range_reference(&args[1])?;
+  let (return_array_start, return_array_end) = parse_range_reference(&args[2])?;
+  Some(XLookupFormula {
+    lookup_value: args[0].clone(),
+    lookup_array_start,
+    lookup_array_end,
+    return_array_start,
+    return_array_end,
+    if_not_found: args.get(3).cloned(),
+    match_mode: args.get(4).cloned(),
+    search_mode: args.get(5).cloned(),
   })
 }
 
@@ -284,6 +315,7 @@ mod tests {
     parse_left_formula, parse_len_formula, parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_if_formula, parse_today_formula, parse_vlookup_formula,
+    parse_xlookup_formula,
     parse_year_formula,
   };
 
@@ -329,6 +361,19 @@ mod tests {
     assert_eq!(parsed.table_end, (6, 5));
     assert_eq!(parsed.result_col_index, 2);
     assert_eq!(parsed.range_lookup.as_deref(), Some("FALSE"));
+
+    let xlookup = parse_xlookup_formula(
+      r#"=XLOOKUP("north",E1:E4,F1:F4,"missing",0,1)"#,
+    )
+    .expect("xlookup formula should parse");
+    assert_eq!(xlookup.lookup_value, r#""north""#);
+    assert_eq!(xlookup.lookup_array_start, (1, 5));
+    assert_eq!(xlookup.lookup_array_end, (4, 5));
+    assert_eq!(xlookup.return_array_start, (1, 6));
+    assert_eq!(xlookup.return_array_end, (4, 6));
+    assert_eq!(xlookup.if_not_found.as_deref(), Some(r#""missing""#));
+    assert_eq!(xlookup.match_mode.as_deref(), Some("0"));
+    assert_eq!(xlookup.search_mode.as_deref(), Some("1"));
   }
 
   #[test]

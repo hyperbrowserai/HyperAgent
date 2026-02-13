@@ -6,7 +6,7 @@ use crate::{
     parse_if_formula, parse_left_formula, parse_len_formula, parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula,
     parse_single_ref_formula, parse_today_formula, parse_vlookup_formula,
-    parse_year_formula, VLookupFormula,
+    parse_xlookup_formula, parse_year_formula, VLookupFormula, XLookupFormula,
   },
   models::{CellMutation, CellRange, CellSnapshot},
 };
@@ -283,6 +283,10 @@ fn evaluate_formula(
 
   if let Some(vlookup_formula) = parse_vlookup_formula(formula) {
     return evaluate_vlookup_formula(connection, sheet, &vlookup_formula);
+  }
+
+  if let Some(xlookup_formula) = parse_xlookup_formula(formula) {
+    return evaluate_xlookup_formula(connection, sheet, &xlookup_formula);
   }
 
   if let Some(and_args) = parse_and_formula(formula) {
@@ -566,22 +570,44 @@ fn resolve_scalar_operand(
   }
 
   if let Some((row_index, col_index)) = parse_cell_address(trimmed) {
-    let value = connection
-      .query_row(
-        r#"
-        SELECT COALESCE(evaluated_value, raw_value)
-        FROM cells
-        WHERE sheet = ?1 AND row_index = ?2 AND col_index = ?3
-        "#,
-        params![sheet, i64::from(row_index), i64::from(col_index)],
-        |row| row.get::<_, Option<String>>(0),
-      )
-      .map_err(ApiError::internal)?
-      .unwrap_or_default();
-    return Ok(value);
+    return load_cell_scalar(connection, sheet, row_index, col_index);
   }
 
   Ok(trimmed.to_string())
+}
+
+fn load_cell_scalar(
+  connection: &Connection,
+  sheet: &str,
+  row_index: u32,
+  col_index: u32,
+) -> Result<String, ApiError> {
+  connection
+    .query_row(
+      r#"
+      SELECT COALESCE(evaluated_value, raw_value)
+      FROM cells
+      WHERE sheet = ?1 AND row_index = ?2 AND col_index = ?3
+      "#,
+      params![sheet, i64::from(row_index), i64::from(col_index)],
+      |row| row.get::<_, Option<String>>(0),
+    )
+    .map_err(ApiError::internal)
+    .map(|value| value.unwrap_or_default())
+}
+
+fn matches_lookup_value(
+  candidate: &str,
+  lookup_value: &str,
+  lookup_numeric: Option<f64>,
+) -> bool {
+  if let Some(target_numeric) = lookup_numeric {
+    return candidate
+      .parse::<f64>()
+      .map(|candidate_numeric| (candidate_numeric - target_numeric).abs() < f64::EPSILON)
+      .unwrap_or(false);
+  }
+  candidate.trim().eq_ignore_ascii_case(lookup_value.trim())
 }
 
 fn parse_optional_char_count(
@@ -677,48 +703,137 @@ fn evaluate_vlookup_formula(
   let target_col = start_col + formula.result_col_index - 1;
 
   for row_index in start_row..=end_row {
-    let candidate = connection
-      .query_row(
-        r#"
-        SELECT COALESCE(evaluated_value, raw_value)
-        FROM cells
-        WHERE sheet = ?1 AND row_index = ?2 AND col_index = ?3
-        "#,
-        params![sheet, i64::from(row_index), i64::from(start_col)],
-        |row| row.get::<_, Option<String>>(0),
-      )
-      .map_err(ApiError::internal)?
-      .unwrap_or_default();
-
-    let is_match = if let Some(target_numeric) = lookup_numeric {
-      candidate
-        .parse::<f64>()
-        .map(|candidate_numeric| (candidate_numeric - target_numeric).abs() < f64::EPSILON)
-        .unwrap_or(false)
-    } else {
-      candidate.trim().eq_ignore_ascii_case(lookup_value.trim())
-    };
+    let candidate = load_cell_scalar(connection, sheet, row_index, start_col)?;
+    let is_match = matches_lookup_value(&candidate, &lookup_value, lookup_numeric);
 
     if !is_match {
       continue;
     }
 
-    let resolved = connection
-      .query_row(
-        r#"
-        SELECT COALESCE(evaluated_value, raw_value)
-        FROM cells
-        WHERE sheet = ?1 AND row_index = ?2 AND col_index = ?3
-        "#,
-        params![sheet, i64::from(row_index), i64::from(target_col)],
-        |row| row.get::<_, Option<String>>(0),
-      )
-      .map_err(ApiError::internal)?
-      .unwrap_or_default();
+    let resolved = load_cell_scalar(connection, sheet, row_index, target_col)?;
     return Ok(Some(resolved));
   }
 
   Ok(Some(String::new()))
+}
+
+fn evaluate_xlookup_formula(
+  connection: &Connection,
+  sheet: &str,
+  formula: &XLookupFormula,
+) -> Result<Option<String>, ApiError> {
+  let match_mode = parse_lookup_mode_operand(
+    connection,
+    sheet,
+    formula.match_mode.as_deref(),
+    0,
+  )?;
+  if match_mode != 0 {
+    return Ok(None);
+  }
+  let search_mode = parse_lookup_mode_operand(
+    connection,
+    sheet,
+    formula.search_mode.as_deref(),
+    1,
+  )?;
+  if search_mode != 1 && search_mode != -1 {
+    return Ok(None);
+  }
+
+  let lookup_start_row = formula.lookup_array_start.0.min(formula.lookup_array_end.0);
+  let lookup_end_row = formula.lookup_array_start.0.max(formula.lookup_array_end.0);
+  let lookup_start_col = formula.lookup_array_start.1.min(formula.lookup_array_end.1);
+  let lookup_end_col = formula.lookup_array_start.1.max(formula.lookup_array_end.1);
+  let return_start_row = formula.return_array_start.0.min(formula.return_array_end.0);
+  let return_end_row = formula.return_array_start.0.max(formula.return_array_end.0);
+  let return_start_col = formula.return_array_start.1.min(formula.return_array_end.1);
+  let return_end_col = formula.return_array_start.1.max(formula.return_array_end.1);
+
+  let lookup_height = lookup_end_row.saturating_sub(lookup_start_row) + 1;
+  let lookup_width = lookup_end_col.saturating_sub(lookup_start_col) + 1;
+  let return_height = return_end_row.saturating_sub(return_start_row) + 1;
+  let return_width = return_end_col.saturating_sub(return_start_col) + 1;
+
+  let is_vertical_lookup = lookup_width == 1;
+  let is_horizontal_lookup = lookup_height == 1;
+  if !is_vertical_lookup && !is_horizontal_lookup {
+    return Ok(None);
+  }
+
+  let is_vertical_return = return_width == 1;
+  let is_horizontal_return = return_height == 1;
+  if !is_vertical_return && !is_horizontal_return {
+    return Ok(None);
+  }
+
+  if is_vertical_lookup && (!is_vertical_return || lookup_height != return_height) {
+    return Ok(None);
+  }
+  if is_horizontal_lookup && (!is_horizontal_return || lookup_width != return_width) {
+    return Ok(None);
+  }
+
+  let lookup_value = resolve_scalar_operand(connection, sheet, &formula.lookup_value)?;
+  let lookup_numeric = lookup_value.parse::<f64>().ok();
+
+  if is_vertical_lookup {
+    let mut offsets: Vec<u32> = (0..lookup_height).collect();
+    if search_mode == -1 {
+      offsets.reverse();
+    }
+    for offset in offsets {
+      let lookup_row = lookup_start_row + offset;
+      let candidate =
+        load_cell_scalar(connection, sheet, lookup_row, lookup_start_col)?;
+      if !matches_lookup_value(&candidate, &lookup_value, lookup_numeric) {
+        continue;
+      }
+      let return_row = return_start_row + offset;
+      let resolved =
+        load_cell_scalar(connection, sheet, return_row, return_start_col)?;
+      return Ok(Some(resolved));
+    }
+  } else {
+    let mut offsets: Vec<u32> = (0..lookup_width).collect();
+    if search_mode == -1 {
+      offsets.reverse();
+    }
+    for offset in offsets {
+      let lookup_col = lookup_start_col + offset;
+      let candidate =
+        load_cell_scalar(connection, sheet, lookup_start_row, lookup_col)?;
+      if !matches_lookup_value(&candidate, &lookup_value, lookup_numeric) {
+        continue;
+      }
+      let return_col = return_start_col + offset;
+      let resolved =
+        load_cell_scalar(connection, sheet, return_start_row, return_col)?;
+      return Ok(Some(resolved));
+    }
+  }
+
+  if let Some(if_not_found) = formula.if_not_found.as_deref() {
+    return resolve_scalar_operand(connection, sheet, if_not_found).map(Some);
+  }
+
+  Ok(Some(String::new()))
+}
+
+fn parse_lookup_mode_operand(
+  connection: &Connection,
+  sheet: &str,
+  mode_operand: Option<&str>,
+  default_value: i32,
+) -> Result<i32, ApiError> {
+  let Some(raw_operand) = mode_operand else {
+    return Ok(default_value);
+  };
+  let resolved = resolve_scalar_operand(connection, sheet, raw_operand)?;
+  resolved
+    .trim()
+    .parse::<i32>()
+    .map_err(|_| ApiError::internal("lookup mode must be an integer"))
 }
 
 fn normalize_cell_payload(
@@ -933,12 +1048,30 @@ mod tests {
         value: None,
         formula: Some(r#"=IF(AND(A1>=100,A2<100),"eligible","ineligible")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 20,
+        value: None,
+        formula: Some(r#"=XLOOKUP("north",E1:E2,F1:F2,"missing",0,1)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 21,
+        value: None,
+        formula: Some(r#"=XLOOKUP("missing",E1:E2,F1:F2,"fallback",0,1)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 22,
+        value: None,
+        formula: Some(r#"=XLOOKUP("south",E1:E2,F1:F2,"missing",0,-1)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 17);
+    assert_eq!(updated_cells, 20);
     assert!(unsupported_formulas.is_empty());
 
     let snapshots = get_cells(
@@ -948,7 +1081,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 19,
+        end_col: 22,
       },
     )
     .expect("cells should be fetched");
@@ -996,6 +1129,9 @@ mod tests {
     assert_eq!(by_position(1, 17).evaluated_value.as_deref(), Some("true"));
     assert_eq!(by_position(1, 18).evaluated_value.as_deref(), Some("true"));
     assert_eq!(by_position(1, 19).evaluated_value.as_deref(), Some("eligible"));
+    assert_eq!(by_position(1, 20).evaluated_value.as_deref(), Some("Northeast"));
+    assert_eq!(by_position(1, 21).evaluated_value.as_deref(), Some("fallback"));
+    assert_eq!(by_position(1, 22).evaluated_value.as_deref(), Some("Southeast"));
   }
 
   #[test]
@@ -1028,6 +1164,39 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=VLOOKUP("a",A1:B1,2,TRUE)"#.to_string()]
+    );
+  }
+
+  #[test]
+  fn should_leave_non_exact_xlookup_modes_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!("north")),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!("Northeast")),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 3,
+        value: None,
+        formula: Some(r#"=XLOOKUP("north",A1:A1,B1:B1,"missing",1,1)"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=XLOOKUP("north",A1:A1,B1:B1,"missing",1,1)"#.to_string()]
     );
   }
 }
