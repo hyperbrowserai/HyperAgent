@@ -5,6 +5,7 @@
 
 import fs from "fs";
 import path from "path";
+import { formatUnknownError } from "./format-unknown-error";
 
 interface FoundElementDebugData {
   elementId: string;
@@ -54,6 +55,40 @@ export interface DebugData {
 let actionCounter = 0;
 let sessionId: string | null = null;
 
+function stringifyDebugJson(value: unknown): string {
+  const seen = new WeakSet<object>();
+  try {
+    const serialized = JSON.stringify(
+      value,
+      (_key, candidate: unknown) => {
+        if (typeof candidate === "bigint") {
+          return `${candidate.toString()}n`;
+        }
+        if (typeof candidate === "object" && candidate !== null) {
+          if (seen.has(candidate)) {
+            return "[Circular]";
+          }
+          seen.add(candidate);
+        }
+        return candidate;
+      },
+      2
+    );
+    if (typeof serialized === "string") {
+      return serialized;
+    }
+  } catch {
+    // fall through to fallback serialization
+  }
+  return JSON.stringify(
+    {
+      __nonSerializable: formatUnknownError(value),
+    },
+    null,
+    2
+  );
+}
+
 /**
  * Initialize a new debug session
  */
@@ -98,7 +133,7 @@ export async function writeAiActionDebug(
   };
   fs.writeFileSync(
     path.join(debugDir, "metadata.json"),
-    JSON.stringify(metadata, null, 2)
+    stringifyDebugJson(metadata)
   );
 
   // Write DOM tree
@@ -113,7 +148,7 @@ export async function writeAiActionDebug(
   if (debugData.foundElement) {
     fs.writeFileSync(
       path.join(debugDir, "found-element.json"),
-      JSON.stringify(debugData.foundElement, null, 2)
+      stringifyDebugJson(debugData.foundElement)
     );
   }
 
@@ -121,7 +156,7 @@ export async function writeAiActionDebug(
   if (debugData.llmResponse) {
     fs.writeFileSync(
       path.join(debugDir, "llm-response.json"),
-      JSON.stringify(debugData.llmResponse, null, 2)
+      stringifyDebugJson(debugData.llmResponse)
     );
     // Also write just the raw text for easy viewing
     fs.writeFileSync(
@@ -138,7 +173,7 @@ export async function writeAiActionDebug(
     fs.writeFileSync(path.join(debugDir, "available-elements.txt"), elementsText);
     fs.writeFileSync(
       path.join(debugDir, "available-elements.json"),
-      JSON.stringify(debugData.availableElements, null, 2)
+      stringifyDebugJson(debugData.availableElements)
     );
   }
 
@@ -146,7 +181,7 @@ export async function writeAiActionDebug(
   if (debugData.error) {
     fs.writeFileSync(
       path.join(debugDir, "error.json"),
-      JSON.stringify(debugData.error, null, 2)
+      stringifyDebugJson(debugData.error)
     );
   }
 
@@ -154,7 +189,7 @@ export async function writeAiActionDebug(
   if (debugData.frameDebugInfo && debugData.frameDebugInfo.length > 0) {
     fs.writeFileSync(
       path.join(debugDir, "frame-debug-info.json"),
-      JSON.stringify(debugData.frameDebugInfo, null, 2)
+      stringifyDebugJson(debugData.frameDebugInfo)
     );
 
     // Also write a human-readable summary
