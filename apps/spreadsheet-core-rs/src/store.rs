@@ -19,6 +19,7 @@ use crate::{
     parse_or_formula, parse_rept_formula, parse_right_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_find_formula,
+    parse_value_formula,
     parse_single_ref_formula,
     parse_xor_formula,
     parse_sign_formula,
@@ -471,6 +472,14 @@ fn evaluate_formula(
     };
     let integer_value = number.trunc() as i64;
     return Ok(Some((integer_value.abs() % 2 == 1).to_string()));
+  }
+
+  if let Some(value_arg) = parse_value_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &value_arg)?;
+    let Some(parsed) = value.trim().parse::<f64>().ok() else {
+      return Ok(None);
+    };
+    return Ok(Some(parsed.to_string()));
   }
 
   if let Some(abs_arg) = parse_abs_formula(formula) {
@@ -2575,12 +2584,18 @@ mod tests {
           r#"=SUBSTITUTE("north-north-north","north","south",2)"#.to_string(),
         ),
       },
+      CellMutation {
+        row: 1,
+        col: 83,
+        value: None,
+        formula: Some(r#"=VALUE("12.34")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 80);
+    assert_eq!(updated_cells, 81);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2594,7 +2609,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 82,
+        end_col: 83,
       },
     )
     .expect("cells should be fetched");
@@ -2718,6 +2733,7 @@ mod tests {
       by_position(1, 82).evaluated_value.as_deref(),
       Some("north-south-north"),
     );
+    assert_eq!(by_position(1, 83).evaluated_value.as_deref(), Some("12.34"));
   }
 
   #[test]
@@ -2930,6 +2946,22 @@ mod tests {
       unsupported_formulas,
       vec![r#"=SUBSTITUTE("north-north","north","south",0)"#.to_string()]
     );
+  }
+
+  #[test]
+  fn should_leave_value_non_numeric_text_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=VALUE("north")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=VALUE("north")"#.to_string()]);
   }
 
   #[test]

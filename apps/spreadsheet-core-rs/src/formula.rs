@@ -514,6 +514,14 @@ pub fn parse_substitute_formula(
   ))
 }
 
+pub fn parse_value_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "VALUE" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_search_formula(
   formula: &str,
 ) -> Option<(String, String, Option<String>)> {
@@ -838,6 +846,7 @@ mod tests {
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
     parse_find_formula, parse_mid_formula, parse_rept_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
+    parse_value_formula,
     parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
@@ -1073,6 +1082,10 @@ mod tests {
     assert_eq!(substitute_args.1, r#""north""#);
     assert_eq!(substitute_args.2, r#""south""#);
     assert_eq!(substitute_args.3.as_deref(), Some("2"));
+    assert_eq!(
+      parse_value_formula(r#"=VALUE("12.34")"#).as_deref(),
+      Some(r#""12.34""#),
+    );
 
     let search_args = parse_search_formula(r#"=SEARCH("sheet","spreadsheet",2)"#)
       .expect("search should parse");
