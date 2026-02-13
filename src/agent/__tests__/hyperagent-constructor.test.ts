@@ -144,6 +144,19 @@ describe("HyperAgent constructor and task controls", () => {
     expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
   });
 
+  it("surfaces HyperagentTaskError without requiring error listeners", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockRejectedValue(new Error("boom without listeners"));
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+
+    await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+  });
+
   it("cancel does not override terminal failed task status", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockRejectedValue(new Error("boom"));
@@ -153,7 +166,6 @@ describe("HyperAgent constructor and task controls", () => {
     });
     const fakePage = {} as unknown as Page;
     const task = await agent.executeTaskAsync("test task", undefined, fakePage);
-    task.emitter.once("error", () => undefined);
 
     await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
     expect(task.getStatus()).toBe(TaskStatus.FAILED);

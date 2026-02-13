@@ -397,6 +397,31 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private emitTaskErrorSafely(taskError: HyperagentTaskError): void {
+    let listenerCount = 0;
+    try {
+      listenerCount = this.errorEmitter.listenerCount("error");
+    } catch {
+      listenerCount = 0;
+    }
+
+    if (listenerCount === 0) {
+      return;
+    }
+
+    try {
+      this.errorEmitter.emit("error", taskError);
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to emit task error event: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+  }
+
   private attachBrowserPageListener(context: BrowserContext): void {
     const contextOn = this.safeReadField(context, "on");
     if (typeof contextOn !== "function") {
@@ -1030,7 +1055,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           if (nextStatus !== TaskStatus.CANCELLED) {
             failedTaskState.error = taskFailureError.cause.message;
             // Emit error on the central emitter, including the taskId
-            this.errorEmitter.emit("error", taskFailureError);
+            this.emitTaskErrorSafely(taskFailureError);
           }
         } else {
           // Fallback if task state somehow doesn't exist
