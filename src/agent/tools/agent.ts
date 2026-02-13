@@ -55,6 +55,7 @@ const MAX_RUNTIME_ACTION_TYPE_CHARS = 120;
 const MAX_RUNTIME_ACTION_MESSAGE_CHARS = 4_000;
 const MAX_RUNTIME_URL_CHARS = 1_000;
 const MAX_RUNTIME_TASK_OUTPUT_CHARS = 20_000;
+const MAX_DOM_PROGRESS_SIGNATURE_CHARS = 800;
 
 function truncateDiagnosticText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -152,6 +153,19 @@ function safeGetPageUrl(page: Page): string {
   } catch {
     return "about:blank";
   }
+}
+
+function buildDomProgressSignature(domState: A11yDOMState): string {
+  const rawDomState = safeReadRecordField(domState, "domState");
+  const normalized = formatDiagnosticText(
+    rawDomState,
+    MAX_DOM_PROGRESS_SIGNATURE_CHARS,
+    "DOM state unavailable"
+  );
+  if (normalized.length <= MAX_DOM_PROGRESS_SIGNATURE_CHARS) {
+    return normalized;
+  }
+  return truncateDiagnosticText(normalized, MAX_DOM_PROGRESS_SIGNATURE_CHARS);
 }
 
 function normalizeWaitStats(value: unknown): {
@@ -649,7 +663,7 @@ export const runAgentTask = async (
   let currStep = 0;
   let consecutiveFailuresOrWaits = 0;
   const MAX_CONSECUTIVE_FAILURES_OR_WAITS = 5;
-  let lastSuccessfulActionFingerprint: string | null = null;
+  let lastSuccessfulProgressFingerprint: string | null = null;
   let consecutiveRepeatedSuccessfulActions = 0;
   let lastOverlayKey: string | null = null;
   let lastScreenshotBase64: string | undefined;
@@ -1096,19 +1110,20 @@ export const runAgentTask = async (
       }
 
       if (actionOutput.success && actionType !== "wait") {
-        const actionFingerprint = safeJsonStringify(
+        const progressFingerprint = safeJsonStringify(
           {
-          actionType,
-          params: actionParams,
-          url: safeGetPageUrl(page),
+            actionType,
+            params: actionParams,
+            url: safeGetPageUrl(page),
+            domSignature: buildDomProgressSignature(domState),
           },
           0
         );
-        if (actionFingerprint === lastSuccessfulActionFingerprint) {
+        if (progressFingerprint === lastSuccessfulProgressFingerprint) {
           consecutiveRepeatedSuccessfulActions++;
         } else {
           consecutiveRepeatedSuccessfulActions = 1;
-          lastSuccessfulActionFingerprint = actionFingerprint;
+          lastSuccessfulProgressFingerprint = progressFingerprint;
         }
 
         if (
@@ -1120,6 +1135,7 @@ export const runAgentTask = async (
             `Agent appears stuck: repeated the same successful action ${MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS} times without visible progress.`,
             "Agent appears stuck after repeated actions."
           );
+          output = taskState.error;
 
           const step: AgentStep = {
             idx: currStep,
@@ -1132,7 +1148,7 @@ export const runAgentTask = async (
         }
       } else {
         consecutiveRepeatedSuccessfulActions = 0;
-        lastSuccessfulActionFingerprint = null;
+        lastSuccessfulProgressFingerprint = null;
       }
 
       // Check action result and handle retry logic
@@ -1146,6 +1162,7 @@ export const runAgentTask = async (
             `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress.`,
             "Agent is stuck after repeated waits."
           );
+          output = taskState.error;
 
           const step: AgentStep = {
             idx: currStep,
@@ -1172,6 +1189,7 @@ export const runAgentTask = async (
             `Agent is stuck: waited or failed ${MAX_CONSECUTIVE_FAILURES_OR_WAITS} consecutive times without making progress. Last error: ${actionOutput.message}`,
             "Agent is stuck after repeated failures."
           );
+          output = taskState.error;
 
           const step: AgentStep = {
             idx: currStep,

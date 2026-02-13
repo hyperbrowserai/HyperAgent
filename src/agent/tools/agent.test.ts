@@ -635,6 +635,76 @@ function createSchemaErrorSummaryCtx(): AgentCtx {
   };
 }
 
+function createRepeatedActionThenCompleteCtx(repeatedSteps: number): AgentCtx {
+  const repeatedAction = {
+    thoughts: "progress",
+    memory: "progress",
+    action: {
+      type: "recordProgress",
+      params: {
+        id: "progress",
+      },
+    },
+  };
+  const completeAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "final answer",
+      },
+    },
+  };
+
+  const invokeStructured = jest.fn();
+  for (let idx = 0; idx < repeatedSteps; idx += 1) {
+    invokeStructured.mockResolvedValueOnce({
+      rawText: "{}",
+      parsed: repeatedAction,
+    });
+  }
+  invokeStructured.mockResolvedValue({
+    rawText: "{}",
+    parsed: completeAction,
+  });
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured,
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [
+      {
+        type: "recordProgress",
+        actionParams: z.object({ id: z.string() }),
+        run: async () => ({
+          success: true,
+          message: "progress saved",
+        }),
+      },
+      createCompleteActionDefinition(),
+    ],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
 function createTaskState(page: Page): TaskState {
   return {
     id: "task-1",
@@ -1233,6 +1303,37 @@ describe("runAgentTask completion behavior", () => {
     const ctx = createCircularParamsStepCtx();
 
     const result = await runAgentTask(ctx, createTaskState(page));
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toBe("final answer");
+  });
+
+  it("fails when identical successful actions repeat without DOM progress", async () => {
+    const page = createMockPage();
+    const ctx = createRepeatedActionThenCompleteCtx(4);
+
+    const result = await runAgentTask(ctx, createTaskState(page));
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("Agent appears stuck");
+  });
+
+  it("allows repeated successful actions when DOM state keeps changing", async () => {
+    const page = createMockPage();
+    const ctx = createRepeatedActionThenCompleteCtx(4);
+    let domSnapshotIndex = 0;
+    captureDOMState.mockImplementation(async () => {
+      domSnapshotIndex += 1;
+      return {
+        elements: new Map(),
+        domState: `dom-${domSnapshotIndex}`,
+        xpathMap: {},
+        backendNodeMap: {},
+        frameMap: new Map(),
+      };
+    });
+
+    const result = await runAgentTask(ctx, createTaskState(page));
+
     expect(result.status).toBe(TaskStatus.COMPLETED);
     expect(result.output).toBe("final answer");
   });
