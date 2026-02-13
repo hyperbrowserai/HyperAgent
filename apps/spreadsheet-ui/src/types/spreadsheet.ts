@@ -80,6 +80,8 @@ export interface AgentPresetInfo {
 export interface AgentSchemaInfo {
   endpoint: string;
   agent_ops_preview_endpoint?: string;
+  agent_ops_cache_stats_endpoint?: string;
+  agent_ops_cache_clear_endpoint?: string;
   agent_ops_idempotency_cache_max_entries?: number;
   agent_ops_preview_request_shape?: Record<string, string>;
   agent_ops_preview_response_shape?: Record<string, string>;

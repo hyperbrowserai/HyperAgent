@@ -1886,6 +1886,22 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_stats_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache stats endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_stats_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_clear_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache clear endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_clear_endpoint}
+                </span>
+              </p>
+            ) : null}
             {typeof agentSchemaQuery.data?.agent_ops_idempotency_cache_max_entries === "number" ? (
               <p className="mb-2 text-xs text-slate-400">
                 idempotency cache entries/workbook:{" "}
