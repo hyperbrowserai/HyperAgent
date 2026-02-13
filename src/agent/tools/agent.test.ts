@@ -210,6 +210,106 @@ function createThrowingObjectCtx(): AgentCtx {
   };
 }
 
+function createMissingRunHandlerCtx(): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "unused",
+      },
+    },
+  };
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured: async () => ({
+      rawText: "{}",
+      parsed: parsedAction,
+    }),
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [
+      {
+        type: "complete",
+        actionParams: z.object({
+          success: z.boolean(),
+          text: z.string().optional(),
+        }),
+        run: undefined as unknown as AgentActionDefinition["run"],
+      },
+    ],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
+function createInvalidOutputCtx(): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "unused",
+      },
+    },
+  };
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured: async () => ({
+      rawText: "{}",
+      parsed: parsedAction,
+    }),
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [
+      {
+        type: "complete",
+        actionParams: z.object({
+          success: z.boolean(),
+          text: z.string().optional(),
+        }),
+        run: async () => null as unknown as { success: boolean; message: string },
+      },
+    ],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
 function createSchemaRetryCtx(
   rawText: string,
   providerId = "mock",
@@ -511,6 +611,58 @@ describe("runAgentTask completion behavior", () => {
 
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.output).toContain('Action complete failed: {"reason":"object failure"}');
+  });
+
+  it("surfaces missing action handler implementations as failures", async () => {
+    const page = createMockPage();
+    const result = await runAgentTask(
+      createMissingRunHandlerCtx(),
+      createTaskState(page)
+    );
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("missing a runnable handler");
+  });
+
+  it("normalizes invalid action outputs to readable failures", async () => {
+    const page = createMockPage();
+    const result = await runAgentTask(
+      createInvalidOutputCtx(),
+      createTaskState(page)
+    );
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("returned invalid output");
+  });
+
+  it("falls back to empty variables when variables enumeration traps throw", async () => {
+    const page = createMockPage();
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.variables = new Proxy(
+      {},
+      {
+        ownKeys: () => {
+          throw new Error("variables trap");
+        },
+      }
+    ) as AgentCtx["variables"];
+
+    const result = await runAgentTask(ctx, createTaskState(page));
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toBe("final answer");
+  });
+
+  it("reports CDP initialization failures as action failures", async () => {
+    const page = createMockPage();
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.cdpActions = true;
+    initializeRuntimeContext.mockRejectedValueOnce(new Error("cdp init failed"));
+
+    const result = await runAgentTask(ctx, createTaskState(page));
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain("cdp init failed");
   });
 
   it("does not fail task when debug artifact IO throws", async () => {

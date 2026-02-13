@@ -51,6 +51,8 @@ const MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS = 8_000;
 const MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS = 120;
 const MAX_SCHEMA_ERROR_SUMMARY_CHARS = 3_000;
 const MAX_SCHEMA_ERROR_HISTORY = 20;
+const MAX_RUNTIME_ACTION_TYPE_CHARS = 120;
+const MAX_RUNTIME_ACTION_MESSAGE_CHARS = 4_000;
 
 function truncateDiagnosticText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -74,6 +76,75 @@ function formatDiagnosticIdentifier(value: unknown, fallback: string): string {
     normalized,
     MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS
   );
+}
+
+function safeReadRecordField(value: unknown, key: string): unknown {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return undefined;
+  }
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeRuntimeActionType(value: unknown): string {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return "unknown";
+  }
+  return truncateDiagnosticText(normalized, MAX_RUNTIME_ACTION_TYPE_CHARS);
+}
+
+function normalizeRuntimeActionMessage(value: unknown): string {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return "Action failed without an error message.";
+  }
+  return truncateDiagnosticText(normalized, MAX_RUNTIME_ACTION_MESSAGE_CHARS);
+}
+
+function normalizeActionOutput(
+  value: unknown,
+  actionType: string
+): ActionOutput {
+  if (!value || typeof value !== "object") {
+    return {
+      success: false,
+      message: `Action ${actionType} returned invalid output: ${normalizeRuntimeActionMessage(
+        value
+      )}`,
+    };
+  }
+  const success = safeReadRecordField(value, "success") === true;
+  const message = normalizeRuntimeActionMessage(
+    safeReadRecordField(value, "message")
+  );
+  const extract = safeReadRecordField(value, "extract");
+  const debug = safeReadRecordField(value, "debug");
+  return {
+    success,
+    message,
+    ...(extract !== undefined ? { extract: extract as object } : {}),
+    ...(debug !== undefined ? { debug } : {}),
+  };
+}
+
+function getContextVariables(ctx: AgentCtx): ActionContext["variables"] {
+  const rawVariables = safeReadRecordField(ctx, "variables");
+  if (!rawVariables || typeof rawVariables !== "object") {
+    return [];
+  }
+  try {
+    return Object.values(
+      rawVariables as Record<string, ActionContext["variables"][number]>
+    );
+  } catch {
+    return [];
+  }
 }
 
 function safeJsonStringify(value: unknown, spacing: number = 2): string {
@@ -203,12 +274,32 @@ const compositeScreenshot = async (
 };
 
 const getActionSchema = (actions: Array<AgentActionDefinition>) => {
-  const zodDefs = actions.map((action) =>
-    z.object({
-      type: z.literal(action.type),
-      params: action.actionParams,
-    })
-  );
+  const zodDefs: z.ZodObject<{
+    type: z.ZodLiteral<string>;
+    params: z.ZodTypeAny;
+  }>[] = [];
+  for (const action of actions) {
+    const actionType = normalizeRuntimeActionType(
+      safeReadRecordField(action, "type")
+    );
+    const actionParams = safeReadRecordField(action, "actionParams");
+    if (actionType === "unknown") {
+      continue;
+    }
+    if (
+      !actionParams ||
+      typeof actionParams !== "object" ||
+      typeof safeReadRecordField(actionParams, "safeParse") !== "function"
+    ) {
+      continue;
+    }
+    zodDefs.push(
+      z.object({
+        type: z.literal(actionType),
+        params: actionParams as z.ZodTypeAny,
+      })
+    );
+  }
 
   if (zodDefs.length === 0) {
     throw new Error("No actions registered for agent");
@@ -233,12 +324,21 @@ const getActionHandler = (
   actions: Array<AgentActionDefinition>,
   type: string
 ) => {
-  const foundAction = actions.find((actions) => actions.type === type);
-  if (foundAction) {
-    return foundAction.run;
-  } else {
-    throw new ActionNotFoundError(type);
+  const normalizedType = normalizeRuntimeActionType(type);
+  for (const action of actions) {
+    const actionType = normalizeRuntimeActionType(
+      safeReadRecordField(action, "type")
+    );
+    if (actionType !== normalizedType) {
+      continue;
+    }
+    const run = safeReadRecordField(action, "run");
+    if (typeof run !== "function") {
+      throw new Error(`Action ${normalizedType} is missing a runnable handler.`);
+    }
+    return run as AgentActionDefinition["run"];
   }
+  throw new ActionNotFoundError(normalizedType);
 };
 
 const runAction = async (
@@ -248,6 +348,8 @@ const runAction = async (
   ctx: AgentCtx
 ): Promise<ActionOutput> => {
   const actionStart = performance.now();
+  const actionType = normalizeRuntimeActionType(safeReadRecordField(action, "type"));
+  const actionParams = safeReadRecordField(action, "params");
   const actionCtx: ActionContext = {
     domState,
     page,
@@ -256,46 +358,70 @@ const runAction = async (
     debugDir: ctx.debugDir,
     debug: ctx.debug,
     mcpClient: ctx.mcpClient || undefined,
-    variables: Object.values(ctx.variables),
+    variables: getContextVariables(ctx),
     cdpActions: ctx.cdpActions,
     invalidateDomCache: () => markDomSnapshotDirty(page),
   };
 
-  if (ctx.cdpActions) {
-    const { cdpClient, frameContextManager } = await initializeRuntimeContext(
-      page,
-      ctx.debug
-    );
-    actionCtx.cdp = {
-      resolveElement,
-      dispatchCDPAction,
-      client: cdpClient,
-      preferScriptBoundingBox: !!ctx.debugDir,
-      frameContextManager,
-      debug: ctx.debug,
-    };
-  }
-  const actionType = action.type;
-  const actionHandler = getActionHandler(ctx.actions, action.type);
-  if (!actionHandler) {
-    return {
-      success: false,
-      message: `Unknown action type: ${actionType}`,
-    };
-  }
+  let actionHandler: AgentActionDefinition["run"];
   try {
-    const result = await actionHandler(actionCtx, action.params);
-    logPerf(ctx.debug, `[Perf][runAction][${action.type}]`, actionStart);
-    return result;
+    actionHandler = getActionHandler(ctx.actions, actionType);
   } catch (error) {
     logPerf(
       ctx.debug,
-      `[Perf][runAction][${action.type}] (error)`,
+      `[Perf][runAction][${actionType}] (handler error)`,
       actionStart
     );
     return {
       success: false,
-      message: `Action ${action.type} failed: ${formatUnknownError(error)}`,
+      message: `Action ${actionType} failed: ${normalizeRuntimeActionMessage(error)}`,
+    };
+  }
+
+  if (ctx.cdpActions) {
+    try {
+      const { cdpClient, frameContextManager } = await initializeRuntimeContext(
+        page,
+        ctx.debug
+      );
+      actionCtx.cdp = {
+        resolveElement,
+        dispatchCDPAction,
+        client: cdpClient,
+        preferScriptBoundingBox: !!ctx.debugDir,
+        frameContextManager,
+        debug: ctx.debug,
+      };
+    } catch (error) {
+      logPerf(
+        ctx.debug,
+        `[Perf][runAction][${actionType}] (cdp init error)`,
+        actionStart
+      );
+      return {
+        success: false,
+        message: `Action ${actionType} failed: ${normalizeRuntimeActionMessage(
+          error
+        )}`,
+      };
+    }
+  }
+
+  try {
+    const result = await actionHandler(actionCtx, actionParams);
+    logPerf(ctx.debug, `[Perf][runAction][${actionType}]`, actionStart);
+    return normalizeActionOutput(result, actionType);
+  } catch (error) {
+    logPerf(
+      ctx.debug,
+      `[Perf][runAction][${actionType}] (error)`,
+      actionStart
+    );
+    return {
+      success: false,
+      message: `Action ${actionType} failed: ${normalizeRuntimeActionMessage(
+        error
+      )}`,
     };
   }
 };
@@ -382,9 +508,20 @@ export const runAgentTask = async (
 
   try {
     // Initialize context at the start of the task
-    await initializeRuntimeContext(page, ctx.debug);
+    let runtimeContextReady = true;
+    try {
+      await initializeRuntimeContext(page, ctx.debug);
+    } catch (error) {
+      runtimeContextReady = false;
+      const initError = `Failed to initialize runtime context: ${normalizeRuntimeActionMessage(
+        error
+      )}`;
+      taskState.status = TaskStatus.FAILED;
+      taskState.error = initError;
+      output = initError;
+    }
 
-    while (true) {
+    while (runtimeContextReady) {
       // Check for page context switch
       if (ctx.activePage) {
         const newPage = await ctx.activePage();
@@ -397,7 +534,17 @@ export const runAgentTask = async (
           cleanupDomListeners(page);
           page = newPage;
           setupDomListeners(page);
-          await initializeRuntimeContext(page, ctx.debug);
+          try {
+            await initializeRuntimeContext(page, ctx.debug);
+          } catch (error) {
+            const switchError = `Failed to initialize runtime context for switched page: ${normalizeRuntimeActionMessage(
+              error
+            )}`;
+            taskState.status = TaskStatus.FAILED;
+            taskState.error = switchError;
+            output = switchError;
+            break;
+          }
           markDomSnapshotDirty(page);
         }
       }
@@ -514,7 +661,7 @@ export const runAgentTask = async (
         page,
         domState,
         trimmedScreenshot,
-        Object.values(ctx.variables)
+        getContextVariables(ctx)
       );
 
       // Append accumulated schema errors from previous steps
@@ -704,6 +851,10 @@ export const runAgentTask = async (
 
       // Run single action
       const action = agentOutput.action;
+      const actionType = normalizeRuntimeActionType(
+        safeReadRecordField(action, "type")
+      );
+      const actionParams = safeReadRecordField(action, "params");
 
       // Execute the action
       const actionExecStart = performance.now();
@@ -715,7 +866,7 @@ export const runAgentTask = async (
         actionExecStart
       );
       stepMetrics.actionMs = Math.round(actionDuration);
-      stepMetrics.actionType = action.type;
+      stepMetrics.actionType = actionType;
       stepMetrics.actionSuccess = actionOutput.success;
       if (
         actionOutput.debug &&
@@ -726,7 +877,7 @@ export const runAgentTask = async (
       ) {
         stepMetrics.actionTimings = actionOutput.debug.timings;
       }
-      if (!READ_ONLY_ACTIONS.has(action.type)) {
+      if (!READ_ONLY_ACTIONS.has(actionType)) {
         markDomSnapshotDirty(page);
       }
 
@@ -738,13 +889,13 @@ export const runAgentTask = async (
       });
       actionCacheSteps.push(actionCacheEntry);
 
-      if (action.type === "complete") {
+      if (actionType === "complete") {
         if (actionOutput.success) {
           const actionDefinition = ctx.actions.find(
             (actionDefinition) => actionDefinition.type === "complete"
           );
           output =
-            (await actionDefinition?.completeAction?.(action.params)) ??
+            (await actionDefinition?.completeAction?.(actionParams)) ??
             "Task Complete";
           taskState.status = TaskStatus.COMPLETED;
         } else {
@@ -764,11 +915,11 @@ export const runAgentTask = async (
         break;
       }
 
-      if (actionOutput.success && action.type !== "wait") {
+      if (actionOutput.success && actionType !== "wait") {
         const actionFingerprint = safeJsonStringify(
           {
-          actionType: action.type,
-          params: action.params,
+          actionType,
+          params: actionParams,
           url: page.url(),
           },
           0
@@ -802,7 +953,7 @@ export const runAgentTask = async (
       }
 
       // Check action result and handle retry logic
-      if (action.type === "wait") {
+      if (actionType === "wait") {
         // Wait action - increment counter
         consecutiveFailuresOrWaits++;
 
