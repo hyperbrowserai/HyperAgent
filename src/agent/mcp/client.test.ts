@@ -50,6 +50,20 @@ describe("normalizeDiscoveredMCPTools", () => {
     ).toThrow("MCP tool name contains unsupported control characters");
   });
 
+  it("rejects discovered tools with non-string names", () => {
+    expect(() =>
+      normalizeDiscoveredMCPTools(
+        [
+          {
+            description: "bad tool",
+            inputSchema: { type: "object", properties: {} },
+          } as unknown as Tool,
+        ],
+        {}
+      )
+    ).toThrow("MCP tool name must be a string");
+  });
+
   it("throws actionable error when includeTools filter matches nothing", () => {
     expect(() =>
       normalizeDiscoveredMCPTools([createTool("search"), createTool("notes")], {
@@ -1244,6 +1258,17 @@ describe("MCPClient.executeTool server selection", () => {
     await expect(
       mcpClient.executeTool("   ", { query: "missing" }, "unknown-server")
     ).rejects.toThrow("MCP tool name must be a non-empty string");
+  });
+
+  it("rejects non-string tool names before server lookup", async () => {
+    const mcpClient = new MCPClient(false);
+    await expect(
+      mcpClient.executeTool(
+        42 as unknown as string,
+        { query: "missing" },
+        "unknown-server"
+      )
+    ).rejects.toThrow("MCP tool name must be a string");
   });
 
   it("rejects tool names with control characters", async () => {

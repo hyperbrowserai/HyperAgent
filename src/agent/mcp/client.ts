@@ -98,7 +98,10 @@ function formatMCPIdentifier(value: unknown, fallback: string): string {
   )}... [truncated]`;
 }
 
-function normalizeMCPExecutionToolName(toolName: string): string {
+function normalizeMCPExecutionToolName(toolName: unknown): string {
+  if (typeof toolName !== "string") {
+    throw new Error("MCP tool name must be a string");
+  }
   const normalized = toolName.trim();
   if (normalized.length === 0) {
     throw new Error("MCP tool name must be a non-empty string");
