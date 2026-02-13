@@ -45,6 +45,7 @@ const MAX_MCP_CONFIG_ARG_CHARS = 4_000;
 const MAX_MCP_CONFIG_RECORD_ENTRIES = 200;
 const MAX_MCP_CONFIG_RECORD_KEY_CHARS = 256;
 const MAX_MCP_CONFIG_RECORD_VALUE_CHARS = 4_000;
+const MAX_MCP_DISCOVERED_TOOLS = 500;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const UNSAFE_MCP_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
@@ -502,6 +503,29 @@ export function normalizeDiscoveredMCPTools(
   return normalizedTools;
 }
 
+export function normalizeMCPListToolsPayload(value: unknown): Tool[] {
+  if (
+    !isPlainRecord(value) ||
+    !Object.prototype.hasOwnProperty.call(value, "tools") ||
+    !Array.isArray(value.tools)
+  ) {
+    throw new Error("Invalid MCP listTools response: expected a tools array");
+  }
+  if (value.tools.length > MAX_MCP_DISCOVERED_TOOLS) {
+    throw new Error(
+      `Invalid MCP listTools response: received more than ${MAX_MCP_DISCOVERED_TOOLS} tools`
+    );
+  }
+  if (
+    value.tools.some((tool) => typeof tool !== "object" || tool === null)
+  ) {
+    throw new Error(
+      "Invalid MCP listTools response: each tool entry must be an object"
+    );
+  }
+  return value.tools as Tool[];
+}
+
 function findConnectedServerId(
   servers: Map<string, ServerConnection>,
   requestedId: string
@@ -856,10 +880,11 @@ class MCPClient {
       await client.connect(transport);
 
       const toolsResult = await client.listTools();
+      const listedTools = normalizeMCPListToolsPayload(toolsResult);
       const toolsMap = new Map<string, Tool>();
 
       const discoveredTools = normalizeDiscoveredMCPTools(
-        toolsResult.tools,
+        listedTools,
         serverConfig
       );
 

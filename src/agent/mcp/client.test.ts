@@ -1,6 +1,7 @@
 import {
   MCPClient,
   normalizeDiscoveredMCPTools,
+  normalizeMCPListToolsPayload,
   normalizeMCPToolParams,
   stringifyMCPPayload,
 } from "@/agent/mcp/client";
@@ -105,6 +106,38 @@ describe("normalizeDiscoveredMCPTools", () => {
         excludeTools: [" Search "],
       })
     ).toThrow("MCP includeTools and excludeTools overlap on: Search");
+  });
+});
+
+describe("normalizeMCPListToolsPayload", () => {
+  it("returns tools array when payload shape is valid", () => {
+    const tools = [createTool("search"), createTool("notes")];
+    expect(normalizeMCPListToolsPayload({ tools })).toEqual(tools);
+  });
+
+  it("rejects payloads without a tools array", () => {
+    expect(() => normalizeMCPListToolsPayload({})).toThrow(
+      "Invalid MCP listTools response: expected a tools array"
+    );
+  });
+
+  it("rejects oversized tools payloads", () => {
+    const tools = Array.from({ length: 501 }, (_, index) =>
+      createTool(`tool-${index}`)
+    );
+    expect(() => normalizeMCPListToolsPayload({ tools })).toThrow(
+      "Invalid MCP listTools response: received more than 500 tools"
+    );
+  });
+
+  it("rejects non-object tool entries", () => {
+    expect(() =>
+      normalizeMCPListToolsPayload({
+        tools: [createTool("search"), "bad-entry"],
+      })
+    ).toThrow(
+      "Invalid MCP listTools response: each tool entry must be an object"
+    );
   });
 });
 
