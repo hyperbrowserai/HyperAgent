@@ -126,6 +126,27 @@ describe("action cache helpers", () => {
     expect(script).toContain("waitForTimeout(0)");
   });
 
+  it("normalizes negative wait durations to default timeout", () => {
+    const waitEntry: ActionCacheEntry = {
+      stepIndex: 8,
+      instruction: "wait negative",
+      elementId: null,
+      method: null,
+      arguments: ["-10"],
+      actionType: "wait",
+      success: true,
+      message: "ok",
+      frameIndex: null,
+      xpath: null,
+    };
+
+    const script = createScriptFromActionCache({
+      steps: [waitEntry],
+    });
+
+    expect(script).toContain("waitForTimeout(1000)");
+  });
+
   it("skips helper generation when xpath is missing", () => {
     const actElementEntry: ActionCacheEntry = {
       stepIndex: 3,
