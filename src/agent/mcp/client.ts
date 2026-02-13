@@ -19,6 +19,7 @@ interface ServerConnection {
 
 type MCPToolResult = Awaited<ReturnType<Client["callTool"]>>;
 const MAX_MCP_PAYLOAD_CHARS = 4000;
+const MAX_MCP_TOOL_PARAMS_JSON_CHARS = 100_000;
 const MAX_MCP_PARAM_DEPTH = 25;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
@@ -116,14 +117,20 @@ export function normalizeMCPToolParams(
     sanitizeParamValue(value, new WeakSet<object>(), 0) as Record<string, unknown>;
 
   if (typeof input === "string") {
-    if (input.trim().length === 0) {
+    const trimmedInput = input.trim();
+    if (trimmedInput.length === 0) {
       throw new Error(
         "Invalid MCP tool params JSON string: input is empty"
       );
     }
+    if (trimmedInput.length > MAX_MCP_TOOL_PARAMS_JSON_CHARS) {
+      throw new Error(
+        `Invalid MCP tool params JSON string: exceeds ${MAX_MCP_TOOL_PARAMS_JSON_CHARS} characters`
+      );
+    }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(input);
+      parsed = JSON.parse(trimmedInput);
     } catch (error) {
       const message = formatUnknownError(error);
       throw new Error(`Invalid MCP tool params JSON string: ${message}`);

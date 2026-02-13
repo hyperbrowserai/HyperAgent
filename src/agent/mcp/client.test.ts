@@ -50,6 +50,13 @@ describe("normalizeMCPToolParams", () => {
     );
   });
 
+  it("rejects oversized JSON string params before parsing", () => {
+    const oversized = `{"data":"${"x".repeat(100_010)}"}`;
+    expect(() => normalizeMCPToolParams(oversized)).toThrow(
+      "Invalid MCP tool params JSON string: exceeds 100000 characters"
+    );
+  });
+
   it("rejects reserved object keys in parsed JSON params", () => {
     expect(() => normalizeMCPToolParams('{"__proto__":{"x":1}}')).toThrow(
       'MCP tool params cannot include reserved key "__proto__"'
