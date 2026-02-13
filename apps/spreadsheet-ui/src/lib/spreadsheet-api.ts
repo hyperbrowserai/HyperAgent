@@ -3,6 +3,7 @@ import {
   AgentOpsPreviewResponse,
   AgentOpsCacheStatsResponse,
   ClearAgentOpsCacheResponse,
+  ReplayAgentOpsCacheEntryResponse,
   RemoveAgentOpsCacheEntryResponse,
   AgentOpsResponse,
   AgentOperationPlanPreview,
@@ -226,7 +227,7 @@ export async function clearAgentOpsCache(
 export async function replayAgentOpsCacheEntry(
   workbookId: string,
   requestId: string,
-): Promise<AgentOpsResponse> {
+): Promise<ReplayAgentOpsCacheEntryResponse> {
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/replay`,
     {
@@ -235,7 +236,7 @@ export async function replayAgentOpsCacheEntry(
       body: JSON.stringify({ request_id: requestId }),
     },
   );
-  return parseJsonResponse<AgentOpsResponse>(response);
+  return parseJsonResponse<ReplayAgentOpsCacheEntryResponse>(response);
 }
 
 export async function removeAgentOpsCacheEntry(

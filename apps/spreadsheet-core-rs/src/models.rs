@@ -174,6 +174,12 @@ pub struct ReplayAgentOpsCacheEntryRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayAgentOpsCacheEntryResponse {
+  pub cached_response: AgentOpsResponse,
+  pub operations: Vec<AgentOperation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsCacheEntry {
   pub request_id: String,
   pub operations_signature: Option<String>,

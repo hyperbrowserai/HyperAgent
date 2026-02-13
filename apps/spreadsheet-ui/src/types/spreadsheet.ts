@@ -80,6 +80,11 @@ export interface RemoveAgentOpsCacheEntryResponse {
   remaining_entries: number;
 }
 
+export interface ReplayAgentOpsCacheEntryResponse {
+  cached_response: AgentOpsResponse;
+  operations: AgentOperationPreview[];
+}
+
 export interface ClearAgentOpsCacheResponse {
   cleared_entries: number;
 }

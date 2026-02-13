@@ -1,6 +1,8 @@
 use crate::{
   error::ApiError,
-  models::{AgentOpsResponse, ChartSpec, WorkbookEvent, WorkbookSummary},
+  models::{
+    AgentOperation, AgentOpsResponse, ChartSpec, WorkbookEvent, WorkbookSummary,
+  },
 };
 use chrono::Utc;
 use duckdb::Connection;
@@ -29,6 +31,7 @@ pub struct WorkbookRecord {
   pub events_tx: broadcast::Sender<WorkbookEvent>,
   pub next_seq: u64,
   pub agent_ops_cache: HashMap<String, AgentOpsResponse>,
+  pub agent_ops_cached_operations: HashMap<String, Vec<AgentOperation>>,
   pub agent_ops_cache_order: VecDeque<String>,
 }
 
@@ -66,6 +69,7 @@ impl AppState {
       events_tx,
       next_seq: 1,
       agent_ops_cache: HashMap::new(),
+      agent_ops_cached_operations: HashMap::new(),
       agent_ops_cache_order: VecDeque::new(),
     };
 
@@ -209,6 +213,7 @@ impl AppState {
     &self,
     workbook_id: Uuid,
     request_id: String,
+    operations: Vec<AgentOperation>,
     response: AgentOpsResponse,
   ) -> Result<(), ApiError> {
     let mut guard = self.workbooks.write().await;
@@ -219,14 +224,36 @@ impl AppState {
     if !record.agent_ops_cache.contains_key(&request_id) {
       record.agent_ops_cache_order.push_back(request_id.clone());
     }
-    record.agent_ops_cache.insert(request_id, response);
+    let cache_key = request_id.clone();
+    record.agent_ops_cache.insert(cache_key.clone(), response);
+    record.agent_ops_cached_operations.insert(cache_key, operations);
 
     while record.agent_ops_cache_order.len() > AGENT_OPS_CACHE_MAX_ENTRIES {
       if let Some(evicted) = record.agent_ops_cache_order.pop_front() {
         record.agent_ops_cache.remove(&evicted);
+        record.agent_ops_cached_operations.remove(&evicted);
       }
     }
     Ok(())
+  }
+
+  pub async fn get_cached_agent_ops_replay_data(
+    &self,
+    workbook_id: Uuid,
+    request_id: &str,
+  ) -> Result<Option<(AgentOpsResponse, Vec<AgentOperation>)>, ApiError> {
+    let guard = self.workbooks.read().await;
+    let record = guard
+      .get(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+    let response = record.agent_ops_cache.get(request_id).cloned();
+    let operations = record.agent_ops_cached_operations.get(request_id).cloned();
+    Ok(match (response, operations) {
+      (Some(existing_response), Some(existing_operations)) => {
+        Some((existing_response, existing_operations))
+      }
+      _ => None,
+    })
   }
 
   pub async fn agent_ops_cache_stats(
@@ -280,6 +307,7 @@ impl AppState {
     let cleared_entries = record.agent_ops_cache_order.len();
     record.agent_ops_cache_order.clear();
     record.agent_ops_cache.clear();
+    record.agent_ops_cached_operations.clear();
     Ok(cleared_entries)
   }
 
@@ -295,6 +323,7 @@ impl AppState {
     let removed = record.agent_ops_cache.remove(request_id).is_some();
     if removed {
       record.agent_ops_cache_order.retain(|entry| entry != request_id);
+      record.agent_ops_cached_operations.remove(request_id);
     }
     Ok((removed, record.agent_ops_cache_order.len()))
   }
@@ -325,7 +354,7 @@ fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
 #[cfg(test)]
 mod tests {
   use super::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES};
-  use crate::models::{AgentOperationResult, AgentOpsResponse};
+  use crate::models::{AgentOperation, AgentOperationResult, AgentOpsResponse};
   use serde_json::json;
   use tempfile::tempdir;
 
@@ -351,7 +380,12 @@ mod tests {
       }],
     };
     state
-      .cache_agent_ops_response(workbook.id, "req-1".to_string(), response.clone())
+      .cache_agent_ops_response(
+        workbook.id,
+        "req-1".to_string(),
+        vec![AgentOperation::Recalculate],
+        response.clone(),
+      )
       .await
       .expect("cache should be updated");
 
@@ -364,6 +398,14 @@ mod tests {
       cached.and_then(|value| value.request_id),
       Some("req-1".to_string()),
     );
+
+    let replay_data = state
+      .get_cached_agent_ops_replay_data(workbook.id, "req-1")
+      .await
+      .expect("cache replay lookup should succeed")
+      .expect("cache replay data should be present");
+    assert_eq!(replay_data.1.len(), 1);
+    assert!(matches!(replay_data.1[0], AgentOperation::Recalculate));
   }
 
   #[tokio::test]
@@ -385,7 +427,12 @@ mod tests {
         results: Vec::new(),
       };
       state
-        .cache_agent_ops_response(workbook.id, request_id, response)
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id,
+          vec![AgentOperation::Recalculate],
+          response,
+        )
         .await
         .expect("cache update should succeed");
     }
@@ -422,7 +469,12 @@ mod tests {
       results: Vec::new(),
     };
     state
-      .cache_agent_ops_response(workbook.id, "req-1".to_string(), response)
+      .cache_agent_ops_response(
+        workbook.id,
+        "req-1".to_string(),
+        vec![AgentOperation::Recalculate],
+        response,
+      )
       .await
       .expect("cache update should succeed");
 
@@ -465,6 +517,7 @@ mod tests {
         .cache_agent_ops_response(
           workbook.id,
           request_id.clone(),
+          vec![AgentOperation::Recalculate],
           AgentOpsResponse {
             request_id: Some(request_id),
             operations_signature: Some(format!("sig-{index}")),
@@ -509,6 +562,7 @@ mod tests {
         .cache_agent_ops_response(
           workbook.id,
           request_id.clone(),
+          vec![AgentOperation::Recalculate],
           AgentOpsResponse {
             request_id: Some(request_id),
             operations_signature: Some(format!("sig-{index}")),

@@ -38,6 +38,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent details panel surfaces `served_from_cache` when `agent/ops` responses are replayed by request id
 - Agent details panel provides one-click replay of the latest `request_id` to validate idempotent cached responses
 - Latest `request_id` replay now calls dedicated cache replay API (does not require local operation plan state)
+- Cache replay responses hydrate both operation results and cached operation plan for follow-up copy/replay workflows
 - API client error handling preserves backend error codes in thrown messages (e.g. `OPERATION_SIGNATURE_MISMATCH: ...`)
 - Signature-related validation codes (`OPERATION_SIGNATURE_MISMATCH`, `INVALID_SIGNATURE_FORMAT`, `EMPTY_OPERATION_LIST`, `REQUEST_ID_CONFLICT`) map to recovery messaging in UI actions
 - Signature recovery uses structured API error codes (not substring-only matching)

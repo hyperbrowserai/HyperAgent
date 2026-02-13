@@ -1154,11 +1154,14 @@ export function SpreadsheetApp() {
         workbook.id,
         lastAgentRequestId,
       );
-      setLastOperationsSignature(response.operations_signature ?? null);
-      setLastServedFromCache(response.served_from_cache ?? null);
-      setLastAgentOps(response.results);
+      setLastExecutedOperations(response.operations);
+      setLastOperationsSignature(
+        response.cached_response.operations_signature ?? null,
+      );
+      setLastServedFromCache(response.cached_response.served_from_cache ?? null);
+      setLastAgentOps(response.cached_response.results);
       setNotice(
-        response.served_from_cache
+        response.cached_response.served_from_cache
           ? "Replay served from idempotency cache."
           : "Replay executed fresh (cache miss).",
       );
@@ -1229,10 +1232,13 @@ export function SpreadsheetApp() {
     try {
       clearUiError();
       const response = await replayAgentOpsCacheEntry(workbook.id, requestId);
-      setLastAgentRequestId(response.request_id ?? requestId);
-      setLastOperationsSignature(response.operations_signature ?? null);
-      setLastServedFromCache(response.served_from_cache ?? true);
-      setLastAgentOps(response.results);
+      setLastExecutedOperations(response.operations);
+      setLastAgentRequestId(response.cached_response.request_id ?? requestId);
+      setLastOperationsSignature(
+        response.cached_response.operations_signature ?? null,
+      );
+      setLastServedFromCache(response.cached_response.served_from_cache ?? true);
+      setLastAgentOps(response.cached_response.results);
       setNotice(`Replayed cached response for request_id ${requestId}.`);
       await Promise.all([
         queryClient.invalidateQueries({

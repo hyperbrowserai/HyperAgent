@@ -6,7 +6,7 @@ use crate::{
     AgentOpsResponse, AgentOpsPreviewRequest, AgentOpsPreviewResponse,
     AgentPresetRunRequest, AgentScenarioRunRequest,
     RemoveAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntryResponse,
-    ReplayAgentOpsCacheEntryRequest,
+    ReplayAgentOpsCacheEntryRequest, ReplayAgentOpsCacheEntryResponse,
     AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
     ClearAgentOpsCacheResponse,
     CellMutation, CreateSheetRequest, CreateSheetResponse, CreateWorkbookRequest,
@@ -1051,10 +1051,13 @@ async fn get_agent_schema(
       "request_id": "string (required)"
     },
     "agent_ops_cache_replay_response_shape": {
-      "request_id": "optional string",
-      "operations_signature": "sha256 signature over cached operations",
-      "served_from_cache": "always true when replay succeeds",
-      "results": "array of cached operation results"
+      "cached_response": {
+        "request_id": "optional string",
+        "operations_signature": "sha256 signature over cached operations",
+        "served_from_cache": "always true when replay succeeds",
+        "results": "array of cached operation results"
+      },
+      "operations": "cached operation array for request replay portability"
     },
     "agent_ops_cache_remove_request_shape": {
       "request_id": "string (required)"
@@ -1285,13 +1288,14 @@ async fn agent_ops(
   Json(payload): Json<AgentOpsRequest>,
 ) -> Result<Json<AgentOpsResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
-  ensure_non_empty_operations(&payload.operations)?;
-  let operation_signature = operations_signature(&payload.operations)?;
+  let request_id = payload.request_id.clone();
+  let operations = payload.operations;
+  ensure_non_empty_operations(&operations)?;
+  let operation_signature = operations_signature(&operations)?;
   validate_expected_operations_signature(
     payload.expected_operations_signature.as_deref(),
     operation_signature.as_str(),
   )?;
-  let request_id = payload.request_id.clone();
   if let Some(existing_request_id) = request_id.as_deref() {
     if let Some(mut cached_response) = state
       .get_cached_agent_ops_response(workbook_id, existing_request_id)
@@ -1312,7 +1316,7 @@ async fn agent_ops(
     workbook_id,
     actor.as_str(),
     stop_on_error,
-    payload.operations,
+    operations.clone(),
   )
   .await;
 
@@ -1327,6 +1331,7 @@ async fn agent_ops(
       .cache_agent_ops_response(
         workbook_id,
         existing_request_id.clone(),
+        operations,
         response.clone(),
       )
       .await?;
@@ -1419,7 +1424,7 @@ async fn replay_agent_ops_cache_entry(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
   Json(payload): Json<ReplayAgentOpsCacheEntryRequest>,
-) -> Result<Json<AgentOpsResponse>, ApiError> {
+) -> Result<Json<ReplayAgentOpsCacheEntryResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
   let request_id = payload.request_id.trim();
   if request_id.is_empty() {
@@ -1428,8 +1433,8 @@ async fn replay_agent_ops_cache_entry(
       "request_id is required to replay a cache entry.",
     ));
   }
-  let mut cached_response = state
-    .get_cached_agent_ops_response(workbook_id, request_id)
+  let (mut cached_response, operations) = state
+    .get_cached_agent_ops_replay_data(workbook_id, request_id)
     .await?
     .ok_or_else(|| {
       ApiError::bad_request_with_code(
@@ -1438,7 +1443,10 @@ async fn replay_agent_ops_cache_entry(
       )
     })?;
   cached_response.served_from_cache = true;
-  Ok(Json(cached_response))
+  Ok(Json(ReplayAgentOpsCacheEntryResponse {
+    cached_response,
+    operations,
+  }))
 }
 
 async fn remove_agent_ops_cache_entry(
@@ -2151,8 +2159,12 @@ mod tests {
     .await
     .expect("replay should succeed")
     .0;
-    assert!(replay_response.served_from_cache);
-    assert_eq!(replay_response.request_id.as_deref(), Some("replay-me"));
+    assert!(replay_response.cached_response.served_from_cache);
+    assert_eq!(
+      replay_response.cached_response.request_id.as_deref(),
+      Some("replay-me"),
+    );
+    assert_eq!(replay_response.operations.len(), 1);
   }
 
   #[tokio::test]
