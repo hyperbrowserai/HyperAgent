@@ -231,4 +231,69 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("=== Open Tabs ===");
     expect(joined).toContain("Open tabs unavailable");
   });
+
+  it("caps open-tab listing and reports omitted tab count", async () => {
+    const urls = Array.from({ length: 25 }, (_, idx) => `https://example.com/${idx}`);
+    const page = createFakePage("https://example.com/0", urls);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[19] https://example.com/19");
+    expect(joined).toContain("... 5 more tabs omitted");
+    expect(joined).not.toContain("[20] https://example.com/20");
+  });
+
+  it("truncates oversized thought, memory, and action output messages", async () => {
+    const longText = "x".repeat(5000);
+    const step = createStep(0);
+    step.agentOutput.thoughts = longText;
+    step.agentOutput.memory = longText;
+    step.actionOutput.message = longText;
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [step],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[truncated for prompt budget]");
+    expect(joined.length).toBeLessThan(9000);
+  });
 });

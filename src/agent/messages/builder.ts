@@ -9,6 +9,7 @@ import { formatUnknownError } from "@/utils";
 
 const MAX_HISTORY_STEPS = 10;
 const MAX_SERIALIZED_PROMPT_VALUE_CHARS = 2000;
+const MAX_OPEN_TAB_ENTRIES = 20;
 
 function truncatePromptText(value: string): string {
   if (value.length <= MAX_SERIALIZED_PROMPT_VALUE_CHARS) {
@@ -47,14 +48,17 @@ function normalizeScrollInfo(value: unknown): [number, number] {
 
 function getOpenTabsSummary(page: Page): string {
   try {
-    return page
-      .context()
-      .pages()
-      .map((openPage, index) => {
-        const currentMarker = openPage === page ? " (current)" : "";
-        return `[${index}] ${openPage.url() || "about:blank"}${currentMarker}`;
-      })
-      .join("\n");
+    const pages = page.context().pages();
+    const visibleTabs = pages.slice(0, MAX_OPEN_TAB_ENTRIES);
+    const hiddenCount = Math.max(0, pages.length - visibleTabs.length);
+    const tabLines = visibleTabs.map((openPage, index) => {
+      const currentMarker = openPage === page ? " (current)" : "";
+      return `[${index}] ${openPage.url() || "about:blank"}${currentMarker}`;
+    });
+    if (hiddenCount > 0) {
+      tabLines.push(`... ${hiddenCount} more tabs omitted`);
+    }
+    return tabLines.join("\n");
   } catch {
     return "Open tabs unavailable";
   }
@@ -123,7 +127,9 @@ export const buildAgentStepMessages = async (
       const { thoughts, memory, action } = step.agentOutput;
       messages.push({
         role: "assistant",
-        content: `Thoughts: ${thoughts}\nMemory: ${memory}\nAction: ${safeSerializeForPrompt(
+        content: `Thoughts: ${truncatePromptText(thoughts)}\nMemory: ${truncatePromptText(
+          memory
+        )}\nAction: ${safeSerializeForPrompt(
           action
         )}`,
       });
@@ -131,8 +137,8 @@ export const buildAgentStepMessages = async (
       messages.push({
         role: "user",
         content: actionResult.extract
-          ? `${actionResult.message} :\n ${safeSerializeForPrompt(actionResult.extract)}`
-          : actionResult.message,
+          ? `${truncatePromptText(actionResult.message)} :\n ${safeSerializeForPrompt(actionResult.extract)}`
+          : truncatePromptText(actionResult.message),
       });
     }
   }
