@@ -13,6 +13,7 @@ import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
 import { parseJsonMaybe } from "../utils/safe-json";
 import { parseStructuredResponse } from "../utils/structured-response";
 import { getDebugOptions } from "@/debug/options";
+import { formatUnknownError } from "@/utils";
 
 const ENV_STRUCTURED_SCHEMA_DEBUG =
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "1" ||
@@ -62,7 +63,7 @@ function convertFromOpenAIContent(
         };
       }
       // Fallback for unknown types
-      return { type: "text", text: JSON.stringify(part) };
+      return { type: "text", text: formatUnknownError(part) };
     });
   }
 
