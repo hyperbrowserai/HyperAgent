@@ -51,6 +51,13 @@ describe("stringifyMCPPayload", () => {
     circular.self = circular;
     expect(stringifyMCPPayload(circular)).toBe('{"self":"[Circular]"}');
   });
+
+  it("truncates oversized payload strings to bounded length", () => {
+    const payload = { text: "x".repeat(5000) };
+    const output = stringifyMCPPayload(payload);
+    expect(output).toContain("[truncated]");
+    expect(output.length).toBeLessThanOrEqual(4016);
+  });
 });
 
 describe("MCPClient.connectToServer validation", () => {

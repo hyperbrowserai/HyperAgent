@@ -18,6 +18,7 @@ interface ServerConnection {
 }
 
 type MCPToolResult = Awaited<ReturnType<Client["callTool"]>>;
+const MAX_MCP_PAYLOAD_CHARS = 4000;
 
 const MCPToolActionParams = z.object({
   params: z
@@ -30,13 +31,20 @@ const MCPToolActionParams = z.object({
 type MCPToolActionInput = z.infer<typeof MCPToolActionParams>;
 
 export function stringifyMCPPayload(value: unknown): string {
+  const truncate = (content: string): string =>
+    content.length <= MAX_MCP_PAYLOAD_CHARS
+      ? content
+      : `${content.slice(0, MAX_MCP_PAYLOAD_CHARS)}... [truncated]`;
+
   try {
     const serialized = JSON.stringify(value);
-    return typeof serialized === "string"
-      ? serialized
-      : formatUnknownError(value);
+    return truncate(
+      typeof serialized === "string"
+        ? serialized
+        : formatUnknownError(value)
+    );
   } catch {
-    return formatUnknownError(value);
+    return truncate(formatUnknownError(value));
   }
 }
 
