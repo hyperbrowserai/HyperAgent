@@ -61,8 +61,23 @@ function truncateConverterDiagnostic(value: string): string {
   )}... [truncated ${omitted} chars]`;
 }
 
+function sanitizeConverterDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  return Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function formatConverterFallback(value: unknown): string {
-  return truncateConverterDiagnostic(formatUnknownError(value));
+  const normalized = sanitizeConverterDiagnostic(formatUnknownError(value));
+  const fallback = normalized.length > 0 ? normalized : "{}";
+  return truncateConverterDiagnostic(fallback);
 }
 
 function extractBase64Payload(url: string): string {

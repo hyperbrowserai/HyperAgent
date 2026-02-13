@@ -173,6 +173,25 @@ describe("convertToOpenAIMessages", () => {
     expect(text).toContain("[truncated");
   });
 
+  it("sanitizes control characters in unknown content diagnostics", () => {
+    const noisyError = new Error(`boom\u0000\n${"x".repeat(3_500)}`);
+    const result = convertToOpenAIMessages([
+      {
+        role: "assistant",
+        content: [noisyError as unknown as never],
+      },
+    ]);
+
+    const text = (
+      result[0]?.content as Array<{
+        text: string;
+      }>
+    )[0]?.text;
+    expect(text).toContain("[truncated");
+    expect(text).not.toContain("\u0000");
+    expect(text).not.toContain("\n");
+  });
+
   it("normalizes tool-role messages with tool_call_id and text content", () => {
     const result = convertToOpenAIMessages([
       {
