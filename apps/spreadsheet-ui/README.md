@@ -35,6 +35,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Preview panels show signature sync status (`in-sync` / `stale`) against latest execution
 - Agent details panel can copy the most recent executed plan as a re-signed `agent/ops` payload
 - API client error handling preserves backend error codes in thrown messages (e.g. `OPERATION_SIGNATURE_MISMATCH: ...`)
+- Signature-related validation codes (`OPERATION_SIGNATURE_MISMATCH`, `INVALID_SIGNATURE_FORMAT`, `EMPTY_OPERATION_LIST`) map to recovery messaging in UI actions
 - Event stream viewer with per-event-type filtering
 
 ## Run

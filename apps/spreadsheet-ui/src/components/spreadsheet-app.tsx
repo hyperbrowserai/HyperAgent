@@ -341,6 +341,16 @@ export function SpreadsheetApp() {
     maybeMessage: string | null,
   ): Promise<boolean> {
     const message = maybeMessage ?? "";
+    if (message.includes("EMPTY_OPERATION_LIST")) {
+      setUiError("No operations were provided. Refresh previews and retry.");
+      return true;
+    }
+    if (message.includes("INVALID_SIGNATURE_FORMAT")) {
+      setUiError(
+        `${message} Refresh previews to regenerate a valid signature and retry.`,
+      );
+      return true;
+    }
     if (
       !message.includes("OPERATION_SIGNATURE_MISMATCH") &&
       !message.includes("Operation signature mismatch")
