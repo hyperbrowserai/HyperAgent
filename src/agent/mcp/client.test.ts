@@ -1803,6 +1803,75 @@ describe("MCPClient.executeTool server selection", () => {
     ).rejects.toThrow("No valid server found for tool search");
   });
 
+  it("returns deterministic error when server-count reads trap", async () => {
+    const mcpClient = new MCPClient(false);
+    const throwingMap = new Proxy(
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool: jest.fn() },
+          },
+        ],
+      ]),
+      {
+        get(target, prop, receiver): unknown {
+          if (prop === "size") {
+            throw new Error("size trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+    setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
+
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" })
+    ).rejects.toThrow("No valid server found for tool search");
+  });
+
+  it("returns deterministic error when server lookup traps", async () => {
+    const mcpClient = new MCPClient(false);
+    const throwingMap = new Proxy(new Map(), {
+      get(target, prop, receiver): unknown {
+        if (prop === "has" || prop === "keys") {
+          return () => {
+            throw new Error("registry trap");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
+
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "server-a")
+    ).rejects.toThrow("No valid server found for tool search");
+  });
+
+  it("returns deterministic error when server retrieval traps", async () => {
+    const mcpClient = new MCPClient(false);
+    const throwingMap = new Proxy(new Map(), {
+      get(target, prop, receiver): unknown {
+        if (prop === "has") {
+          return () => true;
+        }
+        if (prop === "get") {
+          return () => {
+            throw new Error("get trap");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
+
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "server-a")
+    ).rejects.toThrow("Server with ID server-a not found");
+  });
+
   it("rejects empty tool names before server lookup", async () => {
     const mcpClient = new MCPClient(false);
     await expect(

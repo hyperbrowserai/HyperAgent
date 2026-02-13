@@ -688,6 +688,49 @@ function safeGetConnectedServerEntries(
   }
 }
 
+function safeGetConnectedServerCount(
+  servers: Map<string, ServerConnection>
+): number {
+  try {
+    return servers.size;
+  } catch {
+    return 0;
+  }
+}
+
+function safeFindConnectedServerId(
+  servers: Map<string, ServerConnection>,
+  requestedId: string
+): string | undefined {
+  try {
+    return findConnectedServerId(servers, requestedId);
+  } catch {
+    return undefined;
+  }
+}
+
+function safeHasConnectedServer(
+  servers: Map<string, ServerConnection>,
+  serverId: string
+): boolean {
+  try {
+    return servers.has(serverId);
+  } catch {
+    return false;
+  }
+}
+
+function safeGetConnectedServer(
+  servers: Map<string, ServerConnection>,
+  serverId: string
+): ServerConnection | undefined {
+  try {
+    return servers.get(serverId);
+  } catch {
+    return undefined;
+  }
+}
+
 function resolveMCPToolNameOnServer(
   tools: Map<string, Tool>,
   requestedToolName: string
@@ -1258,16 +1301,17 @@ class MCPClient {
     const safeServerId = (): string =>
       formatMCPIdentifier(serverId, "unknown-server");
     let resolvedToolNameForServer: string | undefined;
+    const connectedServerCount = safeGetConnectedServerCount(this.servers);
 
     // If no server ID provided and only one server exists, use that one
-    if (!normalizedServerId && this.servers.size === 1) {
-      serverId = [...this.servers.keys()][0];
+    if (!normalizedServerId && connectedServerCount === 1) {
+      serverId = safeGetConnectedServerIds(this.servers)[0];
     }
 
     // If no server ID provided and multiple servers exist, try to find one with the tool
-    if (!normalizedServerId && this.servers.size > 1) {
+    if (!normalizedServerId && connectedServerCount > 1) {
       const matchingServers: Array<{ serverId: string; toolName: string }> = [];
-      for (const [id, server] of this.servers.entries()) {
+      for (const [id, server] of safeGetConnectedServerEntries(this.servers)) {
         const resolvedTool = resolveMCPToolNameOnServer(
           server.tools,
           normalizedToolName
@@ -1301,14 +1345,14 @@ class MCPClient {
         );
       }
     } else if (normalizedServerId) {
-      serverId = findConnectedServerId(this.servers, normalizedServerId);
+      serverId = safeFindConnectedServerId(this.servers, normalizedServerId);
     }
 
-    if (!serverId || !this.servers.has(serverId)) {
+    if (!serverId || !safeHasConnectedServer(this.servers, serverId)) {
       throw new Error(`No valid server found for tool ${safeToolName}`);
     }
 
-    const server = this.servers.get(serverId);
+    const server = safeGetConnectedServer(this.servers, serverId);
     if (!server) {
       throw new Error(`Server with ID ${safeServerId()} not found`);
     }
