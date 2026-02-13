@@ -4,6 +4,7 @@ import type { BoundingBox } from "@/cdp/bounding-box";
 import { getBoundingBox } from "@/cdp/bounding-box";
 import type { ResolvedCDPElement } from "@/cdp/element-resolver";
 import type { CDPSession } from "@/cdp/types";
+import { formatUnknownError } from "@/utils";
 
 type MouseButton = "left" | "right" | "middle";
 
@@ -77,6 +78,17 @@ interface ScrollToOptions {
 
 interface SelectOptionOptions {
   value: string;
+}
+
+function createScrollIntoViewFailureMessage(
+  primaryError: unknown,
+  fallbackError: unknown
+): string {
+  return (
+    `[CDP][Interactions] Failed to scroll element into view. ` +
+    `Primary method failed: ${formatUnknownError(primaryError)}. ` +
+    `Fallback also failed: ${formatUnknownError(fallbackError)}`
+  );
 }
 
 type SelectOptionResult =
@@ -891,19 +903,25 @@ async function scrollElementIntoView(ctx: CDPActionContext): Promise<void> {
     await session.send("DOM.scrollIntoViewIfNeeded", {
       backendNodeId: element.backendNodeId,
     });
-  } catch {
-    const objectId = await ensureObjectHandle(element);
-    await ensureRuntimeEnabled(session);
-    await session.send("Runtime.callFunctionOn", {
-      objectId,
-      functionDeclaration: `
-        function() {
-          if (typeof this.scrollIntoView === "function") {
-            this.scrollIntoView({ behavior: "auto", block: "center" });
+  } catch (primaryError) {
+    try {
+      const objectId = await ensureObjectHandle(element);
+      await ensureRuntimeEnabled(session);
+      await session.send("Runtime.callFunctionOn", {
+        objectId,
+        functionDeclaration: `
+          function() {
+            if (typeof this.scrollIntoView === "function") {
+              this.scrollIntoView({ behavior: "auto", block: "center" });
+            }
           }
-        }
-      `,
-    });
+        `,
+      });
+    } catch (fallbackError) {
+      throw new Error(
+        createScrollIntoViewFailureMessage(primaryError, fallbackError)
+      );
+    }
   }
   await waitForScrollSettlement(session, element.backendNodeId);
 }
@@ -983,9 +1001,7 @@ async function scrollIntoViewIfNeeded(ctx: CDPActionContext): Promise<void> {
     } catch (fallbackError) {
       // Re-throw with context about both failures
       throw new Error(
-        `[CDP][Interactions] Failed to scroll element into view. ` +
-          `Primary method failed: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}. ` +
-          `Fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+        createScrollIntoViewFailureMessage(primaryError, fallbackError)
       );
     }
   }
