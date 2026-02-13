@@ -678,6 +678,14 @@ function safeGetConnectedServerIds(
   }
 }
 
+function sanitizeConnectedServerIdsForOutput(
+  serverIds: string[]
+): string[] {
+  return serverIds
+    .filter((serverId): serverId is string => typeof serverId === "string")
+    .map((serverId) => formatMCPIdentifier(serverId, "unknown-server"));
+}
+
 function safeGetConnectedServerEntries(
   servers: Map<string, ServerConnection>
 ): Array<[string, ServerConnection]> {
@@ -1467,7 +1475,9 @@ class MCPClient {
    * @returns Array of server IDs
    */
   getServerIds(): string[] {
-    return safeGetConnectedServerIds(this.servers);
+    return sanitizeConnectedServerIdsForOutput(
+      safeGetConnectedServerIds(this.servers)
+    );
   }
 
   /**
