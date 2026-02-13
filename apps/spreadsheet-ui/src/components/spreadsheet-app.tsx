@@ -60,6 +60,8 @@ const ChartPreview = dynamic(
 );
 
 const CACHE_ENTRIES_PREVIEW_LIMIT = 6;
+const CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT = "12";
+const CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT: "count" | "recent" = "count";
 
 function parsePositiveIntegerInput(value: string): number | undefined {
   const normalized = value.trim();
@@ -146,10 +148,12 @@ export function SpreadsheetApp() {
   const [cachePrefixSuggestionsOffset, setCachePrefixSuggestionsOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
-  const [cachePrefixSuggestionLimit, setCachePrefixSuggestionLimit] = useState("12");
+  const [cachePrefixSuggestionLimit, setCachePrefixSuggestionLimit] = useState(
+    CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT,
+  );
   const [cachePrefixMinEntryCount, setCachePrefixMinEntryCount] = useState("");
   const [cachePrefixSortBy, setCachePrefixSortBy] = useState<"count" | "recent">(
-    "count",
+    CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT,
   );
   const [cacheRemovePreviewSampleLimit, setCacheRemovePreviewSampleLimit] = useState("10");
   const [cacheStalePreviewSampleLimit, setCacheStalePreviewSampleLimit] = useState("10");
@@ -420,9 +424,9 @@ export function SpreadsheetApp() {
     setSelectedCacheEntryDetail(null);
     setCacheRerunRequestId("");
     setCacheEntriesMaxAgeSeconds("");
-    setCachePrefixSuggestionLimit("12");
+    setCachePrefixSuggestionLimit(CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT);
     setCachePrefixMinEntryCount("");
-    setCachePrefixSortBy("count");
+    setCachePrefixSortBy(CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT);
     setCachePrefixRemovalPreview(null);
     setCacheRemovePreviewSampleLimit("10");
     setCacheStalePreviewSampleLimit("10");
@@ -690,6 +694,16 @@ export function SpreadsheetApp() {
 
   function setNotice(message: string | null): void {
     setUiNotice(message);
+  }
+
+  function resetCachePrefixSuggestionControls(): void {
+    setCacheRequestIdPrefix("");
+    setCachePrefixMinEntryCount("");
+    setCachePrefixSortBy(CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT);
+    setCachePrefixSuggestionLimit(CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT);
+    setCachePrefixSuggestionsOffset(0);
+    setCachePrefixRemovalPreview(null);
+    setCacheStaleRemovalPreview(null);
   }
 
   async function handleSignatureMismatchRecovery(error: unknown): Promise<boolean> {
@@ -2843,7 +2857,7 @@ export function SpreadsheetApp() {
                       onChange={(event) =>
                         setCachePrefixSuggestionLimit(event.target.value)
                       }
-                      placeholder="12"
+                      placeholder={CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT}
                       inputMode="numeric"
                       className={`h-6 w-16 rounded bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 ${
                         hasInvalidCachePrefixSuggestionLimitInput
@@ -2852,8 +2866,15 @@ export function SpreadsheetApp() {
                       }`}
                     />
                     <button
-                      onClick={() => setCachePrefixSuggestionLimit("12")}
-                      disabled={cachePrefixSuggestionLimit.trim() === "12"}
+                      onClick={() =>
+                        setCachePrefixSuggestionLimit(
+                          CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT,
+                        )
+                      }
+                      disabled={
+                        cachePrefixSuggestionLimit.trim()
+                        === CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT
+                      }
                       className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
                     >
                       Reset limit
@@ -2894,6 +2915,19 @@ export function SpreadsheetApp() {
                       <option value="count">count</option>
                       <option value="recent">recent</option>
                     </select>
+                    <button
+                      onClick={resetCachePrefixSuggestionControls}
+                      disabled={
+                        cacheRequestIdPrefix.trim().length === 0
+                        && cachePrefixMinEntryCount.trim().length === 0
+                        && cachePrefixSortBy === CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT
+                        && cachePrefixSuggestionLimit.trim()
+                        === CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT
+                      }
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Reset prefix scope
+                    </button>
                     <button
                       onClick={handlePreviewRemoveCacheEntriesByPrefix}
                       disabled={
