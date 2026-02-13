@@ -198,6 +198,54 @@ describe("ExtractActionDefinition.run", () => {
     }
   });
 
+  it("formats non-Error debug directory creation failures", async () => {
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw { reason: "mkdir object failure" };
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createContext(undefined, { debugDir: "debug", debug: true });
+
+    try {
+      const result = await ExtractActionDefinition.run(ctx, {
+        objective: "Extract title",
+      });
+
+      expect(result.success).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[extract] Failed to prepare debug directory "debug": {"reason":"mkdir object failure"}'
+      );
+    } finally {
+      mkdirSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("formats non-Error debug write failures", async () => {
+    const mkdirSpy = jest
+      .spyOn(fs, "mkdirSync")
+      .mockImplementation(() => undefined);
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      throw { reason: "disk object failure" };
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createContext(undefined, { debugDir: "debug", debug: true });
+
+    try {
+      const result = await ExtractActionDefinition.run(ctx, {
+        objective: "Extract title",
+      });
+
+      expect(result.success).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('{"reason":"disk object failure"}')
+      );
+    } finally {
+      mkdirSpy.mockRestore();
+      writeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("returns failure when llm responds without text content", async () => {
     const emptyTextLlm = createMockLLM(
       jest.fn().mockResolvedValue({

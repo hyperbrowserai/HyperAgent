@@ -74,13 +74,28 @@ function writeDebugFileSafe(
     fs.writeFileSync(filePath, content);
   } catch (error) {
     if (debug) {
-      console.error(`[extract] Failed to write debug file "${filePath}":`, error);
+      console.error(
+        `[extract] Failed to write debug file "${filePath}": ${formatErrorMessage(error)}`
+      );
     }
   }
 }
 
 function formatErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
 }
 
 function ensureDebugDirSafe(debugDir: string, debug?: boolean): string | null {
@@ -90,8 +105,7 @@ function ensureDebugDirSafe(debugDir: string, debug?: boolean): string | null {
   } catch (error) {
     if (debug) {
       console.error(
-        `[extract] Failed to prepare debug directory "${debugDir}":`,
-        error
+        `[extract] Failed to prepare debug directory "${debugDir}": ${formatErrorMessage(error)}`
       );
     }
     return null;
