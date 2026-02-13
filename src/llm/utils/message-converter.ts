@@ -67,8 +67,28 @@ function extractTextContent(
     .trim();
 }
 
+function normalizeToolName(toolName: string): string {
+  const normalized = toolName.trim().replace(/\s+/g, " ");
+  return normalized.length > 0 ? normalized : "unknown-tool";
+}
+
+function normalizeToolNameForLabel(toolName: string): string {
+  return normalizeToolName(toolName).replace(/[\[\]\r\n]/g, " ");
+}
+
+function normalizeToolCallId(
+  toolCallId: string | undefined,
+  toolName: string
+): string {
+  const normalizedId = toolCallId?.trim();
+  if (normalizedId && normalizedId.length > 0) {
+    return normalizedId;
+  }
+  return normalizeToolName(toolName);
+}
+
 function buildToolMessageLabel(toolName: string): string {
-  return `[Tool ${toolName}]`;
+  return `[Tool ${normalizeToolNameForLabel(toolName)}]`;
 }
 
 export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
@@ -84,7 +104,10 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
           : extractTextContent(msg.content);
       openAIMessage.content =
         textContent.length > 0 ? textContent : formatUnknownError(msg.content);
-      openAIMessage.tool_call_id = msg.toolCallId ?? msg.toolName;
+      openAIMessage.tool_call_id = normalizeToolCallId(
+        msg.toolCallId,
+        msg.toolName
+      );
       return openAIMessage;
     }
 
@@ -100,11 +123,12 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
             image_url: { url: part.url },
           };
         } else if (part.type === "tool_call") {
+          const normalizedToolName = normalizeToolName(part.toolName);
           return {
             type: "tool_call",
-            id: part.toolName,
+            id: normalizedToolName,
             function: {
-              name: part.toolName,
+              name: normalizedToolName,
               arguments: stringifyToolArguments(part.arguments),
             },
           };
@@ -119,7 +143,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
           id: tc.id || "",
           type: "function",
           function: {
-            name: tc.name,
+            name: normalizeToolName(tc.name),
             arguments: stringifyToolArguments(tc.arguments),
           },
         })

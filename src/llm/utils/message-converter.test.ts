@@ -121,6 +121,37 @@ describe("convertToOpenAIMessages", () => {
       content: "tool result payload",
     });
   });
+
+  it("normalizes tool-call identifiers and names defensively", () => {
+    const result = convertToOpenAIMessages([
+      {
+        role: "tool",
+        toolName: "   ",
+        toolCallId: "   ",
+        content: "tool result payload",
+      },
+      {
+        role: "assistant",
+        content: "done",
+        toolCalls: [
+          {
+            id: "call-1",
+            name: "   bad\nname   ",
+            arguments: {},
+          },
+        ],
+      },
+    ]);
+
+    expect(result[0]).toEqual({
+      role: "tool",
+      tool_call_id: "unknown-tool",
+      content: "tool result payload",
+    });
+    expect((result[1] as { tool_calls?: Array<{ function: { name: string } }> }).tool_calls?.[0]?.function.name).toBe(
+      "bad name"
+    );
+  });
 });
 
 describe("image payload conversion", () => {
@@ -314,6 +345,21 @@ describe("system message text extraction", () => {
     });
   });
 
+  it("sanitizes Anthropic tool labels for unsafe characters", () => {
+    const { messages } = convertToAnthropicMessages([
+      {
+        role: "tool",
+        toolName: "  weird]\nname  ",
+        content: "tool response",
+      },
+    ]);
+
+    expect(messages[0]).toEqual({
+      role: "user",
+      content: "[Tool weird  name]\ntool response",
+    });
+  });
+
   it("prefixes Gemini tool-role messages with tool label", () => {
     const { messages } = convertToGeminiMessages([
       {
@@ -326,6 +372,21 @@ describe("system message text extraction", () => {
     expect(messages[0]).toEqual({
       role: "user",
       parts: [{ text: "[Tool lookup-user]\ntool response" }],
+    });
+  });
+
+  it("sanitizes Gemini tool labels for unsafe characters", () => {
+    const { messages } = convertToGeminiMessages([
+      {
+        role: "tool",
+        toolName: "  weird]\nname  ",
+        content: "tool response",
+      },
+    ]);
+
+    expect(messages[0]).toEqual({
+      role: "user",
+      parts: [{ text: "[Tool weird  name]\ntool response" }],
     });
   });
 });
