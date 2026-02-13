@@ -158,6 +158,58 @@ function createThrowingCompleteCtx(errorMessage: string): AgentCtx {
   };
 }
 
+function createThrowingObjectCtx(): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "unused",
+      },
+    },
+  };
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured: async () => ({
+      rawText: "{}",
+      parsed: parsedAction,
+    }),
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [
+      {
+        type: "complete",
+        actionParams: z.object({
+          success: z.boolean(),
+          text: z.string().optional(),
+        }),
+        run: async () => {
+          throw { reason: "object failure" };
+        },
+      },
+    ],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
 function createTaskState(page: Page): TaskState {
   return {
     id: "task-1",
@@ -228,6 +280,17 @@ describe("runAgentTask completion behavior", () => {
 
     expect(result.status).toBe(TaskStatus.FAILED);
     expect(result.output).toContain("Action complete failed: intentional failure");
+  });
+
+  it("serializes non-Error thrown values in action failures", async () => {
+    const page = createMockPage();
+    const result = await runAgentTask(
+      createThrowingObjectCtx(),
+      createTaskState(page)
+    );
+
+    expect(result.status).toBe(TaskStatus.FAILED);
+    expect(result.output).toContain('Action complete failed: {"reason":"object failure"}');
   });
 
   it("does not fail task when debug artifact IO throws", async () => {
