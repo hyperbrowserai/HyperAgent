@@ -20,6 +20,17 @@ describe("normalizeTaskDescription", () => {
       "Task description from --command is empty after trimming whitespace. Please provide a non-empty task description."
     );
   });
+
+  it("throws when task descriptions exceed the allowed size", () => {
+    expect(() =>
+      normalizeTaskDescription(
+        "x".repeat(20001),
+        "Task description from --command"
+      )
+    ).toThrow(
+      "Task description from --command exceeds 20000 characters. Please provide a shorter task description."
+    );
+  });
 });
 
 describe("loadTaskDescriptionFromFile", () => {

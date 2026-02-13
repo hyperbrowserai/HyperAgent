@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import { formatUnknownError } from "@/utils";
 
+const MAX_TASK_DESCRIPTION_CHARS = 20_000;
+
 export function normalizeTaskDescription(
   value: string,
   sourceLabel: string
@@ -9,6 +11,11 @@ export function normalizeTaskDescription(
   if (trimmed.length === 0) {
     throw new Error(
       `${sourceLabel} is empty after trimming whitespace. Please provide a non-empty task description.`
+    );
+  }
+  if (trimmed.length > MAX_TASK_DESCRIPTION_CHARS) {
+    throw new Error(
+      `${sourceLabel} exceeds ${MAX_TASK_DESCRIPTION_CHARS} characters. Please provide a shorter task description.`
     );
   }
   return trimmed;
