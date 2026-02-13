@@ -1524,12 +1524,16 @@ describe("HyperAgent constructor and task controls", () => {
 
   it("continues getPages when scoped listener cleanup setter traps", async () => {
     let trappedPage: Page;
+    const contextOn = jest.fn();
+    const contextOff = jest.fn();
+    const pageOn = jest.fn();
+    const pageOff = jest.fn();
     const basePage = {
-      on: jest.fn(),
-      off: jest.fn(),
+      on: pageOn,
+      off: pageOff,
       context: () => ({
-        on: jest.fn(),
-        off: jest.fn(),
+        on: contextOn,
+        off: contextOff,
         pages: () => [trappedPage],
       }),
       isClosed: () => false,
@@ -1566,9 +1570,12 @@ describe("HyperAgent constructor and task controls", () => {
 
     try {
       await expect(agent.getPages()).resolves.toHaveLength(1);
+      await expect(agent.getPages()).resolves.toHaveLength(1);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining("Failed to store scope listener cleanup callback")
       );
+      expect(contextOff).toHaveBeenCalledWith("page", expect.any(Function));
+      expect(pageOff).toHaveBeenCalledWith("close", expect.any(Function));
     } finally {
       warnSpy.mockRestore();
     }

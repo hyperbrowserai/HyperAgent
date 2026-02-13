@@ -106,6 +106,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private taskResults: Record<string, Promise<AgentTaskOutput>> = {};
   private taskErrorForwarders: Map<string, (error: Error) => void> = new Map();
   private mcpActionTypesByServer: Map<string, Set<string>> = new Map();
+  private scopeListenerCleanupByPage: WeakMap<Page, () => void> = new WeakMap();
   private lifecycleGeneration = 0;
 
   public browser: Browser | null = null;
@@ -3124,6 +3125,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
 
     // Clean up existing listener if this page was already setup
+    const existingScopedCleanup = this.scopeListenerCleanupByPage.get(page);
+    if (typeof existingScopedCleanup === "function") {
+      try {
+        existingScopedCleanup();
+      } catch {
+        // no-op
+      }
+      this.scopeListenerCleanupByPage.delete(page);
+    }
     const existingScopeCleanup = this.safeReadField(
       scopedPage,
       "_scopeListenerCleanup"
@@ -3299,6 +3309,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         // no-op
       }
     };
+    this.scopeListenerCleanupByPage.set(page, scopeListenerCleanup);
     try {
       scopedPage._scopeListenerCleanup = scopeListenerCleanup;
     } catch (error) {
