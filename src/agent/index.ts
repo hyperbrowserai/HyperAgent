@@ -776,7 +776,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           JSON.stringify(replayResult, null, 2)
         );
       } catch (error) {
-        console.error("[runFromActionCache] Failed to write replay debug:", error);
+        console.error(
+          `[runFromActionCache] Failed to write replay debug: ${formatUnknownError(error)}`
+        );
       }
     }
 
@@ -1349,8 +1351,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           }
         } catch (error) {
           console.error(
-            `Failed to initialize MCP server ${serverConfig.id || "unknown"}:`,
-            error
+            `Failed to initialize MCP server ${serverConfig.id || "unknown"}: ${formatUnknownError(error)}`
           );
         }
       }
@@ -1362,7 +1363,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         );
       }
     } catch (error) {
-      console.error("Failed to initialize MCP client:", error);
+      console.error(
+        `Failed to initialize MCP client: ${formatUnknownError(error)}`
+      );
       this.mcpClient = undefined;
     }
   }

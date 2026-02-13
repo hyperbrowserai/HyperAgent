@@ -264,4 +264,25 @@ describe("MCP lifecycle action registration", () => {
       consoleWarnSpy.mockRestore();
     }
   });
+
+  it("formats non-Error MCP connection failures consistently", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    try {
+      connectToServerMock.mockRejectedValueOnce({ reason: "connect exploded" });
+      const agent = new HyperAgent({ llm: createMockLLM() });
+
+      const serverId = await agent.connectToMCPServer({
+        command: "echo",
+      });
+
+      expect(serverId).toBeNull();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Failed to connect to MCP server: {"reason":"connect exploded"}'
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
 });
