@@ -1201,6 +1201,78 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toContain("page getter trap");
   });
 
+  it("truncates oversized page-getter replay diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "click login",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: "//button[1]",
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, () => {
+      throw new Error(`x${"y".repeat(2_000)}\npage getter trap`);
+    });
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("[truncated");
+    expect(replay.steps[0]?.message).not.toContain("\n");
+  });
+
+  it("truncates oversized perform-path replay diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest
+      .fn()
+      .mockRejectedValue(new Error(`x${"y".repeat(2_000)}\nperform failed`));
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "trigger perform",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("[truncated");
+    expect(replay.steps[0]?.message).not.toContain("\n");
+  });
+
   it("normalizes invalid maxXPathRetries to default replay retries", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

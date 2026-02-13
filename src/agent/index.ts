@@ -2072,7 +2072,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           steps: [],
           output: `Replay step ${getSafeStepIndex(
             getStepIndexValue(step)
-          )} failed: ${formatUnknownError(error)}`,
+          )} failed: ${formatReplayDiagnostic(error)}`,
           replayStepMeta: {
             usedCachedAction: false,
             fallbackUsed: false,
@@ -2182,7 +2182,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           }
         }
       } catch (error: unknown) {
-        const message = formatUnknownError(error);
+        const message = formatReplayDiagnostic(error);
         result = {
           taskId: sourceTaskId,
           status: TaskStatus.FAILED,
