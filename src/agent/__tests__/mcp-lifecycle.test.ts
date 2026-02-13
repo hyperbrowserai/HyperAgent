@@ -265,6 +265,69 @@ describe("MCP lifecycle action registration", () => {
     }
   });
 
+  it("closeAgent tolerates trapped MCP action-type registry iteration", async () => {
+    const agent = new HyperAgent({ llm: createMockLLM() });
+    const internalAgent = agent as unknown as {
+      mcpActionTypesByServer: Map<string, Set<string>>;
+    };
+    internalAgent.mcpActionTypesByServer = new Proxy(
+      new Map<string, Set<string>>([
+        ["server-1", new Set<string>(["mcp_action_a"])],
+      ]),
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "values" || prop === "clear") {
+            throw new Error("registry trap");
+          }
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }
+    ) as unknown as Map<string, Set<string>>;
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+  });
+
+  it("initializeMCPClient tolerates trapped action-type registry during reset", async () => {
+    const action = createAction("mcp_reinit_action", "reinit");
+    connectToServerMock.mockResolvedValue({
+      serverId: "server-reinit",
+      actions: [action],
+    });
+
+    const agent = new HyperAgent({ llm: createMockLLM() });
+    const internalAgent = agent as unknown as {
+      mcpClient: { disconnect: () => Promise<void> } | undefined;
+      mcpActionTypesByServer: Map<string, Set<string>>;
+    };
+    internalAgent.mcpClient = {
+      disconnect: async () => undefined,
+    };
+    internalAgent.mcpActionTypesByServer = new Proxy(
+      new Map<string, Set<string>>([
+        ["server-legacy", new Set<string>(["mcp_legacy_action"])],
+      ]),
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "values" || prop === "clear") {
+            throw new Error("registry trap");
+          }
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }
+    ) as unknown as Map<string, Set<string>>;
+
+    await expect(
+      agent.initializeMCPClient({
+        servers: [{ id: "server-reinit", command: "echo" }],
+      })
+    ).resolves.toBeUndefined();
+    expect(
+      agent.pprintAction({ type: "mcp_reinit_action", params: {} } as ActionType)
+    ).toBe("reinit");
+  });
+
   it("formats non-Error MCP connection failures consistently", async () => {
     const consoleErrorSpy = jest
       .spyOn(console, "error")

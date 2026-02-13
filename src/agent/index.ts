@@ -790,11 +790,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     if (this.mcpClient) {
       this.unregisterActionsByType(
-        Array.from(this.mcpActionTypesByServer.values()).flatMap(
-          (actionTypes) => Array.from(actionTypes)
-        )
+        this.getRegisteredMCPActionTypes()
       );
-      this.mcpActionTypesByServer.clear();
+      this.clearRegisteredMCPActionTypes();
       try {
         await this.mcpClient.disconnect();
       } catch (error) {
@@ -806,11 +804,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     } else {
       this.unregisterActionsByType(
-        Array.from(this.mcpActionTypesByServer.values()).flatMap(
-          (actionTypes) => Array.from(actionTypes)
-        )
+        this.getRegisteredMCPActionTypes()
       );
-      this.mcpActionTypesByServer.clear();
+      this.clearRegisteredMCPActionTypes();
     }
 
     if (this.browser || this.context || this.hasBrowserProviderSession()) {
@@ -1956,6 +1952,67 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     this.actions = this.actions.filter((action) => !removeTypes.has(action.type));
   }
 
+  private getRegisteredMCPActionTypes(): string[] {
+    try {
+      return Array.from(this.mcpActionTypesByServer.values()).flatMap(
+        (actionTypes) => {
+          try {
+            return Array.from(actionTypes).filter(
+              (type): type is string =>
+                typeof type === "string" && type.trim().length > 0
+            );
+          } catch {
+            return [];
+          }
+        }
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  private clearRegisteredMCPActionTypes(): void {
+    try {
+      this.mcpActionTypesByServer.clear();
+    } catch {
+      // no-op
+    }
+  }
+
+  private deleteRegisteredMCPActionTypes(serverId: string): void {
+    try {
+      this.mcpActionTypesByServer.delete(serverId);
+    } catch {
+      // no-op
+    }
+  }
+
+  private getMCPActionTypesForServer(serverId: string): Set<string> | null {
+    let actionTypes: unknown;
+    try {
+      actionTypes = this.mcpActionTypesByServer.get(serverId);
+    } catch {
+      return null;
+    }
+    if (!actionTypes) {
+      return null;
+    }
+    if (actionTypes instanceof Set) {
+      return actionTypes;
+    }
+    try {
+      const normalized = new Set<string>();
+      for (const value of actionTypes as Iterable<unknown>) {
+        if (typeof value === "string" && value.trim().length > 0) {
+          normalized.add(value);
+        }
+      }
+      return normalized;
+    } catch {
+      return null;
+    }
+  }
+
   private registerMCPActions(
     serverId: string,
     actions: AgentActionDefinition[]
@@ -1969,18 +2026,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.mcpActionTypesByServer.set(serverId, registeredActionTypes);
     } catch (error) {
       this.unregisterActionsByType(registeredActionTypes);
-      this.mcpActionTypesByServer.delete(serverId);
+      this.deleteRegisteredMCPActionTypes(serverId);
       throw error;
     }
   }
 
   private unregisterMCPActionsForServer(serverId: string): void {
-    const actionTypes = this.mcpActionTypesByServer.get(serverId);
+    const actionTypes = this.getMCPActionTypesForServer(serverId);
     if (!actionTypes) {
       return;
     }
     this.unregisterActionsByType(actionTypes);
-    this.mcpActionTypesByServer.delete(serverId);
+    this.deleteRegisteredMCPActionTypes(serverId);
   }
 
   private async resetMCPClient(): Promise<void> {
@@ -1995,11 +2052,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.mcpClient = undefined;
     }
     this.unregisterActionsByType(
-      Array.from(this.mcpActionTypesByServer.values()).flatMap((actionTypes) =>
-        Array.from(actionTypes)
-      )
+      this.getRegisteredMCPActionTypes()
     );
-    this.mcpActionTypesByServer.clear();
+    this.clearRegisteredMCPActionTypes();
   }
 
   /**
