@@ -193,6 +193,30 @@ pub fn parse_len_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_upper_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "UPPER" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_lower_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "LOWER" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_trim_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "TRIM" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_left_formula(formula: &str) -> Option<(String, Option<String>)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "LEFT" || !(args.len() == 1 || args.len() == 2) {
@@ -449,12 +473,13 @@ mod tests {
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
     parse_concat_formula, parse_date_formula, parse_day_formula,
-    parse_left_formula, parse_len_formula, parse_month_formula,
+    parse_left_formula, parse_len_formula, parse_lower_formula,
+    parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_if_formula, parse_today_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula,
-    parse_year_formula,
+    parse_year_formula, parse_upper_formula, parse_trim_formula,
   };
 
   #[test]
@@ -527,6 +552,15 @@ mod tests {
 
     let len_arg = parse_len_formula(r#"=LEN("abc")"#).expect("len should parse");
     assert_eq!(len_arg, r#""abc""#);
+    let upper_arg =
+      parse_upper_formula(r#"=UPPER("mixed Case")"#).expect("upper should parse");
+    assert_eq!(upper_arg, r#""mixed Case""#);
+    let lower_arg =
+      parse_lower_formula(r#"=LOWER("MIXED Case")"#).expect("lower should parse");
+    assert_eq!(lower_arg, r#""MIXED Case""#);
+    let trim_arg =
+      parse_trim_formula(r#"=TRIM("  spaced text   ")"#).expect("trim should parse");
+    assert_eq!(trim_arg, r#""  spaced text   ""#);
 
     let left_args =
       parse_left_formula(r#"=LEFT("spreadsheet", 6)"#).expect("left should parse");

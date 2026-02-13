@@ -553,7 +553,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "warnings": "array of compatibility warning strings"
     },
     "formula_capabilities": {
-      "supported_functions": "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
+      "supported_functions": "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
       "unsupported_behaviors": "VLOOKUP with range_lookup TRUE/1 and XLOOKUP non-exact match_mode/search_mode variants remain unsupported and are surfaced via unsupported_formulas",
       "fallback_behavior": "unsupported formulas are preserved and reported by formula.recalculated payloads"
     },
@@ -1077,7 +1077,7 @@ async fn get_agent_schema(
       }
     },
     "formula_capabilities": {
-      "supported_functions": "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
+      "supported_functions": "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
       "unsupported_behaviors": "VLOOKUP with range_lookup TRUE/1 and XLOOKUP non-exact match_mode/search_mode variants remain unsupported and are surfaced via unsupported_formulas",
       "fallback_behavior": "unsupported formulas are preserved and reported by formula.recalculated payloads"
     },
@@ -4645,7 +4645,7 @@ mod tests {
         .and_then(|value| value.get("supported_functions"))
         .and_then(serde_json::Value::as_str),
       Some(
-        "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
+        "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
       ),
     );
     assert_eq!(
@@ -5117,7 +5117,7 @@ mod tests {
         .and_then(|value| value.get("supported_functions"))
         .and_then(serde_json::Value::as_str),
       Some(
-        "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
+        "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
       ),
     );
   }

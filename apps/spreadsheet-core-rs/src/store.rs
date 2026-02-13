@@ -5,10 +5,12 @@ use crate::{
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_left_formula,
-    parse_len_formula, parse_month_formula, parse_not_formula,
-    parse_or_formula, parse_right_formula, parse_single_ref_formula,
+    parse_len_formula, parse_lower_formula, parse_month_formula,
+    parse_not_formula, parse_or_formula, parse_right_formula,
+    parse_single_ref_formula, parse_trim_formula,
     parse_sumif_formula, parse_sumifs_formula, parse_today_formula,
-    parse_vlookup_formula, parse_xlookup_formula, parse_year_formula,
+    parse_upper_formula, parse_vlookup_formula, parse_xlookup_formula,
+    parse_year_formula,
     ConditionalAggregateFormula, MultiCriteriaAggregateFormula, VLookupFormula,
     XLookupFormula,
   },
@@ -345,6 +347,22 @@ fn evaluate_formula(
   if let Some(len_arg) = parse_len_formula(formula) {
     let text = resolve_scalar_operand(connection, sheet, &len_arg)?;
     return Ok(Some(text.chars().count().to_string()));
+  }
+
+  if let Some(upper_arg) = parse_upper_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &upper_arg)?;
+    return Ok(Some(text.to_uppercase()));
+  }
+
+  if let Some(lower_arg) = parse_lower_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &lower_arg)?;
+    return Ok(Some(text.to_lowercase()));
+  }
+
+  if let Some(trim_arg) = parse_trim_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &trim_arg)?;
+    let trimmed = text.split_whitespace().collect::<Vec<&str>>().join(" ");
+    return Ok(Some(trimmed));
   }
 
   if let Some((text_arg, count_arg)) = parse_left_formula(formula) {
@@ -1530,12 +1548,30 @@ mod tests {
         value: None,
         formula: Some(r#"=AVERAGEIFS(A1:A2,E1:E2,"south",A1:A2,">=80")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 32,
+        value: None,
+        formula: Some(r#"=UPPER("mixed Case")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 33,
+        value: None,
+        formula: Some(r#"=LOWER("MIXED Case")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 34,
+        value: None,
+        formula: Some(r#"=TRIM("  north   region  ")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 29);
+    assert_eq!(updated_cells, 32);
     assert!(unsupported_formulas.is_empty());
 
     let snapshots = get_cells(
@@ -1545,7 +1581,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 31,
+        end_col: 34,
       },
     )
     .expect("cells should be fetched");
@@ -1605,6 +1641,9 @@ mod tests {
     assert_eq!(by_position(1, 29).evaluated_value.as_deref(), Some("1"));
     assert_eq!(by_position(1, 30).evaluated_value.as_deref(), Some("80"));
     assert_eq!(by_position(1, 31).evaluated_value.as_deref(), Some("80"));
+    assert_eq!(by_position(1, 32).evaluated_value.as_deref(), Some("MIXED CASE"));
+    assert_eq!(by_position(1, 33).evaluated_value.as_deref(), Some("mixed case"));
+    assert_eq!(by_position(1, 34).evaluated_value.as_deref(), Some("north region"));
   }
 
   #[test]
