@@ -574,6 +574,24 @@ describe("parseMCPServersConfig", () => {
       "MCP server entry at index 0 has tools present in both includeTools and excludeTools: Search."
     );
   });
+
+  it("truncates overlap diagnostics when many tool names collide", () => {
+    const includeTools = Array.from({ length: 12 }, (_, index) => `tool-${index}`);
+    const excludeTools = [...includeTools];
+    expect(() =>
+      parseMCPServersConfig(
+        JSON.stringify([
+          {
+            command: "npx",
+            includeTools,
+            excludeTools,
+          },
+        ])
+      )
+    ).toThrow(
+      "MCP server entry at index 0 has tools present in both includeTools and excludeTools: tool-0, tool-1, tool-2, tool-3, tool-4, tool-5, tool-6, tool-7, tool-8, tool-9, ... (+2 more)."
+    );
+  });
 });
 
 describe("loadMCPServersFromFile", () => {

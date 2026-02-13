@@ -14,6 +14,7 @@ const MAX_MCP_TOOL_NAME_CHARS = 256;
 const MAX_MCP_RECORD_ENTRIES = 200;
 const MAX_MCP_RECORD_KEY_CHARS = 256;
 const MAX_MCP_RECORD_VALUE_CHARS = 4_000;
+const MAX_MCP_OVERLAP_ERROR_ITEMS = 10;
 const UNSAFE_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
 
@@ -355,8 +356,14 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
         excludeLookup.has(tool.toLowerCase())
       );
       if (overlap.length > 0) {
+        const overlapPreview = overlap.slice(0, MAX_MCP_OVERLAP_ERROR_ITEMS);
+        const omittedCount = overlap.length - overlapPreview.length;
+        const overlapSummary =
+          omittedCount > 0
+            ? `${overlapPreview.join(", ")}, ... (+${omittedCount} more)`
+            : overlapPreview.join(", ");
         throw new Error(
-          `MCP server entry at index ${i} has tools present in both includeTools and excludeTools: ${overlap.join(", ")}.`
+          `MCP server entry at index ${i} has tools present in both includeTools and excludeTools: ${overlapSummary}.`
         );
       }
     }
