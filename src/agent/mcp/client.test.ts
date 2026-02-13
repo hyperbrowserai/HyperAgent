@@ -731,6 +731,30 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("truncates oversized connect failures before rethrowing", async () => {
+    const connectSpy = jest
+      .spyOn(Client.prototype, "connect")
+      .mockRejectedValue(new Error("x".repeat(2_000)));
+    const closeSpy = jest
+      .spyOn(StdioClientTransport.prototype, "close")
+      .mockResolvedValue(undefined);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const mcpClient = new MCPClient(false);
+
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+        })
+      ).rejects.toThrow(/\[truncated/);
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      connectSpy.mockRestore();
+      closeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("stores normalized stdio config values for connected servers", async () => {
     const connectSpy = jest
       .spyOn(Client.prototype, "connect")

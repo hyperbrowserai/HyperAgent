@@ -1235,7 +1235,7 @@ class MCPClient {
       console.error(
         `Failed to connect to MCP server: ${formatMCPRuntimeDiagnostic(error)}`
       );
-      throw error;
+      throw new Error(formatMCPRuntimeDiagnostic(error));
     }
   }
 
