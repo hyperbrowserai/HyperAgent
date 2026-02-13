@@ -91,4 +91,8 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Added dedicated perform option typing and handling.
 - Aligned prompt text with actual registered action names.
 - Fixed frame listener bookkeeping to avoid session listener overwrite drift.
+- Added compact omitted-history summaries in prompt building to preserve context while respecting prompt budgets.
+- Made repeated-success stuck detection progress-aware by incorporating bounded DOM-state signatures.
+- Reduced first-party frame false positives in ad/tracking filtering with same-site weak-signal safeguards.
+- Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.

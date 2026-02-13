@@ -131,6 +131,20 @@ task.result.catch((error) => {
 });
 ```
 
+### Importing Public Types
+
+Core workflow types are available directly from the package entrypoint:
+
+```typescript
+import type {
+  ActionCacheOutput,
+  AgentTaskOutput,
+  HyperAgentConfig,
+  PerformTaskParams,
+  TaskOutput,
+} from "@hyperbrowser/agent";
+```
+
 ## Two Modes of Operation
 
 HyperAgent provides two complementary APIs optimized for different use cases:
@@ -161,6 +175,7 @@ await page.perform("click the login button");
 await page.perform("click the login button", {
   maxElementRetries: 5,
   retryDelayMs: 250,
+  maxContextSwitchRetries: 4,
 });
 ```
 

@@ -5,7 +5,7 @@ This document explains every relevant function added or changed since commit `f3
 1. Frame/session infrastructure and why it exists.
 2. How the accessibility DOM (A11yDOM) pipeline gathers full-frame data.
 3. How bounding boxes/visual overlays work without Playwright.
-4. How `page.aiAction()` (`executeAction`/`runAgentTask`) and `page.ai()` (`executeSingleAction`) flow through CDP.
+4. How `page.perform()` (`executeSingleAction`) and `page.ai()` (`runAgentTask`) flow through CDP.
 5. What each CDP runtime action does under the hood.
 6. **THE BIG PICTURE: Why we have so many maps and events**
 7. Areas that still need abstraction or cleanup.
@@ -1014,11 +1014,13 @@ frameMap.set(1, {
 
 ---
 
-## 0.7. Entry Points: `page.ai()` vs `page.aiAction()`
+## 0.7. Entry Points: `page.ai()` vs `page.perform()` (with `page.aiAction()` alias)
+
+> `page.aiAction()` remains available as a deprecated alias to `page.perform()`. This section uses `page.perform()` as the canonical single-action API name.
 
 ### Quick Reference Table
 
-| Feature | `page.ai(task)` | `page.aiAction(instruction)` |
+| Feature | `page.ai(task)` | `page.perform(instruction)` |
 |---------|-----------------|------------------------------|
 | **Use Case** | Multi-step complex workflows | Single granular action |
 | **Mode** | Visual (screenshot + overlay) | A11y tree (text-based) |
@@ -1057,10 +1059,10 @@ Loop until complete or maxSteps:
   7. Check if task complete
 ```
 
-### Code Flow: `page.aiAction()`
+### Code Flow: `page.perform()`
 
 ```typescript
-page.aiAction("click the login button")
+page.perform("click the login button")
   ↓
 HyperAgent.executeSingleAction(instruction, page, params)
   ↓
@@ -1089,14 +1091,14 @@ Loop up to 10 retries:
 
 ### Key Implementation Differences
 
-| Aspect | `page.ai()` | `page.aiAction()` |
+| Aspect | `page.ai()` | `page.perform()` |
 |--------|-------------|-------------------|
 | **DOM Mode** | `mode: "visual-debug"` with screenshot | `mode: "a11y"` text-only |
 | **LLM Prompt** | Full agent system prompt with action schema | Minimal "find element" prompt |
 | **Retry Logic** | Agent loop handles retries via actions | Built-in 10x retry with DOM refresh |
 | **State Management** | TaskState tracks multi-step history | Stateless single execution |
 | **Error Handling** | Can recover via `thinking` action | Fails after max retries |
-| **Debug Output** | Per-step debug directories | Single aiAction/ directory |
+| **Debug Output** | Per-step debug directories | Single perform/ directory |
 
 ### When Each Entry Point Calls getA11yDOM
 
@@ -1112,12 +1114,12 @@ await getA11yDOM(page, {
 });
 ```
 
-**`page.aiAction()` calls:**
+**`page.perform()` calls:**
 ```typescript
 await getA11yDOM(page, {
   mode: "a11y",                // Text-only
   drawBoundingBoxes: false,    // No visual processing
-  debugDir: "debug/aiAction",
+  debugDir: "debug/perform",
   debug: true
 });
 ```
@@ -1163,18 +1165,18 @@ await page.ai("Login with email 'test@example.com' and password 'pass123'");
 // Step 6: complete
 ```
 
-**Using `page.aiAction()` (explicit steps):**
+**Using `page.perform()` (explicit steps):**
 ```typescript
-await page.aiAction("click the email field");
-await page.aiAction("type 'test@example.com' into the email field");
-await page.aiAction("click the password field");
-await page.aiAction("type 'pass123' into the password field");
-await page.aiAction("click the login button");
+await page.perform("click the email field");
+await page.perform("type 'test@example.com' into the email field");
+await page.perform("click the password field");
+await page.perform("type 'pass123' into the password field");
+await page.perform("click the login button");
 ```
 
 **Trade-off:**
 - `page.ai()`: More autonomous, but slower and more expensive
-- `page.aiAction()`: More control, faster, cheaper, but requires explicit sequencing
+- `page.perform()`: More control, faster, cheaper, but requires explicit sequencing
 
 ---
 
@@ -1196,7 +1198,7 @@ await page.aiAction("click the login button");
 
 **Entry Point:** `getA11yDOM(page, params)` in `src/context-providers/a11y-dom/index.ts`
 
-This is the core function that builds all the maps we discussed in Section 0. Both `page.ai()` and `page.aiAction()` call this function.
+This is the core function that builds all the maps we discussed in Section 0. Both `page.ai()` and `page.perform()` call this function.
 
 ### Complete Data Flow with Examples
 
@@ -1650,7 +1652,7 @@ We have to call each domain separately and stitch the results together using sha
 
 ## 3. Bounding Box Collection: How We Get Element Coordinates
 
-**Used by:** `page.ai()` visual mode only (not `page.aiAction()`)
+**Used by:** `page.ai()` visual mode only (not `page.perform()`)
 
 ### The Challenge
 
@@ -1849,7 +1851,7 @@ Result: Screenshot with red boxes and labels showing `"0-15"`, `"1-42"`, etc.
 
 ## 4. Element Resolution & Action Dispatch
 
-**Note:** For a high-level comparison of `page.ai()` vs `page.aiAction()`, see **Section 0.7**.
+**Note:** For a high-level comparison of `page.ai()` vs `page.perform()`, see **Section 0.7**.
 
 This section covers the implementation details of how we go from `encodedId` to actual CDP commands.
 
@@ -2531,7 +2533,7 @@ This diagram shows the complete data collection pipeline, including frame handli
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        Agent Task Starts                                 │
-│                    (page.ai() or page.aiAction())                       │
+│                    (page.ai() or page.perform())                        │
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │
                                  ▼
