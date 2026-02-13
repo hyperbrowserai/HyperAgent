@@ -229,6 +229,44 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.retries).toBe(1);
   });
 
+  it("replays special waitForLoadState action", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const waitForLoadState = jest.fn().mockResolvedValue(undefined);
+    const page = {
+      waitForLoadState,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "wait loadstate",
+          elementId: null,
+          method: null,
+          arguments: ["NETWORKIDLE", "1200"],
+          frameIndex: null,
+          xpath: null,
+          actionType: "waitForLoadState",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(waitForLoadState).toHaveBeenCalledWith("networkidle", {
+      timeout: 1200,
+    });
+    expect(replay.status).toBe(TaskStatus.COMPLETED);
+    expect(replay.steps[0]?.message).toContain("Waited for load state: networkidle");
+  });
+
   it("fails replay step cleanly when special action execution throws", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
