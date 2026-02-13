@@ -428,6 +428,22 @@ pub fn parse_atan2_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_degrees_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DEGREES" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_radians_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "RADIANS" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_round_formula(formula: &str) -> Option<(String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ROUND" && args.len() == 2 {
@@ -986,7 +1002,8 @@ mod tests {
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_sin_formula,
     parse_cos_formula, parse_tan_formula, parse_asin_formula, parse_acos_formula,
-    parse_atan_formula, parse_atan2_formula, parse_lower_formula,
+    parse_atan_formula, parse_atan2_formula, parse_degrees_formula,
+    parse_radians_formula, parse_lower_formula,
     parse_match_formula, parse_maxifs_formula,
     parse_minifs_formula,
     parse_month_formula,
@@ -1147,6 +1164,8 @@ mod tests {
     let atan2 = parse_atan2_formula("=ATAN2(A1,B1)").expect("atan2 should parse");
     assert_eq!(atan2.0, "A1");
     assert_eq!(atan2.1, "B1");
+    assert_eq!(parse_degrees_formula("=DEGREES(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_radians_formula("=RADIANS(A1)").as_deref(), Some("A1"));
     let round = parse_round_formula("=ROUND(12.345, 2)").expect("round should parse");
     assert_eq!(round.0, "12.345");
     assert_eq!(round.1, "2");

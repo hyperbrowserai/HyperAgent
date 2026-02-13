@@ -8,6 +8,7 @@ use crate::{
     parse_abs_formula, parse_ln_formula, parse_log10_formula, parse_pi_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_asin_formula,
     parse_acos_formula, parse_atan_formula, parse_atan2_formula,
+    parse_degrees_formula, parse_radians_formula,
     parse_choose_formula, parse_left_formula,
     parse_ceiling_formula, parse_exact_formula, parse_floor_formula,
     parse_index_formula,
@@ -622,6 +623,16 @@ fn evaluate_formula(
     let x = parse_required_float(connection, sheet, &x_arg)?;
     let y = parse_required_float(connection, sheet, &y_arg)?;
     return Ok(Some(y.atan2(x).to_string()));
+  }
+
+  if let Some(degrees_arg) = parse_degrees_formula(formula) {
+    let value = parse_required_float(connection, sheet, &degrees_arg)?;
+    return Ok(Some(value.to_degrees().to_string()));
+  }
+
+  if let Some(radians_arg) = parse_radians_formula(formula) {
+    let value = parse_required_float(connection, sheet, &radians_arg)?;
+    return Ok(Some(value.to_radians().to_string()));
   }
 
   if let Some(abs_arg) = parse_abs_formula(formula) {
@@ -2852,12 +2863,24 @@ mod tests {
         value: None,
         formula: Some("=ATAN2(0,1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 104,
+        value: None,
+        formula: Some("=DEGREES(3.141592653589793)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 105,
+        value: None,
+        formula: Some("=RADIANS(180)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 101);
+    assert_eq!(updated_cells, 103);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2871,7 +2894,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 103,
+        end_col: 105,
       },
     )
     .expect("cells should be fetched");
@@ -3024,6 +3047,11 @@ mod tests {
     assert_eq!(
       by_position(1, 103).evaluated_value.as_deref(),
       Some("1.5707963267948966"),
+    );
+    assert_eq!(by_position(1, 104).evaluated_value.as_deref(), Some("180"));
+    assert_eq!(
+      by_position(1, 105).evaluated_value.as_deref(),
+      Some("3.141592653589793"),
     );
   }
 

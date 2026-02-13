@@ -84,6 +84,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "ACOS",
   "ATAN",
   "ATAN2",
+  "DEGREES",
+  "RADIANS",
   "ROUND",
   "ROUNDUP",
   "ROUNDDOWN",
