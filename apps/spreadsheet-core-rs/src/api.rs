@@ -281,6 +281,7 @@ async fn import_bytes_into_workbook(
         "cells_imported": import_result.cells_imported,
         "formula_cells_imported": import_result.formula_cells_imported,
         "formula_cells_with_cached_values": import_result.formula_cells_with_cached_values,
+        "formula_cells_without_cached_values": import_result.formula_cells_without_cached_values,
         "warnings": import_result.warnings,
       }),
     )
@@ -291,6 +292,7 @@ async fn import_bytes_into_workbook(
     cells_imported: import_result.cells_imported,
     formula_cells_imported: import_result.formula_cells_imported,
     formula_cells_with_cached_values: import_result.formula_cells_with_cached_values,
+    formula_cells_without_cached_values: import_result.formula_cells_without_cached_values,
     warnings: import_result.warnings,
   })
 }
@@ -326,6 +328,7 @@ async fn import_workbook(
       "cells_imported": import_result.cells_imported,
       "formula_cells_imported": import_result.formula_cells_imported,
       "formula_cells_with_cached_values": import_result.formula_cells_with_cached_values,
+      "formula_cells_without_cached_values": import_result.formula_cells_without_cached_values,
       "warnings": import_result.warnings
     }
   })))

@@ -201,6 +201,7 @@ export function SpreadsheetApp() {
     cellsImported: number;
     formulaCellsImported: number;
     formulaCellsWithCachedValues: number;
+    formulaCellsWithoutCachedValues: number;
     warnings: string[];
   } | null>(null);
   const normalizedCacheEntriesMaxAgeSeconds = parsePositiveIntegerInput(
@@ -283,7 +284,7 @@ export function SpreadsheetApp() {
       clearUiError();
       setWorkbook(importedWorkbook);
       const formulaSummary = response.import.formula_cells_imported > 0
-        ? `, ${response.import.formula_cells_imported} formulas (${response.import.formula_cells_with_cached_values} cached)`
+        ? `, ${response.import.formula_cells_imported} formulas (${response.import.formula_cells_with_cached_values} cached, ${response.import.formula_cells_without_cached_values} uncached)`
         : "";
       setNotice(
         `Imported workbook ${importedWorkbook.name} (${response.import.sheets_imported} sheets, ${response.import.cells_imported} cells${formulaSummary}).`,
@@ -301,6 +302,8 @@ export function SpreadsheetApp() {
         formulaCellsImported: response.import.formula_cells_imported,
         formulaCellsWithCachedValues:
           response.import.formula_cells_with_cached_values,
+        formulaCellsWithoutCachedValues:
+          response.import.formula_cells_without_cached_values,
         warnings: response.import.warnings,
       });
       queryClient.invalidateQueries({ queryKey: ["cells", importedWorkbook.id] });
@@ -2061,6 +2064,8 @@ export function SpreadsheetApp() {
               formulaCellsImported: response.import.formula_cells_imported,
               formulaCellsWithCachedValues:
                 response.import.formula_cells_with_cached_values,
+              formulaCellsWithoutCachedValues:
+                response.import.formula_cells_without_cached_values,
               warnings: response.import.warnings,
             }
           : null,
@@ -3928,7 +3933,11 @@ export function SpreadsheetApp() {
                   {lastWizardImportSummary.cellsImported} cells /{" "}
                   {lastWizardImportSummary.formulaCellsImported} formulas
                   {lastWizardImportSummary.formulaCellsImported > 0 ? (
-                    <> ({lastWizardImportSummary.formulaCellsWithCachedValues} cached)</>
+                    <>
+                      {" "}
+                      ({lastWizardImportSummary.formulaCellsWithCachedValues} cached,{" "}
+                      {lastWizardImportSummary.formulaCellsWithoutCachedValues} uncached)
+                    </>
                   ) : null}
                 </span>
                 {lastWizardImportSummary.warnings.length > 0 ? (

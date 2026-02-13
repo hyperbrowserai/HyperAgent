@@ -18,7 +18,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard can toggle export payload embedding (`include_file_base64`) before execution
 - Wizard can run selected scenario either on a new workbook flow or current workbook context
 - Wizard supports running previewed operation plans via `agent/ops` and inspecting raw JSON payloads
-- Import summaries (wizard + direct workbook import) show sheet/cell/formula counts, including formula cells with cached values when present
+- Import summaries (wizard + direct workbook import) show sheet/cell/formula counts, including cached vs uncached formula-cell coverage when formulas are present
 - Wizard includes one-click copy of preset/scenario operation JSON for agent prompt/tool handoff
 - Copied plan payloads include `operations_signature` for backend signature validation
 - Wizard can copy signature-ready run payloads for preset/scenario endpoint calls

@@ -350,6 +350,7 @@ pub struct AgentWizardImportResult {
   pub cells_imported: usize,
   pub formula_cells_imported: usize,
   pub formula_cells_with_cached_values: usize,
+  pub formula_cells_without_cached_values: usize,
   pub warnings: Vec<String>,
 }
 

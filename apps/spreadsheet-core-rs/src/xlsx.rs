@@ -15,6 +15,7 @@ pub struct ImportResult {
   pub cells_imported: usize,
   pub formula_cells_imported: usize,
   pub formula_cells_with_cached_values: usize,
+  pub formula_cells_without_cached_values: usize,
   pub warnings: Vec<String>,
 }
 
@@ -76,12 +77,16 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
     }
   }
 
+  let formula_cells_without_cached_values =
+    formula_cells_imported.saturating_sub(formula_cells_with_cached_values);
+
   Ok(ImportResult {
     sheet_names: sheet_names.clone(),
     sheets_imported: sheet_names.len(),
     cells_imported,
     formula_cells_imported,
     formula_cells_with_cached_values,
+    formula_cells_without_cached_values,
     warnings: vec![
       "Charts, VBA/macros, and pivot artifacts are not imported in v1; formulas and cells are imported best-effort.".to_string(),
     ],
@@ -291,6 +296,12 @@ mod tests {
     assert!(
       import_result.formula_cells_with_cached_values <= import_result.formula_cells_imported,
       "cached formula value count should not exceed formula cell count",
+    );
+    assert_eq!(
+      import_result.formula_cells_imported,
+      import_result.formula_cells_with_cached_values
+        + import_result.formula_cells_without_cached_values,
+      "formula cached/non-cached counts should add up",
     );
     assert_eq!(
       import_result.sheet_names,
