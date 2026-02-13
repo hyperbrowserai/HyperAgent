@@ -225,4 +225,27 @@ describe("PDFActionDefinition", () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain("gemini unavailable");
   });
+
+  it("sanitizes and truncates oversized PDF download failures", async () => {
+    const requestGet = jest
+      .fn()
+      .mockRejectedValue(new Error(`download\u0000\n${"x".repeat(10_000)}`));
+    const ctx = createContext({
+      page: {
+        request: { get: requestGet },
+      } as unknown as Page,
+    });
+
+    const result = await PDFActionDefinition.run(ctx, {
+      pdfUrl: "https://example.com/file.pdf",
+      prompt: "Summarize",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("Failed to download PDF:");
+    expect(result.message).toContain("…");
+    expect(result.message).not.toContain("\u0000");
+    expect(result.message).not.toContain("\n");
+    expect(result.message.length).toBeLessThan(750);
+  });
 });

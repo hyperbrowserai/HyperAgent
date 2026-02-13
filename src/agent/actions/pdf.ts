@@ -2,7 +2,6 @@ import { z } from "zod";
 import { ActionContext, AgentActionDefinition } from "@/types";
 import { config } from "dotenv";
 import { GoogleGenAI } from "@google/genai";
-import { formatUnknownError } from "@/utils";
 import {
   buildActionFailureMessage,
   getPageMethod,
@@ -186,7 +185,7 @@ export const PDFActionDefinition: AgentActionDefinition = {
     } catch (err) {
       return {
         success: false,
-        message: `Failed to download PDF: ${formatUnknownError(err)}`,
+        message: buildActionFailureMessage("download PDF", err),
       };
     }
     if (!pdfBuffer) {
