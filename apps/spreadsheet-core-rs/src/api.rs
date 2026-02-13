@@ -158,6 +158,17 @@ fn validate_expected_operations_signature(
   )))
 }
 
+fn ensure_non_empty_operations(
+  operations: &[AgentOperation],
+) -> Result<(), ApiError> {
+  if operations.is_empty() {
+    return Err(ApiError::BadRequest(
+      "Operation list cannot be empty.".to_string(),
+    ));
+  }
+  Ok(())
+}
+
 async fn import_bytes_into_workbook(
   state: &AppState,
   workbook_id: Uuid,
@@ -915,7 +926,7 @@ async fn get_agent_schema(
       "actor": "optional string",
       "stop_on_error": "optional boolean (default false)",
       "expected_operations_signature": "optional string for payload integrity checks",
-      "operations": [
+      "operations (non-empty array)": [
         {
           "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | recalculate | upsert_chart | export_workbook",
           "payload": "operation-specific object"
@@ -953,7 +964,7 @@ async fn get_agent_schema(
     },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
     "agent_ops_preview_request_shape": {
-      "operations": "array of operation objects"
+      "operations": "non-empty array of operation objects"
     },
     "agent_ops_preview_response_shape": {
       "operations_signature": "sha256 signature over submitted operations",
@@ -1169,6 +1180,7 @@ async fn agent_ops(
   Json(payload): Json<AgentOpsRequest>,
 ) -> Result<Json<AgentOpsResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
+  ensure_non_empty_operations(&payload.operations)?;
   let request_id = payload.request_id.clone();
   let actor = payload.actor.unwrap_or_else(|| "agent".to_string());
   let stop_on_error = payload.stop_on_error.unwrap_or(false);
@@ -1199,6 +1211,7 @@ async fn agent_ops_preview(
   Json(payload): Json<AgentOpsPreviewRequest>,
 ) -> Result<Json<AgentOpsPreviewResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
+  ensure_non_empty_operations(&payload.operations)?;
   let operation_signature = operations_signature(&payload.operations)?;
   Ok(Json(AgentOpsPreviewResponse {
     operations_signature: operation_signature,
@@ -1391,8 +1404,8 @@ async fn openapi() -> Json<serde_json::Value> {
 #[cfg(test)]
 mod tests {
   use super::{
-    build_preset_operations, build_scenario_operations, normalize_sheet_name,
-    operations_signature, parse_optional_bool,
+    build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
+    normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
   };
 
@@ -1543,6 +1556,21 @@ mod tests {
     assert_ne!(
       without_file_signature, with_file_signature,
       "signature should change when operation payload changes",
+    );
+  }
+
+  #[test]
+  fn should_reject_empty_operation_lists() {
+    assert!(
+      ensure_non_empty_operations(&[]).is_err(),
+      "empty operation arrays should fail validation",
+    );
+
+    let operations = build_preset_operations("export_snapshot", Some(false))
+      .expect("preset operations should build");
+    assert!(
+      ensure_non_empty_operations(&operations).is_ok(),
+      "non-empty operation arrays should pass validation",
     );
   }
 }

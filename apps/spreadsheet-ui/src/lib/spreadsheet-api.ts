@@ -158,6 +158,9 @@ export async function previewAgentOps(
   workbookId: string,
   operations: AgentOperationPreview[],
 ): Promise<AgentOpsPreviewResponse> {
+  if (operations.length === 0) {
+    throw new Error("Operation list cannot be empty.");
+  }
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/preview`,
     {

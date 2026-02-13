@@ -63,6 +63,7 @@ Request options:
 - `actor` (optional): appears in emitted workbook events.
 - `stop_on_error` (optional, default `false`): stop processing remaining operations after first failure.
 - `expected_operations_signature` (optional): verify operation payload integrity before execution.
+- `operations` must be a non-empty array.
 
 Response includes:
 - `operations_signature` — sha256 signature over submitted operations.
