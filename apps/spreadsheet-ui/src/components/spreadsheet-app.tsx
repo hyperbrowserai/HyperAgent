@@ -808,6 +808,17 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.import_response_shape),
     [wizardSchemaQuery.data?.import_response_shape],
   );
+  const wizardFormulaCapabilityFields = useMemo(
+    () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.formula_capabilities),
+    [wizardSchemaQuery.data?.formula_capabilities],
+  );
+  const wizardSupportedFormulaFunctions = useMemo(
+    () =>
+      parseCommaSeparatedList(
+        wizardSchemaQuery.data?.formula_capabilities?.supported_functions,
+      ),
+    [wizardSchemaQuery.data?.formula_capabilities],
+  );
   const agentWorkbookImportResponseFields = useMemo(
     () =>
       flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
@@ -2527,6 +2538,22 @@ export function SpreadsheetApp() {
                 import response fields:{" "}
                 <span className="font-mono text-slate-300">
                   {formatSchemaShapeEntries(wizardImportResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardFormulaCapabilityFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                formula capabilities:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardFormulaCapabilityFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardSupportedFormulaFunctions.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                supported formula functions ({wizardSupportedFormulaFunctions.length}):{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSupportedFormulaFunctions.join(", ")}
                 </span>
               </p>
             ) : null}

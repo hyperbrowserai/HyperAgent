@@ -552,6 +552,11 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "formula_cells_without_cached_values": "formula cells without cached scalar values",
       "warnings": "array of compatibility warning strings"
     },
+    "formula_capabilities": {
+      "supported_functions": "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
+      "unsupported_behaviors": "VLOOKUP with range_lookup TRUE/1 and XLOOKUP non-exact match_mode/search_mode variants remain unsupported and are surfaced via unsupported_formulas",
+      "fallback_behavior": "unsupported formulas are preserved and reported by formula.recalculated payloads"
+    },
     "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
     "scenarios": scenario_catalog(),
     "presets": preset_catalog()
@@ -5105,6 +5110,15 @@ mod tests {
         .and_then(|value| value.get("formula_cells_without_cached_values"))
         .and_then(serde_json::Value::as_str),
       Some("formula cells without cached scalar values"),
+    );
+    assert_eq!(
+      schema
+        .get("formula_capabilities")
+        .and_then(|value| value.get("supported_functions"))
+        .and_then(serde_json::Value::as_str),
+      Some(
+        "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode",
+      ),
     );
   }
 }

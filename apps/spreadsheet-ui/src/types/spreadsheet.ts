@@ -288,6 +288,7 @@ export interface AgentWizardSchemaInfo {
   operations_preview_response_shape?: Record<string, string>;
   run_response_shape?: Record<string, string>;
   import_response_shape?: Record<string, string>;
+  formula_capabilities?: Record<string, unknown>;
   presets: AgentPresetInfo[];
   scenarios: AgentScenarioInfo[];
 }
