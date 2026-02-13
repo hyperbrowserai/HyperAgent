@@ -23,9 +23,17 @@ export async function handleCliFatalError(params: {
     logShutdownError = console.error,
   } = params;
 
-  logError(chalk.red(formatCliError(error)));
+  try {
+    logError(chalk.red(formatCliError(error)));
+  } catch {
+    // best-effort logging only
+  }
   if (debug) {
-    logTrace(error);
+    try {
+      logTrace(error);
+    } catch {
+      // best-effort logging only
+    }
   }
 
   if (!agent) {
@@ -34,6 +42,10 @@ export async function handleCliFatalError(params: {
 
   const shutdown = await closeAgentSafely(agent);
   if (!shutdown.success) {
-    logShutdownError(`Error during shutdown: ${shutdown.message}`);
+    try {
+      logShutdownError(`Error during shutdown: ${shutdown.message}`);
+    } catch {
+      // best-effort logging only
+    }
   }
 }
