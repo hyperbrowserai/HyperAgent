@@ -200,6 +200,51 @@ describe("runCachedStep", () => {
           fallbackElementId: "0-1",
         })
       );
+      expect(logSpy).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("logs cached fallback diagnostics only in debug mode", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));
+    const performFallback = jest.fn().mockResolvedValue({
+      taskId: "fallback-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "fallback completed",
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: true,
+        retries: 1,
+        fallbackXPath: "/html/body/button[1]",
+        fallbackElementId: "0-1",
+      },
+    });
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await runCachedStep({
+        page: createMockPage(),
+        instruction: "click login",
+        cachedAction: {
+          actionType: "actElement",
+          xpath: "//button[1]",
+          method: "click",
+          frameIndex: 0,
+          arguments: [],
+        },
+        maxSteps: 1,
+        debug: true,
+        tokenLimit: 8000,
+        llm: createMockLLM(),
+        mcpClient: undefined,
+        variables: [],
+        performFallback,
+      });
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
     } finally {
       logSpy.mockRestore();
     }
