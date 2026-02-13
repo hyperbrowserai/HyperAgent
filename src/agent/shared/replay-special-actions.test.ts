@@ -114,6 +114,24 @@ describe("executeReplaySpecialAction", () => {
     expect(result?.output).toContain("Missing objective/instruction");
   });
 
+  it("fails extract replay when instruction is only whitespace", async () => {
+    const extract = jest.fn();
+    const page = createPage({
+      extract,
+    });
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-7",
+      actionType: "extract",
+      instruction: "   ",
+      page: page as unknown as Page,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.output).toContain("Missing objective/instruction");
+    expect(extract).not.toHaveBeenCalled();
+  });
+
   it("returns null for non-special actions", async () => {
     const page = createPage();
 

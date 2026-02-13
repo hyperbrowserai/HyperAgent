@@ -142,7 +142,8 @@ export async function executeReplaySpecialAction(
     const extractPage = page as Page & {
       extract?: (objective: string) => Promise<string | unknown>;
     };
-    if (!instruction) {
+    const extractInstruction = instruction?.trim();
+    if (!extractInstruction) {
       return {
         taskId,
         status: TaskStatus.FAILED,
@@ -161,7 +162,7 @@ export async function executeReplaySpecialAction(
       };
     }
     try {
-      const extracted = await extractPage.extract(instruction);
+      const extracted = await extractPage.extract(extractInstruction);
       return {
         taskId,
         status: TaskStatus.COMPLETED,
