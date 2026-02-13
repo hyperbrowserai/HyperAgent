@@ -3058,8 +3058,15 @@ export function SpreadsheetApp() {
                       {cachePrefixSuggestions.map((suggestion) => (
                         <button
                           key={suggestion.prefix}
-                          onClick={() => setCacheRequestIdPrefix(suggestion.prefix)}
-                          title={`latest: ${suggestion.newest_request_id}`}
+                          onClick={(event) => {
+                            setCacheRequestIdPrefix(suggestion.prefix);
+                            if (event.shiftKey) {
+                              void handleInspectCacheRequestId(
+                                suggestion.newest_request_id,
+                              );
+                            }
+                          }}
+                          title={`latest: ${suggestion.newest_request_id} (Shift+click to inspect)`}
                           className={`rounded border px-1.5 py-0.5 text-[10px] ${
                             cacheRequestIdPrefix.trim() === suggestion.prefix
                               ? "border-indigo-500/80 bg-indigo-500/20 text-indigo-200"
