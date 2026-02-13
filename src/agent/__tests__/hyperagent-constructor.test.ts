@@ -7,6 +7,7 @@ import type { HyperAgentLLM } from "@/llm/types";
 import { runAgentTask } from "@/agent/tools/agent";
 import { TaskStatus } from "@/types/agent/types";
 import { HyperagentError, HyperagentTaskError } from "@/agent/error";
+import type { ActionCacheEntry } from "@/types/agent/types";
 
 jest.mock("@/agent/tools/agent", () => ({
   runAgentTask: jest.fn(),
@@ -653,6 +654,96 @@ describe("HyperAgent constructor and task controls", () => {
     expect(taskStateArg.task).toContain("summarize inventory");
     expect(taskStateArg.task).not.toContain("  summarize inventory  ");
     expect(paramsArg.maxSteps).toBe(2);
+  });
+
+  it("returns empty pprint output for malformed action payloads", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const badAction = {
+      get type(): string {
+        throw new Error("type trap");
+      },
+      params: {},
+    };
+
+    expect(agent.pprintAction(badAction as never)).toBe("");
+  });
+
+  it("returns empty pprint output when custom pprintAction throws", () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const throwingAction: AgentActionDefinition = {
+      type: "customPprint",
+      actionParams: z.object({}),
+      run: async () => ({ success: true, message: "ok" }),
+      pprintAction: () => {
+        throw new Error("pprint failed");
+      },
+    };
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      customActions: [throwingAction],
+    });
+
+    try {
+      expect(
+        agent.pprintAction({
+          type: "customPprint",
+          params: {},
+        } as never)
+      ).toBe("");
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[HyperAgent] Failed to pprint action "customPprint": pprint failed'
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("creates scripts from iterable action-cache steps", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const step: ActionCacheEntry = {
+      stepIndex: 0,
+      instruction: "click login",
+      elementId: "0-1",
+      method: "click",
+      arguments: [],
+      frameIndex: 0,
+      xpath: "//button[1]",
+      actionType: "actElement",
+      success: true,
+      message: "cached",
+    };
+    const script = agent.createScriptFromActionCache(
+      new Set([step]) as unknown as ActionCacheEntry[],
+      "  task-id  "
+    );
+
+    expect(script).toContain("performClick");
+  });
+
+  it("throws readable errors when action-cache steps are unreadable", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const trappedSteps = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === Symbol.iterator) {
+            throw new Error("steps iterator trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as ActionCacheEntry[];
+
+    expect(() => agent.createScriptFromActionCache(trappedSteps)).toThrow(
+      "Failed to read action cache steps: steps iterator trap"
+    );
   });
 
   it("executeTaskAsync tolerates context listener attachment failures", async () => {

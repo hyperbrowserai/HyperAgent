@@ -201,6 +201,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return normalized.length > 0 ? normalized : null;
   }
 
+  private safeReadField(value: unknown, key: string): unknown {
+    if (!value || (typeof value !== "object" && typeof value !== "function")) {
+      return undefined;
+    }
+    try {
+      return (value as Record<string, unknown>)[key];
+    } catch {
+      return undefined;
+    }
+  }
+
   private normalizeSingleActionInstruction(value: unknown): string {
     if (typeof value !== "string") {
       throw new HyperagentError(
@@ -1948,13 +1959,39 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Formatted string representation of the action
    */
   public pprintAction(action: ActionType): string {
-    const foundAction = this.actions.find(
-      (actions) => actions.type === action.type
+    const actionType = this.normalizeServerId(
+      (this.safeReadField(action, "type") as string | undefined) ?? ""
     );
-    if (foundAction && foundAction.pprintAction) {
-      return foundAction.pprintAction(action.params);
+    if (!actionType) {
+      return "";
     }
-    return "";
+    const actionParams = this.safeReadField(action, "params");
+    const foundAction = this.actions.find((candidate) => {
+      const candidateType = this.normalizeServerId(
+        this.safeReadField(candidate, "type") as string | undefined
+      );
+      return candidateType === actionType;
+    });
+    if (!foundAction) {
+      return "";
+    }
+    const pprintAction = this.safeReadField(foundAction, "pprintAction");
+    if (typeof pprintAction !== "function") {
+      return "";
+    }
+    try {
+      const pretty = pprintAction(actionParams);
+      return typeof pretty === "string" ? pretty : "";
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to pprint action "${actionType}": ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+      return "";
+    }
   }
 
   public getSession() {
@@ -1981,7 +2018,30 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     steps: ActionCacheEntry[],
     taskId?: string
   ): string {
-    return createScriptFromActionCache({ steps, taskId });
+    let normalizedSteps: ActionCacheEntry[] = [];
+    try {
+      if (Array.isArray(steps)) {
+        normalizedSteps = Array.from(steps);
+      } else if (steps && typeof steps === "object") {
+        normalizedSteps = Array.from(steps as unknown as Iterable<ActionCacheEntry>);
+      }
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to read action cache steps: ${formatUnknownError(error)}`,
+        400
+      );
+    }
+    try {
+      return createScriptFromActionCache({
+        steps: normalizedSteps,
+        taskId: this.normalizeVariableKey(taskId) ?? undefined,
+      });
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to create action cache script: ${formatUnknownError(error)}`,
+        500
+      );
+    }
   }
 
   private setupHyperPage(page: Page): HyperPage {
