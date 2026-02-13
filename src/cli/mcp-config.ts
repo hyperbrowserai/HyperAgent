@@ -324,6 +324,24 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 export async function loadMCPServersFromFile(
   filePath: string
 ): Promise<MCPServerConfig[]> {
+  let fileStats: fs.Stats | undefined;
+  try {
+    fileStats = await fs.promises.stat(filePath);
+  } catch {
+    // Fall through to readFile for missing/inaccessible path diagnostics.
+  }
+
+  if (fileStats && !fileStats.isFile()) {
+    throw new Error(
+      `Failed to read MCP config file "${filePath}": path is not a regular file.`
+    );
+  }
+  if (fileStats && fileStats.size > MAX_MCP_CONFIG_FILE_CHARS) {
+    throw new Error(
+      `Invalid MCP config file "${filePath}": config exceeds ${MAX_MCP_CONFIG_FILE_CHARS} characters.`
+    );
+  }
+
   let fileContent: string;
   try {
     fileContent = await fs.promises.readFile(filePath, "utf-8");

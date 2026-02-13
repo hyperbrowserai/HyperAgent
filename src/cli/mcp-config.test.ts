@@ -407,6 +407,20 @@ describe("loadMCPServersFromFile", () => {
     );
   });
 
+  it("throws readable error when config path is not a regular file", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-mcp-config-")
+    );
+
+    try {
+      await expect(loadMCPServersFromFile(tempDir)).rejects.toThrow(
+        `Failed to read MCP config file "${tempDir}": path is not a regular file.`
+      );
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("throws readable error when config file contents are invalid", async () => {
     const tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "hyperagent-mcp-config-")
