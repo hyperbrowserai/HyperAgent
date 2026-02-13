@@ -686,6 +686,34 @@ describe("runAgentTask completion behavior", () => {
     }
   });
 
+  it("parses BOM-prefixed structured-output diagnostics for zod feedback", async () => {
+    const page = createMockPage();
+    const ctx = createSchemaRetryCtx('\uFEFF{"foo":"bar"}');
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await runAgentTask(ctx, createTaskState(page));
+
+      const invokeStructuredMock = (
+        ctx.llm as unknown as { invokeStructured: jest.Mock }
+      ).invokeStructured;
+      const secondCallMessages = invokeStructuredMock.mock.calls[1]?.[1] as Array<{
+        role: string;
+        content: unknown;
+      }>;
+      const retryUserMessage = secondCallMessages
+        .slice()
+        .reverse()
+        .find((message) => message.role === "user");
+
+      expect(typeof retryUserMessage?.content).toBe("string");
+      expect(retryUserMessage?.content).toContain('"thoughts"');
+      expect(retryUserMessage?.content).not.toContain("Unexpected token");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("formats structured-output retry failures with readable messages", async () => {
     const page = createMockPage();
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});

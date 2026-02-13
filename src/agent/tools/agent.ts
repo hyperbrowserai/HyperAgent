@@ -587,7 +587,11 @@ export const runAgentTask = async (
                 throw new Error(validationError);
               }
 
-              const parsed = JSON.parse(structuredResult.rawText);
+              const normalizedRawText = structuredResult.rawText.replace(
+                /^\uFEFF/,
+                ""
+              );
+              const parsed = JSON.parse(normalizedRawText);
               AgentOutputFn(actionSchema).parse(parsed);
             } catch (zodError) {
               if (zodError instanceof z.ZodError) {
