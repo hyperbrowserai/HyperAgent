@@ -74,6 +74,20 @@ describe("normalizeOpenAIToolCalls", () => {
     ).toThrow('[LLM][DeepSeek] Unknown tool call type: {"id":"x","type":"mystery"}');
   });
 
+  it("normalizes provider labels used in diagnostics", () => {
+    expect(() =>
+      normalizeOpenAIToolCalls(
+        [
+          {
+            id: "x",
+            type: "mystery",
+          },
+        ],
+        "  DeepSeek\u0000 Provider \n Name That Is Really Really Long  "
+      )
+    ).toThrow("[LLM][DeepSeek Provider Name That Is Really Re]");
+  });
+
   it("truncates oversized tool-call diagnostics in errors", () => {
     const huge = "x".repeat(3_500);
     expect(() =>

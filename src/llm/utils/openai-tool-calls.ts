@@ -12,6 +12,7 @@ const NO_RESERVED_PROVIDER_OPTION_KEYS: ReadonlySet<string> = new Set();
 const MAX_TOOL_CALL_DIAGNOSTIC_CHARS = 2_000;
 const MAX_TOOL_CALL_ID_CHARS = 256;
 const MAX_TOOL_CALL_NAME_CHARS = 256;
+const MAX_PROVIDER_LABEL_CHARS = 40;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -44,6 +45,17 @@ function sanitizeToolArguments(value: unknown): unknown {
     : sanitized.arguments;
 }
 
+function normalizeProviderLabel(providerLabel: string): string {
+  const normalized = providerLabel
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (normalized.length === 0) {
+    return "Provider";
+  }
+  return normalized.slice(0, MAX_PROVIDER_LABEL_CHARS);
+}
+
 function formatToolCallDiagnostic(value: unknown): string {
   const formatted = formatUnknownError(value);
   if (formatted.length <= MAX_TOOL_CALL_DIAGNOSTIC_CHARS) {
@@ -65,10 +77,11 @@ export function normalizeOpenAIToolCalls(
     return undefined;
   }
 
+  const normalizedProviderLabel = normalizeProviderLabel(providerLabel);
   return toolCalls.map((toolCall) => {
     if (!isRecord(toolCall)) {
       throw new Error(
-        `[LLM][${providerLabel}] Unknown tool call payload: ${formatToolCallDiagnostic(toolCall)}`
+        `[LLM][${normalizedProviderLabel}] Unknown tool call payload: ${formatToolCallDiagnostic(toolCall)}`
       );
     }
 
@@ -95,7 +108,7 @@ export function normalizeOpenAIToolCalls(
     }
 
     throw new Error(
-      `[LLM][${providerLabel}] Unknown tool call type: ${formatToolCallDiagnostic(toolCall)}`
+      `[LLM][${normalizedProviderLabel}] Unknown tool call type: ${formatToolCallDiagnostic(toolCall)}`
     );
   });
 }
