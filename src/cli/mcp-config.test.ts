@@ -34,6 +34,19 @@ describe("parseMCPServersConfig", () => {
     ]);
   });
 
+  it("parses config content with BOM and surrounding whitespace", () => {
+    const parsed = parseMCPServersConfig(
+      "  \n\uFEFF[{\"command\":\"npx\",\"args\":[\"-y\"]}]  \n"
+    );
+    expect(parsed).toEqual([
+      {
+        command: "npx",
+        args: ["-y"],
+        connectionType: "stdio",
+      },
+    ]);
+  });
+
   it("throws clear message for invalid JSON", () => {
     expect(() => parseMCPServersConfig("{broken")).toThrow(
       "Invalid MCP config JSON"

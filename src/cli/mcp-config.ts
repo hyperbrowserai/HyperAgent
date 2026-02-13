@@ -138,8 +138,9 @@ function normalizeServersPayload(payload: unknown): unknown[] {
 
 export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
   let parsed: unknown;
+  const normalizedConfig = rawConfig.replace(/^\uFEFF/, "").trim();
   try {
-    parsed = JSON.parse(rawConfig);
+    parsed = JSON.parse(normalizedConfig);
   } catch (error) {
     throw new Error(
       `Invalid MCP config JSON: ${formatUnknownError(error)}`
