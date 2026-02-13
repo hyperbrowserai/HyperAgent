@@ -678,6 +678,25 @@ impl AppState {
           .then_with(|| right.1.cmp(&left.1))
           .then_with(|| left.0.cmp(&right.0))
       }),
+      "span" => prefixes.sort_by(|left, right| {
+        let left_span_seconds = match (&left.3, &left.5) {
+          (Some(newest), Some(oldest)) => {
+            newest.signed_duration_since(*oldest).num_seconds().max(0)
+          }
+          _ => 0,
+        };
+        let right_span_seconds = match (&right.3, &right.5) {
+          (Some(newest), Some(oldest)) => {
+            newest.signed_duration_since(*oldest).num_seconds().max(0)
+          }
+          _ => 0,
+        };
+        right_span_seconds
+          .cmp(&left_span_seconds)
+          .then_with(|| right.1.cmp(&left.1))
+          .then_with(|| right.3.cmp(&left.3))
+          .then_with(|| left.0.cmp(&right.0))
+      }),
       "alpha" => prefixes.sort_by(|left, right| {
         left
           .0
@@ -1327,6 +1346,83 @@ mod tests {
       .expect("alpha-sorted prefixes should load");
     assert_eq!(alpha_sorted_prefixes[0].0, "few-");
     assert_eq!(alpha_sorted_prefixes[1].0, "many-");
+  }
+
+  #[tokio::test]
+  async fn should_sort_prefix_suggestions_by_span_when_requested() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-prefix-sort-span".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    state
+      .cache_agent_ops_response(
+        workbook.id,
+        "wide-1".to_string(),
+        vec![AgentOperation::Recalculate],
+        AgentOpsResponse {
+          request_id: Some("wide-1".to_string()),
+          operations_signature: Some("sig-wide-1".to_string()),
+          served_from_cache: false,
+          results: Vec::new(),
+        },
+      )
+      .await
+      .expect("cache update should succeed");
+    tokio::time::sleep(Duration::from_millis(25)).await;
+    state
+      .cache_agent_ops_response(
+        workbook.id,
+        "tight-1".to_string(),
+        vec![AgentOperation::Recalculate],
+        AgentOpsResponse {
+          request_id: Some("tight-1".to_string()),
+          operations_signature: Some("sig-tight-1".to_string()),
+          served_from_cache: false,
+          results: Vec::new(),
+        },
+      )
+      .await
+      .expect("cache update should succeed");
+    state
+      .cache_agent_ops_response(
+        workbook.id,
+        "tight-2".to_string(),
+        vec![AgentOperation::Recalculate],
+        AgentOpsResponse {
+          request_id: Some("tight-2".to_string()),
+          operations_signature: Some("sig-tight-2".to_string()),
+          served_from_cache: false,
+          results: Vec::new(),
+        },
+      )
+      .await
+      .expect("cache update should succeed");
+    tokio::time::sleep(Duration::from_millis(25)).await;
+    state
+      .cache_agent_ops_response(
+        workbook.id,
+        "wide-2".to_string(),
+        vec![AgentOperation::Recalculate],
+        AgentOpsResponse {
+          request_id: Some("wide-2".to_string()),
+          operations_signature: Some("sig-wide-2".to_string()),
+          served_from_cache: false,
+          results: Vec::new(),
+        },
+      )
+      .await
+      .expect("cache update should succeed");
+
+    let (_, _, _, _, span_sorted_prefixes) = state
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, "span", 0, 5)
+      .await
+      .expect("span-sorted prefixes should load");
+    assert_eq!(span_sorted_prefixes[0].0, "wide-");
+    assert_eq!(span_sorted_prefixes[1].0, "tight-");
   }
 
   #[tokio::test]

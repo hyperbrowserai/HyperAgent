@@ -1069,7 +1069,7 @@ async fn get_agent_schema(
     "agent_ops_cache_prefixes_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
-      "sort_by": "optional string enum: count|recent|alpha (default count)",
+      "sort_by": "optional string enum: count|recent|alpha|span (default count)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
       "offset": "optional number, default 0",
       "limit": "optional number, default 8, min 1, max 100"
@@ -1127,7 +1127,7 @@ async fn get_agent_schema(
       "returned_entry_count": "total cache entries represented by returned prefixes in this page",
       "request_id_prefix": "echoed filter prefix when provided",
       "min_entry_count": "applied minimum entry count filter (default 1)",
-      "sort_by": "applied sort mode: count|recent|alpha",
+      "sort_by": "applied sort mode: count|recent|alpha|span",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "offset": "start index in sorted prefix list",
@@ -2026,9 +2026,12 @@ fn normalize_prefix_sort_by(sort_by: Option<&str>) -> Result<String, ApiError> {
     Some(value) if value.eq_ignore_ascii_case("alpha") => {
       Ok("alpha".to_string())
     }
+    Some(value) if value.eq_ignore_ascii_case("span") => {
+      Ok("span".to_string())
+    }
     Some(_) => Err(ApiError::bad_request_with_code(
       "INVALID_PREFIX_SORT_BY",
-      "sort_by must be one of: count, recent, alpha.",
+      "sort_by must be one of: count, recent, alpha, span.",
     )),
   }
 }
@@ -3258,6 +3261,25 @@ mod tests {
     assert_eq!(alpha_sorted.prefixes[0].prefix, "preset-");
     assert_eq!(alpha_sorted.prefixes[1].prefix, "scenario-");
 
+    let span_sorted = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        sort_by: Some("span".to_string()),
+        max_age_seconds: None,
+        offset: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect("span-sorted prefixes should load")
+    .0;
+    assert_eq!(span_sorted.sort_by, "span");
+    assert_eq!(span_sorted.prefixes[0].prefix, "scenario-");
+    assert_eq!(span_sorted.prefixes[1].prefix, "preset-");
+
     let invalid_sort_error = agent_ops_cache_prefixes(
       State(state),
       Path(workbook.id),
@@ -4167,7 +4189,7 @@ mod tests {
         .get("agent_ops_cache_prefixes_query_shape")
         .and_then(|value| value.get("sort_by"))
         .and_then(serde_json::Value::as_str),
-      Some("optional string enum: count|recent|alpha (default count)"),
+      Some("optional string enum: count|recent|alpha|span (default count)"),
     );
     assert_eq!(
       schema
@@ -4257,7 +4279,7 @@ mod tests {
         .get("agent_ops_cache_prefixes_response_shape")
         .and_then(|value| value.get("sort_by"))
         .and_then(serde_json::Value::as_str),
-      Some("applied sort mode: count|recent|alpha"),
+      Some("applied sort mode: count|recent|alpha|span"),
     );
     assert_eq!(
       schema

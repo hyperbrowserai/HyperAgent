@@ -61,7 +61,8 @@ const ChartPreview = dynamic(
 
 const CACHE_ENTRIES_PREVIEW_LIMIT = 6;
 const CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT = "12";
-const CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT: "count" | "recent" | "alpha" = "count";
+const CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT: "count" | "recent" | "alpha" | "span" =
+  "count";
 
 function parsePositiveIntegerInput(value: string): number | undefined {
   const normalized = value.trim();
@@ -160,7 +161,9 @@ export function SpreadsheetApp() {
     CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT,
   );
   const [cachePrefixMinEntryCount, setCachePrefixMinEntryCount] = useState("");
-  const [cachePrefixSortBy, setCachePrefixSortBy] = useState<"count" | "recent" | "alpha">(
+  const [cachePrefixSortBy, setCachePrefixSortBy] = useState<
+    "count" | "recent" | "alpha" | "span"
+  >(
     CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT,
   );
   const [cacheRemovePreviewSampleLimit, setCacheRemovePreviewSampleLimit] = useState("10");
@@ -2937,7 +2940,11 @@ export function SpreadsheetApp() {
                       value={cachePrefixSortBy}
                       onChange={(event) =>
                         setCachePrefixSortBy(
-                          event.target.value as "count" | "recent" | "alpha",
+                          event.target.value as
+                            | "count"
+                            | "recent"
+                            | "alpha"
+                            | "span",
                         )
                       }
                       className="h-6 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-indigo-500"
@@ -2945,6 +2952,7 @@ export function SpreadsheetApp() {
                       <option value="count">count</option>
                       <option value="recent">recent</option>
                       <option value="alpha">alpha</option>
+                      <option value="span">span</option>
                     </select>
                     <button
                       onClick={resetCachePrefixSuggestionControls}

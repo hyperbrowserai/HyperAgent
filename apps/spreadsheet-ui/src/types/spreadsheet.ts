@@ -93,7 +93,7 @@ export interface AgentOpsCachePrefixesResponse {
   returned_entry_count: number;
   request_id_prefix: string | null;
   min_entry_count: number;
-  sort_by: "count" | "recent" | "alpha";
+  sort_by: "count" | "recent" | "alpha" | "span";
   max_age_seconds: number | null;
   cutoff_timestamp: string | null;
   offset: number;
