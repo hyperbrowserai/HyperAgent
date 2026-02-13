@@ -119,7 +119,17 @@ function normalizeOptionalStringArray(
     );
   }
 
-  return Array.from(new Set(normalized));
+  const seen = new Set<string>();
+  for (const toolName of normalized) {
+    if (seen.has(toolName)) {
+      throw new Error(
+        `MCP server entry at index ${index} contains duplicate "${field}" value "${toolName}" after trimming.`
+      );
+    }
+    seen.add(toolName);
+  }
+
+  return normalized;
 }
 
 function normalizeServersPayload(payload: unknown): unknown[] {
