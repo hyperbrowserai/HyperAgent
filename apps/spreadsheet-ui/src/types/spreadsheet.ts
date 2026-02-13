@@ -75,3 +75,17 @@ export interface AgentScenarioResponse {
   request_id?: string;
   results: AgentOperationResult[];
 }
+
+export interface AgentWizardImportResult {
+  sheets_imported: number;
+  cells_imported: number;
+  warnings: string[];
+}
+
+export interface AgentWizardRunResponse {
+  workbook: WorkbookSummary;
+  scenario: string;
+  request_id?: string;
+  results: AgentOperationResult[];
+  import: AgentWizardImportResult | null;
+}

@@ -20,6 +20,7 @@ import {
   runAgentOps,
   runAgentPreset,
   runAgentScenario,
+  runAgentWizard,
   subscribeToWorkbookEvents,
   upsertChart,
 } from "@/lib/spreadsheet-api";
@@ -54,8 +55,12 @@ export function SpreadsheetApp() {
   const [isRunningAgentFlow, setIsRunningAgentFlow] = useState(false);
   const [isRunningPreset, setIsRunningPreset] = useState(false);
   const [isRunningScenario, setIsRunningScenario] = useState(false);
+  const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
+  const [wizardScenario, setWizardScenario] = useState("seed_then_export");
+  const [wizardWorkbookName, setWizardWorkbookName] = useState("Wizard Workbook");
+  const [wizardFile, setWizardFile] = useState<File | null>(null);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [uiError, setUiError] = useState<string | null>(null);
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
@@ -413,6 +418,45 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleWizardRun() {
+    if (!wizardScenario) {
+      return;
+    }
+    setIsRunningWizard(true);
+    try {
+      setUiError(null);
+      const response = await runAgentWizard({
+        scenario: wizardScenario,
+        request_id: `wizard-${wizardScenario}-${Date.now()}`,
+        actor: "ui-wizard",
+        stop_on_error: true,
+        include_file_base64: false,
+        workbook_name: wizardWorkbookName,
+        file: wizardFile,
+      });
+      setWorkbook(response.workbook);
+      setActiveSheet(response.workbook.sheets[0] ?? "Sheet1");
+      setLastScenario(response.scenario);
+      setLastPreset(null);
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastAgentOps(response.results);
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workbook", response.workbook.id] }),
+        queryClient.invalidateQueries({ queryKey: ["cells", response.workbook.id, response.workbook.sheets[0] ?? "Sheet1"] }),
+        queryClient.invalidateQueries({ queryKey: ["agent-presets", response.workbook.id] }),
+        queryClient.invalidateQueries({ queryKey: ["agent-scenarios", response.workbook.id] }),
+        queryClient.invalidateQueries({ queryKey: ["agent-schema", response.workbook.id] }),
+      ]);
+    } catch (error) {
+      setUiError(
+        error instanceof Error ? error.message : "Failed to run wizard flow.",
+      );
+    } finally {
+      setIsRunningWizard(false);
+    }
+  }
+
   async function handleCreateSheet() {
     if (!workbook) {
       return;
@@ -582,6 +626,61 @@ export function SpreadsheetApp() {
                 className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-600 disabled:opacity-40"
               >
                 {isCreatingSheet ? "Adding..." : "Add Sheet"}
+              </button>
+            </div>
+          </div>
+          <div className="mt-3 rounded-md border border-slate-800 bg-slate-950/60 p-2">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-300">
+                Agent Wizard (new workbook run)
+              </p>
+              <span className="text-[11px] text-slate-500">
+                Optional import + scenario execution
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={wizardScenario}
+                onChange={(event) => setWizardScenario(event.target.value)}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+              >
+                {(scenariosQuery.data ?? []).map((scenarioInfo) => (
+                  <option key={scenarioInfo.scenario} value={scenarioInfo.scenario}>
+                    {scenarioInfo.scenario}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={wizardWorkbookName}
+                onChange={(event) => setWizardWorkbookName(event.target.value)}
+                className="w-40 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+                placeholder="Workbook name"
+              />
+              <label className="cursor-pointer rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800">
+                {wizardFile ? wizardFile.name : "Attach .xlsx (optional)"}
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={(event) => {
+                    setWizardFile(event.target.files?.[0] ?? null);
+                  }}
+                />
+              </label>
+              {wizardFile ? (
+                <button
+                  onClick={() => setWizardFile(null)}
+                  className="rounded border border-slate-700 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+                >
+                  Clear file
+                </button>
+              ) : null}
+              <button
+                onClick={handleWizardRun}
+                disabled={isRunningWizard || (scenariosQuery.data ?? []).length === 0}
+                className="rounded bg-teal-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-400 disabled:opacity-40"
+              >
+                {isRunningWizard ? "Running wizard..." : "Run Wizard"}
               </button>
             </div>
           </div>

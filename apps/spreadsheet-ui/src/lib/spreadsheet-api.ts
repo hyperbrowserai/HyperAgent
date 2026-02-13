@@ -5,6 +5,7 @@ import {
   AgentPresetResponse,
   AgentScenarioInfo,
   AgentScenarioResponse,
+  AgentWizardRunResponse,
   CellSnapshot,
   ChartSpec,
   WorkbookEvent,
@@ -223,6 +224,47 @@ export async function runAgentScenario(
     },
   );
   return parseJsonResponse<AgentScenarioResponse>(response);
+}
+
+interface AgentWizardRequest {
+  scenario: string;
+  request_id?: string;
+  actor?: string;
+  stop_on_error?: boolean;
+  include_file_base64?: boolean;
+  workbook_name?: string;
+  file?: File | null;
+}
+
+export async function runAgentWizard(
+  payload: AgentWizardRequest,
+): Promise<AgentWizardRunResponse> {
+  const formData = new FormData();
+  formData.append("scenario", payload.scenario);
+  if (payload.request_id) {
+    formData.append("request_id", payload.request_id);
+  }
+  if (payload.actor) {
+    formData.append("actor", payload.actor);
+  }
+  if (payload.workbook_name) {
+    formData.append("workbook_name", payload.workbook_name);
+  }
+  if (typeof payload.stop_on_error === "boolean") {
+    formData.append("stop_on_error", String(payload.stop_on_error));
+  }
+  if (typeof payload.include_file_base64 === "boolean") {
+    formData.append("include_file_base64", String(payload.include_file_base64));
+  }
+  if (payload.file) {
+    formData.append("file", payload.file);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/run`, {
+    method: "POST",
+    body: formData,
+  });
+  return parseJsonResponse<AgentWizardRunResponse>(response);
 }
 
 export async function upsertChart(
