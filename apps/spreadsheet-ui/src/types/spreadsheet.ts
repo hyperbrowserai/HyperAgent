@@ -196,6 +196,14 @@ export interface AgentPresetInfo {
   operations: string[];
 }
 
+export interface FormulaCapabilitiesSchema {
+  supported_functions?: string;
+  supported_function_list?: string[];
+  unsupported_behaviors?: string;
+  unsupported_behavior_list?: string[];
+  fallback_behavior?: string;
+}
+
 export interface AgentSchemaInfo {
   endpoint: string;
   workbook_import_endpoint?: string;
@@ -205,7 +213,7 @@ export interface AgentSchemaInfo {
   workbook_import_event_shape?: Record<string, unknown>;
   workbook_export_event_shape?: Record<string, unknown>;
   workbook_event_shapes?: Record<string, unknown>;
-  formula_capabilities?: Record<string, unknown>;
+  formula_capabilities?: FormulaCapabilitiesSchema;
   agent_ops_preview_endpoint?: string;
   agent_ops_cache_stats_endpoint?: string;
   agent_ops_cache_entries_endpoint?: string;
@@ -288,7 +296,7 @@ export interface AgentWizardSchemaInfo {
   operations_preview_response_shape?: Record<string, string>;
   run_response_shape?: Record<string, string>;
   import_response_shape?: Record<string, string>;
-  formula_capabilities?: Record<string, unknown>;
+  formula_capabilities?: FormulaCapabilitiesSchema;
   presets: AgentPresetInfo[];
   scenarios: AgentScenarioInfo[];
 }

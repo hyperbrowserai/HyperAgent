@@ -45,9 +45,62 @@ use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::BroadcastStream;
 use uuid::Uuid;
 
-const FORMULA_SUPPORTED_FUNCTIONS: &str = "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, IFERROR, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, ISBLANK, ISNUMBER, ISTEXT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, HLOOKUP exact-match mode, XLOOKUP exact-match mode, MATCH exact-match mode, INDEX";
-const FORMULA_UNSUPPORTED_BEHAVIORS: &str = "VLOOKUP/HLOOKUP with range_lookup TRUE/1, XLOOKUP non-exact match_mode/search_mode variants, and MATCH non-exact match_type variants remain unsupported and are surfaced via unsupported_formulas";
+const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
+  "SUM",
+  "AVERAGE",
+  "MIN",
+  "MAX",
+  "COUNT",
+  "COUNTIF",
+  "COUNTIFS",
+  "SUMIF",
+  "SUMIFS",
+  "AVERAGEIF",
+  "AVERAGEIFS",
+  "direct references",
+  "arithmetic expressions",
+  "IF",
+  "IFERROR",
+  "AND",
+  "OR",
+  "NOT",
+  "CONCAT",
+  "CONCATENATE",
+  "LEN",
+  "LEFT",
+  "RIGHT",
+  "UPPER",
+  "LOWER",
+  "TRIM",
+  "ISBLANK",
+  "ISNUMBER",
+  "ISTEXT",
+  "TODAY",
+  "DATE",
+  "YEAR",
+  "MONTH",
+  "DAY",
+  "VLOOKUP exact-match mode",
+  "HLOOKUP exact-match mode",
+  "XLOOKUP exact-match mode",
+  "MATCH exact-match mode",
+  "INDEX",
+];
+const FORMULA_UNSUPPORTED_BEHAVIOR_LIST: &[&str] = &[
+  "VLOOKUP/HLOOKUP with range_lookup TRUE/1 remain unsupported.",
+  "XLOOKUP non-exact match_mode/search_mode variants remain unsupported.",
+  "MATCH non-exact match_type variants remain unsupported.",
+  "Unsupported formulas are surfaced via unsupported_formulas.",
+];
 const FORMULA_FALLBACK_BEHAVIOR: &str = "unsupported formulas are preserved and reported by formula.recalculated payloads";
+
+fn formula_supported_functions_summary() -> String {
+  FORMULA_SUPPORTED_FUNCTION_LIST.join(", ")
+}
+
+fn formula_unsupported_behaviors_summary() -> String {
+  FORMULA_UNSUPPORTED_BEHAVIOR_LIST.join(" ")
+}
 
 pub fn create_router(state: AppState) -> Router {
   Router::new()
@@ -557,8 +610,10 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "warnings": "array of compatibility warning strings"
     },
     "formula_capabilities": {
-      "supported_functions": FORMULA_SUPPORTED_FUNCTIONS,
-      "unsupported_behaviors": FORMULA_UNSUPPORTED_BEHAVIORS,
+      "supported_functions": formula_supported_functions_summary(),
+      "supported_function_list": FORMULA_SUPPORTED_FUNCTION_LIST,
+      "unsupported_behaviors": formula_unsupported_behaviors_summary(),
+      "unsupported_behavior_list": FORMULA_UNSUPPORTED_BEHAVIOR_LIST,
       "fallback_behavior": FORMULA_FALLBACK_BEHAVIOR
     },
     "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
@@ -1081,8 +1136,10 @@ async fn get_agent_schema(
       }
     },
     "formula_capabilities": {
-      "supported_functions": FORMULA_SUPPORTED_FUNCTIONS,
-      "unsupported_behaviors": FORMULA_UNSUPPORTED_BEHAVIORS,
+      "supported_functions": formula_supported_functions_summary(),
+      "supported_function_list": FORMULA_SUPPORTED_FUNCTION_LIST,
+      "unsupported_behaviors": formula_unsupported_behaviors_summary(),
+      "unsupported_behavior_list": FORMULA_UNSUPPORTED_BEHAVIOR_LIST,
       "fallback_behavior": FORMULA_FALLBACK_BEHAVIOR
     },
     "agent_ops_response_shape": {
@@ -2506,7 +2563,8 @@ mod tests {
     agent_ops_cache_prefixes,
     agent_ops_cache_stats,
     clear_agent_ops_cache, get_agent_schema, get_agent_wizard_schema,
-    FORMULA_SUPPORTED_FUNCTIONS, FORMULA_UNSUPPORTED_BEHAVIORS,
+    FORMULA_SUPPORTED_FUNCTION_LIST, FORMULA_UNSUPPORTED_BEHAVIOR_LIST,
+    formula_supported_functions_summary, formula_unsupported_behaviors_summary,
     remove_agent_ops_cache_entry,
     remove_agent_ops_cache_entries_by_prefix,
     remove_stale_agent_ops_cache_entries,
@@ -4644,19 +4702,37 @@ mod tests {
         .and_then(serde_json::Value::as_str),
       Some("/v1/workbooks/{id}/export"),
     );
+    let supported_summary = formula_supported_functions_summary();
+    let unsupported_summary = formula_unsupported_behaviors_summary();
     assert_eq!(
       schema
         .get("formula_capabilities")
         .and_then(|value| value.get("supported_functions"))
         .and_then(serde_json::Value::as_str),
-      Some(FORMULA_SUPPORTED_FUNCTIONS),
+      Some(supported_summary.as_str()),
     );
     assert_eq!(
       schema
         .get("formula_capabilities")
         .and_then(|value| value.get("unsupported_behaviors"))
         .and_then(serde_json::Value::as_str),
-      Some(FORMULA_UNSUPPORTED_BEHAVIORS),
+      Some(unsupported_summary.as_str()),
+    );
+    assert_eq!(
+      schema
+        .get("formula_capabilities")
+        .and_then(|value| value.get("supported_function_list"))
+        .and_then(serde_json::Value::as_array)
+        .map(|entries| entries.len()),
+      Some(FORMULA_SUPPORTED_FUNCTION_LIST.len()),
+    );
+    assert_eq!(
+      schema
+        .get("formula_capabilities")
+        .and_then(|value| value.get("unsupported_behavior_list"))
+        .and_then(serde_json::Value::as_array)
+        .map(|entries| entries.len()),
+      Some(FORMULA_UNSUPPORTED_BEHAVIOR_LIST.len()),
     );
     assert_eq!(
       schema
@@ -5117,7 +5193,23 @@ mod tests {
         .get("formula_capabilities")
         .and_then(|value| value.get("supported_functions"))
         .and_then(serde_json::Value::as_str),
-      Some(FORMULA_SUPPORTED_FUNCTIONS),
+      Some(formula_supported_functions_summary().as_str()),
+    );
+    assert_eq!(
+      schema
+        .get("formula_capabilities")
+        .and_then(|value| value.get("supported_function_list"))
+        .and_then(serde_json::Value::as_array)
+        .map(|entries| entries.len()),
+      Some(FORMULA_SUPPORTED_FUNCTION_LIST.len()),
+    );
+    assert_eq!(
+      schema
+        .get("formula_capabilities")
+        .and_then(|value| value.get("unsupported_behavior_list"))
+        .and_then(serde_json::Value::as_array)
+        .map(|entries| entries.len()),
+      Some(FORMULA_UNSUPPORTED_BEHAVIOR_LIST.len()),
     );
   }
 }

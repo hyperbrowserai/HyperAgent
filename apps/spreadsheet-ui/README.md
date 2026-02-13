@@ -15,7 +15,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Built-in scenario runner (seed/export orchestration)
 - Wizard flow: optional XLSX upload + scenario execution in one action
 - Wizard metadata discovery (schema/presets/scenarios) with scenario operation preview
-- Wizard schema panel displays discovered run/import response fields plus formula capability metadata (including a supported-function list) for agent planning awareness
+- Wizard schema panel displays discovered run/import response fields plus formula capability metadata (including supported-function and unsupported-behavior lists) for agent planning awareness
 - Wizard preset operation preview (global/workbook-scoped discovery)
 - Wizard can toggle export payload embedding (`include_file_base64`) before execution
 - Wizard can run selected scenario either on a new workbook flow or current workbook context
@@ -51,7 +51,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent integration panel displays discovered request-id idempotency cache size metadata
 - Agent integration panel displays discovered cache stats/clear endpoint metadata from schema
 - Agent integration panel displays discovered workbook import/export endpoint metadata from schema
-- Agent integration panel displays discovered formula capability metadata from schema (supported/unsupported function behavior), including an explicit supported-function list/count
+- Agent integration panel displays discovered formula capability metadata from schema (supported/unsupported behavior), including explicit supported-function and unsupported-behavior lists
 - Agent integration panel now expands workbook import response fields as dotted key paths with inline descriptions (e.g., `import.formula_cells_imported: ...`)
 - Agent integration panel now expands export header schema fields with inline descriptions (e.g., `x-export-meta: ...`)
 - Agent integration panel now also shows discovered workbook import/export event payload field shapes from schema

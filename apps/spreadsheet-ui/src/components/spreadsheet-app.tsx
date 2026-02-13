@@ -86,6 +86,9 @@ function parseStringArray(value: unknown): string[] {
 }
 
 function parseCommaSeparatedList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return parseStringArray(value);
+  }
   if (typeof value !== "string") {
     return [];
   }
@@ -813,10 +816,22 @@ export function SpreadsheetApp() {
     [wizardSchemaQuery.data?.formula_capabilities],
   );
   const wizardSupportedFormulaFunctions = useMemo(
-    () =>
-      parseCommaSeparatedList(
-        wizardSchemaQuery.data?.formula_capabilities?.supported_functions,
-      ),
+    () => {
+      const capabilities = wizardSchemaQuery.data?.formula_capabilities;
+      return parseCommaSeparatedList(
+        capabilities?.supported_function_list ?? capabilities?.supported_functions,
+      );
+    },
+    [wizardSchemaQuery.data?.formula_capabilities],
+  );
+  const wizardUnsupportedFormulaBehaviors = useMemo(
+    () => {
+      const capabilities = wizardSchemaQuery.data?.formula_capabilities;
+      return parseCommaSeparatedList(
+        capabilities?.unsupported_behavior_list
+          ?? capabilities?.unsupported_behaviors,
+      );
+    },
     [wizardSchemaQuery.data?.formula_capabilities],
   );
   const agentWorkbookImportResponseFields = useMemo(
@@ -836,10 +851,22 @@ export function SpreadsheetApp() {
     [agentSchemaQuery.data?.formula_capabilities],
   );
   const agentSupportedFormulaFunctions = useMemo(
-    () =>
-      parseCommaSeparatedList(
-        agentSchemaQuery.data?.formula_capabilities?.supported_functions,
-      ),
+    () => {
+      const capabilities = agentSchemaQuery.data?.formula_capabilities;
+      return parseCommaSeparatedList(
+        capabilities?.supported_function_list ?? capabilities?.supported_functions,
+      );
+    },
+    [agentSchemaQuery.data?.formula_capabilities],
+  );
+  const agentUnsupportedFormulaBehaviors = useMemo(
+    () => {
+      const capabilities = agentSchemaQuery.data?.formula_capabilities;
+      return parseCommaSeparatedList(
+        capabilities?.unsupported_behavior_list
+          ?? capabilities?.unsupported_behaviors,
+      );
+    },
     [agentSchemaQuery.data?.formula_capabilities],
   );
   const agentWorkbookImportEventFields = useMemo(
@@ -2557,6 +2584,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {wizardUnsupportedFormulaBehaviors.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                unsupported formula behaviors:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardUnsupportedFormulaBehaviors.join(" | ")}
+                </span>
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={wizardScenario}
@@ -3004,6 +3039,14 @@ export function SpreadsheetApp() {
                 supported formula functions ({agentSupportedFormulaFunctions.length}):{" "}
                 <span className="font-mono text-slate-200">
                   {agentSupportedFormulaFunctions.join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {agentUnsupportedFormulaBehaviors.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                unsupported formula behaviors:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentUnsupportedFormulaBehaviors.join(" | ")}
                 </span>
               </p>
             ) : null}
