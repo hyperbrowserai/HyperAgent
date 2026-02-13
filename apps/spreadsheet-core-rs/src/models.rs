@@ -144,6 +144,19 @@ pub struct AgentOpsPreviewResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsCacheStatsResponse {
+  pub entries: usize,
+  pub max_entries: usize,
+  pub oldest_request_id: Option<String>,
+  pub newest_request_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClearAgentOpsCacheResponse {
+  pub cleared_entries: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentPresetRunRequest {
   pub request_id: Option<String>,
   pub actor: Option<String>,

@@ -1,10 +1,11 @@
 use crate::{
   error::ApiError,
   models::{
-    AgentOperation, AgentOperationResult, AgentOpsRequest, AgentOpsResponse,
-    AgentOpsPreviewRequest, AgentOpsPreviewResponse,
+    AgentOperation, AgentOperationResult, AgentOpsCacheStatsResponse, AgentOpsRequest,
+    AgentOpsResponse, AgentOpsPreviewRequest, AgentOpsPreviewResponse,
     AgentPresetRunRequest, AgentScenarioRunRequest,
     AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
+    ClearAgentOpsCacheResponse,
     CellMutation, CreateSheetRequest, CreateSheetResponse, CreateWorkbookRequest,
     CreateWorkbookResponse, ExportResponse, GetCellsRequest,
     GetCellsResponse, QueryRequest, RecalculateResponse, SetCellsRequest,
@@ -58,6 +59,14 @@ pub fn create_router(state: AppState) -> Router {
     .route("/v1/workbooks/{id}/cells/set-batch", post(set_cells_batch))
     .route("/v1/workbooks/{id}/agent/ops", post(agent_ops))
     .route("/v1/workbooks/{id}/agent/ops/preview", post(agent_ops_preview))
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache",
+      get(agent_ops_cache_stats),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache/clear",
+      post(clear_agent_ops_cache),
+    )
     .route("/v1/workbooks/{id}/agent/schema", get(get_agent_schema))
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
     .route(
@@ -976,12 +985,23 @@ async fn get_agent_schema(
       "results": "array of operation results"
     },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
+    "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
+    "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
     "agent_ops_preview_request_shape": {
       "operations": "non-empty array of operation objects"
     },
     "agent_ops_preview_response_shape": {
       "operations_signature": "sha256 signature over submitted operations",
       "operations": "echoed operation array"
+    },
+    "agent_ops_cache_stats_response_shape": {
+      "entries": "current cache entries",
+      "max_entries": "maximum cache size",
+      "oldest_request_id": "optional oldest cached request id",
+      "newest_request_id": "optional newest cached request id"
+    },
+    "agent_ops_cache_clear_response_shape": {
+      "cleared_entries": "number of removed cache entries"
     },
     "agent_ops_idempotency_cache_max_entries": AGENT_OPS_CACHE_MAX_ENTRIES,
     "signature_error_codes": [
@@ -1263,6 +1283,31 @@ async fn agent_ops_preview(
   }))
 }
 
+async fn agent_ops_cache_stats(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+) -> Result<Json<AgentOpsCacheStatsResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let (entries, oldest_request_id, newest_request_id) = state
+    .agent_ops_cache_stats(workbook_id)
+    .await?;
+  Ok(Json(AgentOpsCacheStatsResponse {
+    entries,
+    max_entries: AGENT_OPS_CACHE_MAX_ENTRIES,
+    oldest_request_id,
+    newest_request_id,
+  }))
+}
+
+async fn clear_agent_ops_cache(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+) -> Result<Json<ClearAgentOpsCacheResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let cleared_entries = state.clear_agent_ops_cache(workbook_id).await?;
+  Ok(Json(ClearAgentOpsCacheResponse { cleared_entries }))
+}
+
 async fn run_agent_preset(
   State(state): State<AppState>,
   Path((workbook_id, preset)): Path<(Uuid, String)>,
@@ -1428,6 +1473,8 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
       "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports create_sheet/export_workbook ops)"}},
       "/v1/workbooks/{id}/agent/ops/preview": {"post": {"summary": "Preview and sign a provided agent operation plan without execution"}},
+      "/v1/workbooks/{id}/agent/ops/cache": {"get": {"summary": "Inspect request-id idempotency cache status for agent ops"}},
+      "/v1/workbooks/{id}/agent/ops/cache/clear": {"post": {"summary": "Clear request-id idempotency cache for agent ops"}},
       "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}/operations": {"get": {"summary": "Preview generated operations for a built-in preset"}},

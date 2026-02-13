@@ -38,6 +38,8 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/cells/set-batch`
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
 - `POST /v1/workbooks/{id}/agent/ops/preview`
+- `GET /v1/workbooks/{id}/agent/ops/cache`
+- `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
 - `GET /v1/workbooks/{id}/agent/presets/{preset}/operations`
@@ -78,6 +80,10 @@ The in-memory request-id idempotency cache keeps up to **256** recent `agent/ops
 
 Plan-preview helper:
 - `POST /v1/workbooks/{id}/agent/ops/preview` returns `{ operations_signature, operations }` without executing.
+
+Cache helpers:
+- `GET /v1/workbooks/{id}/agent/ops/cache`
+- `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 
 Supported `op_type` values:
 - `get_workbook`

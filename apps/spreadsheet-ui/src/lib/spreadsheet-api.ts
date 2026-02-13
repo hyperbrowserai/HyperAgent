@@ -1,5 +1,7 @@
 import {
   AgentOpsPreviewResponse,
+  AgentOpsCacheStatsResponse,
+  ClearAgentOpsCacheResponse,
   AgentOpsResponse,
   AgentOperationPlanPreview,
   AgentOperationPreview,
@@ -183,6 +185,27 @@ export async function previewAgentOps(
     },
   );
   return parseJsonResponse<AgentOpsPreviewResponse>(response);
+}
+
+export async function getAgentOpsCacheStats(
+  workbookId: string,
+): Promise<AgentOpsCacheStatsResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache`,
+  );
+  return parseJsonResponse<AgentOpsCacheStatsResponse>(response);
+}
+
+export async function clearAgentOpsCache(
+  workbookId: string,
+): Promise<ClearAgentOpsCacheResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/clear`,
+    {
+      method: "POST",
+    },
+  );
+  return parseJsonResponse<ClearAgentOpsCacheResponse>(response);
 }
 
 interface AgentPresetRequest {

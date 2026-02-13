@@ -228,6 +228,35 @@ impl AppState {
     }
     Ok(())
   }
+
+  pub async fn agent_ops_cache_stats(
+    &self,
+    workbook_id: Uuid,
+  ) -> Result<(usize, Option<String>, Option<String>), ApiError> {
+    let guard = self.workbooks.read().await;
+    let record = guard
+      .get(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+    Ok((
+      record.agent_ops_cache_order.len(),
+      record.agent_ops_cache_order.front().cloned(),
+      record.agent_ops_cache_order.back().cloned(),
+    ))
+  }
+
+  pub async fn clear_agent_ops_cache(
+    &self,
+    workbook_id: Uuid,
+  ) -> Result<usize, ApiError> {
+    let mut guard = self.workbooks.write().await;
+    let record = guard
+      .get_mut(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+    let cleared_entries = record.agent_ops_cache_order.len();
+    record.agent_ops_cache_order.clear();
+    record.agent_ops_cache.clear();
+    Ok(cleared_entries)
+  }
 }
 
 fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
@@ -333,5 +362,49 @@ mod tests {
       .expect("cache lookup should succeed");
     assert!(evicted.is_none(), "oldest entry should be evicted");
     assert!(newest.is_some(), "newest entry should remain cached");
+  }
+
+  #[tokio::test]
+  async fn should_report_and_clear_agent_ops_cache_stats() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-stats".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let response = AgentOpsResponse {
+      request_id: Some("req-1".to_string()),
+      operations_signature: Some("sig-1".to_string()),
+      served_from_cache: false,
+      results: Vec::new(),
+    };
+    state
+      .cache_agent_ops_response(workbook.id, "req-1".to_string(), response)
+      .await
+      .expect("cache update should succeed");
+
+    let (entries, oldest, newest) = state
+      .agent_ops_cache_stats(workbook.id)
+      .await
+      .expect("cache stats should load");
+    assert_eq!(entries, 1);
+    assert_eq!(oldest.as_deref(), Some("req-1"));
+    assert_eq!(newest.as_deref(), Some("req-1"));
+
+    let cleared = state
+      .clear_agent_ops_cache(workbook.id)
+      .await
+      .expect("cache clear should succeed");
+    assert_eq!(cleared, 1);
+
+    let (entries_after, oldest_after, newest_after) = state
+      .agent_ops_cache_stats(workbook.id)
+      .await
+      .expect("cache stats should load");
+    assert_eq!(entries_after, 0);
+    assert!(oldest_after.is_none());
+    assert!(newest_after.is_none());
   }
 }

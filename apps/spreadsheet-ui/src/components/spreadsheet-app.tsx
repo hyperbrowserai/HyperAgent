@@ -8,9 +8,11 @@ import {
 } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import {
+  clearAgentOpsCache,
   createSheet,
   createWorkbook,
   exportWorkbook,
+  getAgentOpsCacheStats,
   getAgentPresetOperations,
   getAgentSchema,
   getAgentPresets,
@@ -96,6 +98,7 @@ export function SpreadsheetApp() {
   const [isCopyingLastExecutionPayload, setIsCopyingLastExecutionPayload] =
     useState(false);
   const [isReplayingLastRequest, setIsReplayingLastRequest] = useState(false);
+  const [isClearingOpsCache, setIsClearingOpsCache] = useState(false);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -187,6 +190,12 @@ export function SpreadsheetApp() {
     queryFn: getWizardSchema,
   });
 
+  const agentOpsCacheQuery = useQuery({
+    queryKey: ["agent-ops-cache", workbook?.id],
+    enabled: Boolean(workbook?.id),
+    queryFn: () => getAgentOpsCacheStats(workbook!.id),
+  });
+
   const wizardScenarioOpsQuery = useQuery({
     queryKey: ["wizard-scenario-ops", workbook?.id, wizardScenario, wizardIncludeFileBase64],
     enabled: wizardScenario.length > 0,
@@ -242,6 +251,7 @@ export function SpreadsheetApp() {
       queryClient.invalidateQueries({ queryKey: ["agent-presets", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-scenarios", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-schema", workbook.id] });
+      queryClient.invalidateQueries({ queryKey: ["agent-ops-cache", workbook.id] });
     });
     return unsubscribe;
   }, [workbook?.id, activeSheet, queryClient, appendEvent]);
@@ -471,9 +481,14 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastScenario(null);
       setLastWizardImportSummary(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["cells", workbook.id, activeSheet],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["cells", workbook.id, activeSheet],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+      ]);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -575,9 +590,14 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastScenario(null);
       setLastWizardImportSummary(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["cells", workbook.id, activeSheet],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["cells", workbook.id, activeSheet],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+      ]);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -620,9 +640,14 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["cells", workbook.id, activeSheet],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["cells", workbook.id, activeSheet],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+      ]);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -663,9 +688,14 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["cells", workbook.id, activeSheet],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["cells", workbook.id, activeSheet],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+      ]);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -1083,6 +1113,9 @@ export function SpreadsheetApp() {
       setLastOperationsSignature(response.operations_signature ?? null);
       setLastServedFromCache(response.served_from_cache ?? null);
       setLastAgentOps(response.results);
+      await queryClient.invalidateQueries({
+        queryKey: ["agent-ops-cache", workbook.id],
+      });
     } catch (error) {
       if (
         error instanceof Error &&
@@ -1093,6 +1126,24 @@ export function SpreadsheetApp() {
       applyUiError(error, "Failed to replay last request.");
     } finally {
       setIsReplayingLastRequest(false);
+    }
+  }
+
+  async function handleClearAgentOpsCache() {
+    if (!workbook) {
+      return;
+    }
+    setIsClearingOpsCache(true);
+    try {
+      clearUiError();
+      await clearAgentOpsCache(workbook.id);
+      await queryClient.invalidateQueries({
+        queryKey: ["agent-ops-cache", workbook.id],
+      });
+    } catch (error) {
+      applyUiError(error, "Failed to clear agent ops idempotency cache.");
+    } finally {
+      setIsClearingOpsCache(false);
     }
   }
 
@@ -1797,6 +1848,36 @@ export function SpreadsheetApp() {
                   {agentSchemaQuery.data.agent_ops_idempotency_cache_max_entries}
                 </span>
               </p>
+            ) : null}
+            {workbook && agentOpsCacheQuery.data ? (
+              <div className="mb-2 rounded border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-400">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    cache usage:{" "}
+                    <span className="font-mono text-slate-200">
+                      {agentOpsCacheQuery.data.entries}/
+                      {agentOpsCacheQuery.data.max_entries}
+                    </span>
+                  </span>
+                  <button
+                    onClick={handleClearAgentOpsCache}
+                    disabled={isClearingOpsCache || agentOpsCacheQuery.data.entries === 0}
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isClearingOpsCache ? "Clearing..." : "Clear cache"}
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  oldest:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentOpsCacheQuery.data.oldest_request_id ?? "-"}
+                  </span>{" "}
+                  · newest:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentOpsCacheQuery.data.newest_request_id ?? "-"}
+                  </span>
+                </p>
+              </div>
             ) : null}
             {lastPreset && (
               <p className="mb-2 text-xs text-slate-400">

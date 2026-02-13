@@ -53,6 +53,17 @@ export interface AgentOpsPreviewResponse {
   operations: AgentOperationPreview[];
 }
 
+export interface AgentOpsCacheStatsResponse {
+  entries: number;
+  max_entries: number;
+  oldest_request_id: string | null;
+  newest_request_id: string | null;
+}
+
+export interface ClearAgentOpsCacheResponse {
+  cleared_entries: number;
+}
+
 export interface AgentPresetResponse {
   preset: string;
   operations_signature?: string;

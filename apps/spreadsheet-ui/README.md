@@ -43,6 +43,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Error banner displays backend error code badges when available for faster debugging
 - Wizard and agent integration panels display discovered signature error-code lists from schema endpoints
 - Agent integration panel displays discovered request-id idempotency cache size metadata
+- Agent integration panel shows live idempotency cache stats (entries/oldest/newest) with a clear-cache control
 - Event stream viewer with per-event-type filtering
 
 ## Run
