@@ -936,6 +936,8 @@ class MCPClient {
         "sseHeaders",
         serverConfig.sseHeaders
       );
+      let normalizedCommand: string | undefined;
+      let normalizedSSEUrl: string | undefined;
       validateMCPConnectionFieldMix({
         connectionType,
         command: serverConfig.command,
@@ -947,6 +949,7 @@ class MCPClient {
 
       if (connectionType === "sse") {
         const sseUrl = normalizeMCPConnectionSSEUrl(serverConfig.sseUrl);
+        normalizedSSEUrl = sseUrl;
 
         if (this.debug) {
           console.log(
@@ -971,6 +974,7 @@ class MCPClient {
         };
       } else {
         const command = normalizeMCPConnectionCommand(serverConfig.command);
+        normalizedCommand = command;
 
         transport = new StdioClientTransport({
           command,
@@ -1046,10 +1050,36 @@ class MCPClient {
           };
         });
 
+      const normalizedServerConfig: MCPServerConfig = {
+        id: serverId,
+        connectionType,
+      };
+      if (normalizedCommand) {
+        normalizedServerConfig.command = normalizedCommand;
+      }
+      if (args) {
+        normalizedServerConfig.args = args;
+      }
+      if (env) {
+        normalizedServerConfig.env = env;
+      }
+      if (normalizedSSEUrl) {
+        normalizedServerConfig.sseUrl = normalizedSSEUrl;
+      }
+      if (sseHeaders) {
+        normalizedServerConfig.sseHeaders = sseHeaders;
+      }
+      if (serverConfig.includeTools) {
+        normalizedServerConfig.includeTools = serverConfig.includeTools;
+      }
+      if (serverConfig.excludeTools) {
+        normalizedServerConfig.excludeTools = serverConfig.excludeTools;
+      }
+
       // Store server connection
       this.servers.set(serverId, {
         id: serverId,
-        config: serverConfig,
+        config: normalizedServerConfig,
         client,
         transport,
         tools: toolsMap,

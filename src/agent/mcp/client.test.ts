@@ -614,6 +614,10 @@ describe("normalizeMCPToolDescription", () => {
 });
 
 describe("MCPClient.connectToServer validation", () => {
+  function getServers(client: MCPClient): Map<string, unknown> {
+    return (client as unknown as { servers: Map<string, unknown> }).servers;
+  }
+
   it("closes pending transport when connection fails after connect", async () => {
     const connectSpy = jest
       .spyOn(Client.prototype, "connect")
@@ -638,6 +642,81 @@ describe("MCPClient.connectToServer validation", () => {
       connectSpy.mockRestore();
       listToolsSpy.mockRestore();
       closeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("stores normalized stdio config values for connected servers", async () => {
+    const connectSpy = jest
+      .spyOn(Client.prototype, "connect")
+      .mockResolvedValue(undefined);
+    const listToolsSpy = jest.spyOn(Client.prototype, "listTools").mockResolvedValue({
+      tools: [createTool("search")],
+    } as unknown as Awaited<ReturnType<Client["listTools"]>>);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const mcpClient = new MCPClient(false);
+
+    try {
+      const { serverId } = await mcpClient.connectToServer({
+        id: "  server-a  ",
+        command: "  npx  ",
+        args: ["  -y  ", " server "],
+        env: {
+          TOKEN: "value",
+        },
+      });
+      const server = getServers(mcpClient).get(serverId) as
+        | { config?: MCPServerConfig }
+        | undefined;
+      expect(server?.config).toEqual({
+        id: "server-a",
+        connectionType: "stdio",
+        command: "npx",
+        args: ["-y", "server"],
+        env: {
+          TOKEN: "value",
+        },
+      });
+    } finally {
+      connectSpy.mockRestore();
+      listToolsSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("stores normalized sse config values for connected servers", async () => {
+    const connectSpy = jest
+      .spyOn(Client.prototype, "connect")
+      .mockResolvedValue(undefined);
+    const listToolsSpy = jest.spyOn(Client.prototype, "listTools").mockResolvedValue({
+      tools: [createTool("search")],
+    } as unknown as Awaited<ReturnType<Client["listTools"]>>);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const mcpClient = new MCPClient(false);
+
+    try {
+      const { serverId } = await mcpClient.connectToServer({
+        id: "server-sse",
+        connectionType: "sse",
+        sseUrl: " https://example.com/events ",
+        sseHeaders: {
+          Authorization: " Bearer token ",
+        },
+      });
+      const server = getServers(mcpClient).get(serverId) as
+        | { config?: MCPServerConfig }
+        | undefined;
+      expect(server?.config).toEqual({
+        id: "server-sse",
+        connectionType: "sse",
+        sseUrl: "https://example.com/events",
+        sseHeaders: {
+          Authorization: "Bearer token",
+        },
+      });
+    } finally {
+      connectSpy.mockRestore();
+      listToolsSpy.mockRestore();
       errorSpy.mockRestore();
     }
   });
