@@ -131,6 +131,7 @@ export interface RemoveStaleAgentOpsCacheEntriesResponse {
   dry_run: boolean;
   cutoff_timestamp: string;
   matched_entries: number;
+  unscoped_matched_entries: number;
   removed_entries: number;
   remaining_entries: number;
   sample_limit: number;

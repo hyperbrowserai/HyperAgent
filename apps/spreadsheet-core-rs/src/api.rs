@@ -1206,6 +1206,7 @@ async fn get_agent_schema(
       "dry_run": "boolean",
       "cutoff_timestamp": "iso timestamp used for stale matching",
       "matched_entries": "number of stale cache entries matching cutoff",
+      "unscoped_matched_entries": "number of stale cache entries matching cutoff without prefix filter",
       "removed_entries": "number of entries removed (0 for dry_run)",
       "remaining_entries": "entries left in cache after operation",
       "sample_limit": "applied sample size",
@@ -1980,6 +1981,7 @@ async fn remove_stale_agent_ops_cache_entries(
     .expect("required max_age_seconds should always produce cutoff");
   let (
     matched_entries,
+    unscoped_matched_entries,
     removed_entries,
     remaining_entries,
     sample_request_ids,
@@ -1999,6 +2001,7 @@ async fn remove_stale_agent_ops_cache_entries(
     dry_run,
     cutoff_timestamp,
     matched_entries,
+    unscoped_matched_entries,
     removed_entries,
     remaining_entries,
     sample_limit,
@@ -3260,6 +3263,7 @@ mod tests {
     assert!(preview.dry_run);
     assert_eq!(preview.request_id_prefix, None);
     assert_eq!(preview.matched_entries, 2);
+    assert_eq!(preview.unscoped_matched_entries, 2);
     assert_eq!(preview.sample_limit, 1);
     assert_eq!(preview.sample_request_ids.len(), 1);
 
@@ -3276,6 +3280,7 @@ mod tests {
     .await
     .expect("zero sample limit should clamp to one")
     .0;
+    assert_eq!(clamped_preview.unscoped_matched_entries, 2);
     assert_eq!(clamped_preview.sample_limit, 1);
     assert_eq!(clamped_preview.sample_request_ids.len(), 1);
 
@@ -3297,6 +3302,7 @@ mod tests {
       Some("stale-a"),
     );
     assert_eq!(prefix_scoped_preview.matched_entries, 1);
+    assert_eq!(prefix_scoped_preview.unscoped_matched_entries, 2);
 
     let remove = remove_stale_agent_ops_cache_entries(
       State(state.clone()),
@@ -3351,6 +3357,7 @@ mod tests {
     .0;
     assert_eq!(remove_all.request_id_prefix, None);
     assert_eq!(remove_all.matched_entries, 2);
+    assert_eq!(remove_all.unscoped_matched_entries, 2);
     assert_eq!(remove_all.removed_entries, 2);
     assert_eq!(remove_all.remaining_entries, 0);
   }
@@ -3754,6 +3761,13 @@ mod tests {
         .and_then(|value| value.get("request_id_prefix"))
         .and_then(serde_json::Value::as_str),
       Some("echoed filter prefix when provided"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_remove_stale_response_shape")
+        .and_then(|value| value.get("unscoped_matched_entries"))
+        .and_then(serde_json::Value::as_str),
+      Some("number of stale cache entries matching cutoff without prefix filter"),
     );
 
     let signature_error_codes = schema

@@ -63,6 +63,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Stale preview/remove actions are blocked while stale-age input is invalid
 - Prefix/stale sample-limit inputs now enforce positive integer validation before preview/remove actions
 - Stale preview/remove actions optionally inherit active prefix filter scope
+- Stale preview panel and notices show scoped vs global stale-match counts when prefix filters narrow scope
 - Stale/prefix preview panels reset when cache filter scopes change to avoid stale context
 - Stale/prefix preview panels also reset when sample-limit inputs change
 - Cache list and detail inspector show when each request-id entry was cached (`cached_at`)

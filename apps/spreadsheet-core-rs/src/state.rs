@@ -464,7 +464,7 @@ impl AppState {
     cutoff_timestamp: DateTime<Utc>,
     dry_run: bool,
     sample_limit: usize,
-  ) -> Result<(usize, usize, usize, Vec<String>), ApiError> {
+  ) -> Result<(usize, usize, usize, usize, Vec<String>), ApiError> {
     let mut guard = self.workbooks.write().await;
     let record = guard
       .get_mut(&workbook_id)
@@ -473,6 +473,17 @@ impl AppState {
     let normalized_prefix = request_id_prefix
       .map(str::trim)
       .filter(|prefix| !prefix.is_empty());
+    let unscoped_matched_entries = record
+      .agent_ops_cache_order
+      .iter()
+      .filter(|request_id| {
+        record
+          .agent_ops_cache_timestamps
+          .get(*request_id)
+          .map(|cached_at| *cached_at <= cutoff_timestamp)
+          .unwrap_or(false)
+      })
+      .count();
     let matching_request_ids = record
       .agent_ops_cache_order
       .iter()
@@ -529,6 +540,7 @@ impl AppState {
     let remaining_entries = record.agent_ops_cache_order.len();
     Ok((
       matched_entries,
+      unscoped_matched_entries,
       removed_entries,
       remaining_entries,
       sample_request_ids,
@@ -1082,9 +1094,10 @@ mod tests {
       .await
       .expect("stale preview should succeed");
     assert_eq!(preview.0, 2);
-    assert_eq!(preview.1, 0);
-    assert_eq!(preview.2, 2);
-    assert_eq!(preview.3.len(), 1);
+    assert_eq!(preview.1, 2);
+    assert_eq!(preview.2, 0);
+    assert_eq!(preview.3, 2);
+    assert_eq!(preview.4.len(), 1);
 
     let remove = state
       .remove_stale_agent_ops_cache_entries(workbook.id, None, cutoff_timestamp, false, 10)
@@ -1092,7 +1105,8 @@ mod tests {
       .expect("stale remove should succeed");
     assert_eq!(remove.0, 2);
     assert_eq!(remove.1, 2);
-    assert_eq!(remove.2, 0);
+    assert_eq!(remove.2, 2);
+    assert_eq!(remove.3, 0);
   }
 
   #[tokio::test]
@@ -1134,8 +1148,9 @@ mod tests {
       .await
       .expect("stale preview should succeed");
     assert_eq!(preview.0, 2);
-    assert_eq!(preview.1, 0);
-    assert_eq!(preview.2, 3);
+    assert_eq!(preview.1, 3);
+    assert_eq!(preview.2, 0);
+    assert_eq!(preview.3, 3);
 
     let remove = state
       .remove_stale_agent_ops_cache_entries(
@@ -1148,7 +1163,8 @@ mod tests {
       .await
       .expect("stale remove should succeed");
     assert_eq!(remove.0, 2);
-    assert_eq!(remove.1, 2);
-    assert_eq!(remove.2, 1);
+    assert_eq!(remove.1, 3);
+    assert_eq!(remove.2, 2);
+    assert_eq!(remove.3, 1);
   }
 }

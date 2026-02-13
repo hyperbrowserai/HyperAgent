@@ -221,6 +221,7 @@ pub struct RemoveStaleAgentOpsCacheEntriesResponse {
   pub dry_run: bool,
   pub cutoff_timestamp: DateTime<Utc>,
   pub matched_entries: usize,
+  pub unscoped_matched_entries: usize,
   pub removed_entries: usize,
   pub remaining_entries: usize,
   pub sample_limit: usize,

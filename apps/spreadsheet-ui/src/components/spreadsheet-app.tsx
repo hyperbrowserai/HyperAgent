@@ -155,6 +155,7 @@ export function SpreadsheetApp() {
     maxAgeSeconds: number;
     cutoffTimestamp: string;
     matchedEntries: number;
+    unscopedMatchedEntries: number;
     sampleLimit: number;
     sampleRequestIds: string[];
   } | null>(null);
@@ -1747,12 +1748,17 @@ export function SpreadsheetApp() {
         maxAgeSeconds: preview.max_age_seconds,
         cutoffTimestamp: preview.cutoff_timestamp,
         matchedEntries: preview.matched_entries,
+        unscopedMatchedEntries: preview.unscoped_matched_entries,
         sampleLimit: preview.sample_limit,
         sampleRequestIds: preview.sample_request_ids,
       });
       setNotice(
         `Previewed ${preview.matched_entries} stale cache entr${
           preview.matched_entries === 1 ? "y" : "ies"
+        }${
+          preview.unscoped_matched_entries !== preview.matched_entries
+            ? ` (global ${preview.unscoped_matched_entries})`
+            : ""
         } older than ${preview.max_age_seconds}s${
           preview.request_id_prefix
             ? ` for prefix ${preview.request_id_prefix}`
@@ -1806,6 +1812,10 @@ export function SpreadsheetApp() {
       setNotice(
         `Removed ${response.removed_entries} stale cache entr${
           response.removed_entries === 1 ? "y" : "ies"
+        }${
+          response.unscoped_matched_entries !== response.matched_entries
+            ? ` (global stale matches ${response.unscoped_matched_entries})`
+            : ""
         } older than ${response.max_age_seconds}s${
           response.request_id_prefix
             ? ` for prefix ${response.request_id_prefix}`
@@ -2956,6 +2966,16 @@ export function SpreadsheetApp() {
                         <span className="font-mono">
                           {cacheStaleRemovalPreview.matchedEntries}
                         </span>{" "}
+                        {cacheStaleRemovalPreview.unscopedMatchedEntries
+                        !== cacheStaleRemovalPreview.matchedEntries ? (
+                          <>
+                            (global{" "}
+                            <span className="font-mono">
+                              {cacheStaleRemovalPreview.unscopedMatchedEntries}
+                            </span>
+                            ){" "}
+                          </>
+                        ) : null}
                         entr
                         {cacheStaleRemovalPreview.matchedEntries === 1 ? "y" : "ies"} (
                         sample limit{" "}
