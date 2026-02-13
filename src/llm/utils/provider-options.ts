@@ -59,6 +59,18 @@ function sanitizeOptionValue(
     seen.delete(value);
   }
 
+  if (typeof value === "bigint") {
+    return `${value.toString()}n`;
+  }
+
+  if (typeof value === "symbol") {
+    return value.toString();
+  }
+
+  if (typeof value === "function") {
+    return `[Function ${value.name || "anonymous"}]`;
+  }
+
   return value;
 }
 

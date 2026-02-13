@@ -180,4 +180,26 @@ describe("sanitizeProviderOptions", () => {
       },
     });
   });
+
+  it("normalizes bigint, symbol, and function values safely", () => {
+    const symbolValue = Symbol("token");
+    function sampleFunction(): void {
+      return;
+    }
+
+    const result = sanitizeProviderOptions(
+      {
+        bigintValue: BigInt(42),
+        symbolValue,
+        functionValue: sampleFunction,
+      },
+      reserved
+    );
+
+    expect(result).toEqual({
+      bigintValue: "42n",
+      symbolValue: "Symbol(token)",
+      functionValue: "[Function sampleFunction]",
+    });
+  });
 });
