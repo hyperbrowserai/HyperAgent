@@ -82,6 +82,20 @@ describe("parseMCPServersConfig", () => {
     ).toThrow('MCP server entry at index 1 reuses duplicate id "shared".');
   });
 
+  it("throws when id or connectionType types are invalid", () => {
+    expect(() =>
+      parseMCPServersConfig('[{"id":123,"command":"npx"}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "id" as a string when specified.'
+    );
+
+    expect(() =>
+      parseMCPServersConfig('[{"connectionType":123,"command":"npx"}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "connectionType" as a string when specified.'
+    );
+  });
+
   it("returns normalized trimmed id/command/sseUrl fields", () => {
     const parsed = parseMCPServersConfig(
       '[{"id":"  stdio-1  ","command":"  npx  ","includeTools":["  search  ","search"],"excludeTools":[" notes " ]},{"connectionType":"sse","id":"  ","sseUrl":"  https://example.com/sse  "}]'

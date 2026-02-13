@@ -132,6 +132,22 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     if (!isRecord(entry)) {
       throw new Error(`MCP server entry at index ${i} must be an object.`);
     }
+    if (
+      Object.prototype.hasOwnProperty.call(entry, "id") &&
+      typeof entry.id !== "string"
+    ) {
+      throw new Error(
+        `MCP server entry at index ${i} must provide "id" as a string when specified.`
+      );
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(entry, "connectionType") &&
+      typeof entry.connectionType !== "string"
+    ) {
+      throw new Error(
+        `MCP server entry at index ${i} must provide "connectionType" as a string when specified.`
+      );
+    }
     const normalizedEntry = { ...entry } as Record<string, unknown>;
     const args = normalizeOptionalArgs(entry.args, i);
     const env = normalizeOptionalStringRecord("env", entry.env, i);
