@@ -3231,7 +3231,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } catch (error) {
         if (this.debug) {
           console.warn(
-            `[HyperPage] Failed to attach close listener for ${targetLabel}: ${formatUnknownError(
+            `[HyperPage] Failed to attach close listener for ${targetLabel}: ${this.formatLifecycleDiagnostic(
               error
             )}`
           );
@@ -3298,7 +3298,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } catch (error) {
         if (this.debug) {
           console.warn(
-            `[HyperPage] Failed to attach context page listener: ${formatUnknownError(
+            `[HyperPage] Failed to attach context page listener: ${this.formatLifecycleDiagnostic(
               error
             )}`
           );

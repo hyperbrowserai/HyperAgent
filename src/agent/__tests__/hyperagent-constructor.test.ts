@@ -1481,6 +1481,41 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("truncates oversized hyperpage context-listener diagnostics", async () => {
+    const page = {
+      on: jest.fn(),
+      context: () => ({
+        on: () => {
+          throw new Error("x".repeat(2_000));
+        },
+        off: jest.fn(),
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+
+    try {
+      const pages = await agent.getPages();
+      expect(pages).toHaveLength(1);
+      const warnedMessage = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warnedMessage).toContain("[truncated");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("continues getPages when scoped listener cleanup getter traps", async () => {
     let trappedPage: Page;
     const basePage = {
