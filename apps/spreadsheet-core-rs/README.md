@@ -110,6 +110,7 @@ Response includes:
 Schema discovery endpoints (`/v1/workbooks/{id}/agent/schema`, `/v1/agent/wizard/schema`) expose these under `signature_error_codes`.
 The in-memory request-id idempotency cache keeps up to **256** recent `agent/ops` responses per workbook (oldest entries evict first).
 `/v1/workbooks/{id}/agent/schema` also advertises workbook import/export endpoint metadata (including `x-export-meta` header shape and import formula-metric response fields) for agent discoverability.
+`/v1/agent/wizard/schema` includes run/import response-shape metadata so agent callers can discover wizard import metric fields without trial calls.
 
 Plan-preview helper:
 - `POST /v1/workbooks/{id}/agent/ops/preview` returns `{ operations_signature, operations }` without executing.

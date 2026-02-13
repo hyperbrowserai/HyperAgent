@@ -536,6 +536,22 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "operations_signature": "sha256 signature over generated operations",
       "operations": "array of operation objects"
     },
+    "run_response_shape": {
+      "workbook": "workbook summary",
+      "scenario": "scenario name",
+      "operations_signature": "sha256 signature over executed operation plan",
+      "request_id": "optional request id",
+      "results": "array of operation execution results",
+      "import": "optional import summary object (see import_response_shape)"
+    },
+    "import_response_shape": {
+      "sheets_imported": "number of imported sheets",
+      "cells_imported": "number of imported cells",
+      "formula_cells_imported": "number of imported cells carrying formulas",
+      "formula_cells_with_cached_values": "formula cells with cached scalar values",
+      "formula_cells_without_cached_values": "formula cells without cached scalar values",
+      "warnings": "array of compatibility warning strings"
+    },
     "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
     "scenarios": scenario_catalog(),
     "presets": preset_catalog()
@@ -2411,7 +2427,8 @@ mod tests {
     agent_ops, agent_ops_cache_entries, agent_ops_cache_entry_detail,
     agent_ops_cache_prefixes,
     agent_ops_cache_stats,
-    clear_agent_ops_cache, get_agent_schema, remove_agent_ops_cache_entry,
+    clear_agent_ops_cache, get_agent_schema, get_agent_wizard_schema,
+    remove_agent_ops_cache_entry,
     remove_agent_ops_cache_entries_by_prefix,
     remove_stale_agent_ops_cache_entries,
     preview_remove_agent_ops_cache_entries_by_prefix,
@@ -4868,6 +4885,52 @@ mod tests {
     assert!(
       cache_validation_error_codes.contains(&"INVALID_PREFIX_SORT_BY"),
       "schema should advertise invalid prefix-sort error code",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_expose_response_shapes_in_wizard_schema() {
+    let schema = get_agent_wizard_schema().await.0;
+
+    assert_eq!(
+      schema
+        .get("endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/agent/wizard/run"),
+    );
+    assert_eq!(
+      schema
+        .get("json_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/agent/wizard/run-json"),
+    );
+    assert_eq!(
+      schema
+        .get("run_response_shape")
+        .and_then(|value| value.get("import"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional import summary object (see import_response_shape)"),
+    );
+    assert_eq!(
+      schema
+        .get("import_response_shape")
+        .and_then(|value| value.get("formula_cells_imported"))
+        .and_then(serde_json::Value::as_str),
+      Some("number of imported cells carrying formulas"),
+    );
+    assert_eq!(
+      schema
+        .get("import_response_shape")
+        .and_then(|value| value.get("formula_cells_with_cached_values"))
+        .and_then(serde_json::Value::as_str),
+      Some("formula cells with cached scalar values"),
+    );
+    assert_eq!(
+      schema
+        .get("import_response_shape")
+        .and_then(|value| value.get("formula_cells_without_cached_values"))
+        .and_then(serde_json::Value::as_str),
+      Some("formula cells without cached scalar values"),
     );
   }
 }

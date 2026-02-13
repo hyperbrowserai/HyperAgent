@@ -2425,6 +2425,22 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {wizardSchemaQuery.data?.run_response_shape ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                run response fields:{" "}
+                <span className="font-mono text-slate-300">
+                  {Object.keys(wizardSchemaQuery.data.run_response_shape).join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.import_response_shape ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                import response fields:{" "}
+                <span className="font-mono text-slate-300">
+                  {Object.keys(wizardSchemaQuery.data.import_response_shape).join(", ")}
+                </span>
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={wizardScenario}
