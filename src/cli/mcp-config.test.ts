@@ -144,6 +144,26 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("rejects control characters in id, connectionType, and command", () => {
+    expect(() =>
+      parseMCPServersConfig('[{"id":"bad\\u0007id","command":"npx"}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "id" as a string when specified.'
+    );
+
+    expect(() =>
+      parseMCPServersConfig('[{"connectionType":"sse\\u0007","command":"npx"}]')
+    ).toThrow(
+      'MCP server entry at index 0 has unsupported connectionType "sse\u0007". Supported values are "stdio" and "sse".'
+    );
+
+    expect(() =>
+      parseMCPServersConfig('[{"command":"np\\u0007x"}]')
+    ).toThrow(
+      'MCP server entry at index 0 must include a non-empty "command" for stdio connections.'
+    );
+  });
+
   it("returns normalized trimmed id/command/sseUrl fields", () => {
     const parsed = parseMCPServersConfig(
       '[{"id":"  stdio-1  ","command":"  npx  ","includeTools":["  search  ","lookup"],"excludeTools":[" notes " ]},{"connectionType":"sse","id":"  ","sseUrl":"  https://example.com/sse  "}]'
@@ -360,6 +380,14 @@ describe("parseMCPServersConfig", () => {
       parseMCPServersConfig('[{"connectionType":"sse","sseUrl":"ftp://example.com/sse"}]')
     ).toThrow(
       'MCP server entry at index 0 has unsupported sseUrl protocol "ftp:". Use http:// or https://.'
+    );
+
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse\\u0007"}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 has invalid "sseUrl" value "https://example.com/sse\u0007".'
     );
   });
 

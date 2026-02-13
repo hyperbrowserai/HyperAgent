@@ -105,6 +105,11 @@ function normalizeSSEUrl(value: unknown, index: number): string {
       `MCP server entry at index ${index} must include a non-empty "sseUrl" for SSE connections.`
     );
   }
+  if (hasUnsupportedControlChars(raw)) {
+    throw new Error(
+      `MCP server entry at index ${index} has invalid "sseUrl" value "${raw}".`
+    );
+  }
   let url: URL;
   try {
     url = new URL(raw);
@@ -282,6 +287,11 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 
     const normalizedId = isNonEmptyString(entry.id) ? entry.id.trim() : "";
     if (normalizedId.length > 0) {
+      if (hasUnsupportedControlChars(normalizedId)) {
+        throw new Error(
+          `MCP server entry at index ${i} must provide "id" as a string when specified.`
+        );
+      }
       const normalizedIdLookup = normalizedId.toLowerCase();
       if (seenIds.has(normalizedIdLookup)) {
         throw new Error(
@@ -297,6 +307,14 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     const rawConnectionType = isNonEmptyString(entry.connectionType)
       ? entry.connectionType.trim().toLowerCase()
       : undefined;
+    if (
+      typeof rawConnectionType === "string" &&
+      hasUnsupportedControlChars(rawConnectionType)
+    ) {
+      throw new Error(
+        `MCP server entry at index ${i} has unsupported connectionType "${entry.connectionType}". Supported values are "stdio" and "sse".`
+      );
+    }
     if (
       rawConnectionType &&
       rawConnectionType !== "stdio" &&
@@ -341,6 +359,11 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 
     const command = isNonEmptyString(entry.command) ? entry.command.trim() : "";
     if (command.length === 0) {
+      throw new Error(
+        `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`
+      );
+    }
+    if (hasUnsupportedControlChars(command)) {
       throw new Error(
         `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`
       );
