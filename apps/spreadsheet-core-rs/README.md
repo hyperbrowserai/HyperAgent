@@ -37,6 +37,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/sheets`
 - `POST /v1/workbooks/{id}/cells/set-batch`
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
+- `POST /v1/workbooks/{id}/agent/ops/preview`
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
 - `GET /v1/workbooks/{id}/agent/presets/{preset}/operations`
@@ -65,6 +66,9 @@ Request options:
 
 Response includes:
 - `operations_signature` — sha256 signature over submitted operations.
+
+Plan-preview helper:
+- `POST /v1/workbooks/{id}/agent/ops/preview` returns `{ operations_signature, operations }` without executing.
 
 Supported `op_type` values:
 - `get_workbook`

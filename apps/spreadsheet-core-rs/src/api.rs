@@ -2,6 +2,7 @@ use crate::{
   error::ApiError,
   models::{
     AgentOperation, AgentOperationResult, AgentOpsRequest, AgentOpsResponse,
+    AgentOpsPreviewRequest, AgentOpsPreviewResponse,
     AgentPresetRunRequest, AgentScenarioRunRequest,
     AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
     CellMutation, CreateSheetRequest, CreateSheetResponse, CreateWorkbookRequest,
@@ -56,6 +57,7 @@ pub fn create_router(state: AppState) -> Router {
     )
     .route("/v1/workbooks/{id}/cells/set-batch", post(set_cells_batch))
     .route("/v1/workbooks/{id}/agent/ops", post(agent_ops))
+    .route("/v1/workbooks/{id}/agent/ops/preview", post(agent_ops_preview))
     .route("/v1/workbooks/{id}/agent/schema", get(get_agent_schema))
     .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
     .route(
@@ -949,6 +951,14 @@ async fn get_agent_schema(
       "operations_signature": "sha256 signature over submitted operations",
       "results": "array of operation results"
     },
+    "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
+    "agent_ops_preview_request_shape": {
+      "operations": "array of operation objects"
+    },
+    "agent_ops_preview_response_shape": {
+      "operations_signature": "sha256 signature over submitted operations",
+      "operations": "echoed operation array"
+    },
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
     "preset_run_request_shape": {
       "request_id": "optional string",
@@ -1183,6 +1193,19 @@ async fn agent_ops(
   }))
 }
 
+async fn agent_ops_preview(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Json(payload): Json<AgentOpsPreviewRequest>,
+) -> Result<Json<AgentOpsPreviewResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let operation_signature = operations_signature(&payload.operations)?;
+  Ok(Json(AgentOpsPreviewResponse {
+    operations_signature: operation_signature,
+    operations: payload.operations,
+  }))
+}
+
 async fn run_agent_preset(
   State(state): State<AppState>,
   Path((workbook_id, preset)): Path<(Uuid, String)>,
@@ -1347,6 +1370,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}, "post": {"summary": "Create sheet"}},
       "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
       "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports create_sheet/export_workbook ops)"}},
+      "/v1/workbooks/{id}/agent/ops/preview": {"post": {"summary": "Preview and sign a provided agent operation plan without execution"}},
       "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}/operations": {"get": {"summary": "Preview generated operations for a built-in preset"}},

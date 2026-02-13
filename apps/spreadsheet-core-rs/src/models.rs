@@ -133,6 +133,17 @@ pub struct AgentOpsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsPreviewRequest {
+  pub operations: Vec<AgentOperation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsPreviewResponse {
+  pub operations_signature: String,
+  pub operations: Vec<AgentOperation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentPresetRunRequest {
   pub request_id: Option<String>,
   pub actor: Option<String>,
