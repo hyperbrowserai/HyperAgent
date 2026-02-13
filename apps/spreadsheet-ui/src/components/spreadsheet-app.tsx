@@ -283,6 +283,7 @@ export function SpreadsheetApp() {
   }, [eventFilter, eventLog]);
   const wizardScenarioOps = wizardScenarioOpsQuery.data ?? [];
   const wizardPresetOps = wizardPresetOpsQuery.data ?? [];
+  const wizardPreviewSource = workbook ? "workbook-scoped" : "global";
 
   const statusText =
     createWorkbookMutation.isPending || importMutation.isPending
@@ -909,6 +910,9 @@ export function SpreadsheetApp() {
                     ? ` · ${wizardSchemaQuery.data.json_endpoint}`
                     : ""}
                 </span>
+                <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-300">
+                  preview source: {wizardPreviewSource}
+                </span>
               </div>
             ) : null}
             <div className="flex flex-wrap items-center gap-2">
@@ -1034,7 +1038,9 @@ export function SpreadsheetApp() {
                     {isCopyingPresetOps ? "Copying..." : "Copy JSON"}
                   </button>
                 </div>
-                {wizardPresetOps.length > 0 ? (
+                {wizardPresetOpsQuery.isFetching ? (
+                  <p className="text-[11px] text-slate-500">Loading preset operations…</p>
+                ) : wizardPresetOps.length > 0 ? (
                   <div>
                     <div className="flex flex-wrap gap-1">
                       {wizardPresetOps.map((operation, index) => (
@@ -1085,6 +1091,9 @@ export function SpreadsheetApp() {
                   </p>
                 )}
               </div>
+            ) : null}
+            {wizardScenarioOpsQuery.isFetching ? (
+              <p className="mt-2 text-[11px] text-slate-500">Loading scenario operations…</p>
             ) : null}
             {wizardScenarioOps.length > 0 ? (
               <div className="mt-2">
