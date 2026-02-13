@@ -1022,12 +1022,6 @@ async fn get_agent_schema(
       "cleared_entries": "number of removed cache entries"
     },
     "agent_ops_idempotency_cache_max_entries": AGENT_OPS_CACHE_MAX_ENTRIES,
-    "signature_error_codes": [
-      "INVALID_SIGNATURE_FORMAT",
-      "OPERATION_SIGNATURE_MISMATCH",
-      "EMPTY_OPERATION_LIST",
-      "REQUEST_ID_CONFLICT"
-    ],
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
     "preset_run_request_shape": {
       "request_id": "optional string",
@@ -1522,7 +1516,7 @@ mod tests {
   use tempfile::tempdir;
 
   use super::{
-    agent_ops, agent_ops_cache_stats, clear_agent_ops_cache,
+    agent_ops, agent_ops_cache_stats, clear_agent_ops_cache, get_agent_schema,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
@@ -1530,7 +1524,7 @@ mod tests {
   };
   use crate::{
     models::{AgentOperation, AgentOpsRequest},
-    state::AppState,
+    state::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES},
   };
 
   #[test]
@@ -1873,5 +1867,56 @@ mod tests {
       }
       _ => panic!("expected conflict to be encoded as custom bad request"),
     }
+  }
+
+  #[tokio::test]
+  async fn should_expose_cache_and_signature_metadata_in_agent_schema() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("schema-metadata".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let schema = get_agent_schema(State(state), Path(workbook.id))
+      .await
+      .expect("schema should resolve")
+      .0;
+
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_stats_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_clear_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache/clear"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_idempotency_cache_max_entries")
+        .and_then(serde_json::Value::as_u64),
+      Some(AGENT_OPS_CACHE_MAX_ENTRIES as u64),
+    );
+
+    let signature_error_codes = schema
+      .get("signature_error_codes")
+      .and_then(serde_json::Value::as_array)
+      .expect("signature_error_codes should be an array")
+      .iter()
+      .filter_map(serde_json::Value::as_str)
+      .collect::<Vec<_>>();
+    assert!(
+      signature_error_codes.contains(&"REQUEST_ID_CONFLICT"),
+      "schema should advertise request-id conflict error code",
+    );
+    assert!(
+      signature_error_codes.contains(&"OPERATION_SIGNATURE_MISMATCH"),
+      "schema should advertise mismatch error code",
+    );
   }
 }
