@@ -47,6 +47,21 @@ describe("executePlaywrightMethod", () => {
     }
   });
 
+  it("truncates oversized click fallback diagnostics", async () => {
+    const locator = createMockLocator({
+      click: jest
+        .fn()
+        .mockRejectedValue(new Error(`x${"y".repeat(2_000)}\nclick failed`)),
+      evaluate: jest
+        .fn()
+        .mockRejectedValue(new Error(`x${"y".repeat(2_000)}\njs click failed`)),
+    });
+
+    await expect(
+      executePlaywrightMethod("click", [], locator, { debug: true })
+    ).rejects.toThrow(/\[truncated/);
+  });
+
   it("does not crash debug logging on circular method args", async () => {
     const circular: Record<string, unknown> = { id: "arg" };
     circular.self = circular;
@@ -181,5 +196,18 @@ describe("executePlaywrightMethod", () => {
 
     expect(fillSpy).toHaveBeenCalled();
     expect((fillSpy.mock.calls[0]?.[0] as string).length).toBe(20_000);
+  });
+
+  it("truncates unknown-method diagnostics for oversized non-string values", async () => {
+    const locator = createMockLocator();
+    const badMethod = `method-${"x".repeat(2_000)}\nunsafe`;
+
+    await expect(
+      executePlaywrightMethod(
+        badMethod as unknown as string,
+        [],
+        locator
+      )
+    ).rejects.toThrow(/\[truncated/);
   });
 });

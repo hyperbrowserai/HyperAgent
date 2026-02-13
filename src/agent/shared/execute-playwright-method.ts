@@ -12,14 +12,29 @@ const MAX_METHOD_ARG_CHARS = 20_000;
 const MAX_SCROLL_PERCENT_ARG_CHARS = 64;
 const MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS = 240;
 
-function truncatePlaywrightDiagnostic(value: string): string {
-  if (value.length <= MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS) {
+function sanitizePlaywrightDiagnostic(value: string): string {
+  if (value.length === 0) {
     return value;
   }
-  return `${value.slice(
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncatePlaywrightDiagnostic(value: string): string {
+  const normalized = sanitizePlaywrightDiagnostic(value);
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  return `${fallback.slice(
     0,
     MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS
-  )}... [truncated ${value.length - MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS} chars]`;
+  )}... [truncated ${
+    fallback.length - MAX_PLAYWRIGHT_METHOD_DIAGNOSTIC_CHARS
+  } chars]`;
 }
 
 function stringifyMethodArgs(args: unknown[]): string {
@@ -152,7 +167,7 @@ export async function executePlaywrightMethod(
       try {
         await invokeLocatorMethod(locator, "click", [{ timeout: clickTimeout }]);
       } catch (e) {
-        const errorMsg = formatUnknownError(e);
+        const errorMsg = truncatePlaywrightDiagnostic(formatUnknownError(e));
         if (debug) {
           console.log(
             `[executePlaywrightMethod] Playwright click failed, falling back to JS click: ${errorMsg}`
@@ -164,7 +179,9 @@ export async function executePlaywrightMethod(
             undefined,
           ]);
         } catch (jsClickError) {
-          const jsErrorMsg = formatUnknownError(jsClickError);
+          const jsErrorMsg = truncatePlaywrightDiagnostic(
+            formatUnknownError(jsClickError)
+          );
           throw new Error(
             `Failed to click element. Playwright error: ${errorMsg}. JS click error: ${jsErrorMsg}`
           );
@@ -332,7 +349,10 @@ export async function executePlaywrightMethod(
       }]);
       break;
     default: {
-      const errorMsg = `Unknown method: ${normalizedMethod || formatUnknownError(method)}`;
+      const methodLabel = normalizedMethod
+        ? truncatePlaywrightDiagnostic(normalizedMethod)
+        : truncatePlaywrightDiagnostic(formatUnknownError(method));
+      const errorMsg = `Unknown method: ${methodLabel}`;
       if (debug) {
         console.error(`[executePlaywrightMethod] ${errorMsg}`);
       }
