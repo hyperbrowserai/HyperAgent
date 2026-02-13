@@ -407,6 +407,33 @@ describe("buildAgentStepMessages", () => {
     expect(joined).not.toContain("\u0007");
   });
 
+  it("falls back to placeholder URL when sanitized tab URL is empty", async () => {
+    const page = createFakePage("\u0007\n\t", ["\u0007\n\t"]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("about:blank (url unavailable)");
+  });
+
   it("includes current tab in summary even when beyond tab cap", async () => {
     const tabs = Array.from({ length: 25 }, (_, idx) => ({
       url: () => `https://example.com/${idx}`,

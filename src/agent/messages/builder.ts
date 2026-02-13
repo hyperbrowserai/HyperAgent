@@ -32,6 +32,9 @@ function truncateTabUrl(url: string): string {
     .join("")
     .replace(/\s+/g, " ")
     .trim();
+  if (normalized.length === 0) {
+    return "about:blank (url unavailable)";
+  }
 
   if (normalized.length <= MAX_TAB_URL_CHARS) {
     return normalized;
