@@ -25,6 +25,7 @@ Server defaults to `http://localhost:8787`.
 
 - `GET /v1/agent/wizard/schema`
 - `GET /v1/agent/wizard/presets`
+- `GET /v1/agent/wizard/presets/{preset}/operations`
 - `GET /v1/agent/wizard/scenarios`
 - `GET /v1/agent/wizard/scenarios/{scenario}/operations`
 - `POST /v1/agent/wizard/run`
@@ -38,6 +39,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
+- `GET /v1/workbooks/{id}/agent/presets/{preset}/operations`
 - `POST /v1/workbooks/{id}/agent/presets/{preset}`
 - `GET /v1/workbooks/{id}/agent/scenarios`
 - `GET /v1/workbooks/{id}/agent/scenarios/{scenario}/operations`
@@ -78,6 +80,9 @@ Supported `preset` values:
 - `seed_sales_demo` — fills demo regional sales, recalculates formulas, syncs chart metadata.
 - `export_snapshot` — recalculates and exports workbook (can include base64 file payload).
 
+Preview helper:
+- `GET /v1/workbooks/{id}/agent/presets/{preset}/operations` (optional query: `include_file_base64=true|false`)
+
 ### AI Agent scenario endpoint
 
 `POST /v1/workbooks/{id}/agent/scenarios/{scenario}` runs a higher-level built-in workflow composed from presets.
@@ -97,6 +102,7 @@ Preview helper:
 Discovery helpers:
 - `GET /v1/agent/wizard/schema`
 - `GET /v1/agent/wizard/presets`
+- `GET /v1/agent/wizard/presets/{preset}/operations` (optional query: `include_file_base64=true|false`)
 - `GET /v1/agent/wizard/scenarios`
 - `GET /v1/agent/wizard/scenarios/{scenario}/operations` (optional query: `include_file_base64=true|false`)
 
