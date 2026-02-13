@@ -1481,6 +1481,99 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("continues getPages when scoped listener cleanup getter traps", async () => {
+    let trappedPage: Page;
+    const basePage = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: jest.fn(),
+        off: jest.fn(),
+        pages: () => [trappedPage],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    trappedPage = new Proxy(basePage, {
+      get: (target, property, receiver) => {
+        if (property === "_scopeListenerCleanup") {
+          throw new Error("scope cleanup getter trap");
+        }
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    }) as unknown as Page;
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [trappedPage],
+    };
+
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+  });
+
+  it("continues getPages when scoped listener cleanup setter traps", async () => {
+    let trappedPage: Page;
+    const basePage = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: jest.fn(),
+        off: jest.fn(),
+        pages: () => [trappedPage],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    trappedPage = new Proxy(basePage, {
+      get: (target, property, receiver) => {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+      set: (target, property, value, receiver) => {
+        if (property === "_scopeListenerCleanup") {
+          throw new Error("scope cleanup setter trap");
+        }
+        return Reflect.set(target, property, value, receiver);
+      },
+    }) as unknown as Page;
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [trappedPage],
+    };
+
+    try {
+      await expect(agent.getPages()).resolves.toHaveLength(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to store scope listener cleanup callback")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("cleans previous HyperPage root listeners when re-wrapping same page", async () => {
     const contextOn = jest.fn();
     const contextOff = jest.fn();

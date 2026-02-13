@@ -3124,9 +3124,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
 
     // Clean up existing listener if this page was already setup
-    if (scopedPage._scopeListenerCleanup) {
+    const existingScopeCleanup = this.safeReadField(
+      scopedPage,
+      "_scopeListenerCleanup"
+    );
+    if (typeof existingScopeCleanup === "function") {
       try {
-        scopedPage._scopeListenerCleanup();
+        existingScopeCleanup();
       } catch {
         // no-op
       }
@@ -3277,7 +3281,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
       }
     }
-    scopedPage._scopeListenerCleanup = () => {
+    const scopeListenerCleanup = () => {
       for (const closeCleanup of closeListenerCleanups) {
         try {
           closeCleanup();
@@ -3295,6 +3299,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         // no-op
       }
     };
+    try {
+      scopedPage._scopeListenerCleanup = scopeListenerCleanup;
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperPage] Failed to store scope listener cleanup callback: ${this.formatLifecycleDiagnostic(
+            error
+          )}`
+        );
+      }
+    }
 
     const executeSingleActionWithRetry = async (
       instruction: string,
