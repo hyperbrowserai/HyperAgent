@@ -399,6 +399,8 @@ export function SpreadsheetApp() {
 
   useEffect(() => {
     if (
+      !hasInvalidCacheEntriesMaxAgeInput
+      &&
       cacheEntriesOffset > 0
       && agentOpsCacheEntriesQuery.data
       && agentOpsCacheEntriesQuery.data.entries.length === 0
@@ -407,7 +409,11 @@ export function SpreadsheetApp() {
         Math.max(0, previousOffset - CACHE_ENTRIES_PREVIEW_LIMIT),
       );
     }
-  }, [agentOpsCacheEntriesQuery.data, cacheEntriesOffset]);
+  }, [
+    agentOpsCacheEntriesQuery.data,
+    cacheEntriesOffset,
+    hasInvalidCacheEntriesMaxAgeInput,
+  ]);
 
   useEffect(() => {
     if (!workbook?.id) {
@@ -504,7 +510,12 @@ export function SpreadsheetApp() {
   const wizardPresetOpsSignature =
     wizardPresetOpsQuery.data?.operations_signature ?? null;
   const wizardPreviewSource = workbook ? "workbook-scoped" : "global";
-  const cachePrefixSuggestions = agentOpsCachePrefixesQuery.data?.prefixes ?? [];
+  const cacheEntriesData = hasInvalidCacheEntriesMaxAgeInput
+    ? null
+    : agentOpsCacheEntriesQuery.data;
+  const cachePrefixSuggestions = hasInvalidCacheEntriesMaxAgeInput
+    ? []
+    : (agentOpsCachePrefixesQuery.data?.prefixes ?? []);
   const scenarioSignatureStatus =
     lastScenario === wizardScenario &&
     lastOperationsSignature &&
@@ -2758,7 +2769,7 @@ export function SpreadsheetApp() {
                         isRemovingCacheByPrefix
                         || !cacheRequestIdPrefix.trim()
                         || hasInvalidCacheEntriesMaxAgeInput
-                        || (agentOpsCacheEntriesQuery.data?.total_entries ?? 0) === 0
+                        || (cacheEntriesData?.total_entries ?? 0) === 0
                       }
                       className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
                     >
@@ -2831,7 +2842,7 @@ export function SpreadsheetApp() {
                         || isPreviewingStaleCache
                         || hasInvalidCacheStalePreviewSampleLimitInput
                         || hasInvalidCacheStaleMaxAgeInput
-                        || (agentOpsCacheEntriesQuery.data?.total_entries ?? 0) === 0
+                        || (cacheEntriesData?.total_entries ?? 0) === 0
                       }
                       className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
                     >
@@ -3004,45 +3015,44 @@ export function SpreadsheetApp() {
                             cacheEntriesOffset + CACHE_ENTRIES_PREVIEW_LIMIT,
                           )
                         }
-                        disabled={!agentOpsCacheEntriesQuery.data?.has_more}
+                        disabled={!cacheEntriesData?.has_more}
                         className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
                       >
                         Older
                       </button>
                     </div>
                   </div>
-                  {agentOpsCacheEntriesQuery.data ? (
+                  {cacheEntriesData ? (
                     <p className="mt-1 text-[10px] text-slate-500">
                       showing{" "}
                       <span className="font-mono text-slate-300">
-                        {agentOpsCacheEntriesQuery.data.returned_entries === 0
+                        {cacheEntriesData.returned_entries === 0
                           ? 0
-                          : agentOpsCacheEntriesQuery.data.offset + 1}
+                          : cacheEntriesData.offset + 1}
                       </span>
                       –
                       <span className="font-mono text-slate-300">
-                        {agentOpsCacheEntriesQuery.data.offset
-                          + agentOpsCacheEntriesQuery.data.returned_entries}
+                        {cacheEntriesData.offset + cacheEntriesData.returned_entries}
                       </span>{" "}
                       of{" "}
                       <span className="font-mono text-slate-300">
-                        {agentOpsCacheEntriesQuery.data.total_entries}
+                        {cacheEntriesData.total_entries}
                       </span>
-                      {agentOpsCacheEntriesQuery.data.request_id_prefix ? (
+                      {cacheEntriesData.request_id_prefix ? (
                         <>
                           {" "}
                           filtered by{" "}
                           <span className="font-mono text-indigo-300">
-                            {agentOpsCacheEntriesQuery.data.request_id_prefix}
+                            {cacheEntriesData.request_id_prefix}
                           </span>
                         </>
                       ) : null}
-                      {typeof agentOpsCacheEntriesQuery.data.max_age_seconds === "number" ? (
+                      {typeof cacheEntriesData.max_age_seconds === "number" ? (
                         <>
                           {" "}
                           older than{" "}
                           <span className="font-mono text-amber-300">
-                            {agentOpsCacheEntriesQuery.data.max_age_seconds}s
+                            {cacheEntriesData.max_age_seconds}s
                           </span>
                         </>
                       ) : null}
@@ -3051,9 +3061,9 @@ export function SpreadsheetApp() {
                   {agentOpsCacheEntriesQuery.isLoading ? (
                     <p className="mt-1 text-[11px] text-slate-500">Loading cache entries…</p>
                   ) : null}
-                  {agentOpsCacheEntriesQuery.data?.entries?.length ? (
+                  {cacheEntriesData?.entries?.length ? (
                     <ul className="mt-1 space-y-1">
-                      {agentOpsCacheEntriesQuery.data.entries.map((entry) => (
+                      {cacheEntriesData.entries.map((entry) => (
                         <li
                           key={entry.request_id}
                           className="flex items-center justify-between gap-2 text-[11px] text-slate-400"

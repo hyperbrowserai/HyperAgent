@@ -51,6 +51,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Cache age-filter control validates positive integer seconds inline
 - Prefix preview/remove actions are blocked while age-filter input is invalid
 - Cache entries/prefix suggestion queries pause while age-filter input is invalid
+- Cache entries list and prefix suggestions are hidden while age-filter input is invalid
 - Stale preview/remove actions are blocked while stale-age input is invalid
 - Prefix/stale sample-limit inputs now enforce positive integer validation before preview/remove actions
 - Cache list and detail inspector show when each request-id entry was cached (`cached_at`)
