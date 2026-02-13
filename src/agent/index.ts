@@ -86,6 +86,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private static readonly MAX_REPLAY_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_REPLAY_STEPS = 1_000;
   private static readonly MAX_ACTION_CACHE_ENTRIES = 200;
+  private static readonly DEFAULT_ACTION_CACHE_CREATED_AT =
+    new Date(0).toISOString();
 
   private llm: HyperAgentLLM;
   private tasks: Record<string, TaskState> = {};
@@ -892,21 +894,46 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!normalizedTaskId) {
       return null;
     }
-    let cache: ActionCacheOutput | undefined;
+    let cache: unknown;
     try {
       cache = this.actionCacheByTaskId[normalizedTaskId];
     } catch {
       return null;
     }
-    if (!cache) return null;
+    if (!cache || typeof cache !== "object") {
+      return null;
+    }
+    const cachedTaskId =
+      this.normalizeVariableKey(this.safeReadField(cache, "taskId")) ??
+      normalizedTaskId;
+    const rawCreatedAt = this.safeReadField(cache, "createdAt");
+    const createdAt =
+      typeof rawCreatedAt === "string" && rawCreatedAt.trim().length > 0
+        ? rawCreatedAt
+        : HyperAgent.DEFAULT_ACTION_CACHE_CREATED_AT;
+    const rawStatus = this.safeReadField(cache, "status");
+    const status =
+      typeof rawStatus === "string" &&
+      HyperAgent.TASK_STATUS_VALUES.has(rawStatus)
+        ? (rawStatus as TaskStatus)
+        : undefined;
     let steps: ActionCacheOutput["steps"] = [];
+    const rawSteps = this.safeReadField(cache, "steps");
     try {
-      steps = Array.from(cache.steps ?? []);
+      if (Array.isArray(rawSteps)) {
+        steps = Array.from(rawSteps);
+      } else if (rawSteps && typeof rawSteps === "object") {
+        steps = Array.from(rawSteps as Iterable<ActionCacheEntry>);
+      } else {
+        steps = [];
+      }
     } catch {
       steps = [];
     }
     return {
-      ...cache,
+      taskId: cachedTaskId,
+      createdAt,
+      status,
       steps,
     };
   }

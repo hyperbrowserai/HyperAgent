@@ -805,6 +805,46 @@ describe("HyperAgent constructor and task controls", () => {
     expect(cache?.steps).toEqual([]);
   });
 
+  it("returns null when cached action-cache entry is not an object", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      actionCacheByTaskId: Record<string, unknown>;
+    };
+    internalAgent.actionCacheByTaskId["task-id"] = 42;
+
+    expect(agent.getActionCache("task-id")).toBeNull();
+  });
+
+  it("normalizes trap-prone cache metadata fields safely", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      actionCacheByTaskId: Record<string, unknown>;
+    };
+    internalAgent.actionCacheByTaskId["task-id"] = {
+      get taskId(): string {
+        throw new Error("taskId trap");
+      },
+      get createdAt(): string {
+        throw new Error("createdAt trap");
+      },
+      get status(): TaskStatus {
+        throw new Error("status trap");
+      },
+      steps: [],
+    };
+
+    const cache = agent.getActionCache("task-id");
+
+    expect(cache?.taskId).toBe("task-id");
+    expect(cache?.createdAt).toBe("1970-01-01T00:00:00.000Z");
+    expect(cache?.status).toBeUndefined();
+    expect(cache?.steps).toEqual([]);
+  });
+
   it("surfaces readable errors when getPages cannot enumerate context pages", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
