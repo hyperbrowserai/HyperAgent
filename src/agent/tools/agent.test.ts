@@ -305,6 +305,77 @@ function createTransientStructuredFailureCtx(): AgentCtx {
   };
 }
 
+function createCircularParamsStepCtx(): AgentCtx {
+  const circularParams: Record<string, unknown> = { id: "progress" };
+  circularParams.self = circularParams;
+
+  const nonCompleteAction = {
+    thoughts: "progress",
+    memory: "progress",
+    action: {
+      type: "recordProgress",
+      params: circularParams,
+    },
+  };
+
+  const completeAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "final answer",
+      },
+    },
+  };
+
+  const invokeStructured = jest
+    .fn()
+    .mockResolvedValueOnce({
+      rawText: "{}",
+      parsed: nonCompleteAction,
+    })
+    .mockResolvedValueOnce({
+      rawText: "{}",
+      parsed: completeAction,
+    });
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured,
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [
+      {
+        type: "recordProgress",
+        actionParams: z.record(z.string(), z.unknown()),
+        run: async () => ({
+          success: true,
+          message: "progress saved",
+        }),
+      },
+      createCompleteActionDefinition(),
+    ],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
 function createTaskState(page: Page): TaskState {
   return {
     id: "task-1",
@@ -558,5 +629,14 @@ describe("runAgentTask completion behavior", () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  it("does not crash when action fingerprint params contain circular values", async () => {
+    const page = createMockPage();
+    const ctx = createCircularParamsStepCtx();
+
+    const result = await runAgentTask(ctx, createTaskState(page));
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(result.output).toBe("final answer");
   });
 });

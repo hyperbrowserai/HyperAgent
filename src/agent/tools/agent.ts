@@ -58,6 +58,41 @@ function truncateDiagnosticText(value: string, maxChars: number): string {
   return `${value.slice(0, maxChars)}... [truncated ${omittedChars} chars]`;
 }
 
+function safeJsonStringify(value: unknown, spacing: number = 2): string {
+  const seen = new WeakSet<object>();
+  try {
+    const serialized = JSON.stringify(
+      value,
+      (_key, candidate: unknown) => {
+        if (typeof candidate === "bigint") {
+          return `${candidate.toString()}n`;
+        }
+        if (typeof candidate === "object" && candidate !== null) {
+          if (seen.has(candidate)) {
+            return "[Circular]";
+          }
+          seen.add(candidate);
+        }
+        return candidate;
+      },
+      spacing
+    );
+    if (typeof serialized === "string") {
+      return serialized;
+    }
+  } catch {
+    // fall through to fallback payload
+  }
+
+  return JSON.stringify(
+    {
+      __nonSerializable: formatUnknownError(value),
+    },
+    null,
+    spacing
+  );
+}
+
 const writeFrameGraphSnapshot = async (
   page: Page,
   dir: string,
@@ -68,7 +103,7 @@ const writeFrameGraphSnapshot = async (
     const frameManager = getOrCreateFrameContextManager(cdpClient);
     frameManager.setDebug(debug);
     const data = frameManager.toJSON();
-    fs.writeFileSync(`${dir}/frames.json`, JSON.stringify(data, null, 2));
+    fs.writeFileSync(`${dir}/frames.json`, safeJsonStringify(data));
   } catch (error) {
     if (debug) {
       console.warn(
@@ -484,7 +519,7 @@ export const runAgentTask = async (
       if (stepDebugArtifactsEnabled) {
         writeDebugFileSafe(
           `${debugStepDir}/msgs.json`,
-          JSON.stringify(msgs, null, 2),
+          safeJsonStringify(msgs),
           ctx.debug
         );
       }
@@ -681,11 +716,14 @@ export const runAgentTask = async (
       }
 
       if (actionOutput.success && action.type !== "wait") {
-        const actionFingerprint = JSON.stringify({
+        const actionFingerprint = safeJsonStringify(
+          {
           actionType: action.type,
           params: action.params,
           url: page.url(),
-        });
+          },
+          0
+        );
         if (actionFingerprint === lastSuccessfulActionFingerprint) {
           consecutiveRepeatedSuccessfulActions++;
         } else {
@@ -799,12 +837,12 @@ export const runAgentTask = async (
         await writeFrameGraphSnapshot(page, debugStepDir, ctx.debug);
         writeDebugFileSafe(
           `${debugStepDir}/stepOutput.json`,
-          JSON.stringify(step, null, 2),
+          safeJsonStringify(step),
           ctx.debug
         );
         writeDebugFileSafe(
           `${debugStepDir}/perf.json`,
-          JSON.stringify(stepMetrics, null, 2),
+          safeJsonStringify(stepMetrics),
           ctx.debug
         );
       }
@@ -825,7 +863,7 @@ export const runAgentTask = async (
     ensureDirectorySafe(debugDir, ctx.debug);
     writeDebugFileSafe(
       `${debugDir}/action-cache.json`,
-      JSON.stringify(actionCache, null, 2),
+      safeJsonStringify(actionCache),
       ctx.debug
     );
   }
@@ -840,7 +878,7 @@ export const runAgentTask = async (
   if (debugArtifactsEnabled) {
     writeDebugFileSafe(
       `${debugDir}/taskOutput.json`,
-      JSON.stringify(taskOutput, null, 2),
+      safeJsonStringify(taskOutput),
       ctx.debug
     );
   }
