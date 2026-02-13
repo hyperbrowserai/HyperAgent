@@ -13,6 +13,7 @@ import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
 import { parseJsonMaybe } from "../utils/safe-json";
 import { parseStructuredResponse } from "../utils/structured-response";
 import { z } from "zod";
+import { formatUnknownError } from "@/utils";
 
 export interface DeepSeekClientConfig {
   apiKey?: string;
@@ -20,6 +21,42 @@ export interface DeepSeekClientConfig {
   temperature?: number;
   maxTokens?: number;
   baseURL?: string;
+}
+
+function convertFromDeepSeekContent(
+  content: unknown
+): string | HyperAgentContentPart[] {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content.map((part: any) => {
+      if (part.type === "text") {
+        return { type: "text", text: part.text };
+      }
+      if (part.type === "image_url") {
+        return {
+          type: "image",
+          url: part.image_url?.url ?? "",
+          mimeType: "image/png",
+        };
+      }
+      if (part.type === "tool_call") {
+        return {
+          type: "tool_call",
+          toolName: part.function?.name ?? "unknown-tool",
+          arguments: parseJsonMaybe(part.function?.arguments),
+        };
+      }
+      return { type: "text", text: formatUnknownError(part) };
+    });
+  }
+
+  if (content == null) {
+    return "";
+  }
+  return String(content);
 }
 
 export class DeepSeekClient implements HyperAgentLLM {
@@ -78,7 +115,7 @@ export class DeepSeekClient implements HyperAgentLLM {
       throw new Error("No response from DeepSeek");
     }
 
-    const content = choice.message.content || "";
+    const content = convertFromDeepSeekContent(choice.message.content);
     const toolCalls = choice.message.tool_calls?.map((tc) => {
       // Handle both function and custom tool calls in OpenAI v6
       if (tc.type === "function") {
