@@ -82,6 +82,14 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     if (excludeTools) {
       normalizedEntry.excludeTools = excludeTools;
     }
+    if (includeTools && excludeTools) {
+      const overlap = includeTools.filter((tool) => excludeTools.includes(tool));
+      if (overlap.length > 0) {
+        throw new Error(
+          `MCP server entry at index ${i} has tools present in both includeTools and excludeTools: ${overlap.join(", ")}.`
+        );
+      }
+    }
 
     const normalizedId = isNonEmptyString(entry.id) ? entry.id.trim() : "";
     if (normalizedId.length > 0) {

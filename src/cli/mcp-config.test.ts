@@ -132,6 +132,16 @@ describe("parseMCPServersConfig", () => {
       'MCP server entry at index 0 has unsupported connectionType "websocket". Supported values are "stdio" and "sse".'
     );
   });
+
+  it("throws when includeTools and excludeTools overlap", () => {
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"command":"npx","includeTools":["search","notes"],"excludeTools":["notes"]}]'
+      )
+    ).toThrow(
+      "MCP server entry at index 0 has tools present in both includeTools and excludeTools: notes."
+    );
+  });
 });
 
 describe("loadMCPServersFromFile", () => {
