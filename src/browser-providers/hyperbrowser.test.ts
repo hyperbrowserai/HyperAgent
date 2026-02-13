@@ -67,6 +67,21 @@ describe("HyperbrowserProvider lifecycle hardening", () => {
     );
   });
 
+  it("truncates oversized start diagnostics", async () => {
+    createSession.mockResolvedValue({
+      id: "session-1",
+      wsEndpoint: "ws://example",
+      liveUrl: "https://live",
+      sessionUrl: "https://session",
+    });
+    connectOverCDP.mockRejectedValue(new Error("x".repeat(2_000)));
+    stopSession.mockRejectedValue(new Error("x".repeat(2_000)));
+
+    const provider = new HyperbrowserProvider();
+
+    await expect(provider.start()).rejects.toThrow(/\[truncated/);
+  });
+
   it("rejects missing websocket endpoints and cleans up session", async () => {
     createSession.mockResolvedValue({
       id: "session-1",
@@ -126,5 +141,25 @@ describe("HyperbrowserProvider lifecycle hardening", () => {
     await expect(provider.close()).rejects.toThrow(
       "Failed to stop Hyperbrowser session session-1: stop trap"
     );
+  });
+
+  it("truncates oversized close diagnostics", async () => {
+    const provider = new HyperbrowserProvider();
+    provider.browser = {
+      close: async () => {
+        throw new Error("x".repeat(2_000));
+      },
+    } as never;
+    provider.session = {
+      id: "session-1",
+    } as never;
+    provider.hbClient = {
+      sessions: {
+        stop: stopSession,
+      },
+    } as never;
+    stopSession.mockRejectedValue(new Error("x".repeat(2_000)));
+
+    await expect(provider.close()).rejects.toThrow(/\[truncated/);
   });
 });

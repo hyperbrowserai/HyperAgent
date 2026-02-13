@@ -25,6 +25,13 @@ describe("LocalBrowserProvider lifecycle hardening", () => {
     );
   });
 
+  it("truncates oversized launch diagnostics", async () => {
+    launch.mockRejectedValue(new Error("x".repeat(2_000)));
+    const provider = new LocalBrowserProvider();
+
+    await expect(provider.start()).rejects.toThrow(/\[truncated/);
+  });
+
   it("rejects invalid launch payloads", async () => {
     launch.mockResolvedValue("invalid-browser" as never);
     const provider = new LocalBrowserProvider();
@@ -45,6 +52,18 @@ describe("LocalBrowserProvider lifecycle hardening", () => {
     await expect(provider.close()).rejects.toThrow(
       "Failed to close local browser session: close trap"
     );
+    expect(provider.getSession()).toBeNull();
+  });
+
+  it("truncates oversized close diagnostics", async () => {
+    const provider = new LocalBrowserProvider();
+    provider.session = {
+      close: async () => {
+        throw new Error("x".repeat(2_000));
+      },
+    } as never;
+
+    await expect(provider.close()).rejects.toThrow(/\[truncated/);
     expect(provider.getSession()).toBeNull();
   });
 

@@ -7,12 +7,27 @@ export type LocalBrowserProviderOptions = Omit<LaunchOptions, "channel"> & {
 };
 
 export class LocalBrowserProvider extends BrowserProvider<Browser> {
+  private static readonly MAX_DIAGNOSTIC_CHARS = 400;
   options: LocalBrowserProviderOptions | undefined;
   session: Browser | undefined;
   constructor(options?: LocalBrowserProviderOptions) {
     super();
     this.options = options;
   }
+
+  private formatDiagnostic(value: unknown): string {
+    const normalized = formatUnknownError(value).replace(/\s+/g, " ").trim();
+    const fallback = normalized.length > 0 ? normalized : "unknown error";
+    if (fallback.length <= LocalBrowserProvider.MAX_DIAGNOSTIC_CHARS) {
+      return fallback;
+    }
+    const omitted = fallback.length - LocalBrowserProvider.MAX_DIAGNOSTIC_CHARS;
+    return `${fallback.slice(
+      0,
+      LocalBrowserProvider.MAX_DIAGNOSTIC_CHARS
+    )}... [truncated ${omitted} chars]`;
+  }
+
   async start(): Promise<Browser> {
     const launchArgs = this.options?.args ?? [];
     let browser: unknown;
@@ -25,7 +40,7 @@ export class LocalBrowserProvider extends BrowserProvider<Browser> {
       });
     } catch (error) {
       throw new Error(
-        `Failed to launch local browser: ${formatUnknownError(error)}`
+        `Failed to launch local browser: ${this.formatDiagnostic(error)}`
       );
     }
 
@@ -46,7 +61,7 @@ export class LocalBrowserProvider extends BrowserProvider<Browser> {
       await session.close();
     } catch (error) {
       throw new Error(
-        `Failed to close local browser session: ${formatUnknownError(error)}`
+        `Failed to close local browser session: ${this.formatDiagnostic(error)}`
       );
     }
   }

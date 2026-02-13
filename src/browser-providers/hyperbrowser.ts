@@ -9,6 +9,21 @@ import {
 import BrowserProvider from "@/types/browser-providers/types";
 import { formatUnknownError } from "@/utils";
 
+const MAX_HYPERBROWSER_DIAGNOSTIC_CHARS = 400;
+
+const formatHyperbrowserDiagnostic = (value: unknown): string => {
+  const normalized = formatUnknownError(value).replace(/\s+/g, " ").trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_HYPERBROWSER_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_HYPERBROWSER_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_HYPERBROWSER_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+};
+
 export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
   browserConfig: Omit<ConnectOverCDPOptions, "endpointURL"> | undefined;
   sessionConfig: CreateSessionParams | undefined;
@@ -39,7 +54,7 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
       await client.sessions.stop(sessionId);
       return null;
     } catch (error) {
-      return `Failed to stop Hyperbrowser session ${sessionId}: ${formatUnknownError(
+      return `Failed to stop Hyperbrowser session ${sessionId}: ${formatHyperbrowserDiagnostic(
         error
       )}`;
     }
@@ -52,7 +67,9 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
       session = await client.sessions.create(this.sessionConfig);
     } catch (error) {
       throw new Error(
-        `Failed to create Hyperbrowser session: ${formatUnknownError(error)}`
+        `Failed to create Hyperbrowser session: ${formatHyperbrowserDiagnostic(
+          error
+        )}`
       );
     }
 
@@ -81,7 +98,9 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
       this.session = undefined;
       this.hbClient = undefined;
       const diagnostics = [
-        `Failed to connect to Hyperbrowser session: ${formatUnknownError(error)}`,
+        `Failed to connect to Hyperbrowser session: ${formatHyperbrowserDiagnostic(
+          error
+        )}`,
       ];
       if (stopError) {
         diagnostics.push(stopError);
@@ -111,7 +130,9 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
         await this.browser.close();
       } catch (error) {
         diagnostics.push(
-          `Failed to close browser connection: ${formatUnknownError(error)}`
+          `Failed to close browser connection: ${formatHyperbrowserDiagnostic(
+            error
+          )}`
         );
       }
     }
