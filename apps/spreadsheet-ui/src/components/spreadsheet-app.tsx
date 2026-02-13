@@ -111,6 +111,16 @@ function flattenSchemaShapeEntries(
   );
 }
 
+function formatSchemaShapeEntries(
+  entries: Array<{ key: string; description: string | null }>,
+): string {
+  return entries
+    .map((entry) =>
+      entry.description ? `${entry.key}: ${entry.description}` : entry.key
+    )
+    .join(", ");
+}
+
 function parseCompatibilityReport(
   value: unknown,
 ): ExportCompatibilityReport | null {
@@ -792,6 +802,13 @@ export function SpreadsheetApp() {
     () =>
       flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
     [agentSchemaQuery.data?.workbook_import_response_shape],
+  );
+  const agentWorkbookExportHeaderFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.workbook_export_response_headers_shape,
+      ),
+    [agentSchemaQuery.data?.workbook_export_response_headers_shape],
   );
   const agentWorkbookImportEventFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
@@ -2480,13 +2497,7 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-[11px] text-slate-500">
                 run response fields:{" "}
                 <span className="font-mono text-slate-300">
-                  {wizardRunResponseFields
-                    .map((entry) =>
-                      entry.description
-                        ? `${entry.key}: ${entry.description}`
-                        : entry.key
-                    )
-                    .join(", ")}
+                  {formatSchemaShapeEntries(wizardRunResponseFields)}
                 </span>
               </p>
             ) : null}
@@ -2494,13 +2505,7 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-[11px] text-slate-500">
                 import response fields:{" "}
                 <span className="font-mono text-slate-300">
-                  {wizardImportResponseFields
-                    .map((entry) =>
-                      entry.description
-                        ? `${entry.key}: ${entry.description}`
-                        : entry.key
-                    )
-                    .join(", ")}
+                  {formatSchemaShapeEntries(wizardImportResponseFields)}
                 </span>
               </p>
             ) : null}
@@ -2942,13 +2947,7 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-xs text-slate-400">
                 workbook import response fields:{" "}
                 <span className="font-mono text-slate-200">
-                  {agentWorkbookImportResponseFields
-                    .map((entry) =>
-                      entry.description
-                        ? `${entry.key}: ${entry.description}`
-                        : entry.key
-                    )
-                    .join(", ")}
+                  {formatSchemaShapeEntries(agentWorkbookImportResponseFields)}
                 </span>
               </p>
             ) : null}
@@ -2956,13 +2955,7 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-xs text-slate-400">
                 workbook import event fields:{" "}
                 <span className="font-mono text-slate-200">
-                  {agentWorkbookImportEventFields
-                    .map((entry) =>
-                      entry.description
-                        ? `${entry.key}: ${entry.description}`
-                        : entry.key
-                    )
-                    .join(", ")}
+                  {formatSchemaShapeEntries(agentWorkbookImportEventFields)}
                 </span>
               </p>
             ) : null}
@@ -2974,11 +2967,11 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
-            {agentSchemaQuery.data?.workbook_export_response_headers_shape ? (
+            {agentWorkbookExportHeaderFields.length > 0 ? (
               <p className="mb-2 text-xs text-slate-400">
                 export headers:{" "}
                 <span className="font-mono text-slate-200">
-                  {Object.keys(agentSchemaQuery.data.workbook_export_response_headers_shape).join(", ")}
+                  {formatSchemaShapeEntries(agentWorkbookExportHeaderFields)}
                 </span>
               </p>
             ) : null}
@@ -2986,13 +2979,7 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-xs text-slate-400">
                 workbook export event fields:{" "}
                 <span className="font-mono text-slate-200">
-                  {agentWorkbookExportEventFields
-                    .map((entry) =>
-                      entry.description
-                        ? `${entry.key}: ${entry.description}`
-                        : entry.key
-                    )
-                    .join(", ")}
+                  {formatSchemaShapeEntries(agentWorkbookExportEventFields)}
                 </span>
               </p>
             ) : null}
@@ -3000,13 +2987,7 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-xs text-slate-400">
                 workbook event shape catalog:{" "}
                 <span className="font-mono text-slate-200">
-                  {agentWorkbookEventShapeFields
-                    .map((entry) =>
-                      entry.description
-                        ? `${entry.key}: ${entry.description}`
-                        : entry.key
-                    )
-                    .join(", ")}
+                  {formatSchemaShapeEntries(agentWorkbookEventShapeFields)}
                 </span>
               </p>
             ) : null}
