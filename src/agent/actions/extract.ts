@@ -4,6 +4,7 @@ import { parseMarkdown } from "@/utils/html-to-markdown";
 import fs from "fs";
 import { getCDPClient } from "@/cdp";
 import type { HyperAgentContentPart } from "@/llm/types";
+import { formatUnknownError } from "@/utils";
 
 export const ExtractAction = z
   .object({
@@ -75,27 +76,10 @@ function writeDebugFileSafe(
   } catch (error) {
     if (debug) {
       console.error(
-        `[extract] Failed to write debug file "${filePath}": ${formatErrorMessage(error)}`
+        `[extract] Failed to write debug file "${filePath}": ${formatUnknownError(error)}`
       );
     }
   }
-}
-
-function formatErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error && typeof error === "object") {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
 }
 
 function ensureDebugDirSafe(debugDir: string, debug?: boolean): string | null {
@@ -105,7 +89,7 @@ function ensureDebugDirSafe(debugDir: string, debug?: boolean): string | null {
   } catch (error) {
     if (debug) {
       console.error(
-        `[extract] Failed to prepare debug directory "${debugDir}": ${formatErrorMessage(error)}`
+        `[extract] Failed to prepare debug directory "${debugDir}": ${formatUnknownError(error)}`
       );
     }
     return null;
@@ -169,7 +153,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         if (ctx.debug) {
           console.warn(
             "[extract] Markdown conversion failed, falling back to HTML text extraction:",
-            formatErrorMessage(error)
+            formatUnknownError(error)
           );
         }
         markdown = fallbackMarkdownFromHtml(content);
@@ -199,7 +183,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           if (ctx.debug) {
             console.warn(
               "[extract] Screenshot capture unavailable, falling back to markdown-only extraction:",
-              formatErrorMessage(error)
+              formatUnknownError(error)
             );
           }
         }
@@ -281,7 +265,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     } catch (error) {
       return {
         success: false,
-        message: `Failed to extract content: ${formatErrorMessage(error)}`,
+        message: `Failed to extract content: ${formatUnknownError(error)}`,
       };
     }
   },
