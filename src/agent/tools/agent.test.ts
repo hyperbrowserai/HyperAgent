@@ -606,6 +606,33 @@ describe("runAgentTask completion behavior", () => {
       expect(structuredLogLine).toBeDefined();
       expect(structuredLogLine).toContain("[truncated");
       expect(structuredLogLine).not.toContain(hugeRaw);
+
+      const invokeStructuredMock = (
+        ctx.llm as unknown as { invokeStructured: jest.Mock }
+      ).invokeStructured;
+      const secondCallMessages = invokeStructuredMock.mock.calls[1]?.[1] as Array<{
+        role: string;
+        content: unknown;
+      }>;
+      expect(Array.isArray(secondCallMessages)).toBe(true);
+      const retryAssistantMessage = secondCallMessages
+        .slice()
+        .reverse()
+        .find((message) => message.role === "assistant");
+      const retryUserMessage = secondCallMessages
+        .slice()
+        .reverse()
+        .find((message) => message.role === "user");
+
+      expect(typeof retryAssistantMessage?.content).toBe("string");
+      expect(typeof retryUserMessage?.content).toBe("string");
+      expect(retryAssistantMessage?.content).toContain("[truncated");
+      expect(retryUserMessage?.content).toContain(
+        "was skipped for validation diagnostics"
+      );
+      expect(retryAssistantMessage?.content).not.toContain(hugeRaw);
+      expect(retryUserMessage?.content).not.toContain(hugeRaw);
+      expect((retryUserMessage?.content as string).length).toBeLessThan(4_500);
     } finally {
       errorSpy.mockRestore();
     }

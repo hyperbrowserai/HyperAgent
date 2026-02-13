@@ -602,6 +602,14 @@ export const runAgentTask = async (
             structuredResult.rawText?.trim() || "<empty>",
             MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS
           );
+          const validationErrorForPrompt = truncateDiagnosticText(
+            validationError,
+            MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS
+          );
+          const rawResponseForPrompt = truncateDiagnosticText(
+            structuredResult.rawText || "Failed to generate response",
+            MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS
+          );
 
           console.error(
             `[LLM][StructuredOutput] Failed to parse response from ${providerId} (${modelId}). Raw response: ${
@@ -612,10 +620,7 @@ export const runAgentTask = async (
           // Store error for cross-step learning
           ctx.schemaErrors?.push({
             stepIndex: currStep,
-            error: truncateDiagnosticText(
-              validationError,
-              MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS
-            ),
+            error: validationErrorForPrompt,
             rawResponse: truncateDiagnosticText(
               structuredResult.rawText || "",
               MAX_STRUCTURED_DIAGNOSTIC_RAW_RESPONSE_CHARS
@@ -628,12 +633,11 @@ export const runAgentTask = async (
               ...currentMsgs,
               {
                 role: "assistant",
-                content:
-                  structuredResult.rawText || "Failed to generate response",
+                content: rawResponseForPrompt,
               },
               {
                 role: "user",
-                content: `The previous response failed validation. Zod validation errors:\n\`\`\`json\n${validationError}\n\`\`\`\n\nPlease fix these errors and return valid structured output matching the schema.`,
+                content: `The previous response failed validation. Zod validation errors:\n\`\`\`json\n${validationErrorForPrompt}\n\`\`\`\n\nPlease fix these errors and return valid structured output matching the schema.`,
               },
             ];
           }
