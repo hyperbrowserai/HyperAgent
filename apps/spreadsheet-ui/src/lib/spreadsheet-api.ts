@@ -21,6 +21,8 @@ import {
   AgentScenarioResponse,
   AgentWizardSchemaInfo,
   AgentWizardRunResponse,
+  ExportCompatibilityReport,
+  ExportWorkbookResponse,
   ImportWorkbookResponse,
   CellSnapshot,
   ChartSpec,
@@ -710,14 +712,83 @@ export async function upsertChart(
   );
 }
 
-export async function exportWorkbook(workbookId: string): Promise<Blob> {
+export async function exportWorkbook(
+  workbookId: string,
+): Promise<ExportWorkbookResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/workbooks/${workbookId}/export`, {
     method: "POST",
   });
   if (!response.ok) {
-    throw new Error(`Export failed with status ${response.status}.`);
+    const maybeError = (await response.json().catch(() => null)) as JsonError | null;
+    const code = maybeError?.error?.code;
+    const message = maybeError?.error?.message
+      ?? `Export failed with status ${response.status}.`;
+    throw new SpreadsheetApiError(
+      code ? `${code}: ${message}` : message,
+      response.status,
+      code,
+    );
   }
-  return response.blob();
+  const compatibilityReport = parseExportCompatibilityReport(
+    response.headers.get("x-export-meta"),
+  );
+  const fileName = parseContentDispositionFilename(
+    response.headers.get("content-disposition"),
+  );
+  return {
+    blob: await response.blob(),
+    file_name: fileName,
+    compatibility_report: compatibilityReport,
+  };
+}
+
+function parseExportCompatibilityReport(
+  rawHeaderValue: string | null,
+): ExportCompatibilityReport | null {
+  if (!rawHeaderValue) {
+    return null;
+  }
+  let parsed: Partial<ExportCompatibilityReport>;
+  try {
+    parsed = JSON.parse(rawHeaderValue) as Partial<ExportCompatibilityReport>;
+  } catch {
+    return null;
+  }
+  const preserved = Array.isArray(parsed.preserved)
+    ? parsed.preserved.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const transformed = Array.isArray(parsed.transformed)
+    ? parsed.transformed.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const unsupported = Array.isArray(parsed.unsupported)
+    ? parsed.unsupported.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  if (
+    preserved.length === 0
+    && transformed.length === 0
+    && unsupported.length === 0
+  ) {
+    return null;
+  }
+  return {
+    preserved,
+    transformed,
+    unsupported,
+  };
+}
+
+function parseContentDispositionFilename(
+  rawHeaderValue: string | null,
+): string | null {
+  if (!rawHeaderValue) {
+    return null;
+  }
+  const utf8FileNameMatch = rawHeaderValue.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8FileNameMatch?.[1]) {
+    return decodeURIComponent(utf8FileNameMatch[1].trim());
+  }
+  const fileNameMatch = rawHeaderValue.match(/filename="?([^";]+)"?/i);
+  return fileNameMatch?.[1]?.trim() ?? null;
 }
 
 export function subscribeToWorkbookEvents(

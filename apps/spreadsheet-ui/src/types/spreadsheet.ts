@@ -255,6 +255,18 @@ export interface AgentWizardRunResponse {
   import: AgentWizardImportResult | null;
 }
 
+export interface ExportCompatibilityReport {
+  preserved: string[];
+  transformed: string[];
+  unsupported: string[];
+}
+
+export interface ExportWorkbookResponse {
+  blob: Blob;
+  file_name: string | null;
+  compatibility_report: ExportCompatibilityReport | null;
+}
+
 export interface AgentWizardSchemaInfo {
   endpoint: string;
   json_endpoint?: string;

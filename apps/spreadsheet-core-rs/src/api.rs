@@ -2384,8 +2384,10 @@ async fn openapi() -> Json<serde_json::Value> {
 #[cfg(test)]
 mod tests {
   use axum::{extract::Path, extract::Query, extract::State, Json};
+  use rust_xlsxwriter::{Formula, Workbook};
   use std::time::Duration;
   use tempfile::tempdir;
+  use tokio::time::timeout;
 
   use super::{
     agent_ops, agent_ops_cache_entries, agent_ops_cache_entry_detail,
@@ -2397,6 +2399,7 @@ mod tests {
     preview_remove_agent_ops_cache_entries_by_prefix,
     replay_agent_ops_cache_entry, reexecute_agent_ops_cache_entry,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
+    import_bytes_into_workbook,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
     validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
@@ -2414,6 +2417,52 @@ mod tests {
     },
     state::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES},
   };
+
+  fn workbook_import_fixture_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let inputs_sheet = workbook.add_worksheet();
+    inputs_sheet.set_name("Inputs").expect("sheet should be renamed");
+    inputs_sheet
+      .write_string(0, 0, "Region")
+      .expect("header should write");
+    inputs_sheet
+      .write_string(1, 0, "North")
+      .expect("text should write");
+    inputs_sheet
+      .write_string(2, 0, "South")
+      .expect("text should write");
+    inputs_sheet
+      .write_string(0, 1, "Sales")
+      .expect("header should write");
+    inputs_sheet
+      .write_number(1, 1, 120.0)
+      .expect("number should write");
+    inputs_sheet
+      .write_number(2, 1, 80.0)
+      .expect("number should write");
+    inputs_sheet
+      .write_string(0, 2, "Total")
+      .expect("header should write");
+    inputs_sheet
+      .write_formula(1, 2, Formula::new("=SUM(B2:B3)"))
+      .expect("formula should write");
+    inputs_sheet
+      .write_string(0, 3, "Active")
+      .expect("header should write");
+    inputs_sheet
+      .write_boolean(1, 3, true)
+      .expect("boolean should write");
+
+    let notes_sheet = workbook.add_worksheet();
+    notes_sheet.set_name("Notes").expect("sheet should be renamed");
+    notes_sheet
+      .write_string(0, 0, "Generated from fixture workbook")
+      .expect("notes text should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("fixture workbook should serialize")
+  }
 
   #[test]
   fn should_validate_sheet_name_rules() {
@@ -2503,6 +2552,87 @@ mod tests {
     assert!(
       parse_optional_bool(Some("not-a-bool".to_string()), "flag").is_err(),
       "invalid bool-like value should fail",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_import_fixture_bytes_into_existing_workbook() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("import-helper-fixture".to_string()))
+      .await
+      .expect("workbook should be created");
+    let mut events = state
+      .subscribe(workbook.id)
+      .await
+      .expect("event subscription should work");
+
+    let import_result = import_bytes_into_workbook(
+      &state,
+      workbook.id,
+      &workbook_import_fixture_bytes(),
+      "fixture-import",
+    )
+    .await
+    .expect("fixture import should succeed");
+
+    assert_eq!(import_result.sheets_imported, 2);
+    assert_eq!(import_result.cells_imported, 11);
+    assert_eq!(
+      import_result.formula_cells_imported,
+      import_result.formula_cells_with_cached_values
+        + import_result.formula_cells_without_cached_values,
+    );
+    assert!(
+      import_result.formula_cells_imported > 0,
+      "fixture should include formula cells",
+    );
+
+    let refreshed = state
+      .get_workbook(workbook.id)
+      .await
+      .expect("workbook should be readable after import");
+    assert!(
+      refreshed.sheets.iter().any(|sheet| sheet == "Inputs"),
+      "import should register input sheet",
+    );
+    assert!(
+      refreshed.sheets.iter().any(|sheet| sheet == "Notes"),
+      "import should register notes sheet",
+    );
+    assert!(
+      !refreshed.compatibility_warnings.is_empty(),
+      "import should add compatibility warnings",
+    );
+
+    let emitted_event = timeout(Duration::from_secs(1), events.recv())
+      .await
+      .expect("import event should arrive")
+      .expect("event payload should decode");
+    assert_eq!(emitted_event.event_type, "workbook.imported");
+    assert_eq!(emitted_event.actor, "fixture-import");
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_imported")
+        .and_then(serde_json::Value::as_u64),
+      Some(import_result.formula_cells_imported as u64),
+    );
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_with_cached_values")
+        .and_then(serde_json::Value::as_u64),
+      Some(import_result.formula_cells_with_cached_values as u64),
+    );
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_without_cached_values")
+        .and_then(serde_json::Value::as_u64),
+      Some(import_result.formula_cells_without_cached_values as u64),
     );
   }
 

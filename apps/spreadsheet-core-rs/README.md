@@ -74,6 +74,8 @@ Server defaults to `http://localhost:8787`.
 
 > Note: `/v1/workbooks/{id}/duckdb/query` currently returns a guarded `400` response in this build to avoid a known upstream panic in the underlying DuckDB Rust wrapper for ad-hoc SQL execution paths.
 
+`POST /v1/workbooks/{id}/export` responds with the XLSX file body and an `x-export-meta` header containing JSON compatibility-report metadata (`preserved`, `transformed`, `unsupported`).
+
 ### AI Agent multi-operation endpoint
 
 `POST /v1/workbooks/{id}/agent/ops` executes a list of typed operations in order and returns per-operation results.

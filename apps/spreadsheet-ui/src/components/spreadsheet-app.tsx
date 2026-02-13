@@ -975,13 +975,17 @@ export function SpreadsheetApp() {
     }
     try {
       clearUiError();
-      const blob = await exportWorkbook(workbook.id);
-      const fileUrl = URL.createObjectURL(blob);
+      const exportedWorkbook = await exportWorkbook(workbook.id);
+      const fileUrl = URL.createObjectURL(exportedWorkbook.blob);
       const anchor = document.createElement("a");
       anchor.href = fileUrl;
-      anchor.download = `${workbook.name}.xlsx`;
+      anchor.download = exportedWorkbook.file_name ?? `${workbook.name}.xlsx`;
       anchor.click();
       URL.revokeObjectURL(fileUrl);
+      const compatibilitySummary = exportedWorkbook.compatibility_report
+        ? ` (preserved ${exportedWorkbook.compatibility_report.preserved.length}, transformed ${exportedWorkbook.compatibility_report.transformed.length}, unsupported ${exportedWorkbook.compatibility_report.unsupported.length})`
+        : "";
+      setNotice(`Exported ${anchor.download}${compatibilitySummary}.`);
     } catch (error) {
       applyUiError(error, "Failed to export workbook.");
     }

@@ -7,6 +7,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Excel-like grid interaction
 - Formula bar editing
 - Workbook import/export controls
+- Export action surfaces backend compatibility-report counts (preserved/transformed/unsupported)
 - Realtime server stream sync via SSE
 - Live chart preview with metadata sync endpoint
 - Dynamic sheet tabs + add-sheet controls
