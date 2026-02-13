@@ -61,6 +61,18 @@ const ChartPreview = dynamic(
 
 const CACHE_ENTRIES_PREVIEW_LIMIT = 6;
 
+function parsePositiveIntegerInput(value: string): number | undefined {
+  const normalized = value.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  const parsedValue = Number.parseInt(normalized, 10);
+  if (Number.isNaN(parsedValue) || parsedValue <= 0) {
+    return undefined;
+  }
+  return parsedValue;
+}
+
 export function SpreadsheetApp() {
   const queryClient = useQueryClient();
   const {
@@ -161,6 +173,12 @@ export function SpreadsheetApp() {
     cellsImported: number;
     warnings: string[];
   } | null>(null);
+  const normalizedCacheEntriesMaxAgeSeconds = parsePositiveIntegerInput(
+    cacheEntriesMaxAgeSeconds,
+  );
+  const hasInvalidCacheEntriesMaxAgeInput =
+    cacheEntriesMaxAgeSeconds.trim().length > 0
+    && typeof normalizedCacheEntriesMaxAgeSeconds !== "number";
 
   const createWorkbookMutation = useMutation({
     mutationFn: () => createWorkbook("Agent Workbook"),
@@ -264,20 +282,14 @@ export function SpreadsheetApp() {
       CACHE_ENTRIES_PREVIEW_LIMIT,
     ],
     enabled: Boolean(workbook?.id),
-    queryFn: () => {
-      const parsedMaxAgeSeconds = Number.parseInt(cacheEntriesMaxAgeSeconds, 10);
-      const normalizedMaxAgeSeconds =
-        Number.isNaN(parsedMaxAgeSeconds) || parsedMaxAgeSeconds <= 0
-          ? undefined
-          : parsedMaxAgeSeconds;
-      return getAgentOpsCacheEntries(
+    queryFn: () =>
+      getAgentOpsCacheEntries(
         workbook!.id,
         CACHE_ENTRIES_PREVIEW_LIMIT,
         cacheEntriesOffset,
         cacheRequestIdPrefix,
-        normalizedMaxAgeSeconds,
-      );
-    },
+        normalizedCacheEntriesMaxAgeSeconds,
+      ),
   });
 
   const agentOpsCachePrefixesQuery = useQuery({
@@ -2617,7 +2629,11 @@ export function SpreadsheetApp() {
                       }
                       placeholder="optional"
                       inputMode="numeric"
-                      className="h-6 w-20 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 focus:border-indigo-500"
+                      className={`h-6 w-20 rounded bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 ${
+                        hasInvalidCacheEntriesMaxAgeInput
+                          ? "border border-rose-500/80 focus:border-rose-400"
+                          : "border border-slate-700 focus:border-indigo-500"
+                      }`}
                     />
                     <button
                       onClick={() => setCacheEntriesMaxAgeSeconds("")}
@@ -2716,6 +2732,11 @@ export function SpreadsheetApp() {
                       {isRemovingStaleCache ? "Removing stale..." : "Remove stale"}
                     </button>
                   </div>
+                  {hasInvalidCacheEntriesMaxAgeInput ? (
+                    <p className="mb-2 text-[10px] text-rose-300">
+                      older-than filter must be a positive integer (seconds).
+                    </p>
+                  ) : null}
                   {cachePrefixRemovalPreview ? (
                     <div className="mb-2 rounded border border-amber-800/60 bg-amber-900/10 p-2 text-[10px] text-amber-100">
                       <p>
