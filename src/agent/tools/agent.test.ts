@@ -322,6 +322,37 @@ describe("runAgentTask completion behavior", () => {
     }
   });
 
+  it("formats non-Error debug IO failures with readable messages", async () => {
+    const page = createMockPage();
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw { reason: "mkdir object failure" };
+    });
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      return undefined;
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.debug = true;
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page), {
+        debugDir: "debug/test",
+      });
+
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[DebugIO] Failed to create directory "debug/test": {"reason":"mkdir object failure"}'
+      );
+      expect(writeSpy).not.toHaveBeenCalled();
+    } finally {
+      mkdirSpy.mockRestore();
+      writeSpy.mockRestore();
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
   it("skips step artifact writes when step debug directory creation fails", async () => {
     const page = createMockPage();
     const mkdirSpy = jest

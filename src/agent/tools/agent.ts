@@ -58,7 +58,9 @@ const writeFrameGraphSnapshot = async (
     fs.writeFileSync(`${dir}/frames.json`, JSON.stringify(data, null, 2));
   } catch (error) {
     if (debug) {
-      console.warn("[FrameContext] Failed to write frame graph:", error);
+      console.warn(
+        `[FrameContext] Failed to write frame graph: ${formatUnknownError(error)}`
+      );
     }
   }
 };
@@ -86,7 +88,9 @@ const ensureDirectorySafe = (dir: string, debug?: boolean): boolean => {
     return true;
   } catch (error) {
     if (debug) {
-      console.error(`[DebugIO] Failed to create directory "${dir}":`, error);
+      console.error(
+        `[DebugIO] Failed to create directory "${dir}": ${formatUnknownError(error)}`
+      );
     }
     return false;
   }
@@ -101,7 +105,9 @@ const writeDebugFileSafe = (
     fs.writeFileSync(filePath, content);
   } catch (error) {
     if (debug) {
-      console.error(`[DebugIO] Failed to write file "${filePath}":`, error);
+      console.error(
+        `[DebugIO] Failed to write file "${filePath}": ${formatUnknownError(error)}`
+      );
     }
   }
 };
