@@ -204,6 +204,7 @@ export interface AgentSchemaInfo {
   workbook_export_response_headers_shape?: Record<string, string>;
   workbook_import_event_shape?: Record<string, unknown>;
   workbook_export_event_shape?: Record<string, unknown>;
+  workbook_event_shapes?: Record<string, unknown>;
   agent_ops_preview_endpoint?: string;
   agent_ops_cache_stats_endpoint?: string;
   agent_ops_cache_entries_endpoint?: string;

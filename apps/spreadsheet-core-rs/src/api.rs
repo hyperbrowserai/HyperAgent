@@ -1113,6 +1113,51 @@ async fn get_agent_schema(
         "compatibility_report": "compatibility report object matching x-export-meta schema"
       }
     },
+    "workbook_event_shapes": {
+      "workbook.created": {
+        "payload": {
+          "name": "workbook name"
+        }
+      },
+      "workbook.imported": {
+        "payload": {
+          "sheets_imported": "number of imported sheets",
+          "cells_imported": "number of imported cells",
+          "formula_cells_imported": "number of imported cells carrying formulas",
+          "formula_cells_with_cached_values": "formula cells with cached scalar values",
+          "formula_cells_without_cached_values": "formula cells without cached scalar values",
+          "warnings": "array of compatibility warning strings"
+        }
+      },
+      "sheet.added": {
+        "payload": {
+          "sheet": "sheet name"
+        }
+      },
+      "cells.updated": {
+        "payload": {
+          "sheet": "sheet name",
+          "updated": "number of updated cells in mutation batch"
+        }
+      },
+      "formula.recalculated": {
+        "payload": {
+          "updated_cells": "number of recalculated cells",
+          "unsupported_formulas": "array of unsupported formula strings"
+        }
+      },
+      "chart.updated": {
+        "payload": {
+          "chart_id": "chart identifier"
+        }
+      },
+      "workbook.exported": {
+        "payload": {
+          "file_name": "exported workbook filename",
+          "compatibility_report": "compatibility report object matching x-export-meta schema"
+        }
+      }
+    },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
@@ -4640,6 +4685,33 @@ mod tests {
     assert_eq!(
       schema
         .get("workbook_export_event_shape")
+        .and_then(|value| value.get("payload"))
+        .and_then(|value| value.get("compatibility_report"))
+        .and_then(serde_json::Value::as_str),
+      Some("compatibility report object matching x-export-meta schema"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_event_shapes")
+        .and_then(|value| value.get("cells.updated"))
+        .and_then(|value| value.get("payload"))
+        .and_then(|value| value.get("updated"))
+        .and_then(serde_json::Value::as_str),
+      Some("number of updated cells in mutation batch"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_event_shapes")
+        .and_then(|value| value.get("formula.recalculated"))
+        .and_then(|value| value.get("payload"))
+        .and_then(|value| value.get("unsupported_formulas"))
+        .and_then(serde_json::Value::as_str),
+      Some("array of unsupported formula strings"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_event_shapes")
+        .and_then(|value| value.get("workbook.exported"))
         .and_then(|value| value.get("payload"))
         .and_then(|value| value.get("compatibility_report"))
         .and_then(serde_json::Value::as_str),

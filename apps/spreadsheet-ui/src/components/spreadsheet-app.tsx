@@ -801,6 +801,10 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_export_event_shape),
     [agentSchemaQuery.data?.workbook_export_event_shape],
   );
+  const agentWorkbookEventShapeFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_event_shapes),
+    [agentSchemaQuery.data?.workbook_event_shapes],
+  );
   const wizardScenarioOps = wizardScenarioOpsQuery.data?.operations ?? [];
   const wizardScenarioOpsSignature =
     wizardScenarioOpsQuery.data?.operations_signature ?? null;
@@ -2983,6 +2987,20 @@ export function SpreadsheetApp() {
                 workbook export event fields:{" "}
                 <span className="font-mono text-slate-200">
                   {agentWorkbookExportEventFields
+                    .map((entry) =>
+                      entry.description
+                        ? `${entry.key}: ${entry.description}`
+                        : entry.key
+                    )
+                    .join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {agentWorkbookEventShapeFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                workbook event shape catalog:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentWorkbookEventShapeFields
                     .map((entry) =>
                       entry.description
                         ? `${entry.key}: ${entry.description}`
