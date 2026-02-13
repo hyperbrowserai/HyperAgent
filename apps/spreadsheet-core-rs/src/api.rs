@@ -1518,11 +1518,19 @@ async fn openapi() -> Json<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
+  use axum::{extract::Path, extract::State, Json};
+  use tempfile::tempdir;
+
   use super::{
+    agent_ops, agent_ops_cache_stats, clear_agent_ops_cache,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
     validate_request_id_signature_consistency,
+  };
+  use crate::{
+    models::{AgentOperation, AgentOpsRequest},
+    state::AppState,
   };
 
   #[test]
@@ -1740,6 +1748,130 @@ mod tests {
         assert_eq!(code, "REQUEST_ID_CONFLICT");
       }
       _ => panic!("expected bad request with custom error code"),
+    }
+  }
+
+  #[tokio::test]
+  async fn should_round_trip_cache_stats_and_clear_via_handlers() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let first_response = agent_ops(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(AgentOpsRequest {
+        request_id: Some("handler-req-1".to_string()),
+        actor: Some("test".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+        operations: vec![AgentOperation::Recalculate],
+      }),
+    )
+    .await
+    .expect("agent ops should succeed")
+    .0;
+    assert!(
+      !first_response.served_from_cache,
+      "first request should not be cache hit",
+    );
+
+    let replay_response = agent_ops(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(AgentOpsRequest {
+        request_id: Some("handler-req-1".to_string()),
+        actor: Some("test".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+        operations: vec![AgentOperation::Recalculate],
+      }),
+    )
+    .await
+    .expect("agent ops replay should succeed")
+    .0;
+    assert!(
+      replay_response.served_from_cache,
+      "replay should be served from cache",
+    );
+
+    let stats = agent_ops_cache_stats(
+      State(state.clone()),
+      Path(workbook.id),
+    )
+    .await
+    .expect("stats should load")
+    .0;
+    assert_eq!(stats.entries, 1);
+    assert_eq!(stats.oldest_request_id.as_deref(), Some("handler-req-1"));
+    assert_eq!(stats.newest_request_id.as_deref(), Some("handler-req-1"));
+
+    let cleared = clear_agent_ops_cache(
+      State(state.clone()),
+      Path(workbook.id),
+    )
+    .await
+    .expect("cache clear should succeed")
+    .0;
+    assert_eq!(cleared.cleared_entries, 1);
+
+    let stats_after_clear = agent_ops_cache_stats(State(state), Path(workbook.id))
+      .await
+      .expect("stats should load")
+      .0;
+    assert_eq!(stats_after_clear.entries, 0);
+    assert!(stats_after_clear.oldest_request_id.is_none());
+    assert!(stats_after_clear.newest_request_id.is_none());
+  }
+
+  #[tokio::test]
+  async fn should_return_request_id_conflict_from_agent_ops_handler() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-conflict".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let _ = agent_ops(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(AgentOpsRequest {
+        request_id: Some("handler-conflict-1".to_string()),
+        actor: Some("test".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+        operations: vec![AgentOperation::Recalculate],
+      }),
+    )
+    .await
+    .expect("initial request should succeed");
+
+    let conflict = agent_ops(
+      State(state),
+      Path(workbook.id),
+      Json(AgentOpsRequest {
+        request_id: Some("handler-conflict-1".to_string()),
+        actor: Some("test".to_string()),
+        stop_on_error: Some(true),
+        expected_operations_signature: None,
+        operations: vec![AgentOperation::ExportWorkbook {
+          include_file_base64: Some(false),
+        }],
+      }),
+    )
+    .await
+    .expect_err("conflicting request should fail");
+    match conflict {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "REQUEST_ID_CONFLICT");
+      }
+      _ => panic!("expected conflict to be encoded as custom bad request"),
     }
   }
 }
