@@ -1,5 +1,9 @@
 import { MCPClient, normalizeMCPToolParams } from "@/agent/mcp/client";
 
+function setServersForClient(client: MCPClient, servers: Map<string, unknown>): void {
+  (client as unknown as { servers: Map<string, unknown> }).servers = servers;
+}
+
 describe("normalizeMCPToolParams", () => {
   it("returns object inputs unchanged", () => {
     const input = { query: "laptops", limit: 5 };
@@ -27,6 +31,35 @@ describe("normalizeMCPToolParams", () => {
   });
 });
 
+describe("MCPClient.connectToServer validation", () => {
+  it("throws when connecting with duplicate server id", async () => {
+    const mcpClient = new MCPClient(false);
+    setServersForClient(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            tools: new Map(),
+          },
+        ],
+      ])
+    );
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          id: "server-1",
+          command: "echo",
+        })
+      ).rejects.toThrow('MCP server with ID "server-1" is already connected');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});
+
 describe("MCPClient.executeTool server selection", () => {
   function setServers(
     client: MCPClient,
@@ -38,17 +71,10 @@ describe("MCPClient.executeTool server selection", () => {
       }
     >
   ): void {
-    (
-      client as unknown as {
-        servers: Map<
-          string,
-          {
-            tools: Map<string, unknown>;
-            client: { callTool: jest.Mock };
-          }
-        >;
-      }
-    ).servers = servers;
+    setServersForClient(
+      client,
+      servers as unknown as Map<string, unknown>
+    );
   }
 
   it("uses the only connected server when serverId is omitted", async () => {
@@ -206,7 +232,7 @@ describe("MCPClient.executeTool server selection", () => {
 
 describe("MCPClient disconnect lifecycle", () => {
   function setServers(client: MCPClient, servers: Map<string, unknown>): void {
-    (client as unknown as { servers: Map<string, unknown> }).servers = servers;
+    setServersForClient(client, servers);
   }
 
   it("disconnectServer closes transport and removes server", async () => {

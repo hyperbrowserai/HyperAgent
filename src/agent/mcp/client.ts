@@ -85,6 +85,9 @@ class MCPClient {
     try {
       // Generate or use provided server ID
       const serverId = serverConfig.id || uuidv4();
+      if (this.servers.has(serverId)) {
+        throw new Error(`MCP server with ID "${serverId}" is already connected`);
+      }
 
       // Create transport for this server
       let transport;
