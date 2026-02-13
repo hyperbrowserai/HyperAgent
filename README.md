@@ -366,6 +366,17 @@ console.log(response);
 await agent.closeAgent();
 ```
 
+You can dynamically disconnect MCP servers later:
+
+```typescript
+// Fire-and-forget disconnect
+agent.disconnectFromMCPServer("server-id");
+
+// Awaited disconnect with success/failure result
+const didDisconnect = await agent.disconnectFromMCPServerAsync("server-id");
+console.log({ didDisconnect });
+```
+
 ### Custom Actions
 
 HyperAgent's capabilities can be extended with custom actions. Custom actions require 3 things:
