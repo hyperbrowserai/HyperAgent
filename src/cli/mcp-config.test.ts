@@ -133,6 +133,41 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("validates args/env/sseHeaders shapes and normalizes record keys", () => {
+    const parsed = parseMCPServersConfig(
+      '[{"command":"npx","args":["-y","server"],"env":{" KEY ":"value"}},{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{" Authorization ":"Bearer token"}}]'
+    );
+    expect(parsed[0]).toEqual(
+      expect.objectContaining({
+        args: ["-y", "server"],
+        env: { KEY: "value" },
+      })
+    );
+    expect(parsed[1]).toEqual(
+      expect.objectContaining({
+        sseHeaders: { Authorization: "Bearer token" },
+      })
+    );
+
+    expect(() =>
+      parseMCPServersConfig('[{"command":"npx","args":[1]}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "args" as an array of strings.'
+    );
+    expect(() =>
+      parseMCPServersConfig('[{"command":"npx","env":{"":1}}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"":1}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 must provide "sseHeaders" as an object of string key/value pairs.'
+    );
+  });
+
   it("throws when includeTools and excludeTools overlap", () => {
     expect(() =>
       parseMCPServersConfig(

@@ -8,6 +8,50 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
+function normalizeOptionalArgs(value: unknown, index: number): string[] | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "args" as an array of strings.`
+    );
+  }
+  if (!value.every((entry) => typeof entry === "string")) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "args" as an array of strings.`
+    );
+  }
+  return value as string[];
+}
+
+function normalizeOptionalStringRecord(
+  field: "env" | "sseHeaders",
+  value: unknown,
+  index: number
+): Record<string, string> | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
+    );
+  }
+
+  const normalized: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(value)) {
+    const key = rawKey.trim();
+    if (key.length === 0 || typeof rawValue !== "string") {
+      throw new Error(
+        `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
+      );
+    }
+    normalized[key] = rawValue;
+  }
+  return normalized;
+}
+
 function normalizeOptionalStringArray(
   field: "includeTools" | "excludeTools",
   value: unknown,
@@ -66,6 +110,13 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       throw new Error(`MCP server entry at index ${i} must be an object.`);
     }
     const normalizedEntry = { ...entry } as Record<string, unknown>;
+    const args = normalizeOptionalArgs(entry.args, i);
+    const env = normalizeOptionalStringRecord("env", entry.env, i);
+    const sseHeaders = normalizeOptionalStringRecord(
+      "sseHeaders",
+      entry.sseHeaders,
+      i
+    );
     const includeTools = normalizeOptionalStringArray(
       "includeTools",
       entry.includeTools,
@@ -81,6 +132,15 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     }
     if (excludeTools) {
       normalizedEntry.excludeTools = excludeTools;
+    }
+    if (args) {
+      normalizedEntry.args = args;
+    }
+    if (env) {
+      normalizedEntry.env = env;
+    }
+    if (sseHeaders) {
+      normalizedEntry.sseHeaders = sseHeaders;
     }
     if (includeTools && excludeTools) {
       const overlap = includeTools.filter((tool) => excludeTools.includes(tool));
