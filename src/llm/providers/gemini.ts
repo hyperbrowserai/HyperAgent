@@ -9,6 +9,7 @@ import {
 } from "../types";
 import { convertToGeminiMessages } from "../utils/message-converter";
 import { convertToGeminiResponseSchema } from "../utils/schema-converter";
+import { parseStructuredResponse } from "../utils/structured-response";
 
 export interface GeminiClientConfig {
   apiKey?: string;
@@ -89,27 +90,7 @@ export class GeminiClient implements HyperAgentLLM {
     });
 
     const text = response.text;
-    if (!text) {
-      return {
-        rawText: "",
-        parsed: null,
-      };
-    }
-
-    try {
-      // Gemini returns pure JSON when using responseJsonSchema
-      const parsed = JSON.parse(text);
-      const validated = request.schema.parse(parsed);
-      return {
-        rawText: text,
-        parsed: validated,
-      };
-    } catch {
-      return {
-        rawText: text,
-        parsed: null,
-      };
-    }
+    return parseStructuredResponse(text, request.schema);
   }
 
   getProviderId(): string {

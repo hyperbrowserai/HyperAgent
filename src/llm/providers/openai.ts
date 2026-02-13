@@ -11,6 +11,7 @@ import {
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
 import { parseJsonMaybe } from "../utils/safe-json";
+import { parseStructuredResponse } from "../utils/structured-response";
 import { getDebugOptions } from "@/debug/options";
 
 const ENV_STRUCTURED_SCHEMA_DEBUG =
@@ -184,26 +185,7 @@ export class OpenAIClient implements HyperAgentLLM {
     }
 
     const content = choice.message.content;
-    if (!content || typeof content !== "string") {
-      return {
-        rawText: "",
-        parsed: null,
-      };
-    }
-
-    try {
-      const parsed = JSON.parse(content);
-      const validated = request.schema.parse(parsed);
-      return {
-        rawText: content,
-        parsed: validated,
-      };
-    } catch {
-      return {
-        rawText: content,
-        parsed: null,
-      };
-    }
+    return parseStructuredResponse(content, request.schema);
   }
 
   getProviderId(): string {

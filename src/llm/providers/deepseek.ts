@@ -11,6 +11,7 @@ import {
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
 import { parseJsonMaybe } from "../utils/safe-json";
+import { parseStructuredResponse } from "../utils/structured-response";
 import { z } from "zod";
 
 export interface DeepSeekClientConfig {
@@ -128,20 +129,8 @@ export class DeepSeekClient implements HyperAgentLLM {
       throw new Error("No response from DeepSeek");
     }
 
-    const content = choice.message.content || "";
-    try {
-      const parsed = JSON.parse(content);
-      const validated = request.schema.parse(parsed);
-      return {
-        rawText: content,
-        parsed: validated,
-      };
-    } catch {
-      return {
-        rawText: content,
-        parsed: null,
-      };
-    }
+    const content = choice.message.content;
+    return parseStructuredResponse(content, request.schema);
   }
 }
 
