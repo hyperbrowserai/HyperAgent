@@ -306,6 +306,105 @@ describe("HyperAgent constructor and task controls", () => {
     );
   });
 
+  it("initBrowser surfaces readable errors when browser provider start fails", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browserProvider: {
+        start: () => Promise<unknown>;
+        close: () => Promise<void>;
+        getSession: () => unknown;
+      };
+      browser: unknown;
+      context: unknown;
+    };
+    internalAgent.browserProvider = {
+      start: async () => {
+        throw new Error("start trap");
+      },
+      close: async () => undefined,
+      getSession: () => null,
+    };
+
+    await expect(agent.initBrowser()).rejects.toThrow(
+      "Failed to start browser provider: start trap"
+    );
+    expect(internalAgent.browser).toBeNull();
+    expect(internalAgent.context).toBeNull();
+  });
+
+  it("initBrowser closes provider when Hyperbrowser context enumeration fails", async () => {
+    const close = jest.fn(async () => undefined);
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browserProviderType: "Hyperbrowser";
+      browserProvider: {
+        start: () => Promise<unknown>;
+        close: typeof close;
+        getSession: () => unknown;
+      };
+      browser: unknown;
+      context: unknown;
+    };
+    internalAgent.browserProviderType = "Hyperbrowser";
+    internalAgent.browserProvider = {
+      start: async () => ({
+        contexts: () => {
+          throw new Error("contexts trap");
+        },
+      }),
+      close,
+      getSession: () => ({ id: "session-1" }),
+    };
+
+    await expect(agent.initBrowser()).rejects.toThrow(
+      "Failed to list browser contexts: contexts trap"
+    );
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(internalAgent.browser).toBeNull();
+    expect(internalAgent.context).toBeNull();
+  });
+
+  it("initBrowser tolerates context page-listener registration failures", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const context = {
+      on: () => {
+        throw new Error("context.on trap");
+      },
+    };
+    const browser = {
+      newContext: async () => context,
+    };
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const internalAgent = agent as unknown as {
+      browserProvider: {
+        start: () => Promise<unknown>;
+        close: () => Promise<void>;
+        getSession: () => unknown;
+      };
+    };
+    internalAgent.browserProvider = {
+      start: async () => browser,
+      close: async () => undefined,
+      getSession: () => ({ id: "session-1" }),
+    };
+
+    try {
+      await expect(agent.initBrowser()).resolves.toBe(browser);
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[HyperAgent] Failed to attach browser page listener: context.on trap"
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("continues getPages when hyperpage context listener attachment fails", async () => {
     const page = {
       on: jest.fn(),
@@ -1002,5 +1101,29 @@ describe("HyperAgent constructor and task controls", () => {
 
     await expect(agent.closeAgent()).resolves.toBeUndefined();
     expect(internalAgent.tasks["task-a"]?.status).toBe(TaskStatus.CANCELLED);
+  });
+
+  it("closeAgent closes browser provider when session exists without browser", async () => {
+    const close = jest.fn(async () => undefined);
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: null;
+      context: null;
+      browserProvider: {
+        close: typeof close;
+        getSession: () => unknown;
+      };
+    };
+    internalAgent.browser = null;
+    internalAgent.context = null;
+    internalAgent.browserProvider = {
+      close,
+      getSession: () => ({ id: "session-1" }),
+    };
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

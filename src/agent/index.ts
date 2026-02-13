@@ -254,6 +254,160 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private async startBrowserProvider(): Promise<Browser> {
+    const startMethod = this.safeReadField(this.browserProvider, "start");
+    if (typeof startMethod !== "function") {
+      throw new HyperagentError(
+        "Browser provider is missing start() method",
+        500
+      );
+    }
+
+    let browser: unknown;
+    try {
+      browser = await (
+        startMethod as (this: unknown) => Promise<unknown>
+      ).call(this.browserProvider);
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to start browser provider: ${formatUnknownError(error)}`,
+        500
+      );
+    }
+
+    if (!browser || typeof browser !== "object") {
+      throw new HyperagentError(
+        "Browser provider returned an invalid browser instance",
+        500
+      );
+    }
+    return browser as Browser;
+  }
+
+  private getBrowserContexts(browser: Browser): BrowserContext[] {
+    const contextsMethod = this.safeReadField(browser, "contexts");
+    if (typeof contextsMethod !== "function") {
+      return [];
+    }
+    try {
+      return Array.from(
+        (contextsMethod as (this: Browser) => BrowserContext[]).call(browser)
+      );
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to list browser contexts: ${formatUnknownError(error)}`,
+        500
+      );
+    }
+  }
+
+  private async createBrowserContext(browser: Browser): Promise<BrowserContext> {
+    const newContextMethod = this.safeReadField(browser, "newContext");
+    if (typeof newContextMethod !== "function") {
+      throw new HyperagentError(
+        "Browser instance is missing newContext() method",
+        500
+      );
+    }
+    let context: unknown;
+    try {
+      context = await (
+        newContextMethod as (
+          this: Browser,
+          options: { viewport: null }
+        ) => Promise<unknown>
+      ).call(browser, {
+        viewport: null,
+      });
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to create browser context: ${formatUnknownError(error)}`,
+        500
+      );
+    }
+    if (!context || typeof context !== "object") {
+      throw new HyperagentError(
+        "Browser newContext() returned an invalid context",
+        500
+      );
+    }
+    return context as BrowserContext;
+  }
+
+  private async closeBrowserProvider(): Promise<void> {
+    const closeMethod = this.safeReadField(this.browserProvider, "close");
+    if (typeof closeMethod !== "function") {
+      throw new HyperagentError(
+        "Browser provider is missing close() method",
+        500
+      );
+    }
+    try {
+      await (closeMethod as (this: unknown) => Promise<void>).call(
+        this.browserProvider
+      );
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to close browser provider: ${formatUnknownError(error)}`,
+        500
+      );
+    }
+  }
+
+  private hasBrowserProviderSession(): boolean {
+    const getSessionMethod = this.safeReadField(this.browserProvider, "getSession");
+    if (typeof getSessionMethod !== "function") {
+      return false;
+    }
+    try {
+      return (
+        (getSessionMethod as (this: unknown) => unknown).call(
+          this.browserProvider
+        ) != null
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private attachBrowserPageListener(context: BrowserContext): void {
+    const contextOn = this.safeReadField(context, "on");
+    if (typeof contextOn !== "function") {
+      if (this.debug) {
+        console.warn(
+          "[HyperAgent] Failed to attach browser page listener: context.on is unavailable"
+        );
+      }
+      return;
+    }
+    try {
+      (
+        contextOn as (
+          this: BrowserContext,
+          event: "page",
+          listener: () => void
+        ) => void
+      ).call(context, "page", () => {
+        if (this.debug) {
+          console.log("New tab/popup detected");
+        }
+
+        // Note: We used to auto-switch this._currentPage here, but that breaks
+        // scoped page interactions. If a user is awaiting pageA.ai(), and a new
+        // tab opens, we don't want pageA to suddenly become pageB.
+        // The user or the specific task logic should handle tab switching if desired.
+      });
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to attach browser page listener: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+  }
+
   private normalizeSingleActionInstruction(value: unknown): string {
     if (typeof value !== "string") {
       throw new HyperagentError(
@@ -417,31 +571,41 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public async initBrowser(): Promise<Browser> {
     if (!this.browser) {
-      this.browser = await this.browserProvider.start();
-      if (
-        this.browserProviderType === "Hyperbrowser" &&
-        this.browser.contexts().length > 0
-      ) {
-        this.context = this.browser.contexts()[0];
-      } else {
-        this.context = await this.browser.newContext({
-          viewport: null,
-        });
+      const browser = await this.startBrowserProvider();
+      this.browser = browser;
+      try {
+        const existingContexts =
+          this.browserProviderType === "Hyperbrowser"
+            ? this.getBrowserContexts(browser)
+            : [];
+        this.context =
+          existingContexts.length > 0
+            ? existingContexts[0]
+            : await this.createBrowserContext(browser);
+      } catch (error) {
+        this.browser = null;
+        this.context = null;
+        try {
+          await this.closeBrowserProvider();
+        } catch (closeError) {
+          if (this.debug) {
+            console.warn(
+              `[HyperAgent] Failed to close browser provider after init failure: ${formatUnknownError(
+                closeError
+              )}`
+            );
+          }
+        }
+        throw error;
       }
 
-      // Listen for new pages (tabs/popups)
-      this.context.on("page", () => {
-        if (this.debug) {
-          console.log("New tab/popup detected");
-        }
+      if (!this.context) {
+        throw new HyperagentError("No context found after browser init", 500);
+      }
 
-        // Note: We used to auto-switch this._currentPage here, but that breaks
-        // scoped page interactions. If a user is awaiting pageA.ai(), and a new
-        // tab opens, we don't want pageA to suddenly become pageB.
-        // The user or the specific task logic should handle tab switching if desired.
-      });
+      this.attachBrowserPageListener(this.context);
 
-      return this.browser;
+      return browser;
     }
     return this.browser;
   }
@@ -638,12 +802,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.mcpActionTypesByServer.clear();
     }
 
-    if (this.browser) {
+    if (this.browser || this.context || this.hasBrowserProviderSession()) {
       try {
-        await this.browserProvider.close();
+        await this.closeBrowserProvider();
       } catch (error) {
         console.warn(
-          `[HyperAgent] Failed to close browser provider: ${formatUnknownError(error)}`
+          `[HyperAgent] ${formatUnknownError(error)}`
         );
       } finally {
         this.browser = null;
