@@ -13,6 +13,23 @@ import {
 } from "./prompts";
 import { ExamineDomResultsSchema, ExamineDomResultsType } from "./schema";
 
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
 /**
  * Find elements in the accessibility tree that match the given instruction
  *
@@ -97,7 +114,9 @@ export async function examineDom(
 
     return { elements: validatedResults, llmResponse };
   } catch (error) {
-    console.error("[examineDom] Error finding elements:", error);
+    console.error(
+      `[examineDom] Error finding elements: ${formatUnknownError(error)}`
+    );
     // Return empty result on error (graceful degradation)
     return {
       elements: [],
