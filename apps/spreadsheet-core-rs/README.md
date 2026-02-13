@@ -160,6 +160,30 @@ curl -X POST "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/ops" \
   }'
 ```
 
+### Example: preview/sign an ops plan, then execute
+
+```bash
+PREVIEW=$(curl -s -X POST "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/ops/preview" \
+  -H "content-type: application/json" \
+  -d '{
+    "operations": [
+      { "op_type": "recalculate" },
+      { "op_type": "export_workbook", "include_file_base64": false }
+    ]
+  }')
+
+SIG=$(echo "$PREVIEW" | jq -r '.operations_signature')
+OPS=$(echo "$PREVIEW" | jq '.operations')
+
+curl -X POST "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/ops" \
+  -H "content-type: application/json" \
+  -d "{
+    \"request_id\": \"ops-signed-1\",
+    \"expected_operations_signature\": \"$SIG\",
+    \"operations\": $OPS
+  }"
+```
+
 ### Example: discover and run built-in presets
 
 ```bash

@@ -1516,4 +1516,33 @@ mod tests {
       "mismatching signature should fail",
     );
   }
+
+  #[test]
+  fn should_allow_blank_expected_signature_values() {
+    let operations = build_preset_operations("export_snapshot", Some(false))
+      .expect("preset operations should build");
+    let signature =
+      operations_signature(&operations).expect("signature should build");
+    assert!(
+      validate_expected_operations_signature(Some("   "), signature.as_str())
+        .is_ok(),
+      "blank signature should be treated as omitted",
+    );
+  }
+
+  #[test]
+  fn should_change_signature_when_operations_change() {
+    let without_file = build_scenario_operations("refresh_and_export", Some(false))
+      .expect("scenario should build");
+    let with_file = build_scenario_operations("refresh_and_export", Some(true))
+      .expect("scenario should build");
+    let without_file_signature = operations_signature(&without_file)
+      .expect("signature should build");
+    let with_file_signature =
+      operations_signature(&with_file).expect("signature should build");
+    assert_ne!(
+      without_file_signature, with_file_signature,
+      "signature should change when operation payload changes",
+    );
+  }
 }
