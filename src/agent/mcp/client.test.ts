@@ -99,6 +99,25 @@ describe("normalizeMCPToolParams", () => {
     ).toThrow("MCP tool params cannot include keys longer than 256 characters");
   });
 
+  it("rejects oversized object collections", () => {
+    const oversized = Object.fromEntries(
+      Array.from({ length: 501 }, (_, index) => [`k${index}`, index])
+    );
+    expect(() => normalizeMCPToolParams(oversized)).toThrow(
+      "MCP tool params cannot include collections with more than 500 entries"
+    );
+  });
+
+  it("rejects oversized array collections", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        values: Array.from({ length: 501 }, (_, index) => index),
+      })
+    ).toThrow(
+      "MCP tool params cannot include collections with more than 500 entries"
+    );
+  });
+
   it("rejects string values with control characters", () => {
     expect(() =>
       normalizeMCPToolParams({
@@ -191,6 +210,28 @@ describe("normalizeMCPToolParams", () => {
         metadata: map as unknown as Record<string, unknown>,
       })
     ).toThrow("MCP tool params cannot include keys longer than 256 characters");
+  });
+
+  it("rejects oversized map and set collections", () => {
+    const oversizedMap = new Map<unknown, unknown>(
+      Array.from({ length: 501 }, (_, index) => [`k${index}`, index])
+    );
+    const oversizedSet = new Set(Array.from({ length: 501 }, (_, index) => index));
+
+    expect(() =>
+      normalizeMCPToolParams({
+        metadata: oversizedMap as unknown as Record<string, unknown>,
+      })
+    ).toThrow(
+      "MCP tool params cannot include collections with more than 500 entries"
+    );
+    expect(() =>
+      normalizeMCPToolParams({
+        values: oversizedSet as unknown as Record<string, unknown>,
+      })
+    ).toThrow(
+      "MCP tool params cannot include collections with more than 500 entries"
+    );
   });
 
   it("rejects circular references in direct object params", () => {

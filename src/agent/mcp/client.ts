@@ -23,6 +23,7 @@ const MAX_MCP_TOOL_PARAMS_JSON_CHARS = 100_000;
 const MAX_MCP_PARAM_DEPTH = 25;
 const MAX_MCP_PARAM_STRING_CHARS = 20_000;
 const MAX_MCP_PARAM_KEY_CHARS = 256;
+const MAX_MCP_PARAM_COLLECTION_SIZE = 500;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -91,6 +92,11 @@ export function normalizeMCPToolParams(
       if (seen.has(value)) {
         throw new Error("MCP tool params cannot include circular references");
       }
+      if (value.length > MAX_MCP_PARAM_COLLECTION_SIZE) {
+        throw new Error(
+          `MCP tool params cannot include collections with more than ${MAX_MCP_PARAM_COLLECTION_SIZE} entries`
+        );
+      }
       seen.add(value);
       try {
         return value.map((entry) => sanitizeParamValue(entry, seen, depth + 1));
@@ -127,6 +133,11 @@ export function normalizeMCPToolParams(
       if (seen.has(value)) {
         throw new Error("MCP tool params cannot include circular references");
       }
+      if (value.size > MAX_MCP_PARAM_COLLECTION_SIZE) {
+        throw new Error(
+          `MCP tool params cannot include collections with more than ${MAX_MCP_PARAM_COLLECTION_SIZE} entries`
+        );
+      }
       seen.add(value);
       try {
         return Array.from(value).map((entry) =>
@@ -139,6 +150,11 @@ export function normalizeMCPToolParams(
     if (value instanceof Map) {
       if (seen.has(value)) {
         throw new Error("MCP tool params cannot include circular references");
+      }
+      if (value.size > MAX_MCP_PARAM_COLLECTION_SIZE) {
+        throw new Error(
+          `MCP tool params cannot include collections with more than ${MAX_MCP_PARAM_COLLECTION_SIZE} entries`
+        );
       }
       seen.add(value);
       try {
@@ -188,8 +204,14 @@ export function normalizeMCPToolParams(
       seen.add(value);
       try {
         const sanitized: Record<string, unknown> = Object.create(null);
+        const entries = Object.entries(value);
+        if (entries.length > MAX_MCP_PARAM_COLLECTION_SIZE) {
+          throw new Error(
+            `MCP tool params cannot include collections with more than ${MAX_MCP_PARAM_COLLECTION_SIZE} entries`
+          );
+        }
         const seenKeys = new Set<string>();
-        for (const [key, paramValue] of Object.entries(value)) {
+        for (const [key, paramValue] of entries) {
           const trimmedKey = key.trim();
           if (trimmedKey.length === 0) {
             throw new Error("MCP tool params cannot include empty keys");
