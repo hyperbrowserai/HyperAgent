@@ -152,6 +152,20 @@ describe("normalizeMCPListToolsPayload", () => {
     );
   });
 
+  it("rejects payloads when tools own-property checks throw", () => {
+    const payload = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor(): PropertyDescriptor {
+          throw new Error("descriptor trap");
+        },
+      }
+    );
+    expect(() =>
+      normalizeMCPListToolsPayload(payload as Record<string, unknown>)
+    ).toThrow("Invalid MCP listTools response: expected a tools array");
+  });
+
   it("rejects oversized tools payloads", () => {
     const tools = Array.from({ length: 501 }, (_, index) =>
       createTool(`tool-${index}`)
@@ -734,6 +748,27 @@ describe("MCPClient.connectToServer validation", () => {
       ).rejects.toThrow("MCP server config must be an object");
       await expect(
         mcpClient.connectToServer([] as unknown as MCPServerConfig)
+      ).rejects.toThrow("MCP server config must be an object");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects proxy server configs that throw during shape checks", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const proxyConfig = new Proxy(
+      {},
+      {
+        getPrototypeOf(): object | null {
+          throw new Error("prototype trap");
+        },
+      }
+    );
+
+    try {
+      await expect(
+        mcpClient.connectToServer(proxyConfig as unknown as MCPServerConfig)
       ).rejects.toThrow("MCP server config must be an object");
     } finally {
       errorSpy.mockRestore();

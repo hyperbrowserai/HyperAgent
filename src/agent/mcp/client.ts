@@ -69,7 +69,11 @@ function hasAnyControlChars(value: string): boolean {
 }
 
 function isMCPServerConfig(value: unknown): value is MCPServerConfig {
-  return isPlainRecord(value);
+  try {
+    return isPlainRecord(value);
+  } catch {
+    return false;
+  }
 }
 
 function validateParamStringValue(value: string): string {
@@ -460,6 +464,14 @@ function normalizeMCPToolFilterListValues(
   return Array.from(normalizedSet);
 }
 
+function safeHasOwnProperty(value: Record<string, unknown>, key: string): boolean {
+  try {
+    return Object.prototype.hasOwnProperty.call(value, key);
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeDiscoveredMCPTools(
   tools: Tool[],
   options: MCPToolDiscoveryOptions
@@ -548,7 +560,7 @@ export function normalizeDiscoveredMCPTools(
 }
 
 export function normalizeMCPListToolsPayload(value: unknown): Tool[] {
-  if (!isPlainRecord(value) || !Object.prototype.hasOwnProperty.call(value, "tools")) {
+  if (!isPlainRecord(value) || !safeHasOwnProperty(value, "tools")) {
     throw new Error("Invalid MCP listTools response: expected a tools array");
   }
   let toolsValue: unknown;
