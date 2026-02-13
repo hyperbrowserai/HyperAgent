@@ -76,6 +76,15 @@ describe("normalizeTaskDescription", () => {
 });
 
 describe("loadTaskDescriptionFromFile", () => {
+  it("throws when task file path is not a non-empty string", async () => {
+    await expect(
+      loadTaskDescriptionFromFile("" as unknown as string)
+    ).rejects.toThrow("Task description file path must be a non-empty string.");
+    await expect(
+      loadTaskDescriptionFromFile(42 as unknown as string)
+    ).rejects.toThrow("Task description file path must be a non-empty string.");
+  });
+
   it("loads and trims task description text", async () => {
     const tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "hyperagent-task-input-")

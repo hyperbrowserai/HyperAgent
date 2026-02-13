@@ -47,35 +47,42 @@ export function normalizeTaskDescription(
 export async function loadTaskDescriptionFromFile(
   filePath: string
 ): Promise<string> {
+  if (typeof filePath !== "string" || filePath.trim().length === 0) {
+    throw new Error(
+      "Task description file path must be a non-empty string."
+    );
+  }
+  const normalizedFilePath = filePath.trim();
+
   let fileStats: fs.Stats | undefined;
   try {
-    fileStats = await fs.promises.stat(filePath);
+    fileStats = await fs.promises.stat(normalizedFilePath);
   } catch {
     // Fall back to readFile error handling for missing/inaccessible paths.
   }
 
   if (fileStats && !fileStats.isFile()) {
     throw new Error(
-      `Task description file "${filePath}" must be a regular text file.`
+      `Task description file "${normalizedFilePath}" must be a regular text file.`
     );
   }
   if (fileStats && fileStats.size > MAX_TASK_FILE_BYTES) {
     throw new Error(
-      `Task description file "${filePath}" exceeds ${MAX_TASK_FILE_BYTES} bytes. Please provide a smaller text file.`
+      `Task description file "${normalizedFilePath}" exceeds ${MAX_TASK_FILE_BYTES} bytes. Please provide a smaller text file.`
     );
   }
 
   let content: string;
   try {
-    content = await fs.promises.readFile(filePath, "utf-8");
+    content = await fs.promises.readFile(normalizedFilePath, "utf-8");
   } catch (error) {
     throw new Error(
-      `Failed to read task description file "${filePath}": ${formatUnknownError(error)}`
+      `Failed to read task description file "${normalizedFilePath}": ${formatUnknownError(error)}`
     );
   }
 
   return normalizeTaskDescription(
     content,
-    `Task description file "${filePath}"`
+    `Task description file "${normalizedFilePath}"`
   );
 }
