@@ -57,6 +57,12 @@ describe("normalizeMCPToolParams", () => {
     );
   });
 
+  it("rejects JSON string params with unsupported control characters", () => {
+    expect(() => normalizeMCPToolParams("{\"query\":\"a\u0007b\"}")).toThrow(
+      "Invalid MCP tool params JSON string: contains unsupported control characters"
+    );
+  });
+
   it("rejects reserved object keys in parsed JSON params", () => {
     expect(() => normalizeMCPToolParams('{"__proto__":{"x":1}}')).toThrow(
       'MCP tool params cannot include reserved key "__proto__"'

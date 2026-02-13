@@ -23,6 +23,16 @@ const MAX_MCP_TOOL_PARAMS_JSON_CHARS = 100_000;
 const MAX_MCP_PARAM_DEPTH = 25;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
+function hasUnsupportedControlChars(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const code = char.charCodeAt(0);
+    return (
+      (code >= 0 && code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+      code === 127
+    );
+  });
+}
+
 const MCPToolActionParams = z.object({
   params: z
     .union([z.string(), z.record(z.string(), z.unknown())])
@@ -121,6 +131,11 @@ export function normalizeMCPToolParams(
     if (trimmedInput.length === 0) {
       throw new Error(
         "Invalid MCP tool params JSON string: input is empty"
+      );
+    }
+    if (hasUnsupportedControlChars(trimmedInput)) {
+      throw new Error(
+        "Invalid MCP tool params JSON string: contains unsupported control characters"
       );
     }
     if (trimmedInput.length > MAX_MCP_TOOL_PARAMS_JSON_CHARS) {
