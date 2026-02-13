@@ -45,6 +45,10 @@ use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::BroadcastStream;
 use uuid::Uuid;
 
+const FORMULA_SUPPORTED_FUNCTIONS: &str = "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, ISBLANK, ISNUMBER, ISTEXT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode, MATCH exact-match mode, INDEX";
+const FORMULA_UNSUPPORTED_BEHAVIORS: &str = "VLOOKUP with range_lookup TRUE/1, XLOOKUP non-exact match_mode/search_mode variants, and MATCH non-exact match_type variants remain unsupported and are surfaced via unsupported_formulas";
+const FORMULA_FALLBACK_BEHAVIOR: &str = "unsupported formulas are preserved and reported by formula.recalculated payloads";
+
 pub fn create_router(state: AppState) -> Router {
   Router::new()
     .route("/health", get(health))
@@ -553,9 +557,9 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "warnings": "array of compatibility warning strings"
     },
     "formula_capabilities": {
-      "supported_functions": "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, ISBLANK, ISNUMBER, ISTEXT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode, MATCH exact-match mode, INDEX",
-      "unsupported_behaviors": "VLOOKUP with range_lookup TRUE/1 and XLOOKUP non-exact match_mode/search_mode variants remain unsupported and are surfaced via unsupported_formulas",
-      "fallback_behavior": "unsupported formulas are preserved and reported by formula.recalculated payloads"
+      "supported_functions": FORMULA_SUPPORTED_FUNCTIONS,
+      "unsupported_behaviors": FORMULA_UNSUPPORTED_BEHAVIORS,
+      "fallback_behavior": FORMULA_FALLBACK_BEHAVIOR
     },
     "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
     "scenarios": scenario_catalog(),
@@ -1077,9 +1081,9 @@ async fn get_agent_schema(
       }
     },
     "formula_capabilities": {
-      "supported_functions": "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, ISBLANK, ISNUMBER, ISTEXT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode, MATCH exact-match mode, INDEX",
-      "unsupported_behaviors": "VLOOKUP with range_lookup TRUE/1 and XLOOKUP non-exact match_mode/search_mode variants remain unsupported and are surfaced via unsupported_formulas",
-      "fallback_behavior": "unsupported formulas are preserved and reported by formula.recalculated payloads"
+      "supported_functions": FORMULA_SUPPORTED_FUNCTIONS,
+      "unsupported_behaviors": FORMULA_UNSUPPORTED_BEHAVIORS,
+      "fallback_behavior": FORMULA_FALLBACK_BEHAVIOR
     },
     "agent_ops_response_shape": {
       "request_id": "optional string",
@@ -2502,6 +2506,7 @@ mod tests {
     agent_ops_cache_prefixes,
     agent_ops_cache_stats,
     clear_agent_ops_cache, get_agent_schema, get_agent_wizard_schema,
+    FORMULA_SUPPORTED_FUNCTIONS, FORMULA_UNSUPPORTED_BEHAVIORS,
     remove_agent_ops_cache_entry,
     remove_agent_ops_cache_entries_by_prefix,
     remove_stale_agent_ops_cache_entries,
@@ -4644,18 +4649,14 @@ mod tests {
         .get("formula_capabilities")
         .and_then(|value| value.get("supported_functions"))
         .and_then(serde_json::Value::as_str),
-      Some(
-        "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, ISBLANK, ISNUMBER, ISTEXT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode, MATCH exact-match mode, INDEX",
-      ),
+      Some(FORMULA_SUPPORTED_FUNCTIONS),
     );
     assert_eq!(
       schema
         .get("formula_capabilities")
         .and_then(|value| value.get("unsupported_behaviors"))
         .and_then(serde_json::Value::as_str),
-      Some(
-        "VLOOKUP with range_lookup TRUE/1 and XLOOKUP non-exact match_mode/search_mode variants remain unsupported and are surfaced via unsupported_formulas",
-      ),
+      Some(FORMULA_UNSUPPORTED_BEHAVIORS),
     );
     assert_eq!(
       schema
@@ -5116,9 +5117,7 @@ mod tests {
         .get("formula_capabilities")
         .and_then(|value| value.get("supported_functions"))
         .and_then(serde_json::Value::as_str),
-      Some(
-        "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, ISBLANK, ISNUMBER, ISTEXT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode, MATCH exact-match mode, INDEX",
-      ),
+      Some(FORMULA_SUPPORTED_FUNCTIONS),
     );
   }
 }
