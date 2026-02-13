@@ -19,17 +19,18 @@ class PlaywrightSessionAdapter implements CDPSession {
     this.id = extractSessionId(session);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async send<T = any>(
+  async send<T = unknown>(
     method: string,
     params?: Record<string, unknown>
   ): Promise<T> {
-    const result = (this.session.send as PlaywrightSession["send"])(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      method as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      params as any
-    );
+    type SendMethod = Parameters<PlaywrightSession["send"]>[0];
+    type SendParams = Parameters<PlaywrightSession["send"]>[1];
+
+    const result = (this.session.send as unknown as (
+      method: SendMethod,
+      params?: SendParams
+    ) => Promise<unknown>)(method as SendMethod, params as SendParams);
+
     return result as Promise<T>;
   }
 
