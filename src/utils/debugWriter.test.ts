@@ -140,4 +140,43 @@ describe("writeAiActionDebug", () => {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("does not consume action counter when directory creation fails", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-debug-writer-")
+    );
+    const originalMkdir = fs.mkdirSync;
+    let hasThrown = false;
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(
+      (
+        targetPath: fs.PathLike,
+        options?: fs.Mode | fs.MakeDirectoryOptions | null
+      ) => {
+        if (!hasThrown) {
+          hasThrown = true;
+          throw { reason: "mkdir denied once" };
+        }
+        return originalMkdir(targetPath, options);
+      }
+    );
+    const debugData: DebugData = {
+      instruction: "click login",
+      url: "https://example.com",
+      timestamp: new Date().toISOString(),
+      domElementCount: 5,
+      domTree: "dom tree",
+      success: true,
+    };
+
+    try {
+      await expect(writeAiActionDebug(debugData, tempDir)).rejects.toThrow(
+        "mkdir denied once"
+      );
+      const debugDir = await writeAiActionDebug(debugData, tempDir);
+      expect(debugDir.endsWith("action-0")).toBe(true);
+    } finally {
+      mkdirSpy.mockRestore();
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

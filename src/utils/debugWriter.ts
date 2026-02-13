@@ -126,7 +126,7 @@ export async function writeAiActionDebug(
   baseDir: string = "debug/aiAction"
 ): Promise<string> {
   const session = getSessionId();
-  const actionNum = actionCounter++;
+  const actionNum = actionCounter;
   const debugDir = path.join(baseDir, session, `action-${actionNum}`);
 
   // Create debug directory
@@ -137,6 +137,7 @@ export async function writeAiActionDebug(
       `[debugWriter] Failed to create debug directory "${debugDir}": ${formatUnknownError(error)}`
     );
   }
+  actionCounter += 1;
 
   // Write instruction and metadata
   const metadata = {
