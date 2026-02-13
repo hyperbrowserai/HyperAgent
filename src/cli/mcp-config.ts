@@ -32,11 +32,13 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 
   const servers = normalizeServersPayload(parsed);
   const seenIds = new Set<string>();
+  const normalizedServers: MCPServerConfig[] = [];
   for (let i = 0; i < servers.length; i += 1) {
     const entry = servers[i];
     if (!isRecord(entry)) {
       throw new Error(`MCP server entry at index ${i} must be an object.`);
     }
+    const normalizedEntry = { ...entry } as Record<string, unknown>;
 
     const normalizedId = isNonEmptyString(entry.id) ? entry.id.trim() : "";
     if (normalizedId.length > 0) {
@@ -46,26 +48,36 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
         );
       }
       seenIds.add(normalizedId);
+      normalizedEntry.id = normalizedId;
+    } else {
+      delete normalizedEntry.id;
     }
 
     const connectionType =
       entry.connectionType === "sse" ? "sse" : "stdio";
+    normalizedEntry.connectionType = connectionType;
     if (connectionType === "sse") {
-      if (!isNonEmptyString(entry.sseUrl)) {
+      const sseUrl = isNonEmptyString(entry.sseUrl) ? entry.sseUrl.trim() : "";
+      if (sseUrl.length === 0) {
         throw new Error(
           `MCP server entry at index ${i} must include a non-empty "sseUrl" for SSE connections.`
         );
       }
+      normalizedEntry.sseUrl = sseUrl;
+      normalizedServers.push(normalizedEntry as MCPServerConfig);
       continue;
     }
 
-    if (!isNonEmptyString(entry.command)) {
+    const command = isNonEmptyString(entry.command) ? entry.command.trim() : "";
+    if (command.length === 0) {
       throw new Error(
         `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`
       );
     }
+    normalizedEntry.command = command;
+    normalizedServers.push(normalizedEntry as MCPServerConfig);
   }
-  return servers as MCPServerConfig[];
+  return normalizedServers;
 }
 
 export async function loadMCPServersFromFile(

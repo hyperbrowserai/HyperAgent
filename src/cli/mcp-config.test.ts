@@ -6,7 +6,12 @@ describe("parseMCPServersConfig", () => {
       '[{"id":"one","command":"npx","args":["-y","server"]}]'
     );
     expect(parsed).toEqual([
-      { id: "one", command: "npx", args: ["-y", "server"] },
+      {
+        id: "one",
+        command: "npx",
+        args: ["-y", "server"],
+        connectionType: "stdio",
+      },
     ]);
   });
 
@@ -69,5 +74,23 @@ describe("parseMCPServersConfig", () => {
         '[{"id":"shared","command":"npx"},{"id":"shared","command":"node"}]'
       )
     ).toThrow('MCP server entry at index 1 reuses duplicate id "shared".');
+  });
+
+  it("returns normalized trimmed id/command/sseUrl fields", () => {
+    const parsed = parseMCPServersConfig(
+      '[{"id":"  stdio-1  ","command":"  npx  "},{"connectionType":"sse","id":"  ","sseUrl":"  https://example.com/sse  "}]'
+    );
+
+    expect(parsed).toEqual([
+      {
+        id: "stdio-1",
+        command: "npx",
+        connectionType: "stdio",
+      },
+      {
+        connectionType: "sse",
+        sseUrl: "https://example.com/sse",
+      },
+    ]);
   });
 });
