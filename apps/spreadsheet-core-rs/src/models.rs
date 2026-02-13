@@ -148,6 +148,7 @@ pub struct AgentOpsCacheStatsResponse {
   pub entries: usize,
   pub max_entries: usize,
   pub max_age_seconds: Option<i64>,
+  pub cutoff_timestamp: Option<DateTime<Utc>>,
   pub oldest_request_id: Option<String>,
   pub newest_request_id: Option<String>,
   pub oldest_cached_at: Option<DateTime<Utc>>,
@@ -278,6 +279,7 @@ pub struct AgentOpsCacheEntriesResponse {
   pub returned_entries: usize,
   pub request_id_prefix: Option<String>,
   pub max_age_seconds: Option<i64>,
+  pub cutoff_timestamp: Option<DateTime<Utc>>,
   pub offset: usize,
   pub limit: usize,
   pub has_more: bool,
@@ -295,6 +297,7 @@ pub struct AgentOpsCachePrefixesResponse {
   pub total_prefixes: usize,
   pub returned_prefixes: usize,
   pub max_age_seconds: Option<i64>,
+  pub cutoff_timestamp: Option<DateTime<Utc>>,
   pub limit: usize,
   pub prefixes: Vec<AgentOpsCachePrefix>,
 }

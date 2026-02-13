@@ -1087,6 +1087,7 @@ async fn get_agent_schema(
       "entries": "current cache entries",
       "max_entries": "maximum cache size",
       "max_age_seconds": "echoed age filter when provided",
+      "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "oldest_request_id": "optional oldest cached request id",
       "newest_request_id": "optional newest cached request id",
       "oldest_cached_at": "optional iso timestamp of oldest cached entry",
@@ -1097,6 +1098,7 @@ async fn get_agent_schema(
       "returned_entries": "number of entries returned in this response",
       "request_id_prefix": "echoed filter prefix when provided",
       "max_age_seconds": "echoed age filter when provided",
+      "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "offset": "start index in newest-first order",
       "limit": "applied limit (default 20, max 200)",
       "has_more": "true when another page exists after this response",
@@ -1112,6 +1114,7 @@ async fn get_agent_schema(
       "total_prefixes": "total distinct prefix suggestions available",
       "returned_prefixes": "number of prefixes returned",
       "max_age_seconds": "echoed age filter when provided",
+      "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "limit": "applied limit (default 8, max 100)",
       "prefixes": [{ "prefix": "string", "entry_count": "number of matching cache entries" }]
     },
@@ -1534,6 +1537,7 @@ async fn agent_ops_cache_stats(
     entries,
     max_entries: AGENT_OPS_CACHE_MAX_ENTRIES,
     max_age_seconds: query.max_age_seconds,
+    cutoff_timestamp,
     oldest_request_id,
     newest_request_id,
     oldest_cached_at,
@@ -1591,6 +1595,7 @@ async fn agent_ops_cache_entries(
     returned_entries: mapped_entries.len(),
     request_id_prefix: normalized_prefix.map(str::to_string),
     max_age_seconds: query.max_age_seconds,
+    cutoff_timestamp,
     offset,
     limit,
     has_more,
@@ -1654,6 +1659,7 @@ async fn agent_ops_cache_prefixes(
     total_prefixes,
     returned_prefixes: mapped_prefixes.len(),
     max_age_seconds: query.max_age_seconds,
+    cutoff_timestamp,
     limit,
     prefixes: mapped_prefixes,
   }))
@@ -2464,6 +2470,7 @@ mod tests {
     .0;
     assert_eq!(stats.entries, 1);
     assert_eq!(stats.max_age_seconds, None);
+    assert!(stats.cutoff_timestamp.is_none());
     assert_eq!(stats.oldest_request_id.as_deref(), Some("handler-req-1"));
     assert_eq!(stats.newest_request_id.as_deref(), Some("handler-req-1"));
     assert!(stats.oldest_cached_at.is_some());
@@ -2480,6 +2487,7 @@ mod tests {
     .expect("age-scoped stats should load")
     .0;
     assert_eq!(scoped_stats.max_age_seconds, Some(86_400));
+    assert!(scoped_stats.cutoff_timestamp.is_some());
     assert_eq!(scoped_stats.entries, 0);
 
     let cleared = clear_agent_ops_cache(
@@ -2502,6 +2510,7 @@ mod tests {
     .expect("stats should load")
     .0;
     assert_eq!(stats_after_clear.entries, 0);
+    assert!(stats_after_clear.cutoff_timestamp.is_none());
     assert!(stats_after_clear.oldest_request_id.is_none());
     assert!(stats_after_clear.newest_request_id.is_none());
     assert!(stats_after_clear.oldest_cached_at.is_none());
@@ -2568,6 +2577,7 @@ mod tests {
     assert_eq!(entries_response.total_entries, 3);
     assert_eq!(entries_response.returned_entries, 2);
     assert_eq!(entries_response.request_id_prefix, None);
+    assert!(entries_response.cutoff_timestamp.is_none());
     assert_eq!(entries_response.offset, 0);
     assert_eq!(entries_response.limit, 2);
     assert!(entries_response.has_more);
@@ -2635,6 +2645,7 @@ mod tests {
     .expect("age-filtered entries should load")
     .0;
     assert_eq!(age_filtered_response.max_age_seconds, Some(86_400));
+    assert!(age_filtered_response.cutoff_timestamp.is_some());
     assert_eq!(age_filtered_response.total_entries, 0);
     assert!(age_filtered_response.entries.is_empty());
   }
@@ -2711,6 +2722,7 @@ mod tests {
     assert_eq!(prefixes.total_prefixes, 2);
     assert_eq!(prefixes.returned_prefixes, 2);
     assert_eq!(prefixes.max_age_seconds, None);
+    assert!(prefixes.cutoff_timestamp.is_none());
     assert_eq!(prefixes.prefixes[0].prefix, "scenario-");
     assert_eq!(prefixes.prefixes[0].entry_count, 2);
     assert_eq!(prefixes.prefixes[1].prefix, "preset-");
@@ -2728,6 +2740,7 @@ mod tests {
     .expect("age-filtered prefixes should load")
     .0;
     assert_eq!(age_filtered.max_age_seconds, Some(86_400));
+    assert!(age_filtered.cutoff_timestamp.is_some());
     assert_eq!(age_filtered.total_prefixes, 0);
     assert!(age_filtered.prefixes.is_empty());
 

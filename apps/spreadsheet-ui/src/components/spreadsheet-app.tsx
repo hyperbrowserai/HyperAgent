@@ -2660,6 +2660,11 @@ export function SpreadsheetApp() {
                         (older than {agentOpsCacheQuery.data.max_age_seconds}s)
                       </span>
                     ) : null}
+                    {agentOpsCacheQuery.data.cutoff_timestamp ? (
+                      <span className="ml-1 text-slate-500">
+                        cutoff {formatIsoTimestamp(agentOpsCacheQuery.data.cutoff_timestamp)}
+                      </span>
+                    ) : null}
                   </span>
                   <button
                     onClick={handleClearAgentOpsCache}
@@ -2972,6 +2977,12 @@ export function SpreadsheetApp() {
                           (older than {agentOpsCachePrefixesQuery.data.max_age_seconds}s)
                         </span>
                       ) : null}
+                      {agentOpsCachePrefixesQuery.data?.cutoff_timestamp ? (
+                        <span className="text-[10px] text-slate-500">
+                          cutoff{" "}
+                          {formatIsoTimestamp(agentOpsCachePrefixesQuery.data.cutoff_timestamp)}
+                        </span>
+                      ) : null}
                       {cachePrefixSuggestions.map((suggestion) => (
                         <button
                           key={suggestion.prefix}
@@ -3053,6 +3064,15 @@ export function SpreadsheetApp() {
                           older than{" "}
                           <span className="font-mono text-amber-300">
                             {cacheEntriesData.max_age_seconds}s
+                          </span>
+                        </>
+                      ) : null}
+                      {cacheEntriesData.cutoff_timestamp ? (
+                        <>
+                          {" "}
+                          cutoff{" "}
+                          <span className="font-mono text-amber-300">
+                            {formatIsoTimestamp(cacheEntriesData.cutoff_timestamp)}
                           </span>
                         </>
                       ) : null}

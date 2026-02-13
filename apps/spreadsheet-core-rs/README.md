@@ -38,7 +38,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/cells/set-batch`
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
 - `POST /v1/workbooks/{id}/agent/ops/preview`
-- `GET /v1/workbooks/{id}/agent/ops/cache?max_age_seconds=3600` (includes oldest/newest request ids plus `oldest_cached_at` / `newest_cached_at`; optional age filter for stale-scoped stats)
+- `GET /v1/workbooks/{id}/agent/ops/cache?max_age_seconds=3600` (includes oldest/newest request ids plus `oldest_cached_at` / `newest_cached_at`; optional age filter for stale-scoped stats and returns `cutoff_timestamp` when scoped)
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries`
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries/{request_id}`
 - `GET /v1/workbooks/{id}/agent/ops/cache/prefixes`
@@ -99,9 +99,9 @@ Plan-preview helper:
 
 Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache`
-- `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&max_age_seconds=3600&offset=0&limit=20` (newest-first paged request-id summaries, optional prefix filter, optional age filter for stale-only browsing, max `limit=200`, includes operation/result counts and `cached_at`)
+- `GET /v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&max_age_seconds=3600&offset=0&limit=20` (newest-first paged request-id summaries, optional prefix filter, optional age filter for stale-only browsing, max `limit=200`, includes operation/result counts, `cached_at`, and scoped `cutoff_timestamp`)
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries/{request_id}` (full cached detail: response + operations + counts + `cached_at`)
-- `GET /v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8&max_age_seconds=3600` (prefix suggestions with counts for filter UX; optional age filter for stale-only views)
+- `GET /v1/workbooks/{id}/agent/ops/cache/prefixes?limit=8&max_age_seconds=3600` (prefix suggestions with counts for filter UX; optional age filter for stale-only views and scoped `cutoff_timestamp`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `POST /v1/workbooks/{id}/agent/ops/cache/replay` with `{ "request_id": "..." }` (returns `{ cached_response, operations }` where `operations` are the original cached ops payload)
 - `POST /v1/workbooks/{id}/agent/ops/cache/reexecute` with `{ "request_id": "...", "new_request_id": "..." }` (reexecutes cached operations as fresh `agent/ops`)
