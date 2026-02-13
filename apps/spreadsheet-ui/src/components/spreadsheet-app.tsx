@@ -225,6 +225,10 @@ export function SpreadsheetApp() {
   const hasInvalidCachePrefixMaxSpanSecondsInput =
     cachePrefixMaxSpanSeconds.trim().length > 0
     && typeof normalizedCachePrefixMaxSpanSeconds !== "number";
+  const hasInvalidCachePrefixSpanRangeInput =
+    typeof normalizedCachePrefixMinSpanSeconds === "number"
+    && typeof normalizedCachePrefixMaxSpanSeconds === "number"
+    && normalizedCachePrefixMinSpanSeconds > normalizedCachePrefixMaxSpanSeconds;
   const normalizedCachePrefixSuggestionLimit = parsePositiveIntegerInput(
     cachePrefixSuggestionLimit,
   );
@@ -390,6 +394,7 @@ export function SpreadsheetApp() {
       && !hasInvalidCachePrefixMinEntryCountInput
       && !hasInvalidCachePrefixMinSpanSecondsInput
       && !hasInvalidCachePrefixMaxSpanSecondsInput
+      && !hasInvalidCachePrefixSpanRangeInput
       && !hasInvalidCachePrefixSuggestionLimitInput,
     queryFn: () =>
       getAgentOpsCachePrefixes(
@@ -518,6 +523,7 @@ export function SpreadsheetApp() {
       && !hasInvalidCachePrefixMinEntryCountInput
       && !hasInvalidCachePrefixMinSpanSecondsInput
       && !hasInvalidCachePrefixMaxSpanSecondsInput
+      && !hasInvalidCachePrefixSpanRangeInput
       && !hasInvalidCachePrefixSuggestionLimitInput
       && cachePrefixSuggestionsOffset > 0
       && agentOpsCachePrefixesQuery.data
@@ -535,6 +541,7 @@ export function SpreadsheetApp() {
     hasInvalidCachePrefixMinEntryCountInput,
     hasInvalidCachePrefixMinSpanSecondsInput,
     hasInvalidCachePrefixMaxSpanSecondsInput,
+    hasInvalidCachePrefixSpanRangeInput,
     hasInvalidCachePrefixSuggestionLimitInput,
   ]);
 
@@ -641,6 +648,7 @@ export function SpreadsheetApp() {
     || hasInvalidCachePrefixMinEntryCountInput
     || hasInvalidCachePrefixMinSpanSecondsInput
     || hasInvalidCachePrefixMaxSpanSecondsInput
+    || hasInvalidCachePrefixSpanRangeInput
     || hasInvalidCachePrefixSuggestionLimitInput
       ? null
       : agentOpsCachePrefixesQuery.data;
@@ -649,6 +657,7 @@ export function SpreadsheetApp() {
     || hasInvalidCachePrefixMinEntryCountInput
     || hasInvalidCachePrefixMinSpanSecondsInput
     || hasInvalidCachePrefixMaxSpanSecondsInput
+    || hasInvalidCachePrefixSpanRangeInput
     || hasInvalidCachePrefixSuggestionLimitInput
     ? []
     : (agentOpsCachePrefixesQuery.data?.prefixes ?? []);
@@ -3188,6 +3197,12 @@ export function SpreadsheetApp() {
                     <p className="mb-2 text-[10px] text-rose-300">
                       max span must be a positive integer (seconds). Prefix queries are
                       paused until corrected.
+                    </p>
+                  ) : null}
+                  {hasInvalidCachePrefixSpanRangeInput ? (
+                    <p className="mb-2 text-[10px] text-rose-300">
+                      max span must be greater than or equal to min span. Prefix
+                      queries are paused until corrected.
                     </p>
                   ) : null}
                   {hasInvalidCachePrefixSuggestionLimitInput ? (

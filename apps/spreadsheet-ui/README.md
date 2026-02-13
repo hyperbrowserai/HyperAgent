@@ -59,6 +59,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Prefix suggestion row supports optional minimum-match filtering (`min prefix count`) for high-signal cache triage
 - Prefix suggestion row supports optional minimum-timespan filtering (`min span (s)`) to focus on long-lived request-id families
 - Prefix suggestion row supports optional maximum-timespan filtering (`max span (s)`) to focus on bursty/short-lived request-id families
+- Prefix suggestion row enforces valid span ranges (`min span <= max span`) before querying
 - Prefix suggestion row supports selectable sort mode (`count`, `recent`, `alpha`, or `span`) for cache triage priorities
 - Prefix suggestion row supports configurable suggestion limit (`prefix limit`) for denser/sparser cache hinting
 - Prefix suggestion row includes pager controls (`Newer`/`Older`) backed by server offset pagination

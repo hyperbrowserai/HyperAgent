@@ -1070,7 +1070,7 @@ async fn get_agent_schema(
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
       "min_span_seconds": "optional number > 0 (filter out prefixes with narrower time spans)",
-      "max_span_seconds": "optional number > 0 (filter out prefixes with wider time spans)",
+      "max_span_seconds": "optional number > 0 (filter out prefixes with wider time spans; when combined with min_span_seconds must be >= min_span_seconds)",
       "sort_by": "optional string enum: count|recent|alpha|span (default count)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
       "offset": "optional number, default 0",
@@ -1245,6 +1245,7 @@ async fn get_agent_schema(
       "INVALID_MIN_ENTRY_COUNT",
       "INVALID_MIN_SPAN_SECONDS",
       "INVALID_MAX_SPAN_SECONDS",
+      "INVALID_SPAN_RANGE",
       "INVALID_PREFIX_SORT_BY",
       "INVALID_REQUEST_ID_PREFIX",
       "CACHE_ENTRY_NOT_FOUND"
@@ -1732,6 +1733,16 @@ async fn agent_ops_cache_prefixes(
       "INVALID_MAX_SPAN_SECONDS",
       "max_span_seconds must be greater than zero when provided.",
     ));
+  }
+  if let (Some(minimum_span), Some(maximum_span)) =
+    (query.min_span_seconds, query.max_span_seconds)
+  {
+    if minimum_span > maximum_span {
+      return Err(ApiError::bad_request_with_code(
+        "INVALID_SPAN_RANGE",
+        "min_span_seconds must be less than or equal to max_span_seconds when both are provided.",
+      ));
+    }
   }
   let sort_by = normalize_prefix_sort_by(query.sort_by.as_deref())?;
   let offset = query.offset.unwrap_or(0);
@@ -3362,6 +3373,29 @@ mod tests {
       _ => panic!("expected invalid max span to use custom error code"),
     }
 
+    let invalid_span_range_error = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        min_span_seconds: Some(10),
+        max_span_seconds: Some(1),
+        sort_by: None,
+        max_age_seconds: None,
+        offset: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect_err("min span greater than max span should fail");
+    match invalid_span_range_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_SPAN_RANGE");
+      }
+      _ => panic!("expected invalid span range to use custom error code"),
+    }
+
     let recent_sorted = agent_ops_cache_prefixes(
       State(state.clone()),
       Path(workbook.id),
@@ -4349,7 +4383,9 @@ mod tests {
         .get("agent_ops_cache_prefixes_query_shape")
         .and_then(|value| value.get("max_span_seconds"))
         .and_then(serde_json::Value::as_str),
-      Some("optional number > 0 (filter out prefixes with wider time spans)"),
+      Some(
+        "optional number > 0 (filter out prefixes with wider time spans; when combined with min_span_seconds must be >= min_span_seconds)",
+      ),
     );
     assert_eq!(
       schema
@@ -4624,6 +4660,10 @@ mod tests {
     assert!(
       cache_validation_error_codes.contains(&"INVALID_MAX_SPAN_SECONDS"),
       "schema should advertise invalid max-span-seconds error code",
+    );
+    assert!(
+      cache_validation_error_codes.contains(&"INVALID_SPAN_RANGE"),
+      "schema should advertise invalid span-range error code",
     );
     assert!(
       cache_validation_error_codes.contains(&"INVALID_PREFIX_SORT_BY"),
