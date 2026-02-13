@@ -66,7 +66,11 @@ const writeFrameGraphSnapshot = async (
 const formatUnknownError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-const compositeScreenshot = async (page: Page, overlay: string) => {
+const compositeScreenshot = async (
+  page: Page,
+  overlay: string,
+  debug?: boolean
+) => {
   // Use CDP screenshot - faster, doesn't wait for fonts
   const cdpClient = await getCDPClient(page);
   const client = await cdpClient.acquireSession("screenshot");
@@ -87,9 +91,11 @@ const compositeScreenshot = async (page: Page, overlay: string) => {
     overlayImage.bitmap.width !== baseImage.bitmap.width ||
     overlayImage.bitmap.height !== baseImage.bitmap.height
   ) {
-    console.log(
-      `[Screenshot] Dimension mismatch - overlay: ${overlayImage.bitmap.width}x${overlayImage.bitmap.height}, screenshot: ${baseImage.bitmap.width}x${baseImage.bitmap.height}, scaling overlay...`
-    );
+    if (debug) {
+      console.log(
+        `[Screenshot] Dimension mismatch - overlay: ${overlayImage.bitmap.width}x${overlayImage.bitmap.height}, screenshot: ${baseImage.bitmap.width}x${baseImage.bitmap.height}, scaling overlay...`
+      );
+    }
     overlayImage.resize({
       w: baseImage.bitmap.width,
       h: baseImage.bitmap.height,
@@ -365,7 +371,7 @@ export const runAgentTask = async (
         if (overlayKey === lastOverlayKey && lastScreenshotBase64) {
           trimmedScreenshot = lastScreenshotBase64;
         } else {
-          trimmedScreenshot = await compositeScreenshot(page, overlayKey);
+          trimmedScreenshot = await compositeScreenshot(page, overlayKey, ctx.debug);
           lastOverlayKey = overlayKey;
           lastScreenshotBase64 = trimmedScreenshot;
         }
