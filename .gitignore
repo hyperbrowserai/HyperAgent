@@ -17,6 +17,7 @@ pids
 *.pid
 *.seed
 *.pid.lock
+target/
 
 .DS_Store
 
