@@ -87,6 +87,7 @@ export function SpreadsheetApp() {
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [uiError, setUiError] = useState<string | null>(null);
   const [uiErrorCode, setUiErrorCode] = useState<string | null>(null);
+  const [uiNotice, setUiNotice] = useState<string | null>(null);
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastScenario, setLastScenario] = useState<string | null>(null);
@@ -111,6 +112,7 @@ export function SpreadsheetApp() {
     onSuccess: (createdWorkbook) => {
       clearUiError();
       setWorkbook(createdWorkbook);
+      setNotice(`Created workbook ${createdWorkbook.name}.`);
       setLastAgentRequestId(null);
       setLastPreset(null);
       setLastScenario(null);
@@ -130,6 +132,7 @@ export function SpreadsheetApp() {
     onSuccess: (importedWorkbook) => {
       clearUiError();
       setWorkbook(importedWorkbook);
+      setNotice(`Imported workbook ${importedWorkbook.name}.`);
       setLastAgentRequestId(null);
       setLastPreset(null);
       setLastScenario(null);
@@ -354,6 +357,7 @@ export function SpreadsheetApp() {
         : "Ready";
 
   function applyUiError(error: unknown, fallback: string): void {
+    setUiNotice(null);
     if (error instanceof SpreadsheetApiError) {
       setUiError(error.message);
       setUiErrorCode(error.code ?? null);
@@ -371,6 +375,11 @@ export function SpreadsheetApp() {
   function clearUiError(): void {
     setUiError(null);
     setUiErrorCode(null);
+    setUiNotice(null);
+  }
+
+  function setNotice(message: string | null): void {
+    setUiNotice(message);
   }
 
   async function handleSignatureMismatchRecovery(error: unknown): Promise<boolean> {
@@ -1120,6 +1129,11 @@ export function SpreadsheetApp() {
       setLastOperationsSignature(response.operations_signature ?? null);
       setLastServedFromCache(response.served_from_cache ?? null);
       setLastAgentOps(response.results);
+      setNotice(
+        response.served_from_cache
+          ? "Replay served from idempotency cache."
+          : "Replay executed fresh (cache miss).",
+      );
       await queryClient.invalidateQueries({
         queryKey: ["agent-ops-cache", workbook.id],
       });
@@ -1143,7 +1157,8 @@ export function SpreadsheetApp() {
     setIsClearingOpsCache(true);
     try {
       clearUiError();
-      await clearAgentOpsCache(workbook.id);
+      const response = await clearAgentOpsCache(workbook.id);
+      setNotice(`Cleared ${response.cleared_entries} cached request entries.`);
       await queryClient.invalidateQueries({
         queryKey: ["agent-ops-cache", workbook.id],
       });
@@ -1355,6 +1370,19 @@ export function SpreadsheetApp() {
                 <button
                   onClick={clearUiError}
                   className="rounded border border-rose-300/30 px-2 py-0.5 text-[11px] hover:bg-rose-500/20"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {uiNotice ? (
+            <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-100">
+              <div className="flex items-center justify-between gap-2">
+                <span>{uiNotice}</span>
+                <button
+                  onClick={() => setNotice(null)}
+                  className="rounded border border-emerald-300/30 px-2 py-0.5 text-[11px] hover:bg-emerald-500/20"
                 >
                   Dismiss
                 </button>

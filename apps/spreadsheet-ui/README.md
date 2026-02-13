@@ -44,6 +44,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard and agent integration panels display discovered signature error-code lists from schema endpoints
 - Agent integration panel displays discovered request-id idempotency cache size metadata
 - Agent integration panel shows live idempotency cache stats (entries/oldest/newest) with a clear-cache control
+- Success/info notice banner surfaces non-error outcomes (workbook import/create, cache clear, replay cache hit/miss)
 - Event stream viewer with per-event-type filtering
 
 ## Run
