@@ -905,6 +905,20 @@ pub fn parse_countblank_formula(
   parse_range_reference(&args[0])
 }
 
+pub fn parse_sumproduct_formula(
+  formula: &str,
+) -> Option<Vec<((u32, u32), (u32, u32))>> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SUMPRODUCT" || args.is_empty() {
+    return None;
+  }
+  let mut ranges = Vec::new();
+  for argument in args {
+    ranges.push(parse_range_reference(&argument)?);
+  }
+  Some(ranges)
+}
+
 pub fn parse_sumif_formula(formula: &str) -> Option<ConditionalAggregateFormula> {
   parse_conditional_aggregate_formula(formula, "SUMIF")
 }
@@ -1144,7 +1158,8 @@ mod tests {
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
     parse_trunc_formula, parse_even_formula, parse_odd_formula,
     parse_sqrt_formula,
-    parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
+    parse_countifs_formula, parse_sumproduct_formula, parse_sumif_formula,
+    parse_sumifs_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_true_formula,
@@ -1483,6 +1498,13 @@ mod tests {
       .expect("countblank should parse");
     assert_eq!(countblank.0, (1, 1));
     assert_eq!(countblank.1, (5, 1));
+
+    let sumproduct =
+      parse_sumproduct_formula("=SUMPRODUCT(A1:A5,B1:B5)")
+        .expect("sumproduct should parse");
+    assert_eq!(sumproduct.len(), 2);
+    assert_eq!(sumproduct[0], ((1, 1), (5, 1)));
+    assert_eq!(sumproduct[1], ((1, 2), (5, 2)));
 
     let sumif = parse_sumif_formula(r#"=SUMIF(A1:A5,">=10",B1:B5)"#)
       .expect("sumif should parse");

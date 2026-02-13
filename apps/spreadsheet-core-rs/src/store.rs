@@ -4,7 +4,7 @@ use crate::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
-    parse_counta_formula, parse_countblank_formula,
+    parse_counta_formula, parse_countblank_formula, parse_sumproduct_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
@@ -332,6 +332,39 @@ fn evaluate_formula(
       }
     }
     return Ok(Some(count.to_string()));
+  }
+
+  if let Some(ranges) = parse_sumproduct_formula(formula) {
+    let mut normalized_ranges = Vec::new();
+    for range in ranges {
+      normalized_ranges.push(normalized_range_bounds(range.0, range.1));
+    }
+    let Some(first_bounds) = normalized_ranges.first().copied() else {
+      return Ok(None);
+    };
+    if normalized_ranges.iter().any(|bounds| {
+      bounds.height != first_bounds.height || bounds.width != first_bounds.width
+    }) {
+      return Ok(None);
+    }
+
+    let mut total = 0.0f64;
+    for row_offset in 0..first_bounds.height {
+      for col_offset in 0..first_bounds.width {
+        let mut product = 1.0f64;
+        for bounds in &normalized_ranges {
+          let row_index = bounds.start_row + row_offset;
+          let col_index = bounds.start_col + col_offset;
+          let value = load_cell_scalar(connection, sheet, row_index, col_index)?
+            .trim()
+            .parse::<f64>()
+            .unwrap_or(0.0);
+          product *= value;
+        }
+        total += product;
+      }
+    }
+    return Ok(Some(total.to_string()));
   }
 
   if let Some(sumif_formula) = parse_sumif_formula(formula) {
@@ -3174,12 +3207,24 @@ mod tests {
         value: None,
         formula: Some("=MROUND(11,2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 121,
+        value: None,
+        formula: Some("=SUMPRODUCT(A1:A2,A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 122,
+        value: None,
+        formula: Some("=SUMPRODUCT(A1:A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 118);
+    assert_eq!(updated_cells, 120);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3193,7 +3238,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 120,
+        end_col: 122,
       },
     )
     .expect("cells should be fetched");
@@ -3370,6 +3415,8 @@ mod tests {
     assert_eq!(by_position(1, 118).evaluated_value.as_deref(), Some("3"));
     assert_eq!(by_position(1, 119).evaluated_value.as_deref(), Some("2"));
     assert_eq!(by_position(1, 120).evaluated_value.as_deref(), Some("12"));
+    assert_eq!(by_position(1, 121).evaluated_value.as_deref(), Some("20800"));
+    assert_eq!(by_position(1, 122).evaluated_value.as_deref(), Some("200"));
   }
 
   #[test]
@@ -4001,6 +4048,51 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=COUNTIFS(A1:A2,">=80",B1:B3,"south")"#.to_string()]
+    );
+  }
+
+  #[test]
+  fn should_leave_mismatched_sumproduct_ranges_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(10)),
+        formula: None,
+      },
+      CellMutation {
+        row: 3,
+        col: 2,
+        value: Some(json!(15)),
+        formula: None,
+      },
+      CellMutation {
+        row: 4,
+        col: 1,
+        value: None,
+        formula: Some("=SUMPRODUCT(A1:A2,B1:B3)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=SUMPRODUCT(A1:A2,B1:B3)".to_string()]
     );
   }
 
