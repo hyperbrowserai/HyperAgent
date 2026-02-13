@@ -2892,8 +2892,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @param config The MCP configuration
    */
   public async initializeMCPClient(config: MCPConfig): Promise<void> {
-    const servers = Array.isArray((config as { servers?: unknown })?.servers)
-      ? ((config as { servers: MCPServerConfig[] }).servers ?? [])
+    const rawServers = this.safeReadField(config, "servers");
+    const servers = Array.isArray(rawServers)
+      ? (rawServers as MCPServerConfig[])
       : [];
     if (servers.length === 0) {
       return;
@@ -2916,7 +2917,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           }
         } catch (error) {
           const serverLabel = this.normalizeServerId(
-            (serverConfig as { id?: unknown })?.id
+            this.safeReadField(serverConfig, "id")
           );
           console.error(
             `Failed to initialize MCP server ${serverLabel ?? "unknown"}: ${this.formatMCPDiagnostic(

@@ -328,6 +328,26 @@ describe("MCP lifecycle action registration", () => {
     ).toBe("reinit");
   });
 
+  it("initializeMCPClient ignores trap-prone servers config getters", async () => {
+    const agent = new HyperAgent({ llm: createMockLLM() });
+    const trappedConfig = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "servers") {
+            throw new Error("servers trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as { servers: Array<{ command: string }> };
+
+    await expect(
+      agent.initializeMCPClient(trappedConfig)
+    ).resolves.toBeUndefined();
+    expect(connectToServerMock).not.toHaveBeenCalled();
+  });
+
   it("formats non-Error MCP connection failures consistently", async () => {
     const consoleErrorSpy = jest
       .spyOn(console, "error")
@@ -343,6 +363,38 @@ describe("MCP lifecycle action registration", () => {
       expect(serverId).toBeNull();
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Failed to connect to MCP server: {"reason":"connect exploded"}'
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it("handles trap-prone MCP server id diagnostics during initialization", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const serverConfig = new Proxy(
+      { command: "echo" },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "id") {
+            throw new Error("id trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    ) as unknown as { command: string; id: string };
+    connectToServerMock.mockRejectedValueOnce(new Error("connect fail"));
+    const agent = new HyperAgent({ llm: createMockLLM() });
+
+    try {
+      await expect(
+        agent.initializeMCPClient({
+          servers: [serverConfig],
+        })
+      ).resolves.toBeUndefined();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to initialize MCP server unknown:")
       );
     } finally {
       consoleErrorSpy.mockRestore();
