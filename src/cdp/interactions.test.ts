@@ -48,6 +48,54 @@ describe("dispatchCDPAction input guards", () => {
       })
     ).rejects.toThrow("[CDP][Interactions] Action context missing valid CDP session");
   });
+
+  it("throws when action method is not a non-empty string", async () => {
+    const session = createSession(async () => ({}));
+
+    await expect(
+      dispatchCDPAction(42 as unknown as never, [], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow("[CDP][Interactions] Action method must be a non-empty string");
+
+    await expect(
+      dispatchCDPAction("   " as unknown as never, [], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow("[CDP][Interactions] Action method must be a non-empty string");
+  });
+
+  it("sanitizes unsupported action-method diagnostics", async () => {
+    const session = createSession(async () => ({}));
+    const noisyMethod = `bad\n${"x".repeat(300)}`;
+
+    try {
+      await dispatchCDPAction(noisyMethod as unknown as never, [], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      });
+      throw new Error("Expected dispatchCDPAction to throw");
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("[CDP][Interactions] Unsupported action method:");
+      expect(message).toContain("[truncated");
+      expect(message).not.toContain("\n");
+    }
+  });
 });
 
 describe("dispatchCDPAction scroll fallback failures", () => {

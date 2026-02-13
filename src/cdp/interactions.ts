@@ -285,6 +285,21 @@ function ensureActionContext(ctx: CDPActionContext): void {
   }
 }
 
+function formatActionMethodDiagnostic(value: unknown): string {
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = stripControlChars(raw).replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return "unknown-method";
+  }
+  if (normalized.length <= MAX_INTERACTION_DIAGNOSTIC_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(
+    0,
+    MAX_INTERACTION_DIAGNOSTIC_CHARS
+  )}... [truncated ${normalized.length - MAX_INTERACTION_DIAGNOSTIC_CHARS} chars]`;
+}
+
 export async function dispatchCDPAction(
   method: CDPActionMethod,
   args: unknown[],
@@ -294,8 +309,12 @@ export async function dispatchCDPAction(
   if (!Array.isArray(args)) {
     throw new Error("[CDP][Interactions] Action args must be an array");
   }
+  if (typeof method !== "string" || method.trim().length === 0) {
+    throw new Error("[CDP][Interactions] Action method must be a non-empty string");
+  }
+  const normalizedMethod = method.trim();
 
-  switch (method) {
+  switch (normalizedMethod) {
     case "click":
       await clickElement(ctx, args[0] as ClickOptions | undefined);
       return;
@@ -371,7 +390,9 @@ export async function dispatchCDPAction(
       return;
     default:
       throw new Error(
-        `[CDP][Interactions] Unsupported action method: ${method}`
+        `[CDP][Interactions] Unsupported action method: ${formatActionMethodDiagnostic(
+          normalizedMethod
+        )}`
       );
   }
 }
