@@ -5,6 +5,7 @@ import {
   normalizeMCPToolParams,
   stringifyMCPPayload,
 } from "@/agent/mcp/client";
+import { MCPServerConfig } from "@/types/config";
 import { Tool } from "@modelcontextprotocol/sdk/types";
 
 function setServersForClient(client: MCPClient, servers: Map<string, unknown>): void {
@@ -551,6 +552,21 @@ describe("stringifyMCPPayload", () => {
 });
 
 describe("MCPClient.connectToServer validation", () => {
+  it("rejects non-object server configs", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer(null as unknown as MCPServerConfig)
+      ).rejects.toThrow("MCP server config must be an object");
+      await expect(
+        mcpClient.connectToServer([] as unknown as MCPServerConfig)
+      ).rejects.toThrow("MCP server config must be an object");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("throws when connecting with duplicate server id", async () => {
     const mcpClient = new MCPClient(false);
     setServersForClient(

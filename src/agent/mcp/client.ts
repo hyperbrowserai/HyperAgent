@@ -67,6 +67,10 @@ function hasAnyControlChars(value: string): boolean {
   });
 }
 
+function isMCPServerConfig(value: unknown): value is MCPServerConfig {
+  return isPlainRecord(value);
+}
+
 function validateParamStringValue(value: string): string {
   if (hasUnsupportedControlChars(value)) {
     throw new Error(
@@ -855,6 +859,9 @@ class MCPClient {
     serverConfig: MCPServerConfig
   ): Promise<{ serverId: string; actions: AgentActionDefinition[] }> {
     try {
+      if (!isMCPServerConfig(serverConfig)) {
+        throw new Error("MCP server config must be an object");
+      }
       // Generate or use provided server ID
       const normalizedConfigServerId = normalizeMCPConnectionServerId(
         serverConfig.id
