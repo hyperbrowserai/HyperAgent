@@ -64,6 +64,17 @@ describe("normalizeDiscoveredMCPTools", () => {
     ).toThrow('MCP server returned duplicate tool name "search"');
   });
 
+  it("rejects case-variant discovered tool names after normalization", () => {
+    expect(() =>
+      normalizeDiscoveredMCPTools(
+        [createTool("Search"), createTool("search")],
+        {}
+      )
+    ).toThrow(
+      'MCP server returned duplicate tool name "search" after case normalization (conflicts with "Search")'
+    );
+  });
+
   it("rejects discovered tool names with unsupported control characters", () => {
     expect(() =>
       normalizeDiscoveredMCPTools([createTool("sea\nrch")], {})

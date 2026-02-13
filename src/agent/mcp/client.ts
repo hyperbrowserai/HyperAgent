@@ -476,6 +476,7 @@ export function normalizeDiscoveredMCPTools(
     }
   }
   const seenToolNames = new Set<string>();
+  const seenToolNamesByLookup = new Map<string, string>();
   const normalizedTools: NormalizedDiscoveredMCPTool[] = [];
 
   for (const tool of tools) {
@@ -489,7 +490,20 @@ export function normalizeDiscoveredMCPTools(
         )}"`
       );
     }
+    const existingCaseVariant = seenToolNamesByLookup.get(normalizedLookup);
+    if (existingCaseVariant && existingCaseVariant !== normalizedName) {
+      throw new Error(
+        `MCP server returned duplicate tool name "${formatMCPIdentifier(
+          normalizedName,
+          "unknown-tool"
+        )}" after case normalization (conflicts with "${formatMCPIdentifier(
+          existingCaseVariant,
+          "unknown-tool"
+        )}")`
+      );
+    }
     seenToolNames.add(normalizedName);
+    seenToolNamesByLookup.set(normalizedLookup, normalizedName);
 
     if (includeLookup && !includeLookup.has(normalizedLookup)) {
       continue;
