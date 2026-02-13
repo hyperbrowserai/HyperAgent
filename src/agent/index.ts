@@ -642,11 +642,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           attemptedCachedAction = true;
           result = replaySpecialResult;
         } else {
-          const method = step.method;
+          const method = step.method?.trim();
           if (method && isPageActionMethod(method)) {
-            const xpath = step.xpath;
-            const hasXPath =
-              typeof xpath === "string" && xpath.trim().length > 0;
+            const xpath = step.xpath?.trim();
+            const hasXPath = typeof xpath === "string" && xpath.length > 0;
             const replayInstruction = getReplayInstruction(step.instruction);
             if (!hasXPath) {
               if (replayInstruction) {

@@ -72,6 +72,56 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.usedXPath).toBe(false);
   });
 
+  it("trims cached helper method and xpath before dispatch", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const performClick = jest.fn().mockResolvedValue({
+      taskId: "click-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "clicked via helper",
+      replayStepMeta: {
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      performClick,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "  click login  ",
+          elementId: "0-1",
+          method: " click ",
+          arguments: [],
+          frameIndex: 0,
+          xpath: "  //button[1]  ",
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(performClick).toHaveBeenCalledWith(
+      "//button[1]",
+      expect.objectContaining({
+        performInstruction: "click login",
+      })
+    );
+    expect(replay.status).toBe(TaskStatus.COMPLETED);
+  });
+
   it("fails fast when method cache lacks both xpath and instruction", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
