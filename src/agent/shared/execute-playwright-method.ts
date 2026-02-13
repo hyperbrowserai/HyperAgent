@@ -85,7 +85,7 @@ export async function executePlaywrightMethod(
       break;
     case "scrollToPercentage":
       {
-        const scrollArg = (args[0] || "50%").toString();
+        const scrollArg = (args[0] ?? "50%").toString();
         await locator.evaluate(
           (element, { yArg }) => {
             function parsePercent(val: string): number {

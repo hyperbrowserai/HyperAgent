@@ -49,4 +49,17 @@ describe("executePlaywrightMethod", () => {
       logSpy.mockRestore();
     }
   });
+
+  it("preserves explicit zero for scrollToPercentage target", async () => {
+    const evaluateSpy = jest.fn().mockResolvedValue(undefined);
+    const locator = createMockLocator({
+      evaluate: evaluateSpy,
+    });
+
+    await executePlaywrightMethod("scrollToPercentage", [0], locator);
+
+    expect(evaluateSpy).toHaveBeenCalled();
+    const call = evaluateSpy.mock.calls[0];
+    expect(call?.[1]).toEqual({ yArg: "0" });
+  });
 });
