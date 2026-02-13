@@ -276,4 +276,33 @@ describe("DeepSeekClient", () => {
       "[LLM][DeepSeek] Invalid completion payload: failed to read choice.message (message getter trap)"
     );
   });
+
+  it("sanitizes and truncates oversized completion diagnostics", async () => {
+    const response = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "choices") {
+            throw new Error(`choices\u0000\n${"x".repeat(2_000)}`);
+          }
+          return undefined;
+        },
+      }
+    );
+    createCompletionMock.mockResolvedValue(response);
+
+    const client = new DeepSeekClient({ model: "deepseek-test" });
+    await client
+      .invoke([{ role: "user", content: "hello" }])
+      .then(() => {
+        throw new Error("expected invoke to reject");
+      })
+      .catch((error) => {
+        const message = String(error instanceof Error ? error.message : error);
+        expect(message).toContain("[truncated");
+        expect(message).not.toContain("\u0000");
+        expect(message).not.toContain("\n");
+        expect(message.length).toBeLessThan(700);
+      });
+  });
 });

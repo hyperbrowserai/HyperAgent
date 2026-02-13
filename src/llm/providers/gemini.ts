@@ -24,14 +24,21 @@ const RESERVED_GEMINI_CONFIG_OPTION_KEYS = new Set([
 const MAX_GEMINI_DIAGNOSTIC_CHARS = 300;
 
 function formatGeminiDiagnostic(value: unknown): string {
-  const normalized = formatUnknownError(value);
-  if (normalized.length <= MAX_GEMINI_DIAGNOSTIC_CHARS) {
-    return normalized;
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_GEMINI_DIAGNOSTIC_CHARS) {
+    return fallback;
   }
-  return `${normalized.slice(
+  return `${fallback.slice(
     0,
     MAX_GEMINI_DIAGNOSTIC_CHARS
-  )}... [truncated ${normalized.length - MAX_GEMINI_DIAGNOSTIC_CHARS} chars]`;
+  )}... [truncated ${fallback.length - MAX_GEMINI_DIAGNOSTIC_CHARS} chars]`;
 }
 
 function safeReadGeminiResponseText(response: unknown): unknown {

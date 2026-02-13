@@ -178,6 +178,37 @@ describe("GeminiClient", () => {
     expect(result.rawText).toContain("text getter trap");
   });
 
+  it("sanitizes and truncates oversized text getter diagnostics", async () => {
+    const response = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "text") {
+            throw new Error(`text\u0000\n${"x".repeat(2_000)}`);
+          }
+          return undefined;
+        },
+      }
+    );
+    generateContentMock.mockResolvedValue(response);
+
+    const client = new GeminiClient({
+      model: "gemini-test",
+    });
+
+    const result = await client.invokeStructured(
+      {
+        schema: z.object({ ok: z.boolean() }),
+      },
+      [{ role: "user", content: "hello" }]
+    );
+    expect(result.parsed).toBeNull();
+    expect(result.rawText).toContain("[truncated");
+    expect(result.rawText).not.toContain("\u0000");
+    expect(result.rawText).not.toContain("\n");
+    expect(result.rawText.length).toBeLessThan(700);
+  });
+
   it("sanitizes reserved config keys from provider options", async () => {
     generateContentMock.mockResolvedValue({
       text: "result text",
