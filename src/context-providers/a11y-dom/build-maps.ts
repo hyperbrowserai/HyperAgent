@@ -11,6 +11,7 @@ import {
   DOMRect,
 } from "./types";
 import { createEncodedId } from "./utils";
+import { formatUnknownError } from "@/utils";
 
 async function annotateIframeBoundingBoxes(
   session: CDPSession,
@@ -362,7 +363,9 @@ export async function buildBackendIdMaps(
       frameMap,
     };
   } catch (error) {
-    console.error("Error building backend ID maps:", error);
+    console.error(
+      `Error building backend ID maps: ${formatUnknownError(error)}`
+    );
     return {
       tagNameMap: {},
       xpathMap: {},

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formatUnknownError } from "@/utils";
 
 function ensureStringOutput(output: unknown, taskStatus: unknown): string {
   if (typeof output !== "string" || output.trim().length === 0) {
@@ -25,7 +26,7 @@ function parseStructuredOutput<TSchema extends z.ZodType<unknown>>(
   try {
     parsed = JSON.parse(rawOutput);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     throw new Error(
       `Extract failed: output is not valid JSON (${message}). Raw output: ${rawOutput.slice(
         0,

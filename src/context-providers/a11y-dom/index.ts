@@ -33,6 +33,7 @@ import type { CDPClient, CDPSession } from "@/cdp";
 import { domSnapshotCache } from "./dom-cache";
 import { PerformanceTracker } from "./performance";
 import { getDebugOptions } from "@/debug/options";
+import { formatUnknownError } from "@/utils";
 
 const DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS = 500;
 
@@ -112,8 +113,7 @@ async function collectExecutionContexts(
       if (debug) {
         console.warn(
           "[A11y] Failed to enable Runtime domain for context collection. " +
-            "Execution contexts may be missing for iframe elements.",
-          error
+            `Execution contexts may be missing for iframe elements. ${formatUnknownError(error)}`
         );
       }
     });
@@ -353,8 +353,7 @@ async function hydrateFrameContextFromSnapshot(
   } catch (error) {
     if (debug) {
       console.warn(
-        "[FrameContext] Failed to hydrate frame manager from cache:",
-        error
+        `[FrameContext] Failed to hydrate frame manager from cache: ${formatUnknownError(error)}`
       );
     }
   }
@@ -957,8 +956,7 @@ export async function getA11yDOM(
     await frameContextManager.ensureInitialized().catch((error) => {
       if (debug) {
         console.warn(
-          "[FrameContext] Failed to initialize frame manager:",
-          error
+          `[FrameContext] Failed to initialize frame manager: ${formatUnknownError(error)}`
         );
       }
     });
@@ -1233,7 +1231,9 @@ export async function getA11yDOM(
 
     return snapshot;
   } catch (error) {
-    console.error("Error extracting accessibility tree:", error);
+    console.error(
+      `Error extracting accessibility tree: ${formatUnknownError(error)}`
+    );
     if (error instanceof Error) {
       console.error("Error details:", {
         message: error.message,
