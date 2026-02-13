@@ -21,6 +21,7 @@ import {
 } from "@/types";
 import { SessionDetail } from "@hyperbrowser/sdk/types";
 import { formatCliError } from "./format-cli-error";
+import { loadMCPServersFromFile } from "./mcp-config";
 import { setRawModeIfSupported } from "./stdin-utils";
 
 const program = new Command();
@@ -262,10 +263,8 @@ program
       }
 
       if (mcpPath) {
-        const mcpConfig = JSON.parse(
-          (await fs.promises.readFile(mcpPath)).toString()
-        );
-        await agent.initializeMCPClient({ servers: mcpConfig });
+        const mcpServers = await loadMCPServersFromFile(mcpPath);
+        await agent.initializeMCPClient({ servers: mcpServers });
       }
 
       if (useHB && !debug) {
