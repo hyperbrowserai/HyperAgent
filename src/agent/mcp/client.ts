@@ -449,6 +449,17 @@ function normalizeMCPToolFilterList(
   return seenNames;
 }
 
+function normalizeMCPToolFilterListValues(
+  value: string[] | undefined,
+  fieldName: "includeTools" | "excludeTools"
+): string[] | undefined {
+  const normalizedSet = normalizeMCPToolFilterList(value, fieldName);
+  if (!normalizedSet) {
+    return undefined;
+  }
+  return Array.from(normalizedSet);
+}
+
 export function normalizeDiscoveredMCPTools(
   tools: Tool[],
   options: MCPToolDiscoveryOptions
@@ -916,6 +927,14 @@ class MCPClient {
         serverConfig.id
       );
       const serverId = normalizedConfigServerId || uuidv4();
+      const normalizedIncludeTools = normalizeMCPToolFilterListValues(
+        serverConfig.includeTools,
+        "includeTools"
+      );
+      const normalizedExcludeTools = normalizeMCPToolFilterListValues(
+        serverConfig.excludeTools,
+        "excludeTools"
+      );
       pendingServerId = serverId;
       const existingServerId = findConnectedServerId(this.servers, serverId);
       if (existingServerId) {
@@ -1002,7 +1021,10 @@ class MCPClient {
 
       const discoveredTools = normalizeDiscoveredMCPTools(
         listedTools,
-        serverConfig
+        {
+          includeTools: normalizedIncludeTools,
+          excludeTools: normalizedExcludeTools,
+        }
       );
 
       // Create actions for each tool
@@ -1069,11 +1091,11 @@ class MCPClient {
       if (sseHeaders) {
         normalizedServerConfig.sseHeaders = sseHeaders;
       }
-      if (serverConfig.includeTools) {
-        normalizedServerConfig.includeTools = serverConfig.includeTools;
+      if (normalizedIncludeTools) {
+        normalizedServerConfig.includeTools = normalizedIncludeTools;
       }
-      if (serverConfig.excludeTools) {
-        normalizedServerConfig.excludeTools = serverConfig.excludeTools;
+      if (normalizedExcludeTools) {
+        normalizedServerConfig.excludeTools = normalizedExcludeTools;
       }
 
       // Store server connection

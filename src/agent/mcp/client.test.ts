@@ -664,6 +664,8 @@ describe("MCPClient.connectToServer validation", () => {
         env: {
           TOKEN: "value",
         },
+        includeTools: [" Search "],
+        excludeTools: [" notes "],
       });
       const server = getServers(mcpClient).get(serverId) as
         | { config?: MCPServerConfig }
@@ -676,6 +678,8 @@ describe("MCPClient.connectToServer validation", () => {
         env: {
           TOKEN: "value",
         },
+        includeTools: ["Search"],
+        excludeTools: ["notes"],
       });
     } finally {
       connectSpy.mockRestore();
