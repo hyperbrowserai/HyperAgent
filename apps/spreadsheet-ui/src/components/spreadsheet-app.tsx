@@ -34,7 +34,7 @@ import {
 } from "@/lib/spreadsheet-api";
 import { buildAddress, indexToColumn, TOTAL_COLS, TOTAL_ROWS } from "@/lib/cell-address";
 import { useWorkbookStore } from "@/store/workbook-store";
-import { AgentOperationResult } from "@/types/spreadsheet";
+import { AgentOperationPreview, AgentOperationResult } from "@/types/spreadsheet";
 
 const ChartPreview = dynamic(
   () => import("@/components/chart-preview").then((module) => module.ChartPreview),
@@ -315,6 +315,19 @@ export function SpreadsheetApp() {
     ]);
     setUiError(`${message} Refreshed operation previews. Please retry.`);
     return true;
+  }
+
+  async function signOperationsForExecution(
+    operations: AgentOperationPreview[],
+  ): Promise<{ operationsSignature: string; operations: AgentOperationPreview[] }> {
+    if (!workbook) {
+      throw new Error("A workbook is required to sign operations.");
+    }
+    const preview = await previewAgentOps(workbook.id, operations);
+    return {
+      operationsSignature: preview.operations_signature,
+      operations: preview.operations,
+    };
   }
 
   async function handleSaveFormula() {
@@ -606,12 +619,13 @@ export function SpreadsheetApp() {
     setIsRunningPreviewOps(true);
     try {
       setUiError(null);
+      const signedPlan = await signOperationsForExecution(wizardScenarioOps);
       const response = await runAgentOps(workbook.id, {
         request_id: `scenario-preview-ops-${wizardScenario}-${Date.now()}`,
         actor: "ui-scenario-preview-ops",
         stop_on_error: true,
-        expected_operations_signature: wizardScenarioOpsSignature ?? undefined,
-        operations: wizardScenarioOps,
+        expected_operations_signature: signedPlan.operationsSignature,
+        operations: signedPlan.operations,
       });
       setLastScenario(wizardScenario);
       setLastPreset(null);
@@ -686,12 +700,13 @@ export function SpreadsheetApp() {
     setIsRunningPresetPreviewOps(true);
     try {
       setUiError(null);
+      const signedPlan = await signOperationsForExecution(wizardPresetOps);
       const response = await runAgentOps(workbook.id, {
         request_id: `preset-preview-ops-${wizardPresetPreview}-${Date.now()}`,
         actor: "ui-preset-preview-ops",
         stop_on_error: true,
-        expected_operations_signature: wizardPresetOpsSignature ?? undefined,
-        operations: wizardPresetOps,
+        expected_operations_signature: signedPlan.operationsSignature,
+        operations: signedPlan.operations,
       });
       setLastPreset(wizardPresetPreview);
       setLastScenario(null);

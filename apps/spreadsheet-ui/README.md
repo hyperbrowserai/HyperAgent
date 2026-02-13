@@ -23,6 +23,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard can copy signature-ready run payloads for preset/scenario endpoint calls
 - Wizard can copy signature-ready `agent/ops` payloads directly from preset/scenario previews
 - Wizard preset preview supports direct run (preset endpoint) and run-as-ops execution on active workbook
+- Run-as-ops actions re-sign plans with `/agent/ops/preview` immediately before execution
 - Wizard preview panels indicate whether operation plans are global or workbook-scoped
 - Wizard execution can pass preview signatures (`operations_signature`) to guard against stale plan drift
 - Signature mismatch responses trigger automatic preview refresh to reduce stale-plan retries
