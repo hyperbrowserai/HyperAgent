@@ -2,7 +2,8 @@ use crate::{
   error::ApiError,
   formula::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
-    parse_cell_address, parse_concat_formula, parse_date_formula, parse_day_formula,
+    parse_cell_address, parse_concat_formula, parse_countif_formula,
+    parse_date_formula, parse_day_formula,
     parse_if_formula, parse_left_formula, parse_len_formula, parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula,
     parse_single_ref_formula, parse_today_formula, parse_vlookup_formula,
@@ -259,6 +260,11 @@ fn evaluate_formula(
     return Ok(Some(value));
   }
 
+  if let Some((start, end, criteria_operand)) = parse_countif_formula(formula) {
+    return evaluate_countif_formula(connection, sheet, start, end, &criteria_operand)
+      .map(Some);
+  }
+
   if let Some((condition, true_value, false_value)) = parse_if_formula(formula) {
     let condition_result = evaluate_if_condition(connection, sheet, &condition)?;
     let chosen_value = if condition_result {
@@ -409,6 +415,32 @@ fn evaluate_expression_formula(
   Ok(Some(result.to_string()))
 }
 
+fn evaluate_countif_formula(
+  connection: &Connection,
+  sheet: &str,
+  start: (u32, u32),
+  end: (u32, u32),
+  criteria_operand: &str,
+) -> Result<String, ApiError> {
+  let criteria = resolve_scalar_operand(connection, sheet, criteria_operand)?;
+  let start_row = start.0.min(end.0);
+  let end_row = start.0.max(end.0);
+  let start_col = start.1.min(end.1);
+  let end_col = start.1.max(end.1);
+  let mut count = 0usize;
+
+  for row_index in start_row..=end_row {
+    for col_index in start_col..=end_col {
+      let candidate = load_cell_scalar(connection, sheet, row_index, col_index)?;
+      if countif_matches_criteria(&candidate, &criteria) {
+        count += 1;
+      }
+    }
+  }
+
+  Ok(count.to_string())
+}
+
 fn evaluate_if_condition(
   connection: &Connection,
   sheet: &str,
@@ -546,6 +578,39 @@ fn compare_strings(left: &str, right: &str, operator: &str) -> bool {
     "<=" => left <= right,
     _ => false,
   }
+}
+
+fn countif_matches_criteria(candidate: &str, criteria: &str) -> bool {
+  const OPERATORS: [&str; 6] = ["<>", ">=", "<=", "=", ">", "<"];
+  for operator in OPERATORS {
+    if let Some(target) = criteria.strip_prefix(operator) {
+      let target_trimmed = target.trim();
+      if let Some((candidate_number, target_number)) = candidate
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .zip(target_trimmed.parse::<f64>().ok())
+      {
+        return compare_numbers(candidate_number, target_number, operator);
+      }
+      return compare_strings(
+        &candidate.trim().to_lowercase(),
+        &target_trimmed.to_lowercase(),
+        operator,
+      );
+    }
+  }
+
+  if let Some((candidate_number, target_number)) = candidate
+    .trim()
+    .parse::<f64>()
+    .ok()
+    .zip(criteria.trim().parse::<f64>().ok())
+  {
+    return compare_numbers(candidate_number, target_number, "=");
+  }
+
+  candidate.trim().eq_ignore_ascii_case(criteria.trim())
 }
 
 fn resolve_truthy_operand(value: &str) -> bool {
@@ -1066,12 +1131,30 @@ mod tests {
         value: None,
         formula: Some(r#"=XLOOKUP("south",E1:E2,F1:F2,"missing",0,-1)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 23,
+        value: None,
+        formula: Some(r#"=COUNTIF(A1:A2,">=100")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 24,
+        value: None,
+        formula: Some(r#"=COUNTIF(E1:E2,"south")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 25,
+        value: None,
+        formula: Some(r#"=COUNTIF(E1:E2,"<>south")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 20);
+    assert_eq!(updated_cells, 23);
     assert!(unsupported_formulas.is_empty());
 
     let snapshots = get_cells(
@@ -1081,7 +1164,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 22,
+        end_col: 25,
       },
     )
     .expect("cells should be fetched");
@@ -1132,6 +1215,9 @@ mod tests {
     assert_eq!(by_position(1, 20).evaluated_value.as_deref(), Some("Northeast"));
     assert_eq!(by_position(1, 21).evaluated_value.as_deref(), Some("fallback"));
     assert_eq!(by_position(1, 22).evaluated_value.as_deref(), Some("Southeast"));
+    assert_eq!(by_position(1, 23).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 24).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 25).evaluated_value.as_deref(), Some("1"));
   }
 
   #[test]

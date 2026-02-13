@@ -218,6 +218,15 @@ pub fn parse_day_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_countif_formula(formula: &str) -> Option<((u32, u32), (u32, u32), String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "COUNTIF" || args.len() != 2 {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[0])?;
+  Some((start, end, args[1].clone()))
+}
+
 fn parse_function_arguments(formula: &str) -> Option<(String, Vec<String>)> {
   let expression = formula.trim();
   if !expression.starts_with('=') {
@@ -315,7 +324,7 @@ mod tests {
     parse_left_formula, parse_len_formula, parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_if_formula, parse_today_formula, parse_vlookup_formula,
-    parse_xlookup_formula,
+    parse_xlookup_formula, parse_countif_formula,
     parse_year_formula,
   };
 
@@ -412,5 +421,11 @@ mod tests {
       Some("A1"),
     );
     assert_eq!(parse_day_formula("=DAY(A1)").as_deref(), Some("A1"));
+
+    let countif = parse_countif_formula(r#"=COUNTIF(A1:A5,">=10")"#)
+      .expect("countif should parse");
+    assert_eq!(countif.0, (1, 1));
+    assert_eq!(countif.1, (5, 1));
+    assert_eq!(countif.2, r#"">=10""#);
   }
 }
