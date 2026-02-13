@@ -60,6 +60,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Prefix/stale sample-limit inputs now enforce positive integer validation before preview/remove actions
 - Stale preview/remove actions optionally inherit active prefix filter scope
 - Stale/prefix preview panels reset when cache filter scopes change to avoid stale context
+- Stale/prefix preview panels also reset when sample-limit inputs change
 - Cache list and detail inspector show when each request-id entry was cached (`cached_at`)
 - Cache timestamps also display relative age labels (e.g., `2m ago`) for quick freshness checks
 - Cache prefix filter offers one-click backend-derived suggestions with entry counts (scoped by age filter when applied)

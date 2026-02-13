@@ -405,6 +405,14 @@ export function SpreadsheetApp() {
   }, [cacheStaleMaxAgeSeconds]);
 
   useEffect(() => {
+    setCachePrefixRemovalPreview(null);
+  }, [cacheRemovePreviewSampleLimit]);
+
+  useEffect(() => {
+    setCacheStaleRemovalPreview(null);
+  }, [cacheStalePreviewSampleLimit]);
+
+  useEffect(() => {
     if (
       !hasInvalidCacheEntriesMaxAgeInput
       &&
