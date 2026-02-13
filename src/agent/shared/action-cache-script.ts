@@ -87,6 +87,18 @@ export function createScriptFromActionCache(
     nextChunk: { fn: "performNextChunk" },
     prevChunk: { fn: "performPrevChunk" },
   };
+  const METHOD_TO_CALL_KEYS = Object.keys(METHOD_TO_CALL);
+  const normalizeHelperMethod = (method: string | null | undefined): string | null => {
+    const normalizedMethod = method?.trim().toLowerCase();
+    if (!normalizedMethod) {
+      return null;
+    }
+    return (
+      METHOD_TO_CALL_KEYS.find(
+        (candidate) => candidate.toLowerCase() === normalizedMethod
+      ) ?? null
+    );
+  };
 
   const formatCall = (step: ActionCacheEntry): string => {
     const indent = "  ";
@@ -153,7 +165,7 @@ ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)});`;
 ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
     }
 
-    const normalizedMethod = step.method?.trim();
+    const normalizedMethod = normalizeHelperMethod(step.method);
     const call = normalizedMethod ? METHOD_TO_CALL[normalizedMethod] : undefined;
     if (call) {
       const normalizedXPath = asNonEmptyTrimmedString(step.xpath);

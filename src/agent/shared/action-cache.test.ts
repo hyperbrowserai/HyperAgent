@@ -418,7 +418,7 @@ describe("action cache helpers", () => {
       stepIndex: 18,
       instruction: "click login",
       elementId: "0-1",
-      method: " click ",
+      method: " CLICK ",
       arguments: [],
       actionType: "actElement",
       success: true,
