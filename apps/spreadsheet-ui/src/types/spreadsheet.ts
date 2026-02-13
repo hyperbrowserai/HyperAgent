@@ -60,6 +60,18 @@ export interface AgentOpsCacheStatsResponse {
   newest_request_id: string | null;
 }
 
+export interface AgentOpsCacheEntry {
+  request_id: string;
+  operations_signature: string | null;
+}
+
+export interface AgentOpsCacheEntriesResponse {
+  total_entries: number;
+  returned_entries: number;
+  limit: number;
+  entries: AgentOpsCacheEntry[];
+}
+
 export interface ClearAgentOpsCacheResponse {
   cleared_entries: number;
 }
@@ -81,6 +93,7 @@ export interface AgentSchemaInfo {
   endpoint: string;
   agent_ops_preview_endpoint?: string;
   agent_ops_cache_stats_endpoint?: string;
+  agent_ops_cache_entries_endpoint?: string;
   agent_ops_cache_clear_endpoint?: string;
   agent_ops_idempotency_cache_max_entries?: number;
   agent_ops_preview_request_shape?: Record<string, string>;

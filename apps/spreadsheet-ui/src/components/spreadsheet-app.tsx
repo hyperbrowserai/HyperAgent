@@ -12,6 +12,7 @@ import {
   createSheet,
   createWorkbook,
   exportWorkbook,
+  getAgentOpsCacheEntries,
   getAgentOpsCacheStats,
   getAgentPresetOperations,
   getAgentSchema,
@@ -45,6 +46,8 @@ const ChartPreview = dynamic(
     ssr: false,
   },
 );
+
+const CACHE_ENTRIES_PREVIEW_LIMIT = 6;
 
 export function SpreadsheetApp() {
   const queryClient = useQueryClient();
@@ -100,6 +103,7 @@ export function SpreadsheetApp() {
     useState(false);
   const [isReplayingLastRequest, setIsReplayingLastRequest] = useState(false);
   const [isClearingOpsCache, setIsClearingOpsCache] = useState(false);
+  const [copyingCacheRequestId, setCopyingCacheRequestId] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -199,6 +203,13 @@ export function SpreadsheetApp() {
     queryFn: () => getAgentOpsCacheStats(workbook!.id),
   });
 
+  const agentOpsCacheEntriesQuery = useQuery({
+    queryKey: ["agent-ops-cache-entries", workbook?.id, CACHE_ENTRIES_PREVIEW_LIMIT],
+    enabled: Boolean(workbook?.id),
+    queryFn: () =>
+      getAgentOpsCacheEntries(workbook!.id, CACHE_ENTRIES_PREVIEW_LIMIT),
+  });
+
   const wizardScenarioOpsQuery = useQuery({
     queryKey: ["wizard-scenario-ops", workbook?.id, wizardScenario, wizardIncludeFileBase64],
     enabled: wizardScenario.length > 0,
@@ -255,6 +266,9 @@ export function SpreadsheetApp() {
       queryClient.invalidateQueries({ queryKey: ["agent-scenarios", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-schema", workbook.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-ops-cache", workbook.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["agent-ops-cache-entries", workbook.id, CACHE_ENTRIES_PREVIEW_LIMIT],
+      });
     });
     return unsubscribe;
   }, [workbook?.id, activeSheet, queryClient, appendEvent]);
@@ -455,6 +469,13 @@ export function SpreadsheetApp() {
       tasks.push(
         queryClient.invalidateQueries({
           queryKey: ["agent-ops-cache", workbookId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [
+            "agent-ops-cache-entries",
+            workbookId,
+            CACHE_ENTRIES_PREVIEW_LIMIT,
+          ],
         }),
       );
     }
@@ -1118,9 +1139,18 @@ export function SpreadsheetApp() {
           ? "Replay served from idempotency cache."
           : "Replay executed fresh (cache miss).",
       );
-      await queryClient.invalidateQueries({
-        queryKey: ["agent-ops-cache", workbook.id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [
+            "agent-ops-cache-entries",
+            workbook.id,
+            CACHE_ENTRIES_PREVIEW_LIMIT,
+          ],
+        }),
+      ]);
     } catch (error) {
       if (
         error instanceof Error &&
@@ -1143,13 +1173,35 @@ export function SpreadsheetApp() {
       clearUiError();
       const response = await clearAgentOpsCache(workbook.id);
       setNotice(`Cleared ${response.cleared_entries} cached request entries.`);
-      await queryClient.invalidateQueries({
-        queryKey: ["agent-ops-cache", workbook.id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [
+            "agent-ops-cache-entries",
+            workbook.id,
+            CACHE_ENTRIES_PREVIEW_LIMIT,
+          ],
+        }),
+      ]);
     } catch (error) {
       applyUiError(error, "Failed to clear agent ops idempotency cache.");
     } finally {
       setIsClearingOpsCache(false);
+    }
+  }
+
+  async function handleCopyCacheRequestId(requestId: string) {
+    setCopyingCacheRequestId(requestId);
+    try {
+      clearUiError();
+      await navigator.clipboard.writeText(requestId);
+      setNotice(`Copied request_id ${requestId} to clipboard.`);
+    } catch (error) {
+      applyUiError(error, "Failed to copy cache request id.");
+    } finally {
+      setCopyingCacheRequestId(null);
     }
   }
 
@@ -1868,6 +1920,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_entries_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache entries endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_entries_endpoint}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.agent_ops_cache_clear_endpoint ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache clear endpoint:{" "}
@@ -1912,6 +1972,49 @@ export function SpreadsheetApp() {
                     {agentOpsCacheQuery.data.newest_request_id ?? "-"}
                   </span>
                 </p>
+                <div className="mt-2 rounded border border-slate-800/80 bg-slate-900/40 p-2">
+                  <p className="text-[11px] text-slate-500">
+                    recent request IDs (newest first, max {CACHE_ENTRIES_PREVIEW_LIMIT} shown):
+                  </p>
+                  {agentOpsCacheEntriesQuery.isLoading ? (
+                    <p className="mt-1 text-[11px] text-slate-500">Loading cache entries…</p>
+                  ) : null}
+                  {agentOpsCacheEntriesQuery.data?.entries?.length ? (
+                    <ul className="mt-1 space-y-1">
+                      {agentOpsCacheEntriesQuery.data.entries.map((entry) => (
+                        <li
+                          key={entry.request_id}
+                          className="flex items-center justify-between gap-2 text-[11px] text-slate-400"
+                        >
+                          <div className="min-w-0">
+                            <span className="font-mono text-slate-200">
+                              {entry.request_id}
+                            </span>
+                            <span className="ml-2 text-slate-500">
+                              sig:
+                              <span className="ml-1 font-mono text-slate-300">
+                                {entry.operations_signature?.slice(0, 12) ?? "-"}
+                              </span>
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyCacheRequestId(entry.request_id)}
+                            disabled={copyingCacheRequestId === entry.request_id}
+                            className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            {copyingCacheRequestId === entry.request_id
+                              ? "Copying..."
+                              : "Copy"}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : agentOpsCacheEntriesQuery.isLoading ? null : (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      No cached request IDs yet.
+                    </p>
+                  )}
+                </div>
               </div>
             ) : null}
             {lastPreset && (

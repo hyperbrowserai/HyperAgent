@@ -157,6 +157,20 @@ pub struct ClearAgentOpsCacheResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsCacheEntry {
+  pub request_id: String,
+  pub operations_signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentOpsCacheEntriesResponse {
+  pub total_entries: usize,
+  pub returned_entries: usize,
+  pub limit: usize,
+  pub entries: Vec<AgentOpsCacheEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentPresetRunRequest {
   pub request_id: Option<String>,
   pub actor: Option<String>,

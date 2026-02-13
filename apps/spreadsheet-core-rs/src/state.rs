@@ -244,6 +244,29 @@ impl AppState {
     ))
   }
 
+  pub async fn agent_ops_cache_entries(
+    &self,
+    workbook_id: Uuid,
+    limit: usize,
+  ) -> Result<Vec<(String, Option<String>)>, ApiError> {
+    let guard = self.workbooks.read().await;
+    let record = guard
+      .get(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+
+    Ok(record
+      .agent_ops_cache_order
+      .iter()
+      .rev()
+      .take(limit)
+      .filter_map(|request_id| {
+        record.agent_ops_cache.get(request_id).map(|response| {
+          (request_id.clone(), response.operations_signature.clone())
+        })
+      })
+      .collect())
+  }
+
   pub async fn clear_agent_ops_cache(
     &self,
     workbook_id: Uuid,
@@ -406,5 +429,42 @@ mod tests {
     assert_eq!(entries_after, 0);
     assert!(oldest_after.is_none());
     assert!(newest_after.is_none());
+  }
+
+  #[tokio::test]
+  async fn should_return_newest_first_cache_entries_with_limit() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-entry-list".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for index in 1..=3 {
+      let request_id = format!("req-{index}");
+      state
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id.clone(),
+          AgentOpsResponse {
+            request_id: Some(request_id),
+            operations_signature: Some(format!("sig-{index}")),
+            served_from_cache: false,
+            results: Vec::new(),
+          },
+        )
+        .await
+        .expect("cache update should succeed");
+    }
+
+    let entries = state
+      .agent_ops_cache_entries(workbook.id, 2)
+      .await
+      .expect("cache entries should load");
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].0, "req-3");
+    assert_eq!(entries[1].0, "req-2");
+    assert_eq!(entries[0].1.as_deref(), Some("sig-3"));
   }
 }

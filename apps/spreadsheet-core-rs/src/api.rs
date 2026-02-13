@@ -1,7 +1,8 @@
 use crate::{
   error::ApiError,
   models::{
-    AgentOperation, AgentOperationResult, AgentOpsCacheStatsResponse, AgentOpsRequest,
+    AgentOperation, AgentOperationResult, AgentOpsCacheEntriesResponse,
+    AgentOpsCacheEntry, AgentOpsCacheStatsResponse, AgentOpsRequest,
     AgentOpsResponse, AgentOpsPreviewRequest, AgentOpsPreviewResponse,
     AgentPresetRunRequest, AgentScenarioRunRequest,
     AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
@@ -62,6 +63,10 @@ pub fn create_router(state: AppState) -> Router {
     .route(
       "/v1/workbooks/{id}/agent/ops/cache",
       get(agent_ops_cache_stats),
+    )
+    .route(
+      "/v1/workbooks/{id}/agent/ops/cache/entries",
+      get(agent_ops_cache_entries),
     )
     .route(
       "/v1/workbooks/{id}/agent/ops/cache/clear",
@@ -1004,6 +1009,7 @@ async fn get_agent_schema(
     },
     "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
+    "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?limit=20",
     "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
     "agent_ops_preview_request_shape": {
       "operations": "non-empty array of operation objects"
@@ -1017,6 +1023,12 @@ async fn get_agent_schema(
       "max_entries": "maximum cache size",
       "oldest_request_id": "optional oldest cached request id",
       "newest_request_id": "optional newest cached request id"
+    },
+    "agent_ops_cache_entries_response_shape": {
+      "total_entries": "total cache entries available",
+      "returned_entries": "number of entries returned in this response",
+      "limit": "applied limit (default 20, max 200)",
+      "entries": [{ "request_id": "string", "operations_signature": "optional string" }]
     },
     "agent_ops_cache_clear_response_shape": {
       "cleared_entries": "number of removed cache entries"
@@ -1301,6 +1313,14 @@ async fn agent_ops_preview(
   }))
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+struct AgentOpsCacheEntriesQuery {
+  limit: Option<usize>,
+}
+
+const DEFAULT_AGENT_OPS_CACHE_ENTRIES_LIMIT: usize = 20;
+const MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT: usize = 200;
+
 async fn agent_ops_cache_stats(
   State(state): State<AppState>,
   Path(workbook_id): Path<Uuid>,
@@ -1314,6 +1334,33 @@ async fn agent_ops_cache_stats(
     max_entries: AGENT_OPS_CACHE_MAX_ENTRIES,
     oldest_request_id,
     newest_request_id,
+  }))
+}
+
+async fn agent_ops_cache_entries(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+  Query(query): Query<AgentOpsCacheEntriesQuery>,
+) -> Result<Json<AgentOpsCacheEntriesResponse>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  let limit = query
+    .limit
+    .unwrap_or(DEFAULT_AGENT_OPS_CACHE_ENTRIES_LIMIT)
+    .min(MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT);
+  let entries = state.agent_ops_cache_entries(workbook_id, limit).await?;
+  let mapped_entries = entries
+    .into_iter()
+    .map(|(request_id, operations_signature)| AgentOpsCacheEntry {
+      request_id,
+      operations_signature,
+    })
+    .collect::<Vec<_>>();
+  let total_entries = state.agent_ops_cache_stats(workbook_id).await?.0;
+  Ok(Json(AgentOpsCacheEntriesResponse {
+    total_entries,
+    returned_entries: mapped_entries.len(),
+    limit,
+    entries: mapped_entries,
   }))
 }
 
@@ -1492,6 +1539,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports create_sheet/export_workbook ops)"}},
       "/v1/workbooks/{id}/agent/ops/preview": {"post": {"summary": "Preview and sign a provided agent operation plan without execution"}},
       "/v1/workbooks/{id}/agent/ops/cache": {"get": {"summary": "Inspect request-id idempotency cache status for agent ops"}},
+      "/v1/workbooks/{id}/agent/ops/cache/entries": {"get": {"summary": "List recent request-id idempotency cache entries for agent ops"}},
       "/v1/workbooks/{id}/agent/ops/cache/clear": {"post": {"summary": "Clear request-id idempotency cache for agent ops"}},
       "/v1/workbooks/{id}/agent/schema": {"get": {"summary": "Get operation schema for AI agent callers"}},
       "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
@@ -1512,15 +1560,17 @@ async fn openapi() -> Json<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
-  use axum::{extract::Path, extract::State, Json};
+  use axum::{extract::Path, extract::Query, extract::State, Json};
   use tempfile::tempdir;
 
   use super::{
-    agent_ops, agent_ops_cache_stats, clear_agent_ops_cache, get_agent_schema,
+    agent_ops, agent_ops_cache_entries, agent_ops_cache_stats,
+    clear_agent_ops_cache, get_agent_schema,
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
-    validate_request_id_signature_consistency,
+    validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
+    MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
   };
   use crate::{
     models::{AgentOperation, AgentOpsRequest},
@@ -1823,6 +1873,61 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn should_list_cache_entries_from_newest_with_limit() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-entries".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for index in 1..=3 {
+      let request_id = format!("handler-entries-{index}");
+      let _ = agent_ops(
+        State(state.clone()),
+        Path(workbook.id),
+        Json(AgentOpsRequest {
+          request_id: Some(request_id),
+          actor: Some("test".to_string()),
+          stop_on_error: Some(true),
+          expected_operations_signature: None,
+          operations: vec![AgentOperation::Recalculate],
+        }),
+      )
+      .await
+      .expect("agent ops should succeed");
+    }
+
+    let entries_response = agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCacheEntriesQuery { limit: Some(2) }),
+    )
+    .await
+    .expect("entries should load")
+    .0;
+
+    assert_eq!(entries_response.total_entries, 3);
+    assert_eq!(entries_response.returned_entries, 2);
+    assert_eq!(entries_response.limit, 2);
+    assert_eq!(entries_response.entries[0].request_id, "handler-entries-3");
+    assert_eq!(entries_response.entries[1].request_id, "handler-entries-2");
+
+    let capped_response = agent_ops_cache_entries(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCacheEntriesQuery { limit: Some(9_999) }),
+    )
+    .await
+    .expect("entries should load")
+    .0;
+    assert_eq!(capped_response.total_entries, 3);
+    assert_eq!(capped_response.returned_entries, 3);
+    assert_eq!(capped_response.limit, MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT);
+  }
+
+  #[tokio::test]
   async fn should_return_request_id_conflict_from_agent_ops_handler() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =
@@ -1895,6 +2000,12 @@ mod tests {
         .get("agent_ops_cache_clear_endpoint")
         .and_then(serde_json::Value::as_str),
       Some("/v1/workbooks/{id}/agent/ops/cache/clear"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_entries_endpoint")
+        .and_then(serde_json::Value::as_str),
+      Some("/v1/workbooks/{id}/agent/ops/cache/entries?limit=20"),
     );
     assert_eq!(
       schema

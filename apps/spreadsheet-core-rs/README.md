@@ -39,6 +39,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
 - `POST /v1/workbooks/{id}/agent/ops/preview`
 - `GET /v1/workbooks/{id}/agent/ops/cache`
+- `GET /v1/workbooks/{id}/agent/ops/cache/entries`
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
@@ -84,6 +85,7 @@ Plan-preview helper:
 
 Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache`
+- `GET /v1/workbooks/{id}/agent/ops/cache/entries?limit=20` (newest-first request-id summaries, max `limit=200`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
 
 Supported `op_type` values:
