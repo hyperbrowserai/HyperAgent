@@ -24,6 +24,7 @@ Server defaults to `http://localhost:8787`.
 ## Key Endpoints
 
 - `GET /v1/agent/wizard/schema`
+- `GET /v1/agent/wizard/presets`
 - `GET /v1/agent/wizard/scenarios`
 - `POST /v1/agent/wizard/run`
 - `POST /v1/agent/wizard/run-json`
@@ -90,6 +91,7 @@ Supported `scenario` values:
 
 Discovery helpers:
 - `GET /v1/agent/wizard/schema`
+- `GET /v1/agent/wizard/presets`
 - `GET /v1/agent/wizard/scenarios`
 
 Multipart fields:

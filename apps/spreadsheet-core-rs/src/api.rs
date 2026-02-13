@@ -34,6 +34,7 @@ pub fn create_router(state: AppState) -> Router {
     .route("/health", get(health))
     .route("/v1/openapi", get(openapi))
     .route("/v1/agent/wizard/schema", get(get_agent_wizard_schema))
+    .route("/v1/agent/wizard/presets", get(list_wizard_presets))
     .route("/v1/agent/wizard/scenarios", get(list_wizard_scenarios))
     .route("/v1/agent/wizard/run", post(run_agent_wizard))
     .route("/v1/agent/wizard/run-json", post(run_agent_wizard_json))
@@ -336,6 +337,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
   Json(json!({
     "endpoint": "/v1/agent/wizard/run",
     "json_endpoint": "/v1/agent/wizard/run-json",
+    "presets_endpoint": "/v1/agent/wizard/presets",
     "scenarios_endpoint": "/v1/agent/wizard/scenarios",
     "request_multipart_fields": [
       "scenario (required)",
@@ -357,6 +359,12 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "file_base64": "optional base64-encoded xlsx payload"
     },
     "scenarios": scenario_catalog(),
+    "presets": preset_catalog()
+  }))
+}
+
+async fn list_wizard_presets() -> Json<serde_json::Value> {
+  Json(json!({
     "presets": preset_catalog()
   }))
 }
@@ -1135,6 +1143,7 @@ async fn openapi() -> Json<serde_json::Value> {
     },
     "paths": {
       "/v1/agent/wizard/schema": {"get": {"summary": "Get schema for wizard orchestration endpoint"}},
+      "/v1/agent/wizard/presets": {"get": {"summary": "List wizard presets without requiring workbook context"}},
       "/v1/agent/wizard/scenarios": {"get": {"summary": "List wizard scenarios without requiring workbook context"}},
       "/v1/agent/wizard/run": {"post": {"summary": "Wizard endpoint: optional import + scenario execution + optional export payload"}},
       "/v1/agent/wizard/run-json": {"post": {"summary": "JSON wizard endpoint with optional base64 import payload for agent callers"}},
