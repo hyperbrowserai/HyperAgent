@@ -105,6 +105,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "SQRT",
   "POWER",
   "MOD",
+  "QUOTIENT",
+  "MROUND",
   "SIGN",
   "INT",
   "EVEN",

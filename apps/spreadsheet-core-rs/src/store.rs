@@ -24,6 +24,7 @@ use crate::{
     parse_mid_formula, parse_mod_formula, parse_month_formula,
     parse_not_formula,
     parse_power_formula,
+    parse_quotient_formula, parse_mround_formula,
     parse_or_formula, parse_rept_formula, parse_right_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_find_formula,
@@ -859,6 +860,31 @@ fn evaluate_formula(
     }
     let result = dividend - divisor * (dividend / divisor).floor();
     return Ok(Some(result.to_string()));
+  }
+
+  if let Some((numerator_arg, denominator_arg)) = parse_quotient_formula(formula) {
+    let numerator = parse_required_float(connection, sheet, &numerator_arg)?;
+    let denominator = parse_required_float(connection, sheet, &denominator_arg)?;
+    if denominator == 0.0 {
+      return Ok(None);
+    }
+    let result = (numerator / denominator).trunc();
+    return Ok(Some(result.to_string()));
+  }
+
+  if let Some((value_arg, multiple_arg)) = parse_mround_formula(formula) {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let multiple = parse_required_float(connection, sheet, &multiple_arg)?;
+    if multiple == 0.0 {
+      return Ok(Some("0".to_string()));
+    }
+    if value.is_sign_positive() != multiple.is_sign_positive()
+      && value.abs() > f64::EPSILON
+    {
+      return Ok(None);
+    }
+    let rounded = (value / multiple).round() * multiple;
+    return Ok(Some(rounded.to_string()));
   }
 
   if let Some(sign_arg) = parse_sign_formula(formula) {
@@ -3136,12 +3162,24 @@ mod tests {
         value: None,
         formula: Some("=ODD(1.2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 119,
+        value: None,
+        formula: Some("=QUOTIENT(9,4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 120,
+        value: None,
+        formula: Some("=MROUND(11,2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 116);
+    assert_eq!(updated_cells, 118);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3155,7 +3193,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 118,
+        end_col: 120,
       },
     )
     .expect("cells should be fetched");
@@ -3330,6 +3368,8 @@ mod tests {
     assert_eq!(by_position(1, 116).evaluated_value.as_deref(), Some("1"));
     assert_eq!(by_position(1, 117).evaluated_value.as_deref(), Some("-2"));
     assert_eq!(by_position(1, 118).evaluated_value.as_deref(), Some("3"));
+    assert_eq!(by_position(1, 119).evaluated_value.as_deref(), Some("2"));
+    assert_eq!(by_position(1, 120).evaluated_value.as_deref(), Some("12"));
   }
 
   #[test]
@@ -3440,6 +3480,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=MOD(10,0)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_quotient_divide_by_zero_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=QUOTIENT(10,0)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=QUOTIENT(10,0)".to_string()]);
   }
 
   #[test]

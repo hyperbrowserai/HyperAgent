@@ -580,6 +580,22 @@ pub fn parse_mod_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_quotient_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "QUOTIENT" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_mround_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "MROUND" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_sign_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "SIGN" && args.len() == 1 {
@@ -1122,7 +1138,8 @@ mod tests {
     parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_cell_address,
-    parse_mod_formula, parse_sign_formula,
+    parse_mod_formula, parse_quotient_formula, parse_mround_formula,
+    parse_sign_formula,
     parse_power_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
     parse_trunc_formula, parse_even_formula, parse_odd_formula,
@@ -1321,6 +1338,14 @@ mod tests {
     let mod_formula = parse_mod_formula("=MOD(10, 3)").expect("mod should parse");
     assert_eq!(mod_formula.0, "10");
     assert_eq!(mod_formula.1, "3");
+    let quotient = parse_quotient_formula("=QUOTIENT(9, 4)")
+      .expect("quotient should parse");
+    assert_eq!(quotient.0, "9");
+    assert_eq!(quotient.1, "4");
+    let mround =
+      parse_mround_formula("=MROUND(10.5, 2)").expect("mround should parse");
+    assert_eq!(mround.0, "10.5");
+    assert_eq!(mround.1, "2");
     assert_eq!(
       parse_sign_formula("=SIGN(-12.5)").as_deref(),
       Some("-12.5"),
