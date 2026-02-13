@@ -222,4 +222,44 @@ describe("createLLMClient", () => {
       maxTokens: undefined,
     });
   });
+
+  it("rejects non-object configs with a readable error", () => {
+    expect(() =>
+      createLLMClient(undefined as unknown as LLMConfig)
+    ).toThrow("Invalid LLM config: config must be an object");
+  });
+
+  it("throws readable errors when config field getters throw", () => {
+    const providerTrapConfig = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "provider") {
+            throw new Error("provider trap");
+          }
+          return undefined;
+        },
+      }
+    );
+    expect(() =>
+      createLLMClient(providerTrapConfig as unknown as LLMConfig)
+    ).toThrow('Invalid LLM config: failed to read "provider" (provider trap)');
+
+    const modelTrapConfig = new Proxy(
+      {
+        provider: "openai",
+      },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "model") {
+            throw new Error("model trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+    expect(() =>
+      createLLMClient(modelTrapConfig as unknown as LLMConfig)
+    ).toThrow('Invalid LLM config: failed to read "model" (model trap)');
+  });
 });

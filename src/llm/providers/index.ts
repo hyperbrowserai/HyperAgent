@@ -3,6 +3,7 @@ import { createOpenAIClient, OpenAIClientConfig } from "./openai";
 import { createAnthropicClient, AnthropicClientConfig } from "./anthropic";
 import { createGeminiClient, GeminiClientConfig } from "./gemini";
 import { createDeepSeekClient, DeepSeekClientConfig } from "./deepseek";
+import { formatUnknownError } from "@/utils";
 
 export type LLMProvider = "openai" | "anthropic" | "gemini" | "deepseek";
 
@@ -17,6 +18,32 @@ export interface LLMConfig {
 
 const MAX_MODEL_ID_CHARS = 200;
 const MAX_PROVIDER_ID_CHARS = 40;
+const MAX_LLM_CONFIG_DIAGNOSTIC_CHARS = 200;
+
+function truncateLLMConfigDiagnostic(value: string): string {
+  if (value.length <= MAX_LLM_CONFIG_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  return `${value.slice(
+    0,
+    MAX_LLM_CONFIG_DIAGNOSTIC_CHARS
+  )}... [truncated ${value.length - MAX_LLM_CONFIG_DIAGNOSTIC_CHARS} chars]`;
+}
+
+function safeReadConfigField(
+  config: Record<string, unknown>,
+  field: keyof LLMConfig
+): unknown {
+  try {
+    return config[field];
+  } catch (error) {
+    throw new Error(
+      `Invalid LLM config: failed to read "${field}" (${truncateLLMConfigDiagnostic(
+        formatUnknownError(error)
+      )})`
+    );
+  }
+}
 
 function normalizeProvider(provider: unknown): LLMProvider {
   if (typeof provider !== "string") {
@@ -114,15 +141,22 @@ function normalizeApiKey(value: unknown): string | undefined {
 }
 
 export function createLLMClient(config: LLMConfig): HyperAgentLLM {
-  const provider = normalizeProvider(config.provider);
-  const model = normalizeModel(config.model);
-  const temperature = normalizeTemperature(config.temperature);
-  const maxTokens = normalizeMaxTokens(config.maxTokens);
+  if (!config || typeof config !== "object") {
+    throw new Error("Invalid LLM config: config must be an object");
+  }
+
+  const configRecord = config as unknown as Record<string, unknown>;
+  const provider = normalizeProvider(safeReadConfigField(configRecord, "provider"));
+  const model = normalizeModel(safeReadConfigField(configRecord, "model"));
+  const temperature = normalizeTemperature(
+    safeReadConfigField(configRecord, "temperature")
+  );
+  const maxTokens = normalizeMaxTokens(safeReadConfigField(configRecord, "maxTokens"));
   const baseURL =
     provider === "openai" || provider === "deepseek"
-      ? normalizeBaseURL(config.baseURL)
+      ? normalizeBaseURL(safeReadConfigField(configRecord, "baseURL"))
       : undefined;
-  const apiKey = normalizeApiKey(config.apiKey);
+  const apiKey = normalizeApiKey(safeReadConfigField(configRecord, "apiKey"));
 
   switch (provider) {
     case "openai":
