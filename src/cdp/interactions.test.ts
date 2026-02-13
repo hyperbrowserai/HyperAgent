@@ -564,6 +564,50 @@ describe("dispatchCDPAction argument coercion", () => {
     expect(args?.[1]?.value).toBe("smooth");
   });
 
+  it("accepts auto scroll behavior alias in object options", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {
+        result: {
+          value: { status: "done", finalTop: 0, maxScroll: 100 },
+        },
+      };
+    });
+
+    await dispatchCDPAction(
+      "scrollTo",
+      [
+        {
+          target: "30%",
+          behavior: "  AUTO\u0007 ",
+        },
+      ],
+      {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      }
+    );
+
+    const scrollCall = calls.find(
+      (call) =>
+        call.method === "Runtime.callFunctionOn" &&
+        typeof call.params?.functionDeclaration === "string" &&
+        (call.params.functionDeclaration as string).includes(
+          "function(percent, behavior)"
+        )
+    );
+    const args = scrollCall?.params?.arguments as
+      | Array<{ value?: unknown }>
+      | undefined;
+    expect(args?.[0]?.value).toBe(30);
+    expect(args?.[1]?.value).toBe("instant");
+  });
+
   it("falls back to 50% for non-finite numeric scroll targets", async () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session = createSession(async (method, params) => {

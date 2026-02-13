@@ -417,6 +417,9 @@ function normalizeScrollOptions(targetArg: unknown): ScrollToOptions {
       return undefined;
     }
     const normalized = stripControlChars(value).trim().toLowerCase();
+    if (normalized === "auto") {
+      return "instant";
+    }
     if (normalized === "smooth" || normalized === "instant") {
       return normalized;
     }
