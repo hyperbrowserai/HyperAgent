@@ -400,7 +400,7 @@ describe("system message text extraction", () => {
 
     expect(messages[0]).toEqual({
       role: "user",
-      content: "[Tool weird  name]\ntool response",
+      content: "[Tool weird name]\ntool response",
     });
   });
 
@@ -430,7 +430,7 @@ describe("system message text extraction", () => {
 
     expect(messages[0]).toEqual({
       role: "user",
-      parts: [{ text: "[Tool weird  name]\ntool response" }],
+      parts: [{ text: "[Tool weird name]\ntool response" }],
     });
   });
 });

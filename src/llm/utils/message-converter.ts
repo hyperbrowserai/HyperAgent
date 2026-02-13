@@ -86,7 +86,9 @@ function normalizeOpenAIToolName(toolName: string): string {
 }
 
 function normalizeToolNameForLabel(toolName: string): string {
-  return normalizeToolName(toolName).replace(/[\[\]\r\n]/g, " ");
+  const sanitized = normalizeToolName(toolName).replace(/[\[\]\r\n]/g, " ");
+  const normalized = sanitized.trim().replace(/\s+/g, " ");
+  return normalized.length > 0 ? normalized : "unknown-tool";
 }
 
 function normalizeToolCallId(
