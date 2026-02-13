@@ -491,36 +491,43 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
 export async function loadMCPServersFromFile(
   filePath: string
 ): Promise<MCPServerConfig[]> {
+  if (typeof filePath !== "string" || filePath.trim().length === 0) {
+    throw new Error(
+      "Failed to read MCP config file: path must be a non-empty string."
+    );
+  }
+  const normalizedFilePath = filePath.trim();
+
   let fileStats: fs.Stats | undefined;
   try {
-    fileStats = await fs.promises.stat(filePath);
+    fileStats = await fs.promises.stat(normalizedFilePath);
   } catch {
     // Fall through to readFile for missing/inaccessible path diagnostics.
   }
 
   if (fileStats && !fileStats.isFile()) {
     throw new Error(
-      `Failed to read MCP config file "${filePath}": path is not a regular file.`
+      `Failed to read MCP config file "${normalizedFilePath}": path is not a regular file.`
     );
   }
   if (fileStats && fileStats.size > MAX_MCP_CONFIG_FILE_CHARS) {
     throw new Error(
-      `Invalid MCP config file "${filePath}": config exceeds ${MAX_MCP_CONFIG_FILE_CHARS} characters.`
+      `Invalid MCP config file "${normalizedFilePath}": config exceeds ${MAX_MCP_CONFIG_FILE_CHARS} characters.`
     );
   }
 
   let fileContent: string;
   try {
-    fileContent = await fs.promises.readFile(filePath, "utf-8");
+    fileContent = await fs.promises.readFile(normalizedFilePath, "utf-8");
   } catch (error) {
     throw new Error(
-      `Failed to read MCP config file "${filePath}": ${formatUnknownError(error)}`
+      `Failed to read MCP config file "${normalizedFilePath}": ${formatUnknownError(error)}`
     );
   }
 
   if (fileContent.length > MAX_MCP_CONFIG_FILE_CHARS) {
     throw new Error(
-      `Invalid MCP config file "${filePath}": config exceeds ${MAX_MCP_CONFIG_FILE_CHARS} characters.`
+      `Invalid MCP config file "${normalizedFilePath}": config exceeds ${MAX_MCP_CONFIG_FILE_CHARS} characters.`
     );
   }
 
@@ -528,7 +535,7 @@ export async function loadMCPServersFromFile(
     return parseMCPServersConfig(fileContent);
   } catch (error) {
     throw new Error(
-      `Invalid MCP config file "${filePath}": ${formatUnknownError(error)}`
+      `Invalid MCP config file "${normalizedFilePath}": ${formatUnknownError(error)}`
     );
   }
 }

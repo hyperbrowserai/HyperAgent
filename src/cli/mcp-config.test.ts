@@ -621,6 +621,19 @@ describe("parseMCPServersConfig", () => {
 });
 
 describe("loadMCPServersFromFile", () => {
+  it("throws when config file path is not a non-empty string", async () => {
+    await expect(
+      loadMCPServersFromFile("" as unknown as string)
+    ).rejects.toThrow(
+      "Failed to read MCP config file: path must be a non-empty string."
+    );
+    await expect(
+      loadMCPServersFromFile(42 as unknown as string)
+    ).rejects.toThrow(
+      "Failed to read MCP config file: path must be a non-empty string."
+    );
+  });
+
   it("loads and parses server config from file", async () => {
     const tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "hyperagent-mcp-config-")
