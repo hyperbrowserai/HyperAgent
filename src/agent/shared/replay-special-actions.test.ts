@@ -238,6 +238,22 @@ describe("executeReplaySpecialAction", () => {
     expect(page.waitForLoadState).toHaveBeenCalledWith("load", undefined);
   });
 
+  it("continues waitForLoadState replay when settle wait fails", async () => {
+    const page = createPage();
+    waitForSettledDOM.mockRejectedValueOnce(new Error("settle failed"));
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-loadstate-settle-fail",
+      actionType: "waitForLoadState",
+      arguments: ["load"],
+      page: page as unknown as Page,
+    });
+
+    expect(page.waitForLoadState).toHaveBeenCalledWith("load", undefined);
+    expect(result?.status).toBe("completed");
+    expect(result?.output).toBe("Waited for load state: load");
+  });
+
   it("fails extract replay when extracted object cannot be serialized", async () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
