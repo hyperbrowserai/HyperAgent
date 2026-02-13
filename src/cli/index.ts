@@ -21,6 +21,7 @@ import {
 } from "@/types";
 import { SessionDetail } from "@hyperbrowser/sdk/types";
 import { formatCliError } from "./format-cli-error";
+import { setRawModeIfSupported } from "./stdin-utils";
 
 const program = new Command();
 
@@ -180,7 +181,7 @@ program
         }
       });
 
-      process.stdin.setRawMode(true);
+      setRawModeIfSupported(true);
 
       const onStep = (params: AgentStep) => {
         const action = params.agentOutput.action;
@@ -194,7 +195,7 @@ program
           `[${chalk.yellow("step")}]: ${params.agentOutput.thoughts}\n${actionDisplay}`
         );
         currentSpinner = ora();
-        process.stdin.setRawMode(true);
+        setRawModeIfSupported(true);
         process.stdin.resume();
       };
 
@@ -205,7 +206,7 @@ program
         currentSpinner.start(
           `[${chalk.yellow("planning")}]: ${params.thoughts}\n${actionDisplay}`
         );
-        process.stdin.setRawMode(true);
+        setRawModeIfSupported(true);
         process.stdin.resume();
       };
 
@@ -233,7 +234,7 @@ program
             required: true,
           });
 
-          process.stdin.setRawMode(true);
+          setRawModeIfSupported(true);
           process.stdin.resume();
 
           task = await agent.executeTaskAsync(taskDescription, {
