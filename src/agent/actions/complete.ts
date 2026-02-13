@@ -4,6 +4,19 @@ import { formatUnknownError } from "@/utils";
 
 const MAX_COMPLETE_TEXT_CHARS = 20_000;
 
+function sanitizeCompleteText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  return Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    if (code === 9 || code === 10) {
+      return char;
+    }
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+}
+
 function safeReadRecordField(value: unknown, key: string): unknown {
   if (!value || (typeof value !== "object" && typeof value !== "function")) {
     return undefined;
@@ -22,7 +35,7 @@ function normalizeCompleteText(value: unknown, fallback: string): string {
       : value == null
         ? fallback
         : formatUnknownError(value);
-  const normalized = raw.replace(/\r\n?/g, "\n").trim();
+  const normalized = sanitizeCompleteText(raw).replace(/\r\n?/g, "\n").trim();
   if (normalized.length === 0) {
     return fallback;
   }

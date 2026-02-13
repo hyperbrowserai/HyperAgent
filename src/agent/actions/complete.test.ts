@@ -63,4 +63,15 @@ describe("CompleteActionDefinition", () => {
     expect(output).toContain("[truncated");
     expect((output ?? "").length).toBeLessThan(20_500);
   });
+
+  it("sanitizes unsupported control characters in completion text", async () => {
+    const output = await CompleteActionDefinition.completeAction?.({
+      success: true,
+      text: "line\u0000 one\nline\u0007 two",
+    });
+
+    expect(output).toBe("line  one\nline  two");
+    expect(output).not.toContain("\u0000");
+    expect(output).not.toContain("\u0007");
+  });
 });
