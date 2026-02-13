@@ -89,6 +89,34 @@ describe("createLLMClient", () => {
     });
   });
 
+  it("drops out-of-range temperatures and preserves valid values", () => {
+    createLLMClient({
+      provider: "openai",
+      model: "model",
+      temperature: 2.5,
+    });
+    expect(createOpenAIClientMock).toHaveBeenLastCalledWith({
+      apiKey: undefined,
+      model: "model",
+      temperature: undefined,
+      maxTokens: undefined,
+      baseURL: undefined,
+    });
+
+    createLLMClient({
+      provider: "openai",
+      model: "model",
+      temperature: 1.25,
+    });
+    expect(createOpenAIClientMock).toHaveBeenLastCalledWith({
+      apiKey: undefined,
+      model: "model",
+      temperature: 1.25,
+      maxTokens: undefined,
+      baseURL: undefined,
+    });
+  });
+
   it("rejects unsupported provider values", () => {
     expect(() =>
       createLLMClient({

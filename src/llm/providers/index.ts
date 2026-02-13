@@ -44,6 +44,9 @@ function normalizeTemperature(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return undefined;
   }
+  if (value < 0 || value > 2) {
+    return undefined;
+  }
   return value;
 }
 
