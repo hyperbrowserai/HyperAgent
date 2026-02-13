@@ -3,7 +3,7 @@ use crate::{
   models::{
     AgentOperation, AgentOperationResult, AgentOpsRequest, AgentOpsResponse,
     AgentPresetRunRequest, AgentScenarioRunRequest,
-    AgentWizardImportResult, AgentWizardRunResponse,
+    AgentWizardImportResult, AgentWizardRunJsonRequest, AgentWizardRunResponse,
     CellMutation, CreateSheetRequest, CreateSheetResponse, CreateWorkbookRequest,
     CreateWorkbookResponse, ExportResponse, GetCellsRequest,
     GetCellsResponse, QueryRequest, RecalculateResponse, SetCellsRequest,
@@ -36,6 +36,7 @@ pub fn create_router(state: AppState) -> Router {
     .route("/v1/agent/wizard/schema", get(get_agent_wizard_schema))
     .route("/v1/agent/wizard/scenarios", get(list_wizard_scenarios))
     .route("/v1/agent/wizard/run", post(run_agent_wizard))
+    .route("/v1/agent/wizard/run-json", post(run_agent_wizard_json))
     .route("/v1/workbooks", post(create_workbook))
     .route("/v1/workbooks/import", post(import_workbook))
     .route("/v1/workbooks/{id}", get(get_workbook))
@@ -271,9 +272,70 @@ async fn run_agent_wizard(
   }))
 }
 
+async fn run_agent_wizard_json(
+  State(state): State<AppState>,
+  Json(payload): Json<AgentWizardRunJsonRequest>,
+) -> Result<Json<AgentWizardRunResponse>, ApiError> {
+  let scenario = payload.scenario.trim();
+  if scenario.is_empty() {
+    return Err(ApiError::BadRequest(
+      "Field 'scenario' is required.".to_string(),
+    ));
+  }
+  let include_file_base64 = payload.include_file_base64.unwrap_or(false);
+  let stop_on_error = payload.stop_on_error.unwrap_or(true);
+  let actor = payload.actor.unwrap_or_else(|| "wizard".to_string());
+  let workbook_name = payload
+    .workbook_name
+    .map(|value| value.trim().to_string())
+    .filter(|value| !value.is_empty())
+    .or(payload.file_name.clone());
+
+  let workbook = state.create_workbook(workbook_name).await?;
+  let import_result = match payload.file_base64 {
+    Some(encoded_file) => {
+      let bytes = BASE64_STANDARD
+        .decode(encoded_file)
+        .map_err(|error| {
+          ApiError::BadRequest(format!(
+            "Field 'file_base64' is not valid base64: {error}",
+          ))
+        })?;
+      Some(
+        import_bytes_into_workbook(&state, workbook.id, &bytes, actor.as_str())
+          .await?,
+      )
+    }
+    None => None,
+  };
+  let operations = build_scenario_operations(
+    scenario,
+    Some(include_file_base64),
+  )?;
+
+  let results = execute_agent_operations(
+    &state,
+    workbook.id,
+    actor.as_str(),
+    stop_on_error,
+    operations,
+  )
+  .await;
+  let refreshed = state.get_workbook(workbook.id).await?;
+
+  Ok(Json(AgentWizardRunResponse {
+    workbook: refreshed,
+    scenario: scenario.to_string(),
+    request_id: payload.request_id,
+    results,
+    import: import_result,
+  }))
+}
+
 async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
   Json(json!({
     "endpoint": "/v1/agent/wizard/run",
+    "json_endpoint": "/v1/agent/wizard/run-json",
     "scenarios_endpoint": "/v1/agent/wizard/scenarios",
     "request_multipart_fields": [
       "scenario (required)",
@@ -284,6 +346,16 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "stop_on_error (optional boolean)",
       "include_file_base64 (optional boolean)"
     ],
+    "request_json_fields": {
+      "scenario": "required string",
+      "request_id": "optional string",
+      "actor": "optional string",
+      "stop_on_error": "optional boolean",
+      "include_file_base64": "optional boolean",
+      "workbook_name": "optional string",
+      "file_name": "optional string",
+      "file_base64": "optional base64-encoded xlsx payload"
+    },
     "scenarios": scenario_catalog(),
     "presets": preset_catalog()
   }))
@@ -724,6 +796,7 @@ async fn get_agent_schema(
     "scenario_endpoint": "/v1/workbooks/{id}/agent/scenarios/{scenario}",
     "scenarios": scenario_catalog(),
     "wizard_endpoint": "/v1/agent/wizard/run",
+    "wizard_json_endpoint": "/v1/agent/wizard/run-json",
     "wizard_request_multipart_fields": [
       "scenario (required)",
       "file (optional .xlsx)",
@@ -1064,6 +1137,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/agent/wizard/schema": {"get": {"summary": "Get schema for wizard orchestration endpoint"}},
       "/v1/agent/wizard/scenarios": {"get": {"summary": "List wizard scenarios without requiring workbook context"}},
       "/v1/agent/wizard/run": {"post": {"summary": "Wizard endpoint: optional import + scenario execution + optional export payload"}},
+      "/v1/agent/wizard/run-json": {"post": {"summary": "JSON wizard endpoint with optional base64 import payload for agent callers"}},
       "/v1/workbooks": {"post": {"summary": "Create workbook"}},
       "/v1/workbooks/import": {"post": {"summary": "Import .xlsx"}},
       "/v1/workbooks/{id}": {"get": {"summary": "Get workbook"}},

@@ -26,6 +26,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/agent/wizard/schema`
 - `GET /v1/agent/wizard/scenarios`
 - `POST /v1/agent/wizard/run`
+- `POST /v1/agent/wizard/run-json`
 - `POST /v1/workbooks`
 - `POST /v1/workbooks/import`
 - `GET /v1/workbooks/{id}`
@@ -85,6 +86,7 @@ Supported `scenario` values:
 ### AI Agent wizard endpoint
 
 `POST /v1/agent/wizard/run` creates a workbook, optionally imports an `.xlsx`, then runs a selected scenario.
+`POST /v1/agent/wizard/run-json` provides the same flow for AI clients that prefer JSON payloads (with optional `file_base64`).
 
 Discovery helpers:
 - `GET /v1/agent/wizard/schema`
@@ -149,6 +151,18 @@ curl -X POST "http://localhost:8787/v1/agent/wizard/run" \
   -F "file=@./a.xlsx" \
   -F "request_id=wizard-1" \
   -F "include_file_base64=false"
+```
+
+### Example: run wizard JSON endpoint
+
+```bash
+curl -X POST "http://localhost:8787/v1/agent/wizard/run-json" \
+  -H "content-type: application/json" \
+  -d '{
+    "scenario": "refresh_and_export",
+    "request_id": "wizard-json-1",
+    "include_file_base64": false
+  }'
 ```
 
 ## Testing
