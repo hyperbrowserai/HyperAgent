@@ -162,12 +162,7 @@ class PlaywrightCDPClient implements CDPClient {
     this.sessionPool.clear();
 
     const detachPromises = Array.from(this.trackedSessions).map((session) =>
-      session.detach().catch((error) => {
-        console.warn(
-          "[CDP][PlaywrightAdapter] Failed to detach cached session:",
-          error
-        );
-      })
+      session.detach()
     );
     await Promise.all(detachPromises);
     this.trackedSessions.clear();
