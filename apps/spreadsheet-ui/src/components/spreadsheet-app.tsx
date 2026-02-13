@@ -1786,6 +1786,10 @@ export function SpreadsheetApp() {
           preview.request_id_prefix
             ? ` for prefix ${preview.request_id_prefix}`
             : ""
+        }${
+          preview.cutoff_timestamp
+            ? ` cutoff ${formatIsoTimestamp(preview.cutoff_timestamp)} (${formatRelativeAge(preview.cutoff_timestamp)})`
+            : ""
         }.`,
       );
     } catch (error) {
@@ -1834,6 +1838,10 @@ export function SpreadsheetApp() {
         } older than ${response.max_age_seconds}s${
           response.request_id_prefix
             ? ` for prefix ${response.request_id_prefix}`
+            : ""
+        }${
+          response.cutoff_timestamp
+            ? ` cutoff ${formatIsoTimestamp(response.cutoff_timestamp)} (${formatRelativeAge(response.cutoff_timestamp)})`
             : ""
         }.`,
       );
