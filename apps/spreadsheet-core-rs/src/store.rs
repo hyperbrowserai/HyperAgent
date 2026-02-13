@@ -7,7 +7,8 @@ use crate::{
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_choose_formula, parse_left_formula,
     parse_ceiling_formula, parse_floor_formula, parse_index_formula,
-    parse_isblank_formula, parse_isnumber_formula, parse_istext_formula,
+    parse_int_formula, parse_isblank_formula, parse_isnumber_formula,
+    parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
     parse_match_formula, parse_maxifs_formula, parse_minifs_formula,
     parse_mod_formula, parse_month_formula,
@@ -16,6 +17,7 @@ use crate::{
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
     parse_sign_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
+    parse_trunc_formula,
     parse_sqrt_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_today_formula, parse_upper_formula, parse_vlookup_formula,
@@ -533,6 +535,27 @@ fn evaluate_formula(
       0
     };
     return Ok(Some(result.to_string()));
+  }
+
+  if let Some(int_arg) = parse_int_formula(formula) {
+    let value = parse_required_float(connection, sheet, &int_arg)?;
+    return Ok(Some(value.floor().to_string()));
+  }
+
+  if let Some((value_arg, digits_arg)) = parse_trunc_formula(formula) {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let digits = match digits_arg {
+      Some(raw_digits) => parse_required_integer(connection, sheet, &raw_digits)?,
+      None => 0,
+    };
+    let factor = 10f64.powi(digits);
+    let scaled = value * factor;
+    let truncated = if scaled.is_sign_negative() {
+      scaled.ceil()
+    } else {
+      scaled.floor()
+    } / factor;
+    return Ok(Some(truncated.to_string()));
   }
 
   if let Some((text_arg, count_arg)) = parse_left_formula(formula) {
@@ -2154,12 +2177,24 @@ mod tests {
         value: None,
         formula: Some(r#"=MAXIFS(A1:A2,E1:E2,"south",A1:A2,">=80")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 63,
+        value: None,
+        formula: Some("=INT(-12.5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 64,
+        value: None,
+        formula: Some("=TRUNC(12.345,2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 60);
+    assert_eq!(updated_cells, 62);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2173,7 +2208,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 62,
+        end_col: 64,
       },
     )
     .expect("cells should be fetched");
@@ -2264,6 +2299,8 @@ mod tests {
     assert_eq!(by_position(1, 60).evaluated_value.as_deref(), Some("-1"));
     assert_eq!(by_position(1, 61).evaluated_value.as_deref(), Some("80"));
     assert_eq!(by_position(1, 62).evaluated_value.as_deref(), Some("80"));
+    assert_eq!(by_position(1, 63).evaluated_value.as_deref(), Some("-13"));
+    assert_eq!(by_position(1, 64).evaluated_value.as_deref(), Some("12.34"));
   }
 
   #[test]

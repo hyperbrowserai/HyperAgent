@@ -80,6 +80,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "POWER",
   "MOD",
   "SIGN",
+  "INT",
+  "TRUNC",
   "LEFT",
   "RIGHT",
   "UPPER",
