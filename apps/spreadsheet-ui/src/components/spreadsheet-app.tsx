@@ -152,7 +152,7 @@ export function SpreadsheetApp() {
   const statusText =
     createWorkbookMutation.isPending || importMutation.isPending
       ? "Initializing workbook..."
-      : cellsQuery.isFetching
+      : cellsQuery.isFetching || workbookQuery.isFetching
         ? "Syncing updates..."
         : "Ready";
 
@@ -410,6 +410,16 @@ export function SpreadsheetApp() {
               Stream Seq: <span className="font-semibold">{eventSeq}</span>
             </div>
           </div>
+          {workbook?.compatibility_warnings?.length ? (
+            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-100">
+              <p className="mb-1 font-semibold">Compatibility warnings</p>
+              <ul className="list-disc space-y-1 pl-4">
+                {workbook.compatibility_warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {(workbook?.sheets ?? []).map((sheet) => (
               <button
