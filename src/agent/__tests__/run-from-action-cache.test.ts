@@ -267,6 +267,80 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toContain("Waited for load state: networkidle");
   });
 
+  it("stops replay side-effects after closeAgent is called mid-run", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    let resolveWait!: () => void;
+    const waitForTimeout = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWait = resolve;
+        })
+    );
+    const performClick = jest.fn().mockResolvedValue({
+      taskId: "click-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "clicked",
+      replayStepMeta: {
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      waitForTimeout,
+      performClick,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "wait",
+          elementId: null,
+          method: null,
+          arguments: [],
+          actionParams: { duration: 10 },
+          frameIndex: null,
+          xpath: null,
+          actionType: "wait",
+          success: true,
+          message: "cached wait",
+        },
+        {
+          stepIndex: 1,
+          instruction: "click submit",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: "//button[1]",
+          actionType: "actElement",
+          success: true,
+          message: "cached click",
+        },
+      ],
+    };
+
+    const replayPromise = agent.runFromActionCache(cache, page);
+    expect(waitForTimeout).toHaveBeenCalledTimes(1);
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    resolveWait();
+
+    const replay = await replayPromise;
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(performClick).not.toHaveBeenCalled();
+    expect(replay.steps[1]?.message).toBe(
+      "Replay stopped because agent was closed"
+    );
+  });
+
   it("fails replay step cleanly when special action execution throws", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

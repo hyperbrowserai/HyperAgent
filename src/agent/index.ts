@@ -1332,6 +1332,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     params?: RunFromActionCacheParams
   ): Promise<ActionCacheReplayResult> {
     const replayId = uuidv4();
+    const replayLifecycleGeneration = this.lifecycleGeneration;
     const maxXPathRetries = this.normalizeRetryCount(
       params?.maxXPathRetries,
       3,
@@ -1483,6 +1484,22 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     for (const step of sortedSteps) {
+      if (!this.isTaskLifecycleGenerationActive(replayLifecycleGeneration)) {
+        replayStatus = TaskStatus.FAILED;
+        stepsResult.push({
+          stepIndex: getSafeStepIndex(getStepIndexValue(step)),
+          actionType: getActionType(step),
+          usedXPath: false,
+          fallbackUsed: false,
+          cachedXPath: null,
+          fallbackXPath: null,
+          fallbackElementId: null,
+          retries: 0,
+          success: false,
+          message: "Replay stopped because agent was closed",
+        });
+        break;
+      }
       let result: TaskOutput;
       let attemptedCachedAction = false;
       const actionType = getActionType(step);
