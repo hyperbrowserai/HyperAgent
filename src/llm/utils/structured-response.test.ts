@@ -23,6 +23,12 @@ describe("parseStructuredResponse", () => {
     expect(result.parsed).toBeNull();
   });
 
+  it("formats non-string payloads for diagnostics without parsing", () => {
+    const result = parseStructuredResponse({ ok: true }, schema);
+    expect(result.rawText).toBe('{"ok":true}');
+    expect(result.parsed).toBeNull();
+  });
+
   it("returns null parsed output when schema validation fails", () => {
     const result = parseStructuredResponse('{"action":1}', schema);
     expect(result.parsed).toBeNull();

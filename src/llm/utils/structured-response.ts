@@ -1,12 +1,20 @@
 import { z } from "zod";
 import { HyperAgentStructuredResult } from "@/llm/types";
 import { parseJsonMaybe } from "@/llm/utils/safe-json";
+import { formatUnknownError } from "@/utils";
 
 export function parseStructuredResponse<TSchema extends z.ZodTypeAny>(
   rawText: unknown,
   schema: TSchema
 ): HyperAgentStructuredResult<TSchema> {
-  const text = typeof rawText === "string" ? rawText : "";
+  if (typeof rawText !== "string") {
+    return {
+      rawText: formatUnknownError(rawText),
+      parsed: null,
+    };
+  }
+
+  const text = rawText;
   if (text.trim().length === 0) {
     return {
       rawText: text,
