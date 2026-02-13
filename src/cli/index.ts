@@ -19,8 +19,8 @@ import {
   TaskOutput,
   TaskStatus,
 } from "@/types";
-import { HyperagentError } from "@/agent/error";
 import { SessionDetail } from "@hyperbrowser/sdk/types";
+import { formatCliError } from "./format-cli-error";
 
 const program = new Command();
 
@@ -174,7 +174,7 @@ program
             await agent.closeAgent();
             process.exit(0);
           } catch (err) {
-            console.error("Error during shutdown:", err);
+            console.error(`Error during shutdown: ${formatCliError(err)}`);
             process.exit(1);
           }
         }
@@ -283,16 +283,9 @@ program
         throw error;
       });
     } catch (err) {
-      if (err instanceof HyperagentError || err instanceof Error) {
-        console.log(chalk.red(err.message));
-        if (debug) {
-          console.trace(err);
-        }
-      } else {
-        console.log(chalk.red(err));
-        if (debug) {
-          console.trace(err);
-        }
+      console.log(chalk.red(formatCliError(err)));
+      if (debug) {
+        console.trace(err);
       }
     }
   });
