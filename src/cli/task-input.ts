@@ -8,6 +8,11 @@ export function normalizeTaskDescription(
   sourceLabel: string
 ): string {
   const trimmed = value.replace(/^\uFEFF/, "").trim();
+  if (trimmed.includes("\u0000")) {
+    throw new Error(
+      `${sourceLabel} appears to be binary or contains null bytes. Please provide plain text.`
+    );
+  }
   if (trimmed.length === 0) {
     throw new Error(
       `${sourceLabel} is empty after trimming whitespace. Please provide a non-empty task description.`

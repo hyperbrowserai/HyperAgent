@@ -40,6 +40,17 @@ describe("normalizeTaskDescription", () => {
       "Task description from --command exceeds 20000 characters. Please provide a shorter task description."
     );
   });
+
+  it("throws when task description contains null bytes", () => {
+    expect(() =>
+      normalizeTaskDescription(
+        "hello\u0000world",
+        "Task description from --command"
+      )
+    ).toThrow(
+      "Task description from --command appears to be binary or contains null bytes. Please provide plain text."
+    );
+  });
 });
 
 describe("loadTaskDescriptionFromFile", () => {
