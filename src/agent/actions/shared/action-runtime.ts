@@ -4,6 +4,17 @@ import { formatUnknownError } from "@/utils";
 const MAX_ACTION_TEXT_CHARS = 400;
 const MAX_ACTION_ERROR_CHARS = 600;
 
+function sanitizeActionRuntimeText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
 function truncateText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
     return value;
@@ -22,7 +33,7 @@ export function normalizeActionText(
       : value == null
         ? fallback
         : formatUnknownError(value);
-  const normalized = source.replace(/\s+/g, " ").trim();
+  const normalized = sanitizeActionRuntimeText(source);
   if (normalized.length === 0) {
     return fallback;
   }
