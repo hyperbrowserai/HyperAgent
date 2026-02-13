@@ -492,7 +492,7 @@ describe("HyperAgent constructor and task controls", () => {
 
     await expect(task.result).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
-      output: "Task cancelled because agent was closed",
+      output: "Task was cancelled",
     });
     expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
     expect(emitterSpy).not.toHaveBeenCalledWith(
@@ -527,7 +527,7 @@ describe("HyperAgent constructor and task controls", () => {
 
     await expect(execution).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
-      output: "Task cancelled because agent was closed",
+      output: "Task was cancelled",
     });
     expect(activeTaskState.status).toBe(TaskStatus.CANCELLED);
   });

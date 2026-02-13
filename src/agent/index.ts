@@ -589,7 +589,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   private buildCancelledTaskOutput(
     taskId: string,
-    taskState: TaskState
+    taskState: TaskState,
+    output: string = "Task cancelled because agent was closed"
   ): AgentTaskOutput {
     let steps: TaskState["steps"] = [];
     try {
@@ -601,7 +602,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       taskId,
       status: TaskStatus.CANCELLED,
       steps,
-      output: "Task cancelled because agent was closed",
+      output,
       actionCache: {
         taskId,
         createdAt: new Date().toISOString(),
@@ -1375,7 +1376,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
                 : TaskStatus.FAILED;
             this.writeTaskStatus(failedTaskState, nextStatus);
             if (nextStatus === TaskStatus.CANCELLED) {
-              return this.buildCancelledTaskOutput(taskId, failedTaskState);
+              return lifecycleActive
+                ? this.buildCancelledTaskOutput(
+                    taskId,
+                    failedTaskState,
+                    "Task was cancelled"
+                  )
+                : this.buildCancelledTaskOutput(taskId, failedTaskState);
             }
             failedTaskState.error = taskFailureError.cause.message;
             // Emit error on the central emitter, including the taskId
@@ -1503,8 +1510,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           : TaskStatus.FAILED;
       this.writeTaskStatus(taskState, nextStatus);
       if (nextStatus === TaskStatus.CANCELLED) {
+        const lifecycleActive = this.isTaskLifecycleGenerationActive(
+          taskLifecycleGeneration
+        );
         this.cleanupTaskLifecycle(taskId);
-        return this.buildCancelledTaskOutput(taskId, taskState);
+        return lifecycleActive
+          ? this.buildCancelledTaskOutput(taskId, taskState, "Task was cancelled")
+          : this.buildCancelledTaskOutput(taskId, taskState);
       }
       this.cleanupTaskLifecycle(taskId);
       throw error;
