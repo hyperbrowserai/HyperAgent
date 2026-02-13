@@ -101,6 +101,26 @@ describe("normalizeOpenAICompatibleContent", () => {
     ]);
   });
 
+  it("collapses whitespace in normalized tool_call names", () => {
+    expect(
+      normalizeOpenAICompatibleContent([
+        {
+          type: "tool_call",
+          function: {
+            name: "  lookup\n\tuser  ",
+            arguments: "{}",
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        type: "tool_call",
+        toolName: "lookup user",
+        arguments: {},
+      },
+    ]);
+  });
+
   it("formats non-string text-part payloads safely", () => {
     expect(
       normalizeOpenAICompatibleContent([

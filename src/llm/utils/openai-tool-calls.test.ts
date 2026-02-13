@@ -180,4 +180,25 @@ describe("normalizeOpenAIToolCalls", () => {
       },
     ]);
   });
+
+  it("collapses whitespace in normalized tool-call names", () => {
+    expect(
+      normalizeOpenAIToolCalls([
+        {
+          id: "fn-1",
+          type: "function",
+          function: {
+            name: "  lookup\n\tuser  ",
+            arguments: "{}",
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        id: "fn-1",
+        name: "lookup user",
+        arguments: {},
+      },
+    ]);
+  });
 });
