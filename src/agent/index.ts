@@ -47,6 +47,7 @@ import type {
   ActionCacheEntry,
   AgentTaskOutput,
   PerformOptions,
+  PerformTaskParams,
 } from "../types/agent/types";
 import { z } from "zod";
 import { ErrorEmitter } from "../utils";
@@ -1100,7 +1101,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async executeSingleAction(
     instruction: string,
     pageOrGetter: Page | (() => Page),
-    params?: TaskParams
+    params?: PerformTaskParams
   ): Promise<TaskOutput> {
     const taskId = uuidv4();
     const actionStart = performance.now();
@@ -1117,7 +1118,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     let elementMap: Map<string, AccessibilityNode> | null = null;
 
     const maxRetries =
-      params?.maxSteps ?? HyperAgent.AIACTION_CONFIG.MAX_RETRIES;
+      params?.maxElementRetries ??
+      params?.maxSteps ??
+      HyperAgent.AIACTION_CONFIG.MAX_RETRIES;
+    const retryDelayMs =
+      params?.retryDelayMs ?? HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS;
 
     try {
       // Find element with retry logic
@@ -1131,7 +1136,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         instruction,
         initialPage,
         maxRetries,
-        HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS,
+        retryDelayMs,
         startTime
       );
 
@@ -1551,9 +1556,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const executeSingleActionWithRetry = async (
       instruction: string,
-      params?: TaskParams
+      params?: PerformTaskParams
     ) => {
-      const maxRetries = 3;
+      const maxRetries = params?.maxContextSwitchRetries ?? 3;
       for (let i = 0; i < maxRetries; i++) {
         try {
           return await this.executeSingleAction(
@@ -1592,12 +1597,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     hyperPage.ai = (task: string, params?: TaskParams) =>
       this.executeTask(task, params, getActivePage());
 
-    hyperPage.perform = (instruction: string, params?: TaskParams) =>
+    hyperPage.perform = (instruction: string, params?: PerformTaskParams) =>
       executeSingleActionWithRetry(instruction, params);
 
-    hyperPage.aiAction = async (instruction: string, params?: TaskParams) => {
-      return executeSingleActionWithRetry(instruction, params);
-    };
+    hyperPage.aiAction = (instruction: string, params?: PerformTaskParams) =>
+      executeSingleActionWithRetry(instruction, params);
 
     hyperPage.getActionCache = (taskId: string) => this.getActionCache(taskId);
 

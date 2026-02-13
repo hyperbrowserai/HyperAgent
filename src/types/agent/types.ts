@@ -93,16 +93,38 @@ export interface RunFromActionCacheParams {
   debug?: boolean;
 }
 
-export interface TaskParams {
-  maxSteps?: number;
+export interface AgentExecutionHooks {
   debugDir?: string;
-  outputSchema?: z.ZodType<any>;
   onStep?: (step: AgentStep) => Promise<void> | void;
   onComplete?: (output: TaskOutput) => Promise<void> | void;
   debugOnAgentOutput?: (step: AgentOutput) => void;
+}
+
+export interface TaskParams extends AgentExecutionHooks {
+  maxSteps?: number;
+  outputSchema?: z.ZodType<unknown>;
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
+}
+
+export interface PerformTaskParams {
+  /**
+   * Maximum attempts for finding and executing an element action.
+   */
+  maxElementRetries?: number;
+  /**
+   * Delay between element-finding retries in milliseconds.
+   */
+  retryDelayMs?: number;
+  /**
+   * Maximum retries when tab/page context switches mid-action.
+   */
+  maxContextSwitchRetries?: number;
+  /**
+   * @deprecated use maxElementRetries instead.
+   */
+  maxSteps?: number;
 }
 
 export interface TaskOutput {
@@ -223,20 +245,26 @@ export interface HyperPage extends Page {
    * Best for: Single actions like "click login", "fill email with test@example.com"
    * Mode: Always a11y (accessibility tree, faster and more reliable)
    */
-  perform: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
+  perform: (
+    instruction: string,
+    params?: PerformTaskParams
+  ) => Promise<TaskOutput>;
 
   /**
    * @deprecated: use perform() instead.
    * Execute a single granular action using a11y mode
    */
-  aiAction: (instruction: string, params?: TaskParams) => Promise<TaskOutput>;
+  aiAction: (
+    instruction: string,
+    params?: PerformTaskParams
+  ) => Promise<TaskOutput>;
 
   aiAsync: (task: string, params?: TaskParams) => Promise<Task>;
-  extract<T extends z.ZodType<any> | undefined = undefined>(
+  extract<T extends z.ZodType<unknown> | undefined = undefined>(
     task?: string,
     outputSchema?: T,
     params?: Omit<TaskParams, "outputSchema">
-  ): Promise<T extends z.ZodType<any> ? z.infer<T> : string>;
+  ): Promise<T extends z.ZodType<unknown> ? z.infer<T> : string>;
   getActionCache: (taskId: string) => ActionCacheOutput | null;
   runFromActionCache: (
     cache: ActionCacheOutput,

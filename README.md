@@ -151,6 +151,12 @@ await page.goto("https://example.com/login");
 await page.perform("fill email with user@example.com");
 await page.perform("fill password with mypassword");
 await page.perform("click the login button");
+
+// Optional retries tuning for single-action mode
+await page.perform("click the login button", {
+  maxElementRetries: 5,
+  retryDelayMs: 250,
+});
 ```
 
 ### 🧠 `page.ai()` - Complex Multi-Step Tasks
