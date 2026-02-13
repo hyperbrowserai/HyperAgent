@@ -74,3 +74,59 @@ describe("dispatchCDPAction scroll fallback failures", () => {
     );
   });
 });
+
+describe("dispatchCDPAction press key normalization", () => {
+  it("falls back to Enter when press key is blank", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+
+    await dispatchCDPAction("press", ["   "], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const keyDown = calls.find(
+      (call) =>
+        call.method === "Input.dispatchKeyEvent" &&
+        call.params?.type === "keyDown"
+    );
+
+    expect(keyDown?.params?.key).toBe("Enter");
+    expect(keyDown?.params?.code).toBe("Enter");
+    expect(keyDown?.params?.windowsVirtualKeyCode).toBe(13);
+  });
+
+  it("trims whitespace around named press keys", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+
+    await dispatchCDPAction("press", ["  tab  "], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    const keyDown = calls.find(
+      (call) =>
+        call.method === "Input.dispatchKeyEvent" &&
+        call.params?.type === "keyDown"
+    );
+
+    expect(keyDown?.params?.key).toBe("Tab");
+    expect(keyDown?.params?.code).toBe("Tab");
+    expect(keyDown?.params?.windowsVirtualKeyCode).toBe(9);
+  });
+});

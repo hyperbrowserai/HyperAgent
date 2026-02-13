@@ -1219,7 +1219,16 @@ interface KeyEventData {
 }
 
 function getKeyEventData(inputKey: string): KeyEventData {
-  const key = (inputKey ?? "").toString();
+  const stripControlChars = (value: string): string =>
+    Array.from(value)
+      .filter((char) => {
+        const code = char.charCodeAt(0);
+        return code > 31 && code !== 127;
+      })
+      .join("");
+
+  const sanitizedKey = stripControlChars((inputKey ?? "").toString()).trim();
+  const key = sanitizedKey.length === 0 ? "Enter" : sanitizedKey;
   const lower = key.toLowerCase();
   const mapping: Record<
     string,
