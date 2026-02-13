@@ -405,6 +405,60 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("initBrowser recreates missing context for existing browser instances", async () => {
+    const on = jest.fn();
+    const context = { on };
+    const browser = {
+      newContext: async () => context,
+    };
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: unknown;
+      context: unknown;
+    };
+    internalAgent.browser = browser;
+    internalAgent.context = null;
+
+    await expect(agent.initBrowser()).resolves.toBe(browser);
+    expect(internalAgent.context).toBe(context);
+    expect(on).toHaveBeenCalledWith("page", expect.any(Function));
+  });
+
+  it("initBrowser resets browser state when context recreation fails", async () => {
+    const close = jest.fn(async () => undefined);
+    const browser = {
+      newContext: async () => {
+        throw new Error("context rebuild trap");
+      },
+    };
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: unknown;
+      context: unknown;
+      browserProvider: {
+        close: typeof close;
+        getSession: () => unknown;
+      };
+    };
+    internalAgent.browser = browser;
+    internalAgent.context = null;
+    internalAgent.browserProvider = {
+      close,
+      getSession: () => ({ id: "session-1" }),
+    };
+
+    await expect(agent.initBrowser()).rejects.toThrow(
+      "Failed to create browser context: context rebuild trap"
+    );
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(internalAgent.browser).toBeNull();
+    expect(internalAgent.context).toBeNull();
+  });
+
   it("continues getPages when hyperpage context listener attachment fails", async () => {
     const page = {
       on: jest.fn(),

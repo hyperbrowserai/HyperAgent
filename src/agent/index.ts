@@ -334,6 +334,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return context as BrowserContext;
   }
 
+  private async resolveInitialBrowserContext(
+    browser: Browser
+  ): Promise<BrowserContext> {
+    const existingContexts =
+      this.browserProviderType === "Hyperbrowser"
+        ? this.getBrowserContexts(browser)
+        : [];
+    if (existingContexts.length > 0 && existingContexts[0]) {
+      return existingContexts[0];
+    }
+    return this.createBrowserContext(browser);
+  }
+
   private async closeBrowserProvider(): Promise<void> {
     const closeMethod = this.safeReadField(this.browserProvider, "close");
     if (typeof closeMethod !== "function") {
@@ -571,17 +584,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    */
   public async initBrowser(): Promise<Browser> {
     if (!this.browser) {
-      const browser = await this.startBrowserProvider();
-      this.browser = browser;
+      this.browser = await this.startBrowserProvider();
+    }
+
+    if (!this.context) {
+      const activeBrowser = this.browser;
+      if (!activeBrowser) {
+        throw new HyperagentError("No browser found after browser init", 500);
+      }
       try {
-        const existingContexts =
-          this.browserProviderType === "Hyperbrowser"
-            ? this.getBrowserContexts(browser)
-            : [];
-        this.context =
-          existingContexts.length > 0
-            ? existingContexts[0]
-            : await this.createBrowserContext(browser);
+        this.context = await this.resolveInitialBrowserContext(activeBrowser);
       } catch (error) {
         this.browser = null;
         this.context = null;
@@ -604,8 +616,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
 
       this.attachBrowserPageListener(this.context);
-
-      return browser;
     }
     return this.browser;
   }
