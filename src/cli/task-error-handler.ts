@@ -13,7 +13,13 @@ export function attachTaskErrorHandler(
       return;
     }
     hasHandledError = true;
-    task.cancel();
+    try {
+      task.cancel();
+    } catch (cancelError) {
+      console.error(
+        `[CLI] Failed to cancel task after error: ${formatUnknownError(cancelError)}`
+      );
+    }
     try {
       onError(error);
     } catch (handlerError) {

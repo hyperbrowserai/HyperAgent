@@ -64,4 +64,29 @@ describe("attachTaskErrorHandler", () => {
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith({ reason: "first" });
   });
+
+  it("logs cancellation failures but still forwards error to callback", () => {
+    const emitter = new EventEmitter();
+    const cancel = jest.fn(() => {
+      throw { reason: "cancel failed" };
+    });
+    const onError = jest.fn();
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const task = {
+      cancel,
+      emitter,
+    } as unknown as Task;
+
+    try {
+      attachTaskErrorHandler(task, onError);
+      emitter.emit("error", { reason: "task failed" });
+
+      expect(onError).toHaveBeenCalledWith({ reason: "task failed" });
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[CLI] Failed to cancel task after error: {"reason":"cancel failed"}'
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
