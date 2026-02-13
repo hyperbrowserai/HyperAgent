@@ -620,6 +620,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         arguments: step.arguments,
         actionParams: step.actionParams,
         page: hyperPage,
+        retries: 1,
       });
 
       if (replaySpecialResult) {

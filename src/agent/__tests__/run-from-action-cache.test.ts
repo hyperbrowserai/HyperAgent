@@ -139,5 +139,6 @@ describe("runFromActionCache hardening", () => {
     expect(replay.status).toBe(TaskStatus.COMPLETED);
     expect(replay.steps[0]?.success).toBe(true);
     expect(replay.steps[0]?.message).toContain("Waited 750ms");
+    expect(replay.steps[0]?.retries).toBe(1);
   });
 });

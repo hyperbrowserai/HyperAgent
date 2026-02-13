@@ -52,6 +52,7 @@ describe("executeReplaySpecialAction", () => {
     expect(waitForSettledDOM).toHaveBeenCalledWith(page);
     expect(markDomSnapshotDirty).toHaveBeenCalledWith(page);
     expect(result?.status).toBe("completed");
+    expect(result?.replayStepMeta?.retries).toBe(1);
   });
 
   it("replays wait using duration from actionParams", async () => {
@@ -93,5 +94,18 @@ describe("executeReplaySpecialAction", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it("honors explicit retry metadata value", async () => {
+    const page = createPage();
+
+    const result = await executeReplaySpecialAction({
+      taskId: "task-5",
+      actionType: "complete",
+      page: page as unknown as Page,
+      retries: 3,
+    });
+
+    expect(result?.replayStepMeta?.retries).toBe(3);
   });
 });

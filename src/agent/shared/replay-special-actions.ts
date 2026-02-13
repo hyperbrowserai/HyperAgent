@@ -10,13 +10,16 @@ interface ReplaySpecialActionInput {
   arguments?: Array<string | number>;
   actionParams?: Record<string, unknown>;
   page: Page;
+  retries?: number;
 }
 
-function createReplayMeta(): NonNullable<TaskOutput["replayStepMeta"]> {
+function createReplayMeta(
+  retries: number
+): NonNullable<TaskOutput["replayStepMeta"]> {
   return {
     usedCachedAction: true,
     fallbackUsed: false,
-    retries: 0,
+    retries,
     cachedXPath: null,
     fallbackXPath: null,
     fallbackElementId: null,
@@ -48,6 +51,7 @@ export async function executeReplaySpecialAction(
     actionParams,
     instruction,
     page,
+    retries = 1,
   } = params;
 
   if (actionType === "goToUrl") {
@@ -61,7 +65,7 @@ export async function executeReplaySpecialAction(
         status: TaskStatus.FAILED,
         steps: [],
         output: "Missing URL for goToUrl",
-        replayStepMeta: createReplayMeta(),
+        replayStepMeta: createReplayMeta(retries),
       };
     }
     await page.goto(url, { waitUntil: "domcontentloaded" });
@@ -72,7 +76,7 @@ export async function executeReplaySpecialAction(
       status: TaskStatus.COMPLETED,
       steps: [],
       output: `Navigated to ${url}`,
-      replayStepMeta: createReplayMeta(),
+      replayStepMeta: createReplayMeta(retries),
     };
   }
 
@@ -82,7 +86,7 @@ export async function executeReplaySpecialAction(
       status: TaskStatus.COMPLETED,
       steps: [],
       output: "Task Complete",
-      replayStepMeta: createReplayMeta(),
+      replayStepMeta: createReplayMeta(retries),
     };
   }
 
@@ -95,7 +99,7 @@ export async function executeReplaySpecialAction(
       status: TaskStatus.COMPLETED,
       steps: [],
       output: "Page refreshed",
-      replayStepMeta: createReplayMeta(),
+      replayStepMeta: createReplayMeta(retries),
     };
   }
 
@@ -107,7 +111,7 @@ export async function executeReplaySpecialAction(
       status: TaskStatus.COMPLETED,
       steps: [],
       output: `Waited ${waitMs}ms`,
-      replayStepMeta: createReplayMeta(),
+      replayStepMeta: createReplayMeta(retries),
     };
   }
 
@@ -121,7 +125,7 @@ export async function executeReplaySpecialAction(
         status: TaskStatus.FAILED,
         steps: [],
         output: "Missing objective/instruction for extract action",
-        replayStepMeta: createReplayMeta(),
+        replayStepMeta: createReplayMeta(retries),
       };
     }
     if (!extractPage.extract) {
@@ -130,7 +134,7 @@ export async function executeReplaySpecialAction(
         status: TaskStatus.FAILED,
         steps: [],
         output: "Extract replay is unavailable on this page instance.",
-        replayStepMeta: createReplayMeta(),
+        replayStepMeta: createReplayMeta(retries),
       };
     }
     try {
@@ -143,7 +147,7 @@ export async function executeReplaySpecialAction(
           typeof extracted === "string"
             ? extracted
             : JSON.stringify(extracted),
-        replayStepMeta: createReplayMeta(),
+        replayStepMeta: createReplayMeta(retries),
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -152,7 +156,7 @@ export async function executeReplaySpecialAction(
         status: TaskStatus.FAILED,
         steps: [],
         output: `Extract failed: ${message}`,
-        replayStepMeta: createReplayMeta(),
+        replayStepMeta: createReplayMeta(retries),
       };
     }
   }
@@ -163,7 +167,7 @@ export async function executeReplaySpecialAction(
       status: TaskStatus.FAILED,
       steps: [],
       output: "analyzePdf replay is not supported in runFromActionCache.",
-      replayStepMeta: createReplayMeta(),
+      replayStepMeta: createReplayMeta(retries),
     };
   }
 

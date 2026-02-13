@@ -100,7 +100,7 @@ describe("runCachedStep", () => {
     });
   });
 
-  it("uses shared special action result and normalizes retries", async () => {
+  it("uses shared special action result metadata", async () => {
     executeReplaySpecialAction.mockResolvedValue({
       taskId: "task-uuid",
       status: TaskStatus.COMPLETED,
@@ -109,7 +109,7 @@ describe("runCachedStep", () => {
       replayStepMeta: {
         usedCachedAction: true,
         fallbackUsed: false,
-        retries: 0,
+        retries: 1,
         cachedXPath: null,
         fallbackXPath: null,
         fallbackElementId: null,

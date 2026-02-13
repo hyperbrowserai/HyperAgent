@@ -65,23 +65,10 @@ export async function runCachedStep(
       ? cachedAction.actionParams
       : undefined,
     page,
+    retries: 1,
   });
   if (specialActionResult) {
-    const replayStepMeta = specialActionResult.replayStepMeta ?? {
-      usedCachedAction: true,
-      fallbackUsed: false,
-      retries: 1,
-      cachedXPath: null,
-      fallbackXPath: null,
-      fallbackElementId: null,
-    };
-    return {
-      ...specialActionResult,
-      replayStepMeta: {
-        ...replayStepMeta,
-        retries: 1,
-      },
-    };
+    return specialActionResult;
   }
 
   if (
