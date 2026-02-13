@@ -117,6 +117,8 @@ export function SpreadsheetApp() {
     string | null
   >(null);
   const [isCopyingCacheDetailJson, setIsCopyingCacheDetailJson] = useState(false);
+  const [isCopyingCacheDetailOperations, setIsCopyingCacheDetailOperations] =
+    useState(false);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
@@ -1326,6 +1328,26 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopySelectedCacheOperations() {
+    if (!selectedCacheEntryDetail) {
+      return;
+    }
+    setIsCopyingCacheDetailOperations(true);
+    try {
+      clearUiError();
+      await navigator.clipboard.writeText(
+        JSON.stringify(selectedCacheEntryDetail.operations, null, 2),
+      );
+      setNotice(
+        `Copied operations array for ${selectedCacheEntryDetail.request_id}.`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy cached operations JSON.");
+    } finally {
+      setIsCopyingCacheDetailOperations(false);
+    }
+  }
+
   async function handleReplayCacheRequestId(requestId: string) {
     if (!workbook) {
       return;
@@ -2415,13 +2437,26 @@ export function SpreadsheetApp() {
                             {selectedCacheEntryDetail.request_id}
                           </span>
                         </span>
-                        <button
-                          onClick={handleCopySelectedCacheDetail}
-                          disabled={isCopyingCacheDetailJson}
-                          className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                        >
-                          {isCopyingCacheDetailJson ? "Copying..." : "Copy detail JSON"}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={handleCopySelectedCacheOperations}
+                            disabled={isCopyingCacheDetailOperations}
+                            className="rounded border border-indigo-700/70 px-1.5 py-0.5 text-[10px] text-indigo-200 hover:bg-indigo-900/40 disabled:opacity-50"
+                          >
+                            {isCopyingCacheDetailOperations
+                              ? "Copying..."
+                              : "Copy operations"}
+                          </button>
+                          <button
+                            onClick={handleCopySelectedCacheDetail}
+                            disabled={isCopyingCacheDetailJson}
+                            className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            {isCopyingCacheDetailJson
+                              ? "Copying..."
+                              : "Copy detail JSON"}
+                          </button>
+                        </div>
                       </div>
                       <p className="text-[10px] text-slate-500">
                         ops:{" "}
@@ -2433,6 +2468,16 @@ export function SpreadsheetApp() {
                           {selectedCacheEntryDetail.result_count}
                         </span>
                       </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {selectedCacheEntryDetail.operations.map((operation, index) => (
+                          <span
+                            key={`${operation.op_type}-${index}`}
+                            className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300"
+                          >
+                            {operation.op_type}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                 </div>
