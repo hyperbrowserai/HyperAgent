@@ -4,6 +4,15 @@
  */
 
 import type { Page } from "playwright-core";
+import { formatUnknownError } from "@/utils";
+
+function stringifyMethodArgs(args: unknown[]): string {
+  try {
+    return formatUnknownError(args);
+  } catch {
+    return "[args unavailable]";
+  }
+}
 
 /**
  * Execute a Playwright method on a locator
@@ -28,7 +37,7 @@ export async function executePlaywrightMethod(
       try {
         await locator.click({ timeout: clickTimeout });
       } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : String(e);
+        const errorMsg = formatUnknownError(e);
         if (debug) {
           console.log(
             `[executePlaywrightMethod] Playwright click failed, falling back to JS click: ${errorMsg}`
@@ -41,10 +50,7 @@ export async function executePlaywrightMethod(
             { timeout: clickTimeout }
           );
         } catch (jsClickError) {
-          const jsErrorMsg =
-            jsClickError instanceof Error
-              ? jsClickError.message
-              : String(jsClickError);
+          const jsErrorMsg = formatUnknownError(jsClickError);
           throw new Error(
             `Failed to click element. Playwright error: ${errorMsg}. JS click error: ${jsErrorMsg}`
           );
@@ -216,7 +222,7 @@ export async function executePlaywrightMethod(
 
   if (debug) {
     console.log(
-      `[executePlaywrightMethod] Successfully executed ${method}(${JSON.stringify(args)})`
+      `[executePlaywrightMethod] Successfully executed ${method}(${stringifyMethodArgs(args)})`
     );
   }
 }
