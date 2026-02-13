@@ -52,6 +52,29 @@ function normalizeOptionalStringRecord(
   return normalized;
 }
 
+function normalizeSSEUrl(value: unknown, index: number): string {
+  const raw = isNonEmptyString(value) ? value.trim() : "";
+  if (raw.length === 0) {
+    throw new Error(
+      `MCP server entry at index ${index} must include a non-empty "sseUrl" for SSE connections.`
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(
+      `MCP server entry at index ${index} has invalid "sseUrl" value "${raw}".`
+    );
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(
+      `MCP server entry at index ${index} has unsupported sseUrl protocol "${url.protocol}". Use http:// or https://.`
+    );
+  }
+  return url.toString();
+}
+
 function normalizeOptionalStringArray(
   field: "includeTools" | "excludeTools",
   value: unknown,
@@ -179,12 +202,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     const connectionType = rawConnectionType === "sse" ? "sse" : "stdio";
     normalizedEntry.connectionType = connectionType;
     if (connectionType === "sse") {
-      const sseUrl = isNonEmptyString(entry.sseUrl) ? entry.sseUrl.trim() : "";
-      if (sseUrl.length === 0) {
-        throw new Error(
-          `MCP server entry at index ${i} must include a non-empty "sseUrl" for SSE connections.`
-        );
-      }
+      const sseUrl = normalizeSSEUrl(entry.sseUrl, i);
       normalizedEntry.sseUrl = sseUrl;
       normalizedServers.push(normalizedEntry as MCPServerConfig);
       continue;

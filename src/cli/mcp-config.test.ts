@@ -168,6 +168,20 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("validates sseUrl formatting and protocol", () => {
+    expect(() =>
+      parseMCPServersConfig('[{"connectionType":"sse","sseUrl":"not-a-url"}]')
+    ).toThrow(
+      'MCP server entry at index 0 has invalid "sseUrl" value "not-a-url".'
+    );
+
+    expect(() =>
+      parseMCPServersConfig('[{"connectionType":"sse","sseUrl":"ftp://example.com/sse"}]')
+    ).toThrow(
+      'MCP server entry at index 0 has unsupported sseUrl protocol "ftp:". Use http:// or https://.'
+    );
+  });
+
   it("throws when includeTools and excludeTools overlap", () => {
     expect(() =>
       parseMCPServersConfig(
