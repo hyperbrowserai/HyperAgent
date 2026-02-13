@@ -14,6 +14,7 @@ import {
   getAgentSchema,
   getAgentPresets,
   getAgentScenarios,
+  getWizardScenarios,
   getCells,
   getWorkbook,
   importWorkbook,
@@ -67,6 +68,11 @@ export function SpreadsheetApp() {
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastScenario, setLastScenario] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
+  const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
+    sheetsImported: number;
+    cellsImported: number;
+    warnings: string[];
+  } | null>(null);
 
   const createWorkbookMutation = useMutation({
     mutationFn: () => createWorkbook("Agent Workbook"),
@@ -121,6 +127,11 @@ export function SpreadsheetApp() {
     queryFn: () => getAgentScenarios(workbook!.id),
   });
 
+  const wizardScenariosQuery = useQuery({
+    queryKey: ["wizard-scenarios"],
+    queryFn: getWizardScenarios,
+  });
+
   useEffect(() => {
     if (!workbook && !createWorkbookMutation.isPending) {
       createWorkbookMutation.mutate();
@@ -164,6 +175,19 @@ export function SpreadsheetApp() {
       selectedCell?.raw_value ?? selectedCell?.evaluated_value ?? "",
     );
   }, [cellsByAddress, selectedAddress]);
+
+  useEffect(() => {
+    if (!wizardScenariosQuery.data?.length) {
+      return;
+    }
+    const hasSelectedScenario = wizardScenariosQuery.data.some(
+      (scenarioInfo) => scenarioInfo.scenario === wizardScenario,
+    );
+    if (hasSelectedScenario) {
+      return;
+    }
+    setWizardScenario(wizardScenariosQuery.data[0].scenario);
+  }, [wizardScenario, wizardScenariosQuery.data]);
 
   const chartData = useMemo(() => {
     return Array.from({ length: 10 }, (_, index) => {
@@ -251,6 +275,7 @@ export function SpreadsheetApp() {
       setLastAgentOps(response.results);
       setLastPreset(null);
       setLastScenario(null);
+      setLastWizardImportSummary(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
@@ -346,6 +371,7 @@ export function SpreadsheetApp() {
       });
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
+      setLastWizardImportSummary(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
@@ -375,6 +401,7 @@ export function SpreadsheetApp() {
       setLastScenario(null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
+      setLastWizardImportSummary(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
@@ -404,6 +431,7 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
+      setLastWizardImportSummary(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
       });
@@ -440,6 +468,15 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
+      setLastWizardImportSummary(
+        response.import
+          ? {
+              sheetsImported: response.import.sheets_imported,
+              cellsImported: response.import.cells_imported,
+              warnings: response.import.warnings,
+            }
+          : null,
+      );
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workbook", response.workbook.id] }),
@@ -644,7 +681,7 @@ export function SpreadsheetApp() {
                 onChange={(event) => setWizardScenario(event.target.value)}
                 className="rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
               >
-                {(scenariosQuery.data ?? []).map((scenarioInfo) => (
+                {(wizardScenariosQuery.data ?? []).map((scenarioInfo) => (
                   <option key={scenarioInfo.scenario} value={scenarioInfo.scenario}>
                     {scenarioInfo.scenario}
                   </option>
@@ -677,7 +714,10 @@ export function SpreadsheetApp() {
               ) : null}
               <button
                 onClick={handleWizardRun}
-                disabled={isRunningWizard || (scenariosQuery.data ?? []).length === 0}
+                disabled={
+                  isRunningWizard ||
+                  (wizardScenariosQuery.data ?? []).length === 0
+                }
                 className="rounded bg-teal-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-400 disabled:opacity-40"
               >
                 {isRunningWizard ? "Running wizard..." : "Run Wizard"}
@@ -789,6 +829,22 @@ export function SpreadsheetApp() {
                 scenario:{" "}
                 <span className="font-mono text-slate-200">{lastScenario}</span>
               </p>
+            )}
+            {lastWizardImportSummary && (
+              <div className="mb-2 text-xs text-slate-400">
+                wizard import:{" "}
+                <span className="font-mono text-slate-200">
+                  {lastWizardImportSummary.sheetsImported} sheets /{" "}
+                  {lastWizardImportSummary.cellsImported} cells
+                </span>
+                {lastWizardImportSummary.warnings.length > 0 ? (
+                  <ul className="mt-1 list-disc pl-4 text-amber-200">
+                    {lastWizardImportSummary.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             )}
             {lastAgentRequestId && (
               <p className="mb-2 text-xs text-slate-400">

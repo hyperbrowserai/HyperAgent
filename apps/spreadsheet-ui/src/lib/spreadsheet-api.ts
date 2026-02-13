@@ -203,6 +203,14 @@ export async function getAgentScenarios(
   return data.scenarios;
 }
 
+export async function getWizardScenarios(): Promise<AgentScenarioInfo[]> {
+  const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/scenarios`);
+  const data = await parseJsonResponse<{ scenarios: AgentScenarioInfo[] }>(
+    response,
+  );
+  return data.scenarios;
+}
+
 interface AgentScenarioRequest {
   request_id?: string;
   actor?: string;
