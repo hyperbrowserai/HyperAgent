@@ -268,6 +268,14 @@ pub fn parse_or_formula(formula: &str) -> Option<Vec<String>> {
   None
 }
 
+pub fn parse_xor_formula(formula: &str) -> Option<Vec<String>> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "XOR" && !args.is_empty() {
+    return Some(args);
+  }
+  None
+}
+
 pub fn parse_not_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "NOT" && args.len() == 1 {
@@ -711,7 +719,8 @@ mod tests {
     parse_len_formula, parse_lower_formula, parse_match_formula, parse_maxifs_formula,
     parse_minifs_formula,
     parse_month_formula,
-    parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
+    parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
+    parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
@@ -821,6 +830,9 @@ mod tests {
 
     let or_args = parse_or_formula("=OR(A1=0,B1=0)").expect("or should parse");
     assert_eq!(or_args, vec!["A1=0", "B1=0"]);
+    let xor_args = parse_xor_formula("=XOR(A1=0,B1=0,C1=0)")
+      .expect("xor should parse");
+    assert_eq!(xor_args, vec!["A1=0", "B1=0", "C1=0"]);
 
     let not_arg = parse_not_formula("=NOT(A1=0)").expect("not should parse");
     assert_eq!(not_arg, "A1=0");

@@ -16,6 +16,7 @@ use crate::{
     parse_not_formula,
     parse_power_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
+    parse_xor_formula,
     parse_sign_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
     parse_trunc_formula,
@@ -390,6 +391,17 @@ fn evaluate_formula(
       .into_iter()
       .any(|value| value);
     return Ok(Some(result.to_string()));
+  }
+
+  if let Some(xor_args) = parse_xor_formula(formula) {
+    let true_count = xor_args
+      .iter()
+      .map(|arg| evaluate_if_condition(connection, sheet, arg))
+      .collect::<Result<Vec<bool>, ApiError>>()?
+      .into_iter()
+      .filter(|value| *value)
+      .count();
+    return Ok(Some((true_count % 2 == 1).to_string()));
   }
 
   if let Some(not_arg) = parse_not_formula(formula) {
@@ -1163,6 +1175,17 @@ fn evaluate_inline_logical_condition(
       .map(|arg| evaluate_if_condition(connection, sheet, arg))
       .collect::<Result<Vec<bool>, ApiError>>()?;
     return Ok(Some(values.into_iter().any(|value| value)));
+  }
+
+  if let Some(xor_args) = parse_xor_formula(&normalized) {
+    let true_count = xor_args
+      .iter()
+      .map(|arg| evaluate_if_condition(connection, sheet, arg))
+      .collect::<Result<Vec<bool>, ApiError>>()?
+      .into_iter()
+      .filter(|value| *value)
+      .count();
+    return Ok(Some(true_count % 2 == 1));
   }
 
   if let Some(not_arg) = parse_not_formula(&normalized) {
@@ -2208,12 +2231,18 @@ mod tests {
         value: None,
         formula: Some(r#"=EXACT("north","north")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 67,
+        value: None,
+        formula: Some("=XOR(A1>=100,A2>=100)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 64);
+    assert_eq!(updated_cells, 65);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2227,7 +2256,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 66,
+        end_col: 67,
       },
     )
     .expect("cells should be fetched");
@@ -2322,6 +2351,7 @@ mod tests {
     assert_eq!(by_position(1, 64).evaluated_value.as_deref(), Some("12.34"));
     assert_eq!(by_position(1, 65).evaluated_value.as_deref(), Some("false"));
     assert_eq!(by_position(1, 66).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 67).evaluated_value.as_deref(), Some("true"));
   }
 
   #[test]

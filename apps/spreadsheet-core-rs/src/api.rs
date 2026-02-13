@@ -66,6 +66,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "CHOOSE",
   "AND",
   "OR",
+  "XOR",
   "NOT",
   "CONCAT",
   "CONCATENATE",
