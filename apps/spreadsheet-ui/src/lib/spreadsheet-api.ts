@@ -247,6 +247,22 @@ interface AgentWizardRequest {
 export async function runAgentWizard(
   payload: AgentWizardRequest,
 ): Promise<AgentWizardRunResponse> {
+  if (!payload.file) {
+    const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/run-json`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenario: payload.scenario,
+        request_id: payload.request_id,
+        actor: payload.actor,
+        stop_on_error: payload.stop_on_error,
+        include_file_base64: payload.include_file_base64,
+        workbook_name: payload.workbook_name,
+      }),
+    });
+    return parseJsonResponse<AgentWizardRunResponse>(response);
+  }
+
   const formData = new FormData();
   formData.append("scenario", payload.scenario);
   if (payload.request_id) {
@@ -264,9 +280,7 @@ export async function runAgentWizard(
   if (typeof payload.include_file_base64 === "boolean") {
     formData.append("include_file_base64", String(payload.include_file_base64));
   }
-  if (payload.file) {
-    formData.append("file", payload.file);
-  }
+  formData.append("file", payload.file);
 
   const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/run`, {
     method: "POST",
