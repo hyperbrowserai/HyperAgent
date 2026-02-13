@@ -62,7 +62,8 @@ describe("normalizeOpenAICompatibleContent", () => {
       },
     ]) as Array<{ url: string }>;
 
-    expect(result[0]?.url.length).toBeLessThanOrEqual(4_000);
+    expect(result[0]?.url.length).toBeGreaterThan(4_000);
+    expect(result[0]?.url).toContain("[truncated");
   });
 
   it("sanitizes unsafe keys in tool-call content arguments", () => {
@@ -186,6 +187,13 @@ describe("normalizeOpenAICompatibleContent", () => {
     expect(normalizeOpenAICompatibleContent(circular)).toBe(
       '{"kind":"mystery","self":"[Circular]"}'
     );
+  });
+
+  it("truncates oversized unknown object diagnostics", () => {
+    const hugeObject = { payload: "x".repeat(5_000) };
+    const result = normalizeOpenAICompatibleContent(hugeObject);
+    expect(typeof result).toBe("string");
+    expect(result).toContain("[truncated");
   });
 
   it("normalizes nullish content to empty string", () => {

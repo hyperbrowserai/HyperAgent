@@ -9,6 +9,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const MAX_TOOL_NAME_CHARS = 256;
 const MAX_IMAGE_URL_CHARS = 4_000;
+const MAX_CONTENT_DIAGNOSTIC_CHARS = 2_000;
 
 function normalizeOptionalString(
   value: unknown,
@@ -29,6 +30,15 @@ function normalizeOptionalString(
 
 const NO_RESERVED_PROVIDER_OPTION_KEYS: ReadonlySet<string> = new Set();
 
+function truncateContentDiagnostic(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+
+  const omitted = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omitted} chars]`;
+}
+
 function sanitizeToolArguments(value: unknown): unknown {
   const sanitized = sanitizeProviderOptions(
     { arguments: value },
@@ -39,25 +49,28 @@ function sanitizeToolArguments(value: unknown): unknown {
     : sanitized.arguments;
 }
 
-function truncateImageUrl(value: string): string {
-  if (value.length <= MAX_IMAGE_URL_CHARS) {
-    return value;
-  }
-  return value.slice(0, MAX_IMAGE_URL_CHARS);
-}
-
 function normalizeImageUrl(value: unknown): string {
   if (typeof value === "string") {
     const normalized = value
       .replace(/[\u0000-\u001F\u007F]/g, " ")
       .trim()
       .replace(/\s+/g, " ");
-    return truncateImageUrl(normalized);
+    return truncateContentDiagnostic(normalized, MAX_IMAGE_URL_CHARS);
   }
   if (typeof value === "undefined") {
     return "";
   }
-  return truncateImageUrl(formatUnknownError(value));
+  return truncateContentDiagnostic(
+    formatUnknownError(value),
+    MAX_IMAGE_URL_CHARS
+  );
+}
+
+function normalizeContentDiagnostic(value: unknown): string {
+  return truncateContentDiagnostic(
+    formatUnknownError(value),
+    MAX_CONTENT_DIAGNOSTIC_CHARS
+  );
 }
 
 function normalizeOpenAICompatibleContentPart(
@@ -66,7 +79,7 @@ function normalizeOpenAICompatibleContentPart(
   if (!isRecord(part)) {
     return {
       type: "text",
-      text: formatUnknownError(part),
+      text: normalizeContentDiagnostic(part),
     };
   }
 
@@ -76,7 +89,7 @@ function normalizeOpenAICompatibleContentPart(
       text:
         typeof part.text === "string"
           ? part.text
-          : formatUnknownError(part.text),
+          : normalizeContentDiagnostic(part.text),
     };
   }
 
@@ -100,7 +113,7 @@ function normalizeOpenAICompatibleContentPart(
 
   return {
     type: "text",
-    text: formatUnknownError(part),
+    text: normalizeContentDiagnostic(part),
   };
 }
 
@@ -120,7 +133,7 @@ export function normalizeOpenAICompatibleContent(
   }
 
   if (typeof content === "object") {
-    return formatUnknownError(content);
+    return normalizeContentDiagnostic(content);
   }
 
   return String(content);
