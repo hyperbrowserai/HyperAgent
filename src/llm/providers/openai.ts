@@ -27,6 +27,14 @@ function shouldDebugStructuredSchema(): boolean {
   return ENV_STRUCTURED_SCHEMA_DEBUG;
 }
 
+function safeDebugStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return formatUnknownError(value);
+  }
+}
+
 export interface OpenAIClientConfig {
   apiKey?: string;
   model: string;
@@ -162,7 +170,7 @@ export class OpenAIClient implements HyperAgentLLM {
           ?.schema ?? responseFormat;
       console.log(
         "[LLM][OpenAI] Structured output schema:",
-        JSON.stringify(schemaPayload, null, 2)
+        safeDebugStringify(schemaPayload)
       );
     }
 

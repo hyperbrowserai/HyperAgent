@@ -40,6 +40,14 @@ function stringifyRawPayload(value: unknown): string {
   return formatUnknownError(value);
 }
 
+function safeDebugStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return formatUnknownError(value);
+  }
+}
+
 export interface AnthropicClientConfig {
   apiKey?: string;
   model: string;
@@ -253,7 +261,7 @@ export class AnthropicClient implements HyperAgentLLM {
     if (shouldDebugStructuredSchema()) {
       console.log(
         "[LLM][Anthropic] Simple structured output tool:",
-        JSON.stringify(tool, null, 2)
+        safeDebugStringify(tool)
       );
     }
 

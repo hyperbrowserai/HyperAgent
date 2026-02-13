@@ -558,7 +558,7 @@ export const runAgentTask = async (
               ) {
                 validationError = zodError.message;
               } else {
-                validationError = String(zodError);
+                validationError = formatUnknownError(zodError);
               }
             }
           }

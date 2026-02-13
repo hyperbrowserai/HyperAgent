@@ -2,6 +2,14 @@ import { z } from "zod";
 import { AnthropicClient } from "@/llm/providers/anthropic";
 
 const createMessageMock = jest.fn();
+const convertToAnthropicToolMock: jest.Mock = jest.fn(() => ({
+  name: "structured_output",
+  input_schema: { type: "object", properties: {} },
+}));
+const debugOptions = {
+  enabled: false,
+  structuredSchema: false,
+};
 
 jest.mock("@anthropic-ai/sdk", () => {
   return jest.fn().mockImplementation(() => ({
@@ -22,16 +30,25 @@ jest.mock("@/llm/utils/schema-converter", () => ({
   convertActionsToAnthropicTools: jest.fn((actions: Array<{ type: string }>) =>
     actions.map((action) => ({ name: action.type }))
   ),
-  convertToAnthropicTool: jest.fn(() => ({
-    name: "structured_output",
-    input_schema: { type: "object", properties: {} },
-  })),
+  convertToAnthropicTool: (schema: unknown) =>
+    convertToAnthropicToolMock(schema),
   createAnthropicToolChoice: jest.fn(() => ({ type: "tool" })),
+}));
+
+jest.mock("@/debug/options", () => ({
+  getDebugOptions: jest.fn(() => debugOptions),
 }));
 
 describe("AnthropicClient", () => {
   beforeEach(() => {
     createMessageMock.mockReset();
+    convertToAnthropicToolMock.mockReset();
+    convertToAnthropicToolMock.mockReturnValue({
+      name: "structured_output",
+      input_schema: { type: "object", properties: {} },
+    });
+    debugOptions.enabled = false;
+    debugOptions.structuredSchema = false;
   });
 
   it("returns first text block even when not first content part", async () => {
@@ -157,5 +174,46 @@ describe("AnthropicClient", () => {
       '[LLM][Anthropic] Failed to validate params for action click: {"reason":"param parse failed"}'
     );
     warnSpy.mockRestore();
+  });
+
+  it("does not crash simple-tool debug logging on circular tool payloads", async () => {
+    const circularTool: Record<string, unknown> = { name: "structured_output" };
+    circularTool.self = circularTool;
+    convertToAnthropicToolMock.mockReturnValue(circularTool);
+    createMessageMock.mockResolvedValue({
+      content: [
+        {
+          type: "tool_use",
+          input: {
+            result: {
+              value: "ok",
+            },
+          },
+        },
+      ],
+    });
+    debugOptions.enabled = true;
+    debugOptions.structuredSchema = true;
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const client = new AnthropicClient({ model: "claude-test" });
+      const result = await client.invokeStructured(
+        {
+          schema: z.object({
+            value: z.string(),
+          }),
+        },
+        [{ role: "user", content: "extract value" }]
+      );
+
+      expect(result.parsed).toEqual({ value: "ok" });
+      expect(logSpy).toHaveBeenCalledWith(
+        "[LLM][Anthropic] Simple structured output tool:",
+        expect.stringContaining('"self":"[Circular]"')
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });
