@@ -15,6 +15,7 @@ import {
 } from "../utils/schema-converter";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages/index";
 import { getDebugOptions } from "@/debug/options";
+import { formatUnknownError } from "@/utils";
 
 const ENV_STRUCTURED_SCHEMA_DEBUG =
   process.env.HYPERAGENT_DEBUG_STRUCTURED_SCHEMA === "1" ||
@@ -26,6 +27,17 @@ function shouldDebugStructuredSchema(): boolean {
     return opts.structuredSchema;
   }
   return ENV_STRUCTURED_SCHEMA_DEBUG;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringifyRawPayload(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  return formatUnknownError(value);
 }
 
 export interface AnthropicClientConfig {
@@ -75,8 +87,8 @@ export class AnthropicClient implements HyperAgentLLM {
       ...options?.providerOptions,
     });
 
-    const content = response.content[0];
-    if (!content || content.type !== "text") {
+    const content = response.content.find((block) => block.type === "text");
+    if (!content || typeof content.text !== "string") {
       throw new Error("No text response from Anthropic");
     }
 
@@ -167,7 +179,7 @@ export class AnthropicClient implements HyperAgentLLM {
 
     if (!toolContent) {
       return {
-        rawText: JSON.stringify(response.content ?? []),
+        rawText: stringifyRawPayload(response.content ?? []),
         parsed: null,
       };
     }
@@ -177,27 +189,25 @@ export class AnthropicClient implements HyperAgentLLM {
     );
     if (!actionDefinition) {
       return {
-        rawText: JSON.stringify(toolContent),
+        rawText: stringifyRawPayload(toolContent),
         parsed: null,
       };
     }
 
-    const input = toolContent.input ?? {};
-    const actionInput = (input as Record<string, unknown>).action ?? {};
-    const params =
-      (actionInput as Record<string, unknown>).params ?? {};
-    const thoughts = (input as Record<string, unknown>).thoughts;
-    const memory = (input as Record<string, unknown>).memory;
+    const input = isRecord(toolContent.input) ? toolContent.input : {};
+    const actionInput = isRecord(input.action) ? input.action : {};
+    const params = actionInput.params ?? {};
+    const thoughts = input.thoughts;
+    const memory = input.memory;
     let validatedParams: z.infer<typeof actionDefinition.actionParams>;
     try {
       validatedParams = actionDefinition.actionParams.parse(params);
     } catch (error) {
       console.warn(
-        `[LLM][Anthropic] Failed to validate params for action ${actionDefinition.type}:`,
-        error
+        `[LLM][Anthropic] Failed to validate params for action ${actionDefinition.type}: ${formatUnknownError(error)}`
       );
       return {
-        rawText: JSON.stringify(toolContent),
+        rawText: stringifyRawPayload(toolContent),
         parsed: null,
       };
     }
@@ -214,16 +224,15 @@ export class AnthropicClient implements HyperAgentLLM {
     try {
       const validated = request.schema.parse(structuredOutput);
       return {
-        rawText: JSON.stringify(toolContent),
+        rawText: stringifyRawPayload(toolContent),
         parsed: validated,
       };
     } catch (error) {
       console.warn(
-        "[LLM][Anthropic] Failed to validate structured output against schema:",
-        error
+        `[LLM][Anthropic] Failed to validate structured output against schema: ${formatUnknownError(error)}`
       );
       return {
-        rawText: JSON.stringify(toolContent),
+        rawText: stringifyRawPayload(toolContent),
         parsed: null,
       };
     }
@@ -259,24 +268,31 @@ export class AnthropicClient implements HyperAgentLLM {
       ...request.options?.providerOptions,
     });
 
-    const content = response.content[0];
-    if (!content || content.type !== "tool_use") {
+    const content = response.content.find((block) => block.type === "tool_use");
+    if (!content) {
       return {
         rawText: "",
         parsed: null,
       };
     }
 
+    const input = content.input;
+    if (!isRecord(input)) {
+      return {
+        rawText: stringifyRawPayload(input),
+        parsed: null,
+      };
+    }
+
     try {
-      const input = content.input as any;
       const validated = request.schema.parse(input.result);
       return {
-        rawText: JSON.stringify(input),
+        rawText: stringifyRawPayload(input),
         parsed: validated,
       };
     } catch {
       return {
-        rawText: JSON.stringify(content.input),
+        rawText: stringifyRawPayload(input),
         parsed: null,
       };
     }
