@@ -30,4 +30,25 @@ describe("setRawModeIfSupported", () => {
 
     expect(setRawMode).toHaveBeenCalledWith(true);
   });
+
+  it("logs warning instead of throwing when setRawMode fails", () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const setRawMode = jest.fn(() => {
+      throw { reason: "tty unavailable" };
+    });
+
+    try {
+      expect(() =>
+        setRawModeIfSupported(true, {
+          isTTY: true,
+          setRawMode,
+        })
+      ).not.toThrow();
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[CLI] Failed to set raw mode: {"reason":"tty unavailable"}'
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

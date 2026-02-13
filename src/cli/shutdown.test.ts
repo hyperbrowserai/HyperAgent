@@ -60,4 +60,39 @@ describe("closeAgentSafely", () => {
     expect(second).toEqual({ success: true });
     expect(closeAgent).toHaveBeenCalledTimes(2);
   });
+
+  it("returns readable error for invalid agent objects", async () => {
+    await expect(closeAgentSafely(undefined)).resolves.toEqual({
+      success: false,
+      message: "Invalid agent instance: closeAgent() is unavailable.",
+    });
+    await expect(closeAgentSafely(42)).resolves.toEqual({
+      success: false,
+      message: "Invalid agent instance: closeAgent() is unavailable.",
+    });
+    await expect(closeAgentSafely({})).resolves.toEqual({
+      success: false,
+      message: "Invalid agent instance: closeAgent() is unavailable.",
+    });
+  });
+
+  it("returns readable error when closeAgent getter throws", async () => {
+    const agent = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "closeAgent") {
+            throw new Error("close getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    await expect(closeAgentSafely(agent)).resolves.toEqual({
+      success: false,
+      message:
+        "Invalid agent instance: failed to access closeAgent() (close getter trap).",
+    });
+  });
 });

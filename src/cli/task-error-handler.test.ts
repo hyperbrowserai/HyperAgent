@@ -89,4 +89,73 @@ describe("attachTaskErrorHandler", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("logs when task emitter is unavailable", () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      attachTaskErrorHandler(
+        {
+          cancel: jest.fn(),
+          emitter: undefined,
+        } as unknown as Task,
+        jest.fn()
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[CLI] Cannot attach task error handler: task emitter is unavailable"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("logs when task emitter getter throws during attachment", () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const task = new Proxy(
+      {
+        cancel: jest.fn(),
+      },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "emitter") {
+            throw new Error("emitter trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    ) as unknown as Task;
+    try {
+      attachTaskErrorHandler(task, jest.fn());
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[CLI] Failed to access task emitter: emitter trap"
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[CLI] Cannot attach task error handler: task emitter is unavailable"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("logs when addListener registration throws", () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const task = {
+      cancel: jest.fn(),
+      emitter: {
+        addListener: () => {
+          throw { reason: "listener failed" };
+        },
+      },
+    } as unknown as Task;
+    try {
+      attachTaskErrorHandler(task, jest.fn());
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[CLI] Failed to attach task error listener: {"reason":"listener failed"}'
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

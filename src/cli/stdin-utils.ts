@@ -1,3 +1,5 @@
+import { formatUnknownError } from "@/utils";
+
 interface RawModeCapableInput {
   isTTY?: boolean;
   setRawMode?: (mode: boolean) => void;
@@ -10,5 +12,11 @@ export function setRawModeIfSupported(
   if (!input.isTTY || typeof input.setRawMode !== "function") {
     return;
   }
-  input.setRawMode(enabled);
+  try {
+    input.setRawMode(enabled);
+  } catch (error) {
+    console.warn(
+      `[CLI] Failed to set raw mode: ${formatUnknownError(error)}`
+    );
+  }
 }
