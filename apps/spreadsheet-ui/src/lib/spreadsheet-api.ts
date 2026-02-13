@@ -221,6 +221,21 @@ export async function clearAgentOpsCache(
   return parseJsonResponse<ClearAgentOpsCacheResponse>(response);
 }
 
+export async function replayAgentOpsCacheEntry(
+  workbookId: string,
+  requestId: string,
+): Promise<AgentOpsResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/replay`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request_id: requestId }),
+    },
+  );
+  return parseJsonResponse<AgentOpsResponse>(response);
+}
+
 export async function removeAgentOpsCacheEntry(
   workbookId: string,
   requestId: string,

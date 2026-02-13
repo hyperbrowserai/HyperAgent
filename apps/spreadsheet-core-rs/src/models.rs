@@ -169,6 +169,11 @@ pub struct RemoveAgentOpsCacheEntryResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayAgentOpsCacheEntryRequest {
+  pub request_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOpsCacheEntry {
   pub request_id: String,
   pub operations_signature: Option<String>,

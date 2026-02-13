@@ -28,6 +28,7 @@ import {
   getWorkbook,
   importWorkbook,
   previewAgentOps,
+  replayAgentOpsCacheEntry,
   removeAgentOpsCacheEntry,
   runAgentOps,
   runAgentPreset,
@@ -103,6 +104,7 @@ export function SpreadsheetApp() {
   const [isCopyingLastExecutionPayload, setIsCopyingLastExecutionPayload] =
     useState(false);
   const [isReplayingLastRequest, setIsReplayingLastRequest] = useState(false);
+  const [replayingCacheRequestId, setReplayingCacheRequestId] = useState<string | null>(null);
   const [isClearingOpsCache, setIsClearingOpsCache] = useState(false);
   const [copyingCacheRequestId, setCopyingCacheRequestId] = useState<string | null>(null);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
@@ -1207,6 +1209,38 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleReplayCacheRequestId(requestId: string) {
+    if (!workbook) {
+      return;
+    }
+    setReplayingCacheRequestId(requestId);
+    try {
+      clearUiError();
+      const response = await replayAgentOpsCacheEntry(workbook.id, requestId);
+      setLastAgentRequestId(response.request_id ?? requestId);
+      setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(response.served_from_cache ?? true);
+      setLastAgentOps(response.results);
+      setNotice(`Replayed cached response for request_id ${requestId}.`);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agent-ops-cache", workbook.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [
+            "agent-ops-cache-entries",
+            workbook.id,
+            CACHE_ENTRIES_PREVIEW_LIMIT,
+          ],
+        }),
+      ]);
+    } catch (error) {
+      applyUiError(error, "Failed to replay cached request id.");
+    } finally {
+      setReplayingCacheRequestId(null);
+    }
+  }
+
   async function handleRemoveCacheRequestId(requestId: string) {
     if (!workbook) {
       return;
@@ -1970,11 +2004,27 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {agentSchemaQuery.data?.agent_ops_cache_replay_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache replay endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_cache_replay_endpoint}
+                </span>
+              </p>
+            ) : null}
             {agentSchemaQuery.data?.agent_ops_cache_remove_endpoint ? (
               <p className="mb-2 text-xs text-slate-400">
                 cache remove endpoint:{" "}
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.agent_ops_cache_remove_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.cache_validation_error_codes?.length ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache validation codes:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.cache_validation_error_codes.join(", ")}
                 </span>
               </p>
             ) : null}
@@ -2041,10 +2091,24 @@ export function SpreadsheetApp() {
                           </div>
                           <div className="flex items-center gap-1">
                             <button
+                              onClick={() => handleReplayCacheRequestId(entry.request_id)}
+                              disabled={
+                                replayingCacheRequestId === entry.request_id
+                                || removingCacheRequestId === entry.request_id
+                                || copyingCacheRequestId === entry.request_id
+                              }
+                              className="rounded border border-emerald-700/70 px-1.5 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-50"
+                            >
+                              {replayingCacheRequestId === entry.request_id
+                                ? "Replaying..."
+                                : "Replay"}
+                            </button>
+                            <button
                               onClick={() => handleCopyCacheRequestId(entry.request_id)}
                               disabled={
                                 copyingCacheRequestId === entry.request_id
                                 || removingCacheRequestId === entry.request_id
+                                || replayingCacheRequestId === entry.request_id
                               }
                               className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
                             >
@@ -2057,6 +2121,7 @@ export function SpreadsheetApp() {
                               disabled={
                                 removingCacheRequestId === entry.request_id
                                 || copyingCacheRequestId === entry.request_id
+                                || replayingCacheRequestId === entry.request_id
                               }
                               className="rounded border border-rose-700/70 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"
                             >

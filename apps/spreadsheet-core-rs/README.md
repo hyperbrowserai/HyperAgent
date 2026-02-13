@@ -41,6 +41,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/agent/ops/cache`
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries`
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
+- `POST /v1/workbooks/{id}/agent/ops/cache/replay`
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove`
 - `GET /v1/workbooks/{id}/agent/schema`
 - `GET /v1/workbooks/{id}/agent/presets`
@@ -77,6 +78,9 @@ Response includes:
   - `OPERATION_SIGNATURE_MISMATCH`
   - `EMPTY_OPERATION_LIST`
   - `REQUEST_ID_CONFLICT` (same `request_id` reused with a different operation signature)
+- Cache-management validation error codes:
+  - `INVALID_REQUEST_ID`
+  - `CACHE_ENTRY_NOT_FOUND`
 
 Schema discovery endpoints (`/v1/workbooks/{id}/agent/schema`, `/v1/agent/wizard/schema`) expose these under `signature_error_codes`.
 The in-memory request-id idempotency cache keeps up to **256** recent `agent/ops` responses per workbook (oldest entries evict first).
@@ -88,6 +92,7 @@ Cache helpers:
 - `GET /v1/workbooks/{id}/agent/ops/cache`
 - `GET /v1/workbooks/{id}/agent/ops/cache/entries?limit=20` (newest-first request-id summaries, max `limit=200`)
 - `POST /v1/workbooks/{id}/agent/ops/cache/clear`
+- `POST /v1/workbooks/{id}/agent/ops/cache/replay` with `{ "request_id": "..." }` (returns cached `agent/ops` response)
 - `POST /v1/workbooks/{id}/agent/ops/cache/remove` with `{ "request_id": "..." }`
 
 Supported `op_type` values:
