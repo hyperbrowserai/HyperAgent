@@ -830,10 +830,45 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     params?: RunFromActionCacheParams
   ): Promise<ActionCacheReplayResult> {
     const replayId = uuidv4();
-    const maxXPathRetries = params?.maxXPathRetries ?? 3;
+    const maxXPathRetries = this.normalizeRetryCount(
+      params?.maxXPathRetries,
+      3,
+      20
+    );
     const debug = params?.debug ?? this.debug;
-    const getPage = () =>
-      typeof pageOrGetter === "function" ? pageOrGetter() : pageOrGetter;
+    const sourceTaskId =
+      this.normalizeVariableKey((cache as { taskId?: unknown })?.taskId) ??
+      "unknown-task";
+    const safeReadStepField = (step: unknown, key: string): unknown => {
+      if (!step || (typeof step !== "object" && typeof step !== "function")) {
+        return undefined;
+      }
+      try {
+        return (step as Record<string, unknown>)[key];
+      } catch {
+        return undefined;
+      }
+    };
+    const getStepIndexValue = (step: unknown): number => {
+      const value = safeReadStepField(step, "stepIndex");
+      return typeof value === "number" ? value : Number.NaN;
+    };
+    const getActionType = (step: unknown): string => {
+      const value = safeReadStepField(step, "actionType");
+      return typeof value === "string" && value.trim().length > 0
+        ? value.trim()
+        : "unknown-action";
+    };
+    const readCacheSteps = (): unknown[] => {
+      const steps = (cache as { steps?: unknown })?.steps;
+      if (Array.isArray(steps)) {
+        return [...steps];
+      }
+      if (!steps) {
+        return [];
+      }
+      return Array.from(steps as Iterable<unknown>);
+    };
 
     const stepsResult: ActionCacheReplayResult["steps"] = [];
     let replayStatus: TaskStatus.COMPLETED | TaskStatus.FAILED =
@@ -865,16 +900,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return truncateReplayOutput(formatUnknownError(output));
     };
     const recordReplayStep = (
-      step: ActionCacheOutput["steps"][number],
+      step: unknown,
       result: TaskOutput
     ): boolean => {
       const finalMeta = result.replayStepMeta;
       const finalSuccess = result.status === TaskStatus.COMPLETED;
-      const safeStepIndex = getSafeStepIndex(step.stepIndex);
+      const safeStepIndex = getSafeStepIndex(getStepIndexValue(step));
 
       stepsResult.push({
         stepIndex: safeStepIndex,
-        actionType: step.actionType,
+        actionType: getActionType(step),
         usedXPath: finalMeta?.usedCachedAction ?? false,
         fallbackUsed: finalMeta?.fallbackUsed ?? false,
         cachedXPath: finalMeta?.cachedXPath ?? null,
@@ -891,30 +926,127 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return finalSuccess;
     };
 
-    const getReplayInstruction = (
-      instruction: string | undefined
-    ): string | null => {
+    const getReplayInstruction = (instruction: unknown): string | null => {
+      if (typeof instruction !== "string") {
+        return null;
+      }
       const trimmed = instruction?.trim();
       return trimmed && trimmed.length > 0 ? trimmed : null;
     };
 
-    for (const step of [...cache.steps].sort(
-      (a, b) => getSortStepIndex(a.stepIndex) - getSortStepIndex(b.stepIndex)
-    )) {
-      const page = getPage();
-      const hyperPage = page as HyperPage;
+    let sortedSteps: unknown[] = [];
+    try {
+      sortedSteps = readCacheSteps().sort(
+        (a, b) =>
+          getSortStepIndex(getStepIndexValue(a)) -
+          getSortStepIndex(getStepIndexValue(b))
+      );
+    } catch (error) {
+      const replayResult: ActionCacheReplayResult = {
+        replayId,
+        sourceTaskId,
+        steps: [
+          {
+            stepIndex: -1,
+            actionType: "unknown-action",
+            usedXPath: false,
+            fallbackUsed: false,
+            cachedXPath: null,
+            fallbackXPath: null,
+            fallbackElementId: null,
+            retries: 0,
+            success: false,
+            message: `Failed to read cached steps: ${formatUnknownError(error)}`,
+          },
+        ],
+        status: TaskStatus.FAILED,
+      };
+      if (debug) {
+        try {
+          const debugDir = "debug/action-cache";
+          fs.mkdirSync(debugDir, { recursive: true });
+          fs.writeFileSync(
+            `${debugDir}/replay-${replayId}.json`,
+            JSON.stringify(replayResult, null, 2)
+          );
+        } catch (debugError) {
+          console.error(
+            `[runFromActionCache] Failed to write replay debug: ${formatUnknownError(
+              debugError
+            )}`
+          );
+        }
+      }
+      return replayResult;
+    }
+
+    for (const step of sortedSteps) {
       let result: TaskOutput;
       let attemptedCachedAction = false;
+      const actionType = getActionType(step);
+      const instruction = getReplayInstruction(
+        safeReadStepField(step, "instruction")
+      );
+      const rawArguments = safeReadStepField(step, "arguments");
+      const stepArguments =
+        Array.isArray(rawArguments) && rawArguments.length > 0
+          ? rawArguments
+          : [];
+      const normalizedStepArguments: Array<string | number> = stepArguments
+        .filter(
+          (value): value is string | number =>
+            typeof value === "string" || typeof value === "number"
+        )
+        .slice(0, 20);
+      const rawActionParams = safeReadStepField(step, "actionParams");
+      const stepActionParams =
+        rawActionParams && typeof rawActionParams === "object"
+          ? (rawActionParams as Record<string, unknown>)
+          : undefined;
+      const stepXPath =
+        typeof safeReadStepField(step, "xpath") === "string"
+          ? (safeReadStepField(step, "xpath") as string)
+          : null;
+      const stepFrameIndex =
+        typeof safeReadStepField(step, "frameIndex") === "number"
+          ? (safeReadStepField(step, "frameIndex") as number)
+          : null;
+      let hyperPage: HyperPage;
       try {
-        if (REPLAY_SPECIAL_ACTION_TYPES.has(step.actionType)) {
+        const page = this.resolveActionPageInput(pageOrGetter);
+        hyperPage = page as HyperPage;
+      } catch (error) {
+        result = {
+          taskId: sourceTaskId,
+          status: TaskStatus.FAILED,
+          steps: [],
+          output: `Replay step ${getSafeStepIndex(
+            getStepIndexValue(step)
+          )} failed: ${formatUnknownError(error)}`,
+          replayStepMeta: {
+            usedCachedAction: false,
+            fallbackUsed: false,
+            retries: 0,
+            cachedXPath: stepXPath,
+            fallbackXPath: null,
+            fallbackElementId: null,
+          },
+        };
+        if (!recordReplayStep(step, result)) {
+          break;
+        }
+        continue;
+      }
+      try {
+        if (REPLAY_SPECIAL_ACTION_TYPES.has(actionType)) {
           attemptedCachedAction = true;
         }
         const replaySpecialResult = await executeReplaySpecialAction({
-          taskId: cache.taskId,
-          actionType: step.actionType,
-          instruction: step.instruction,
-          arguments: step.arguments,
-          actionParams: step.actionParams,
+          taskId: sourceTaskId,
+          actionType,
+          instruction: instruction ?? undefined,
+          arguments: normalizedStepArguments,
+          actionParams: stepActionParams,
           page: hyperPage,
           retries: 1,
         });
@@ -923,20 +1055,23 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           attemptedCachedAction = true;
           result = replaySpecialResult;
         } else {
-          const method = normalizePageActionMethod(step.method);
+          const rawMethod = safeReadStepField(step, "method");
+          const method = normalizePageActionMethod(
+            typeof rawMethod === "string" ? rawMethod : null
+          );
           if (method) {
-            const xpath = step.xpath?.trim();
+            const xpath = stepXPath?.trim();
             const hasXPath = typeof xpath === "string" && xpath.length > 0;
-            const replayInstruction = getReplayInstruction(step.instruction);
+            const replayInstruction = instruction;
             if (!hasXPath) {
               if (replayInstruction) {
                 result = await hyperPage.perform(replayInstruction);
               } else {
                 result = {
-                  taskId: cache.taskId,
+                  taskId: sourceTaskId,
                   status: TaskStatus.FAILED,
                   steps: [],
-                  output: `Cannot replay action type "${step.actionType}" with method "${method}" without XPath or instruction`,
+                  output: `Cannot replay action type "${actionType}" with method "${method}" without XPath or instruction`,
                   replayStepMeta: {
                     usedCachedAction: false,
                     fallbackUsed: false,
@@ -956,10 +1091,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               performInstruction: replayInstruction,
               maxSteps: maxXPathRetries,
             };
-            if (step.frameIndex !== null && step.frameIndex !== undefined) {
-              options.frameIndex = step.frameIndex;
+            if (stepFrameIndex !== null && stepFrameIndex !== undefined) {
+              options.frameIndex = stepFrameIndex;
             }
-            const valueArg = step.arguments?.[0];
+            const firstArgument = normalizedStepArguments[0];
+            const valueArg =
+              typeof firstArgument === "string"
+                ? firstArgument
+                : typeof firstArgument === "number"
+                  ? `${firstArgument}`
+                  : undefined;
             attemptedCachedAction = true;
             result = await dispatchPerformHelper(
               hyperPage,
@@ -969,15 +1110,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               options
             );
           } else {
-            const replayInstruction = getReplayInstruction(step.instruction);
+            const replayInstruction = instruction;
             if (replayInstruction) {
               result = await hyperPage.perform(replayInstruction);
             } else {
               result = {
-                taskId: cache.taskId,
+                taskId: sourceTaskId,
                 status: TaskStatus.FAILED,
                 steps: [],
-                output: `Cannot replay action type "${step.actionType}" without instruction`,
+                output: `Cannot replay action type "${actionType}" without instruction`,
                 replayStepMeta: {
                   usedCachedAction: false,
                   fallbackUsed: false,
@@ -993,15 +1134,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } catch (error: unknown) {
         const message = formatUnknownError(error);
         result = {
-          taskId: cache.taskId,
+          taskId: sourceTaskId,
           status: TaskStatus.FAILED,
           steps: [],
-          output: `Replay step ${getSafeStepIndex(step.stepIndex)} failed: ${message}`,
+          output: `Replay step ${getSafeStepIndex(
+            getStepIndexValue(step)
+          )} failed: ${message}`,
           replayStepMeta: {
             usedCachedAction: attemptedCachedAction,
             fallbackUsed: false,
             retries: 1,
-            cachedXPath: step.xpath ?? null,
+            cachedXPath: stepXPath ?? null,
             fallbackXPath: null,
             fallbackElementId: null,
           },
@@ -1015,7 +1158,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const replayResult: ActionCacheReplayResult = {
       replayId,
-      sourceTaskId: cache.taskId,
+      sourceTaskId,
       steps: stepsResult,
       status: replayStatus,
     };

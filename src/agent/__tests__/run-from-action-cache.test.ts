@@ -665,4 +665,110 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.stepIndex).toBe(0);
     expect(replay.steps[1]?.stepIndex).toBe(-1);
   });
+
+  it("fails gracefully when cached steps are unreadable", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const page = {} as import("@/types/agent/types").HyperPage;
+    const cache = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      get steps(): unknown[] {
+        throw new Error("steps trap");
+      },
+    } as unknown as ActionCacheOutput;
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("Failed to read cached steps");
+    expect(replay.steps[0]?.message).toContain("steps trap");
+  });
+
+  it("fails replay step cleanly when page getter throws", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "click login",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: "//button[1]",
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, () => {
+      throw new Error("page getter trap");
+    });
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("page getter trap");
+  });
+
+  it("normalizes invalid maxXPathRetries to default replay retries", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const performClick = jest.fn().mockResolvedValue({
+      taskId: "click-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "clicked via helper",
+      replayStepMeta: {
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      performClick,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "click login",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: "//button[1]",
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    await agent.runFromActionCache(cache, page, {
+      maxXPathRetries: 0,
+    });
+
+    expect(performClick).toHaveBeenCalledWith(
+      "//button[1]",
+      expect.objectContaining({
+        maxSteps: 3,
+      })
+    );
+  });
 });
