@@ -38,6 +38,8 @@ const MAX_MCP_SERVER_ID_CHARS = 256;
 const MAX_MCP_AMBIGUOUS_SERVER_IDS = 5;
 const MAX_MCP_TOOL_DIAGNOSTIC_ITEMS = 10;
 const MAX_MCP_CONFIG_SERVER_ID_CHARS = 128;
+const MAX_MCP_CONFIG_COMMAND_CHARS = 2_048;
+const MAX_MCP_CONFIG_SSE_URL_CHARS = 4_000;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -163,6 +165,53 @@ function normalizeMCPConnectionType(
   throw new Error(
     'MCP connectionType must be either "stdio" or "sse" when provided'
   );
+}
+
+function normalizeMCPConnectionCommand(command?: string): string {
+  if (typeof command !== "string") {
+    throw new Error("Command is required for stdio connection type");
+  }
+  const normalized = command.trim();
+  if (normalized.length === 0) {
+    throw new Error("Command is required for stdio connection type");
+  }
+  if (hasAnyControlChars(normalized)) {
+    throw new Error("MCP command contains unsupported control characters");
+  }
+  if (normalized.length > MAX_MCP_CONFIG_COMMAND_CHARS) {
+    throw new Error(
+      `MCP command exceeds ${MAX_MCP_CONFIG_COMMAND_CHARS} characters`
+    );
+  }
+  return normalized;
+}
+
+function normalizeMCPConnectionSSEUrl(sseUrl?: string): string {
+  if (typeof sseUrl !== "string") {
+    throw new Error("SSE URL is required for SSE connection type");
+  }
+  const normalized = sseUrl.trim();
+  if (normalized.length === 0) {
+    throw new Error("SSE URL is required for SSE connection type");
+  }
+  if (hasAnyControlChars(normalized)) {
+    throw new Error("SSE URL contains unsupported control characters");
+  }
+  if (normalized.length > MAX_MCP_CONFIG_SSE_URL_CHARS) {
+    throw new Error(
+      `SSE URL exceeds ${MAX_MCP_CONFIG_SSE_URL_CHARS} characters`
+    );
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(normalized);
+  } catch {
+    throw new Error("Invalid SSE URL for SSE connection type");
+  }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw new Error("SSE URL must use http:// or https://");
+  }
+  return parsedUrl.toString();
 }
 
 function summarizeMCPServerIds(serverIds: string[]): string {
@@ -590,18 +639,16 @@ class MCPClient {
       );
 
       if (connectionType === "sse") {
-        if (!serverConfig.sseUrl) {
-          throw new Error("SSE URL is required for SSE connection type");
-        }
+        const sseUrl = normalizeMCPConnectionSSEUrl(serverConfig.sseUrl);
 
         if (this.debug) {
           console.log(
-            `Establishing SSE connection to ${serverConfig.sseUrl}...`
+            `Establishing SSE connection to ${sseUrl}...`
           );
         }
 
         transport = new SSEClientTransport(
-          new URL(serverConfig.sseUrl),
+          new URL(sseUrl),
           serverConfig.sseHeaders
             ? {
                 requestInit: {
@@ -616,12 +663,10 @@ class MCPClient {
           console.error(`SSE error: ${message}`);
         };
       } else {
-        if (!serverConfig.command) {
-          throw new Error("Command is required for stdio connection type");
-        }
+        const command = normalizeMCPConnectionCommand(serverConfig.command);
 
         transport = new StdioClientTransport({
-          command: serverConfig.command,
+          command,
           args: serverConfig.args,
           env: {
             ...((process.env ?? {}) as Record<string, string>),

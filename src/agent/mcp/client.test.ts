@@ -624,6 +624,93 @@ describe("MCPClient.connectToServer validation", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("rejects stdio command values that are blank after trimming", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "   ",
+        })
+      ).rejects.toThrow("Command is required for stdio connection type");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects stdio command values with control characters", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "np\nx",
+        })
+      ).rejects.toThrow("MCP command contains unsupported control characters");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects oversized stdio command values", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: `x${"a".repeat(2_100)}`,
+        })
+      ).rejects.toThrow("MCP command exceeds 2048 characters");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects SSE URLs with unsupported protocols", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "sse",
+          sseUrl: "ftp://example.com/events",
+        })
+      ).rejects.toThrow("SSE URL must use http:// or https://");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects SSE URLs with control characters", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "sse",
+          sseUrl: "https://example.com/\nstream",
+        })
+      ).rejects.toThrow("SSE URL contains unsupported control characters");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects oversized SSE URL values", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "sse",
+          sseUrl: `https://example.com/${"a".repeat(4_100)}`,
+        })
+      ).rejects.toThrow("SSE URL exceeds 4000 characters");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
 
 describe("MCPClient.executeTool server selection", () => {
