@@ -25,8 +25,8 @@ import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { captureDOMState } from "../shared/dom-capture";
 import { initializeRuntimeContext } from "../shared/runtime-context";
 
-import { AgentOutputFn, endTaskStatuses } from "@hyperbrowser/agent/types";
-import { TaskParams, TaskState, TaskStatus } from "@hyperbrowser/agent/types";
+import { AgentOutputFn, endTaskStatuses } from "@/types";
+import { TaskParams, TaskState, TaskStatus } from "@/types";
 
 import { HyperagentError } from "../error";
 import { buildAgentStepMessages } from "../messages/builder";
