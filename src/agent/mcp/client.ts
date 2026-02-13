@@ -134,7 +134,7 @@ function normalizeMCPExecutionServerId(
   }
   const normalized = serverId.trim();
   if (normalized.length === 0) {
-    return undefined;
+    throw new Error("MCP serverId must be a non-empty string when provided");
   }
   if (hasAnyControlChars(normalized)) {
     throw new Error("MCP serverId contains unsupported control characters");

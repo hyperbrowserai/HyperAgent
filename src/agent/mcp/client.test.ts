@@ -1571,6 +1571,13 @@ describe("MCPClient.executeTool server selection", () => {
     ).rejects.toThrow("MCP serverId must be a string when provided");
   });
 
+  it("rejects blank server ids before lookup", async () => {
+    const mcpClient = new MCPClient(false);
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "   ")
+    ).rejects.toThrow("MCP serverId must be a non-empty string when provided");
+  });
+
   it("rejects oversized server ids before lookup", async () => {
     const mcpClient = new MCPClient(false);
     await expect(
