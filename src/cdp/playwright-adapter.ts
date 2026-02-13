@@ -33,16 +33,20 @@ class PlaywrightSessionAdapter implements CDPSession {
     return result as Promise<T>;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  on(event: string, handler: (...payload: any[]) => void): void {
+  on<TPayload extends unknown[]>(
+    event: string,
+    handler: (...payload: TPayload) => void
+  ): void {
     this.session.on(
       event as Parameters<PlaywrightSession["on"]>[0],
-      handler as Parameters<PlaywrightSession["on"]>[1]
+      handler as unknown as Parameters<PlaywrightSession["on"]>[1]
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  off(event: string, handler: (...payload: any[]) => void): void {
+  off<TPayload extends unknown[]>(
+    event: string,
+    handler: (...payload: TPayload) => void
+  ): void {
     const off = (this.session as PlaywrightSession & {
       off?: PlaywrightSession["off"];
     }).off;
@@ -50,7 +54,7 @@ class PlaywrightSessionAdapter implements CDPSession {
       off.call(
         this.session,
         event as Parameters<PlaywrightSession["off"]>[0],
-        handler as Parameters<PlaywrightSession["off"]>[1]
+        handler as unknown as Parameters<PlaywrightSession["off"]>[1]
       );
     }
   }

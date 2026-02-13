@@ -123,6 +123,7 @@ export interface Task {
   pause: () => TaskStatus;
   resume: () => TaskStatus;
   cancel: () => TaskStatus;
+  result: Promise<AgentTaskOutput>;
   emitter: ErrorEmitter;
 }
 
@@ -154,8 +155,8 @@ export interface TaskState {
 export interface AgentDeps {
   debug?: boolean;
   tokenLimit: number;
-  llm: any;
-  mcpClient: any;
+  llm: unknown;
+  mcpClient: unknown;
   variables: Array<{ key: string; value: string; description: string }>;
   cdpActionsEnabled?: boolean;
 }

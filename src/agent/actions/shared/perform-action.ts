@@ -13,6 +13,15 @@ export interface PerformActionParams {
   confidence?: number;
 }
 
+const VARIABLE_TOKEN_PATTERN = /<<([^>]+)>>/g;
+
+function interpolateVariables(value: string, ctx: ActionContext): string {
+  return value.replace(VARIABLE_TOKEN_PATTERN, (match, key) => {
+    const variable = ctx.variables.find((entry) => entry.key === key);
+    return variable ? variable.value : match;
+  });
+}
+
 /**
  * Performs a single action on an element
  * Consolidates logic for choosing between CDP and Playwright execution paths
@@ -28,11 +37,15 @@ export async function performAction(
     arguments: methodArgs = [],
     confidence,
   } = params;
+  const resolvedInstruction = interpolateVariables(instruction, ctx);
+  const resolvedMethodArgs = methodArgs.map((arg) =>
+    interpolateVariables(arg, ctx)
+  );
 
   if (!isEncodedId(elementId)) {
     return {
       success: false,
-      message: `Failed to execute "${instruction}": elementId "${elementId}" is not in encoded format (frameIndex-backendNodeId).`,
+      message: `Failed to execute "${resolvedInstruction}": elementId "${elementId}" is not in encoded format (frameIndex-backendNodeId).`,
     };
   }
 
@@ -41,7 +54,7 @@ export async function performAction(
   if (!elementMetadata) {
     return {
       success: false,
-      message: `Failed to execute "${instruction}": elementId "${elementId}" not present in current DOM.`,
+      message: `Failed to execute "${resolvedInstruction}": elementId "${elementId}" not present in current DOM.`,
     };
   }
 
@@ -52,9 +65,9 @@ export async function performAction(
           requestedAction: {
             elementId,
             method,
-            arguments: methodArgs,
+            arguments: resolvedMethodArgs,
             confidence,
-            instruction,
+            instruction: resolvedInstruction,
           },
           elementMetadata,
           ...(timings ? { timings } : {}),
@@ -84,7 +97,7 @@ export async function performAction(
       }
 
       const dispatchStart = performance.now();
-      await ctx.cdp!.dispatchCDPAction(method as CDPActionMethod, methodArgs, {
+      await ctx.cdp!.dispatchCDPAction(method as CDPActionMethod, resolvedMethodArgs, {
         element: {
           ...resolved,
           xpath: ctx.domState.xpathMap?.[encodedId],
@@ -99,7 +112,7 @@ export async function performAction(
 
       return {
         success: true,
-        message: `Successfully executed: ${instruction}`,
+        message: `Successfully executed: ${resolvedInstruction}`,
         debug: debugInfo,
       };
     } catch (error) {
@@ -107,7 +120,7 @@ export async function performAction(
         error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        message: `Failed to execute "${instruction}": ${errorMessage}`,
+        message: `Failed to execute "${resolvedInstruction}": ${errorMessage}`,
         debug: debugInfo,
       };
     }
@@ -129,7 +142,7 @@ export async function performAction(
 
     // Execute Playwright method using shared utility
     const pwStart = performance.now();
-    await executePlaywrightMethod(method, methodArgs, locator, {
+    await executePlaywrightMethod(method, resolvedMethodArgs, locator, {
       clickTimeout: 3500,
       debug: !!ctx.debugDir,
     });
@@ -139,7 +152,7 @@ export async function performAction(
 
     return {
       success: true,
-      message: `Successfully executed: ${instruction}`,
+      message: `Successfully executed: ${resolvedInstruction}`,
       debug: debugInfo,
     };
   } catch (error) {
@@ -147,7 +160,7 @@ export async function performAction(
       error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      message: `Failed to execute "${instruction}": ${errorMessage}`,
+      message: `Failed to execute "${resolvedInstruction}": ${errorMessage}`,
       debug: debugInfo,
     };
   }

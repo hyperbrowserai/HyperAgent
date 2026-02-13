@@ -61,6 +61,16 @@ export class FrameContextManager {
 
   constructor(private readonly client: CDPClient) {}
 
+  private addSessionListener(
+    session: CDPSession,
+    event: string,
+    handler: (...args: unknown[]) => void
+  ): void {
+    const listeners = this.sessionListeners.get(session) ?? [];
+    listeners.push({ event, handler });
+    this.sessionListeners.set(session, listeners);
+  }
+
   setDebug(debug?: boolean): void {
     this.debugLogs = !!debug;
   }
@@ -462,7 +472,10 @@ export class FrameContextManager {
       // Success! This is an OOPIF - get its CDP frame ID
       try {
         await oopifSession.send("Page.enable");
-        const { frameTree } = await oopifSession.send("Page.getFrameTree");
+        const { frameTree } =
+          await oopifSession.send<Protocol.Page.GetFrameTreeResponse>(
+            "Page.getFrameTree"
+          );
         const frameId = frameTree.frame.id;
 
         this.log(
@@ -565,22 +578,21 @@ export class FrameContextManager {
     session.on("Page.frameDetached", detachedHandler);
     session.on("Page.frameNavigated", navigatedHandler);
 
-    const listeners = this.sessionListeners.get(session) ?? [];
-    listeners.push(
-      {
-        event: "Page.frameAttached",
-        handler: attachedHandler as (...args: unknown[]) => void,
-      },
-      {
-        event: "Page.frameDetached",
-        handler: detachedHandler as (...args: unknown[]) => void,
-      },
-      {
-        event: "Page.frameNavigated",
-        handler: navigatedHandler as (...args: unknown[]) => void,
-      }
+    this.addSessionListener(
+      session,
+      "Page.frameAttached",
+      attachedHandler as (...args: unknown[]) => void
     );
-    this.sessionListeners.set(session, listeners);
+    this.addSessionListener(
+      session,
+      "Page.frameDetached",
+      detachedHandler as (...args: unknown[]) => void
+    );
+    this.addSessionListener(
+      session,
+      "Page.frameNavigated",
+      navigatedHandler as (...args: unknown[]) => void
+    );
   }
 
   private async handlePageFrameAttached(
@@ -701,20 +713,21 @@ export class FrameContextManager {
     session.on("Runtime.executionContextDestroyed", destroyedHandler);
     session.on("Runtime.executionContextsCleared", clearedHandler);
 
-    this.sessionListeners.set(session, [
-      {
-        event: "Runtime.executionContextCreated",
-        handler: createdHandler as (...args: unknown[]) => void,
-      },
-      {
-        event: "Runtime.executionContextDestroyed",
-        handler: destroyedHandler as (...args: unknown[]) => void,
-      },
-      {
-        event: "Runtime.executionContextsCleared",
-        handler: clearedHandler as (...args: unknown[]) => void,
-      },
-    ]);
+    this.addSessionListener(
+      session,
+      "Runtime.executionContextCreated",
+      createdHandler as (...args: unknown[]) => void
+    );
+    this.addSessionListener(
+      session,
+      "Runtime.executionContextDestroyed",
+      destroyedHandler as (...args: unknown[]) => void
+    );
+    this.addSessionListener(
+      session,
+      "Runtime.executionContextsCleared",
+      clearedHandler as (...args: unknown[]) => void
+    );
 
     session.send("Runtime.enable").catch((error) => {
       console.warn(

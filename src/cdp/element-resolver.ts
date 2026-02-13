@@ -161,24 +161,6 @@ async function resolveFrameSession(
   );
 }
 
-async function ensureRootSession(
-  ctx: ElementResolveContext
-): Promise<CDPSession> {
-  try {
-    const session = ctx.cdpClient.rootSession;
-    const cache = getSessionCache(ctx.cdpClient);
-    if (!cache.has(0)) {
-      cache.set(0, session);
-    }
-    return session;
-  } catch {
-    const session = await ctx.cdpClient.acquireSession("dom");
-    const cache = getSessionCache(ctx.cdpClient);
-    cache.set(0, session);
-    return session;
-  }
-}
-
 function getSessionCache(client: CDPClient): Map<number, CDPSession> {
   let cache = sessionCache.get(client);
   if (!cache) {

@@ -85,6 +85,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private cdpActionsEnabled: boolean;
   private actionCacheByTaskId: Record<string, ActionCacheOutput> = {};
+  private taskResults: Record<string, Promise<AgentTaskOutput>> = {};
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -122,6 +123,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.llm = params.llm;
     }
     this.browserProviderType = (params.browserProvider ?? "Local") as T;
+    this.debug = params.debug ?? false;
 
     setDebugOptions(params.debugOptions, this.debug);
 
@@ -139,7 +141,6 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       params.customActions.forEach(this.registerAction, this);
     }
 
-    this.debug = params.debug ?? false;
     this.cdpActionsEnabled = params.cdpActions ?? true;
     this.errorEmitter = new ErrorEmitter();
   }
@@ -186,7 +187,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns
    */
   private getActions(
-    outputSchema?: z.ZodType<any>
+    outputSchema?: z.ZodType<unknown>
   ): Array<AgentActionDefinition> {
     if (outputSchema) {
       return [
@@ -339,7 +340,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @param taskId ID of the task
    * @returns Task control object
    */
-  private getTaskControl(taskId: string): Task {
+  private getTaskControl(
+    taskId: string,
+    result: Promise<AgentTaskOutput>
+  ): Task {
     const taskState = this.tasks[taskId];
     if (!taskState) {
       throw new HyperagentError(`Task ${taskId} not found`);
@@ -365,6 +369,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
         return taskState.status;
       },
+      result,
       emitter: this.errorEmitter,
     };
   }
@@ -412,7 +417,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     this.tasks[taskId] = taskState;
     const mergedParams = params ?? {};
-    runAgentTask(
+    const taskResult = runAgentTask(
       {
         llm: this.llm,
         actions: this.getActions(mergedParams.outputSchema),
@@ -429,6 +434,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       .then((result) => {
         this.actionCacheByTaskId[taskId] = result.actionCache;
         cleanup();
+        return result;
       })
       .catch((error: Error) => {
         cleanup();
@@ -445,8 +451,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             `Task state ${taskId} not found during error handling.`
           );
         }
+        throw error;
+      })
+      .finally(() => {
+        delete this.taskResults[taskId];
       });
-    return this.getTaskControl(taskId);
+    this.taskResults[taskId] = taskResult;
+    return this.getTaskControl(taskId, taskResult);
   }
 
   /**
@@ -599,9 +610,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       let result: TaskOutput;
 
       if (step.actionType === "goToUrl") {
+        const actionParams =
+          step.actionParams && typeof step.actionParams === "object"
+            ? (step.actionParams as Record<string, unknown>)
+            : undefined;
         const url =
           (step.arguments && step.arguments[0]) ||
-          (step.actionParams as any)?.url ||
+          (typeof actionParams?.url === "string" ? actionParams.url : "") ||
           "";
         if (!url || typeof url !== "string") {
           result = {
@@ -669,9 +684,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           },
         };
       } else if (step.actionType === "wait") {
+        const actionParams =
+          step.actionParams && typeof step.actionParams === "object"
+            ? (step.actionParams as Record<string, unknown>)
+            : undefined;
         const durationRaw =
           (step.arguments && step.arguments[0]) ||
-          (step.actionParams as any)?.duration;
+          actionParams?.duration;
         const durationMs =
           typeof durationRaw === "number"
             ? durationRaw
@@ -721,12 +740,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               fallbackElementId: null,
             },
           };
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const errorMessage =
+            err instanceof Error ? err.message : String(err);
           result = {
             taskId: cache.taskId,
             status: TaskStatus.FAILED,
             steps: [],
-            output: `Extract failed: ${err?.message || String(err)}`,
+            output: `Extract failed: ${errorMessage}`,
             replayStepMeta: {
               usedCachedAction: true,
               fallbackUsed: false,
@@ -1079,7 +1100,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   public async executeSingleAction(
     instruction: string,
     pageOrGetter: Page | (() => Page),
-    _params?: TaskParams
+    params?: TaskParams
   ): Promise<TaskOutput> {
     const taskId = uuidv4();
     const actionStart = performance.now();
@@ -1095,6 +1116,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     let domState: A11yDOMState | null = null;
     let elementMap: Map<string, AccessibilityNode> | null = null;
 
+    const maxRetries =
+      params?.maxSteps ?? HyperAgent.AIACTION_CONFIG.MAX_RETRIES;
+
     try {
       // Find element with retry logic
       const findStart = performance.now();
@@ -1106,7 +1130,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } = await this.findElementWithRetry(
         instruction,
         initialPage,
-        HyperAgent.AIACTION_CONFIG.MAX_RETRIES,
+        maxRetries,
         HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS,
         startTime
       );
@@ -1147,7 +1171,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           400
         );
       }
-      let actionXPath: string | null =
+      const actionXPath: string | null =
         domState?.xpathMap?.[element.elementId] ?? null;
 
       // Use shared runtime context
@@ -1293,7 +1317,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Register a new action with the agent
    * @param action The action to register
    */
-  private async registerAction(action: AgentActionDefinition) {
+  private registerAction(action: AgentActionDefinition): void {
     if (action.type === "complete") {
       throw new HyperagentError(
         "Could not add an action with the name 'complete'. Complete is a reserved action.",
@@ -1472,10 +1496,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   private setupHyperPage(page: Page): HyperPage {
     const hyperPage = page as HyperPage;
+    const scopedPage = hyperPage as HyperPage & {
+      _scopeListenerCleanup?: () => void;
+    };
 
     // Clean up existing listener if this page was already setup
-    if ((hyperPage as any)._scopeListenerCleanup) {
-      (hyperPage as any)._scopeListenerCleanup();
+    if (scopedPage._scopeListenerCleanup) {
+      scopedPage._scopeListenerCleanup();
     }
 
     // History Stack: [Root, Tab1, Tab2, ...]
@@ -1518,7 +1545,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     // Attach a persistent listener to track page flow for the lifetime of this wrapper
     page.context().on("page", onPage);
-    (hyperPage as any)._scopeListenerCleanup = () => {
+    scopedPage._scopeListenerCleanup = () => {
       page.context().off("page", onPage);
     };
 
@@ -1534,10 +1561,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             getActivePage,
             params
           );
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const isPageSwitchError =
+            err instanceof HyperagentError
+              ? err.statusCode === 409
+              : err instanceof Error
+                ? err.message.includes("Page context switched")
+                : false;
           if (
-            err.statusCode === 409 ||
-            (err.message && err.message.includes("Page context switched"))
+            isPageSwitchError
           ) {
             if (this.debug) {
               console.log(

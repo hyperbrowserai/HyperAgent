@@ -110,6 +110,22 @@ console.log(res);
 await agent.closeAgent();
 ```
 
+### Async Task Controls
+
+`executeTaskAsync()` returns a control handle you can pause/resume/cancel, plus a `result` promise you can await when you need the final output.
+
+```typescript
+const task = await agent.executeTaskAsync("Sign in and fetch account details");
+
+// Optional runtime control
+task.pause();
+task.resume();
+
+// Await final outcome at any time
+const final = await task.result;
+console.log(final.status, final.output);
+```
+
 ## Two Modes of Operation
 
 HyperAgent provides two complementary APIs optimized for different use cases:

@@ -3,8 +3,15 @@
  * Creates a debug folder structure similar to the agent task debugging
  */
 
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
+
+interface FoundElementDebugData {
+  elementId: string;
+  method: string;
+  arguments: unknown[];
+  xpath?: string;
+}
 
 export interface DebugData {
   instruction: string;
@@ -13,12 +20,7 @@ export interface DebugData {
   domElementCount: number;
   domTree: string;
   screenshot?: Buffer;
-  foundElement?: {
-    elementId: string;
-    method: string;
-    arguments: any[];
-    xpath?: string;
-  };
+  foundElement?: FoundElementDebugData;
   availableElements?: Array<{
     id: string;
     role: string;
@@ -56,7 +58,7 @@ let sessionId: string | null = null;
  * Initialize a new debug session
  */
 export function initDebugSession(): string {
-  sessionId = new Date().toISOString().replace(/[:.]/g, '-');
+  sessionId = new Date().toISOString().replace(/[:.]/g, "-");
   actionCounter = 0;
   return sessionId;
 }
@@ -76,7 +78,7 @@ function getSessionId(): string {
  */
 export async function writeAiActionDebug(
   debugData: DebugData,
-  baseDir: string = 'debug/aiAction'
+  baseDir: string = "debug/aiAction"
 ): Promise<string> {
   const session = getSessionId();
   const actionNum = actionCounter++;
@@ -95,22 +97,22 @@ export async function writeAiActionDebug(
     success: debugData.success,
   };
   fs.writeFileSync(
-    path.join(debugDir, 'metadata.json'),
+    path.join(debugDir, "metadata.json"),
     JSON.stringify(metadata, null, 2)
   );
 
   // Write DOM tree
-  fs.writeFileSync(path.join(debugDir, 'dom-tree.txt'), debugData.domTree);
+  fs.writeFileSync(path.join(debugDir, "dom-tree.txt"), debugData.domTree);
 
   // Write screenshot if available
   if (debugData.screenshot) {
-    fs.writeFileSync(path.join(debugDir, 'screenshot.png'), debugData.screenshot);
+    fs.writeFileSync(path.join(debugDir, "screenshot.png"), debugData.screenshot);
   }
 
   // Write found element info
   if (debugData.foundElement) {
     fs.writeFileSync(
-      path.join(debugDir, 'found-element.json'),
+      path.join(debugDir, "found-element.json"),
       JSON.stringify(debugData.foundElement, null, 2)
     );
   }
@@ -118,12 +120,12 @@ export async function writeAiActionDebug(
   // Write LLM response if available
   if (debugData.llmResponse) {
     fs.writeFileSync(
-      path.join(debugDir, 'llm-response.json'),
+      path.join(debugDir, "llm-response.json"),
       JSON.stringify(debugData.llmResponse, null, 2)
     );
     // Also write just the raw text for easy viewing
     fs.writeFileSync(
-      path.join(debugDir, 'llm-response.txt'),
+      path.join(debugDir, "llm-response.txt"),
       debugData.llmResponse.rawText
     );
   }
@@ -132,10 +134,10 @@ export async function writeAiActionDebug(
   if (debugData.availableElements) {
     const elementsText = debugData.availableElements
       .map((e) => `[${e.id}] ${e.role}: "${e.label}"`)
-      .join('\n');
-    fs.writeFileSync(path.join(debugDir, 'available-elements.txt'), elementsText);
+      .join("\n");
+    fs.writeFileSync(path.join(debugDir, "available-elements.txt"), elementsText);
     fs.writeFileSync(
-      path.join(debugDir, 'available-elements.json'),
+      path.join(debugDir, "available-elements.json"),
       JSON.stringify(debugData.availableElements, null, 2)
     );
   }
@@ -143,7 +145,7 @@ export async function writeAiActionDebug(
   // Write error if present
   if (debugData.error) {
     fs.writeFileSync(
-      path.join(debugDir, 'error.json'),
+      path.join(debugDir, "error.json"),
       JSON.stringify(debugData.error, null, 2)
     );
   }
@@ -151,7 +153,7 @@ export async function writeAiActionDebug(
   // Write frame debug info if available
   if (debugData.frameDebugInfo && debugData.frameDebugInfo.length > 0) {
     fs.writeFileSync(
-      path.join(debugDir, 'frame-debug-info.json'),
+      path.join(debugDir, "frame-debug-info.json"),
       JSON.stringify(debugData.frameDebugInfo, null, 2)
     );
 
@@ -168,19 +170,21 @@ export async function writeAiActionDebug(
         if (frame.sampleNodes && frame.sampleNodes.length > 0) {
           lines.push(`  Sample Nodes (${frame.sampleNodes.length}):`);
           frame.sampleNodes.forEach((node, idx) => {
-            const ignored = node.ignored ? ' [IGNORED]' : '';
-            const role = node.role || 'unknown';
-            const name = node.name ? ` "${node.name}"` : '';
-            const childCount = node.childIds ? ` (${node.childIds} children)` : '';
+            const ignored = node.ignored ? " [IGNORED]" : "";
+            const role = node.role || "unknown";
+            const name = node.name ? ` "${node.name}"` : "";
+            const childCount = node.childIds
+              ? ` (${node.childIds} children)`
+              : "";
             lines.push(`    ${idx + 1}. ${role}${name}${childCount}${ignored}`);
           });
         }
 
-        return lines.join('\n');
+        return lines.join("\n");
       })
-      .join('\n\n');
+      .join("\n\n");
 
-    fs.writeFileSync(path.join(debugDir, 'frame-debug-summary.txt'), frameSummary);
+    fs.writeFileSync(path.join(debugDir, "frame-debug-summary.txt"), frameSummary);
   }
 
   return debugDir;

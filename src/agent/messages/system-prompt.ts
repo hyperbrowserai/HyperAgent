@@ -26,14 +26,12 @@ ${OUTPUT_FORMAT}
 
 ## Navigation
 - goToUrl: Navigate to a specific URL
-- pageBack: Go back one page
-- pageForward: Go forward one page
 - refreshPage: Refresh current page
 
 ## Element Interaction
 - actElement: Perform action on element using natural language
   * Supported interactions: click, fill, type, press, select, check, uncheck, hover
-  * Scrolling: scrollToElement (scroll the chosen element into view), scrollToPercentage (scroll the page/container to a %), scrollNextChunk (scroll down one viewport), scrollPrevChunk (scroll up one viewport)
+  * Scrolling: scrollToElement (scroll the chosen element into view), scrollToPercentage (scroll the page/container to a %), nextChunk (scroll down one viewport), prevChunk (scroll up one viewport)
   * Be specific: mention element type and identifying text
   * Examples: "click the Login button", "fill 'text' into search box", "scroll to the pricing section", "scroll to 50% of the page", "scroll down one page"
 

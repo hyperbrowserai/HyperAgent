@@ -43,6 +43,7 @@ import { buildActionCacheEntry } from "../shared/action-cache";
 // DomChunkAggregator logic moved to shared/dom-capture.ts
 
 const READ_ONLY_ACTIONS = new Set(["wait", "extract", "complete"]);
+const MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS = 4;
 
 const writeFrameGraphSnapshot = async (
   page: Page,
@@ -265,6 +266,8 @@ export const runAgentTask = async (
   let currStep = 0;
   let consecutiveFailuresOrWaits = 0;
   const MAX_CONSECUTIVE_FAILURES_OR_WAITS = 5;
+  let lastSuccessfulActionFingerprint: string | null = null;
+  let consecutiveRepeatedSuccessfulActions = 0;
   let lastOverlayKey: string | null = null;
   let lastScreenshotBase64: string | undefined;
   const actionCacheSteps: ActionCacheOutput["steps"] = [];
@@ -315,7 +318,6 @@ export const runAgentTask = async (
 
       // Get A11y DOM State (visual mode optional, default false for performance)
       let domState: A11yDOMState | null = null;
-      const domChunks: string | null = null;
       try {
         const domFetchStart = performance.now();
 
@@ -379,10 +381,6 @@ export const runAgentTask = async (
             Buffer.from(trimmedScreenshot, "base64")
           );
         }
-      }
-
-      if (domChunks) {
-        domState.domState = domChunks;
       }
 
       // Build Agent Step Messages
@@ -523,21 +521,6 @@ export const runAgentTask = async (
       // Run single action
       const action = agentOutput.action;
 
-      // Handle complete action specially
-      if (action.type === "complete") {
-        taskState.status = TaskStatus.COMPLETED;
-        const actionDefinition = ctx.actions.find(
-          (actionDefinition) => actionDefinition.type === "complete"
-        );
-        if (actionDefinition) {
-          output =
-            (await actionDefinition.completeAction?.(action.params)) ??
-            "No complete action found";
-        } else {
-          output = "No complete action found";
-        }
-      }
-
       // Execute the action
       const actionExecStart = performance.now();
       const actionOutput = await runAction(action, domState, page, ctx);
@@ -570,6 +553,66 @@ export const runAgentTask = async (
         domState,
       });
       actionCacheSteps.push(actionCacheEntry);
+
+      if (action.type === "complete") {
+        if (actionOutput.success) {
+          const actionDefinition = ctx.actions.find(
+            (actionDefinition) => actionDefinition.type === "complete"
+          );
+          output =
+            (await actionDefinition?.completeAction?.(action.params)) ??
+            "Task Complete";
+          taskState.status = TaskStatus.COMPLETED;
+        } else {
+          taskState.status = TaskStatus.FAILED;
+          taskState.error = actionOutput.message;
+          output = actionOutput.message;
+        }
+
+        const step: AgentStep = {
+          idx: currStep,
+          agentOutput,
+          actionOutput,
+        };
+        taskState.steps.push(step);
+        await params?.onStep?.(step);
+        currStep = currStep + 1;
+        break;
+      }
+
+      if (actionOutput.success && action.type !== "wait") {
+        const actionFingerprint = JSON.stringify({
+          actionType: action.type,
+          params: action.params,
+          url: page.url(),
+        });
+        if (actionFingerprint === lastSuccessfulActionFingerprint) {
+          consecutiveRepeatedSuccessfulActions++;
+        } else {
+          consecutiveRepeatedSuccessfulActions = 1;
+          lastSuccessfulActionFingerprint = actionFingerprint;
+        }
+
+        if (
+          consecutiveRepeatedSuccessfulActions >=
+          MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS
+        ) {
+          taskState.status = TaskStatus.FAILED;
+          taskState.error = `Agent appears stuck: repeated the same successful action ${MAX_REPEATED_ACTIONS_WITHOUT_PROGRESS} times without visible progress.`;
+
+          const step: AgentStep = {
+            idx: currStep,
+            agentOutput,
+            actionOutput,
+          };
+          taskState.steps.push(step);
+          await params?.onStep?.(step);
+          break;
+        }
+      } else {
+        consecutiveRepeatedSuccessfulActions = 0;
+        lastSuccessfulActionFingerprint = null;
+      }
 
       // Check action result and handle retry logic
       if (action.type === "wait") {

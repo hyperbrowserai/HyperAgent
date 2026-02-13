@@ -6,6 +6,8 @@ import { retry } from "@/utils/retry";
 import { A11yDOMState } from "@/context-providers/a11y-dom/types";
 import { HyperVariable } from "@/types/agent/types";
 
+const MAX_HISTORY_STEPS = 10;
+
 export const buildAgentStepMessages = async (
   baseMessages: HyperAgentMessage[],
   steps: AgentStep[],
@@ -29,19 +31,50 @@ export const buildAgentStepMessages = async (
     content: `=== Current URL ===\n${page.url()}\n`,
   });
 
-  // Add variables section
+  const openTabs = page
+    .context()
+    .pages()
+    .map((openPage, index) => {
+      const currentMarker = openPage === page ? " (current)" : "";
+      return `[${index}] ${openPage.url() || "about:blank"}${currentMarker}`;
+    })
+    .join("\n");
   messages.push({
     role: "user",
-    content: `=== Variables ===\n${variables.map((v) => `<<${v.key}>> - ${v.description}`).join("\n")}\n`,
+    content: `=== Open Tabs ===\n${openTabs || "No open tabs"}\n`,
+  });
+
+  // Add variables section
+  const variablesContent =
+    variables.length > 0
+      ? variables
+          .map(
+            (v) =>
+              `<<${v.key}>> - ${v.description} | current value: ${JSON.stringify(v.value)}`
+          )
+          .join("\n")
+      : "No variables set";
+  messages.push({
+    role: "user",
+    content: `=== Variables ===\n${variablesContent}\n`,
   });
 
   // Add previous actions section if there are steps
   if (steps.length > 0) {
+    const relevantSteps =
+      steps.length > MAX_HISTORY_STEPS
+        ? steps.slice(-MAX_HISTORY_STEPS)
+        : steps;
+    const hiddenStepCount = steps.length - relevantSteps.length;
+
     messages.push({
       role: "user",
-      content: "=== Previous Actions ===\n",
+      content:
+        hiddenStepCount > 0
+          ? `=== Previous Actions ===\n(Showing latest ${relevantSteps.length} of ${steps.length} steps; ${hiddenStepCount} older steps omitted for context budget.)\n`
+          : "=== Previous Actions ===\n",
     });
-    for (const step of steps) {
+    for (const step of relevantSteps) {
       const { thoughts, memory, action } = step.agentOutput;
       messages.push({
         role: "assistant",
