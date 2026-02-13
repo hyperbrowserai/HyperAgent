@@ -51,6 +51,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "MIN",
   "MAX",
   "COUNT",
+  "COUNTA",
+  "COUNTBLANK",
   "COUNTIF",
   "COUNTIFS",
   "SUMIF",

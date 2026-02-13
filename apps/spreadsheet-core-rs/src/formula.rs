@@ -855,6 +855,24 @@ pub fn parse_countif_formula(formula: &str) -> Option<((u32, u32), (u32, u32), S
   Some((start, end, args[1].clone()))
 }
 
+pub fn parse_counta_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "COUNTA" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_countblank_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "COUNTBLANK" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
 pub fn parse_sumif_formula(formula: &str) -> Option<ConditionalAggregateFormula> {
   parse_conditional_aggregate_formula(formula, "SUMIF")
 }
@@ -1094,6 +1112,7 @@ mod tests {
     parse_trunc_formula,
     parse_sqrt_formula,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
+    parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_true_formula,
     parse_false_formula, parse_pi_formula, parse_vlookup_formula,
@@ -1411,6 +1430,16 @@ mod tests {
     assert_eq!(countif.0, (1, 1));
     assert_eq!(countif.1, (5, 1));
     assert_eq!(countif.2, r#"">=10""#);
+
+    let counta =
+      parse_counta_formula("=COUNTA(A1:A5)").expect("counta should parse");
+    assert_eq!(counta.0, (1, 1));
+    assert_eq!(counta.1, (5, 1));
+
+    let countblank = parse_countblank_formula("=COUNTBLANK(A1:A5)")
+      .expect("countblank should parse");
+    assert_eq!(countblank.0, (1, 1));
+    assert_eq!(countblank.1, (5, 1));
 
     let sumif = parse_sumif_formula(r#"=SUMIF(A1:A5,">=10",B1:B5)"#)
       .expect("sumif should parse");

@@ -4,6 +4,7 @@ use crate::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
+    parse_counta_formula, parse_countblank_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
@@ -297,6 +298,38 @@ fn evaluate_formula(
   if let Some((start, end, criteria_operand)) = parse_countif_formula(formula) {
     return evaluate_countif_formula(connection, sheet, start, end, &criteria_operand)
       .map(Some);
+  }
+
+  if let Some((start, end)) = parse_counta_formula(formula) {
+    let bounds = normalized_range_bounds(start, end);
+    let mut count = 0u64;
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        let row_index = bounds.start_row + row_offset;
+        let col_index = bounds.start_col + col_offset;
+        let value = load_cell_scalar(connection, sheet, row_index, col_index)?;
+        if !value.is_empty() {
+          count += 1;
+        }
+      }
+    }
+    return Ok(Some(count.to_string()));
+  }
+
+  if let Some((start, end)) = parse_countblank_formula(formula) {
+    let bounds = normalized_range_bounds(start, end);
+    let mut count = 0u64;
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        let row_index = bounds.start_row + row_offset;
+        let col_index = bounds.start_col + col_offset;
+        let value = load_cell_scalar(connection, sheet, row_index, col_index)?;
+        if value.is_empty() {
+          count += 1;
+        }
+      }
+    }
+    return Ok(Some(count.to_string()));
   }
 
   if let Some(sumif_formula) = parse_sumif_formula(formula) {
@@ -3048,12 +3081,24 @@ mod tests {
         value: None,
         formula: Some("=LCM(12,18)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 115,
+        value: None,
+        formula: Some("=COUNTA(A1:A3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 116,
+        value: None,
+        formula: Some("=COUNTBLANK(A1:A3)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 112);
+    assert_eq!(updated_cells, 114);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3067,7 +3112,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 114,
+        end_col: 116,
       },
     )
     .expect("cells should be fetched");
@@ -3238,6 +3283,8 @@ mod tests {
     assert_eq!(by_position(1, 112).evaluated_value.as_deref(), Some("10"));
     assert_eq!(by_position(1, 113).evaluated_value.as_deref(), Some("12"));
     assert_eq!(by_position(1, 114).evaluated_value.as_deref(), Some("36"));
+    assert_eq!(by_position(1, 115).evaluated_value.as_deref(), Some("2"));
+    assert_eq!(by_position(1, 116).evaluated_value.as_deref(), Some("1"));
   }
 
   #[test]
