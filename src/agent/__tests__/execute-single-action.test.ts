@@ -163,6 +163,24 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     );
   });
 
+  it("truncates oversized execution failures with bounded diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+    performAction.mockRejectedValue(new Error("x".repeat(2_000)));
+
+    await expect(
+      agent.executeSingleAction("click login", page, {
+        maxElementRetries: 1,
+      })
+    ).rejects.toThrow(/\[truncated/);
+  });
+
   it("formats non-Error failure payloads written to aiAction debug artifacts", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

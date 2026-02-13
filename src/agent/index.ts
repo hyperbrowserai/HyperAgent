@@ -2714,7 +2714,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         throw error;
       }
       // Wrap other errors
-      const errorMsg = formatUnknownError(error);
+      const errorMsg = this.formatHelperDiagnostic(error);
       throw new HyperagentError(`Failed to execute action: ${errorMsg}`, 500);
     }
   }
