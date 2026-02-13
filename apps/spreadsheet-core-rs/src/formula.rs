@@ -189,6 +189,14 @@ pub fn parse_false_formula(formula: &str) -> Option<()> {
   None
 }
 
+pub fn parse_pi_formula(formula: &str) -> Option<()> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "PI" && args.is_empty() {
+    return Some(());
+  }
+  None
+}
+
 pub fn parse_vlookup_formula(formula: &str) -> Option<VLookupFormula> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "VLOOKUP" || !(args.len() == 3 || args.len() == 4) {
@@ -343,6 +351,22 @@ pub fn parse_trim_formula(formula: &str) -> Option<String> {
 pub fn parse_abs_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ABS" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_ln_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "LN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_log10_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "LOG10" && args.len() == 1 {
     return Some(args[0].clone());
   }
   None
@@ -904,7 +928,8 @@ mod tests {
     parse_index_formula, parse_int_formula, parse_isblank_formula,
     parse_iseven_formula, parse_isodd_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
-    parse_len_formula, parse_lower_formula, parse_match_formula, parse_maxifs_formula,
+    parse_len_formula, parse_ln_formula, parse_log10_formula, parse_lower_formula,
+    parse_match_formula, parse_maxifs_formula,
     parse_minifs_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
@@ -921,7 +946,7 @@ mod tests {
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_true_formula,
-    parse_false_formula, parse_vlookup_formula,
+    parse_false_formula, parse_pi_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
     parse_year_formula, parse_upper_formula, parse_trim_formula,
   };
@@ -977,6 +1002,8 @@ mod tests {
     assert!(parse_true_formula("=TRUE(1)").is_none());
     assert!(parse_false_formula("=FALSE()").is_some());
     assert!(parse_false_formula("=FALSE(1)").is_none());
+    assert!(parse_pi_formula("=PI()").is_some());
+    assert!(parse_pi_formula("=PI(1)").is_none());
 
     let parsed = parse_vlookup_formula("=VLOOKUP(A2, D2:E6, 2, FALSE)")
       .expect("vlookup formula should parse");
@@ -1051,6 +1078,8 @@ mod tests {
       parse_abs_formula("=ABS(-12.5)").as_deref(),
       Some("-12.5"),
     );
+    assert_eq!(parse_ln_formula("=LN(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_log10_formula("=LOG10(A1)").as_deref(), Some("A1"));
     let round = parse_round_formula("=ROUND(12.345, 2)").expect("round should parse");
     assert_eq!(round.0, "12.345");
     assert_eq!(round.1, "2");

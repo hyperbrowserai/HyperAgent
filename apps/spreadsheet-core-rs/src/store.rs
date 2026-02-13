@@ -5,7 +5,8 @@ use crate::{
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
-    parse_abs_formula, parse_choose_formula, parse_left_formula,
+    parse_abs_formula, parse_ln_formula, parse_log10_formula, parse_pi_formula,
+    parse_choose_formula, parse_left_formula,
     parse_ceiling_formula, parse_exact_formula, parse_floor_formula,
     parse_index_formula,
     parse_int_formula, parse_isblank_formula, parse_iseven_formula,
@@ -557,6 +558,26 @@ fn evaluate_formula(
       return Ok(None);
     };
     return Ok(Some((first_char as u32).to_string()));
+  }
+
+  if parse_pi_formula(formula).is_some() {
+    return Ok(Some(std::f64::consts::PI.to_string()));
+  }
+
+  if let Some(ln_arg) = parse_ln_formula(formula) {
+    let value = parse_required_float(connection, sheet, &ln_arg)?;
+    if value <= 0.0 {
+      return Ok(None);
+    }
+    return Ok(Some(value.ln().to_string()));
+  }
+
+  if let Some(log10_arg) = parse_log10_formula(formula) {
+    let value = parse_required_float(connection, sheet, &log10_arg)?;
+    if value <= 0.0 {
+      return Ok(None);
+    }
+    return Ok(Some(value.log10().to_string()));
   }
 
   if let Some(abs_arg) = parse_abs_formula(formula) {
@@ -2727,12 +2748,30 @@ mod tests {
         value: None,
         formula: Some(r#"=UNICODE("⚡")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 94,
+        value: None,
+        formula: Some("=PI()".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 95,
+        value: None,
+        formula: Some("=LN(1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 96,
+        value: None,
+        formula: Some("=LOG10(1000)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 91);
+    assert_eq!(updated_cells, 94);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2746,7 +2785,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 93,
+        end_col: 96,
       },
     )
     .expect("cells should be fetched");
@@ -2881,6 +2920,12 @@ mod tests {
     assert_eq!(by_position(1, 91).evaluated_value.as_deref(), Some(""));
     assert_eq!(by_position(1, 92).evaluated_value.as_deref(), Some("☃"));
     assert_eq!(by_position(1, 93).evaluated_value.as_deref(), Some("9889"));
+    assert_eq!(
+      by_position(1, 94).evaluated_value.as_deref(),
+      Some("3.141592653589793"),
+    );
+    assert_eq!(by_position(1, 95).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 96).evaluated_value.as_deref(), Some("3"));
   }
 
   #[test]
@@ -2991,6 +3036,33 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=MOD(10,0)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_non_positive_logarithms_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=LN(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=LOG10(-1)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=LN(0)".to_string(), "=LOG10(-1)".to_string()],
+    );
   }
 
   #[test]
