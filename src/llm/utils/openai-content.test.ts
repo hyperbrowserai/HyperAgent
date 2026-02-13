@@ -19,6 +19,23 @@ describe("normalizeOpenAICompatibleContent", () => {
     ]);
   });
 
+  it("formats non-string image URLs safely for diagnostics", () => {
+    expect(
+      normalizeOpenAICompatibleContent([
+        {
+          type: "image_url",
+          image_url: { url: { href: "bad-shape" } },
+        },
+      ])
+    ).toEqual([
+      {
+        type: "image",
+        url: '{"href":"bad-shape"}',
+        mimeType: "image/png",
+      },
+    ]);
+  });
+
   it("sanitizes unsafe keys in tool-call content arguments", () => {
     expect(
       normalizeOpenAICompatibleContent([

@@ -41,9 +41,15 @@ function normalizeOpenAICompatibleContentPart(
 
   if (part.type === "image_url") {
     const imageUrl = isRecord(part.image_url) ? part.image_url : {};
+    const normalizedUrl =
+      typeof imageUrl.url === "string"
+        ? imageUrl.url
+        : typeof imageUrl.url === "undefined"
+          ? ""
+          : formatUnknownError(imageUrl.url);
     return {
       type: "image",
-      url: typeof imageUrl.url === "string" ? imageUrl.url : "",
+      url: normalizedUrl,
       mimeType: "image/png",
     };
   }
