@@ -344,6 +344,26 @@ describe("ExtractActionDefinition.run", () => {
     }
   });
 
+  it("falls back to plain text extraction when markdown output is empty", async () => {
+    parseMarkdown.mockResolvedValue("");
+    const invoke = jest.fn().mockResolvedValue({
+      role: "assistant",
+      content: "empty-markdown fallback extraction",
+    });
+    const ctx = createContext(createMockLLM(invoke));
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "Extract content",
+    });
+
+    expect(result.success).toBe(true);
+    const messages = invoke.mock.calls[0]?.[0] as Array<{
+      content: Array<{ type: string; text?: string }>;
+    }>;
+    const promptText = messages[0]?.content?.[0]?.text ?? "";
+    expect(promptText).toContain("demo");
+  });
+
   it("skips screenshot content when model is not multimodal", async () => {
     const invoke = jest.fn().mockResolvedValue({
       role: "assistant",

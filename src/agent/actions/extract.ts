@@ -160,6 +160,9 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         }
         markdown = fallbackMarkdownFromHtml(content);
       }
+      if (markdown.trim().length === 0) {
+        markdown = fallbackMarkdownFromHtml(content);
+      }
 
       const supportsMultimodal = ctx.llm.getCapabilities().multimodal;
       if (!supportsMultimodal && ctx.debug) {
