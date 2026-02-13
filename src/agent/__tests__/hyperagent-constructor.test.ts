@@ -1888,6 +1888,82 @@ describe("HyperAgent constructor and task controls", () => {
     });
   });
 
+  it("uses default cancelled output for async tasks closed before completion", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync(
+      "async no output",
+      undefined,
+      fakePage
+    );
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+
+    resolveTask({
+      taskId: task.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: undefined,
+      actionCache: {
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.CANCELLED,
+      output: "Task cancelled because agent was closed",
+    });
+  });
+
+  it("uses default cancelled output for sync tasks closed before completion", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const execution = agent.executeTask("sync no output", undefined, fakePage);
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+
+    resolveTask({
+      taskId: "sync-no-output",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: undefined,
+      actionCache: {
+        taskId: "sync-no-output",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    await expect(execution).resolves.toMatchObject({
+      status: TaskStatus.CANCELLED,
+      output: "Task cancelled because agent was closed",
+    });
+  });
+
   it("closeAgent avoids noisy missing-task logs for late async failures", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     let rejectTask!: (error: unknown) => void;

@@ -516,6 +516,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return generation === this.lifecycleGeneration;
   }
 
+  private normalizeLifecycleCancelledResult(
+    result: AgentTaskOutput
+  ): AgentTaskOutput {
+    const output = result.output;
+    const normalizedOutput =
+      typeof output === "string" && output.trim().length > 0
+        ? output
+        : "Task cancelled because agent was closed";
+    return {
+      ...result,
+      status: TaskStatus.CANCELLED,
+      output: normalizedOutput,
+    };
+  }
+
   private attachBrowserPageListener(context: BrowserContext): void {
     const contextOn = this.safeReadField(context, "on");
     if (typeof contextOn !== "function") {
@@ -1181,10 +1196,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             return result;
           }
           this.writeTaskStatus(taskState, TaskStatus.CANCELLED, TaskStatus.CANCELLED);
-          return {
-            ...result,
-            status: TaskStatus.CANCELLED,
-          };
+          return this.normalizeLifecycleCancelledResult(result);
         })
         .catch((error: unknown) => {
           cleanup();
@@ -1306,10 +1318,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         this.storeTaskActionCache(taskId, result.actionCache);
       } else {
         this.writeTaskStatus(taskState, TaskStatus.CANCELLED, TaskStatus.CANCELLED);
-        result = {
-          ...result,
-          status: TaskStatus.CANCELLED,
-        };
+        result = this.normalizeLifecycleCancelledResult(result);
       }
       this.cleanupTaskLifecycle(taskId);
       return result;
