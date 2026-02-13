@@ -15,13 +15,27 @@ function truncateStructuredRawText(value: string): string {
   )}... [truncated ${value.length - MAX_STRUCTURED_RAW_TEXT_CHARS} chars]`;
 }
 
+function sanitizeStructuredRawText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  return Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32 && code !== 9 && code !== 10) || code === 127
+      ? " "
+      : char;
+  }).join("");
+}
+
 export function parseStructuredResponse<TSchema extends z.ZodTypeAny>(
   rawText: unknown,
   schema: TSchema
 ): HyperAgentStructuredResult<TSchema> {
   if (typeof rawText !== "string") {
     return {
-      rawText: truncateStructuredRawText(formatUnknownError(rawText)),
+      rawText: truncateStructuredRawText(
+        sanitizeStructuredRawText(formatUnknownError(rawText))
+      ),
       parsed: null,
     };
   }

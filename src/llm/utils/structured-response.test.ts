@@ -39,6 +39,16 @@ describe("parseStructuredResponse", () => {
     expect(result.parsed).toBeNull();
   });
 
+  it("sanitizes control characters in non-string diagnostics", () => {
+    const result = parseStructuredResponse(
+      new Error("bad\u0000\npayload"),
+      schema
+    );
+    expect(result.rawText).toBe("bad \npayload");
+    expect(result.rawText).not.toContain("\u0000");
+    expect(result.parsed).toBeNull();
+  });
+
   it("returns null parsed output when schema validation fails", () => {
     const result = parseStructuredResponse('{"action":1}', schema);
     expect(result.parsed).toBeNull();
