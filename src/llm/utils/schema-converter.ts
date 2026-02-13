@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AgentActionDefinition } from "@/types/agent/actions/types";
+import { formatUnknownError } from "@/utils";
 
 /**
  * Utility functions for converting Zod schemas to provider-specific formats
@@ -26,6 +27,91 @@ const THOUGHTS_DESCRIPTION =
   "Your reasoning about the current state and what needs to be done next based on the task goal and previous actions.";
 const MEMORY_DESCRIPTION =
   "A summary of successful actions completed so far and key state changes (e.g., 'Clicked login button -> login form appeared').";
+const MAX_ACTION_DIAGNOSTIC_CHARS = 400;
+const MAX_ACTION_DESCRIPTION_CHARS = 4_000;
+
+const FALLBACK_ACTION_PARAMS_SCHEMA = {
+  type: "object",
+  additionalProperties: true,
+  properties: {},
+};
+
+function truncateActionDiagnostic(value: string): string {
+  if (value.length <= MAX_ACTION_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  return `${value.slice(
+    0,
+    MAX_ACTION_DIAGNOSTIC_CHARS
+  )}... [truncated ${value.length - MAX_ACTION_DIAGNOSTIC_CHARS} chars]`;
+}
+
+function safeReadActionField(
+  action: AgentActionDefinition,
+  field: keyof AgentActionDefinition
+): unknown {
+  try {
+    return (action as unknown as Record<string, unknown>)[field];
+  } catch (error) {
+    return `[Unreadable ${String(field)}: ${truncateActionDiagnostic(
+      formatUnknownError(error)
+    )}]`;
+  }
+}
+
+function isUnreadableFieldMarker(value: unknown): boolean {
+  return typeof value === "string" && value.startsWith("[Unreadable ");
+}
+
+function normalizeActionDescription(value: unknown): string {
+  const raw =
+    typeof value === "string" ? value : truncateActionDiagnostic(formatUnknownError(value));
+  const normalized = Array.from(raw)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback =
+    normalized.length > 0
+      ? normalized
+      : "Generate structured output according to the provided schema";
+  if (fallback.length <= MAX_ACTION_DESCRIPTION_CHARS) {
+    return fallback;
+  }
+  return `${fallback.slice(
+    0,
+    MAX_ACTION_DESCRIPTION_CHARS
+  )}... [truncated ${fallback.length - MAX_ACTION_DESCRIPTION_CHARS} chars]`;
+}
+
+function convertActionParamsToSchema(
+  actionParams: unknown
+): Record<string, unknown> {
+  try {
+    return z.toJSONSchema(actionParams as z.ZodTypeAny, {
+      target: "draft-4",
+      io: "output",
+    });
+  } catch {
+    return { ...FALLBACK_ACTION_PARAMS_SCHEMA };
+  }
+}
+
+function safeReadActionParamsDescription(actionParams: unknown): unknown {
+  if (!actionParams || typeof actionParams !== "object") {
+    return undefined;
+  }
+  try {
+    return (actionParams as Record<string, unknown>).description;
+  } catch (error) {
+    return `[Unreadable actionParams.description: ${truncateActionDiagnostic(
+      formatUnknownError(error)
+    )}]`;
+  }
+}
 
 /**
  * Convert a simple Zod schema to an Anthropic tool (for non-agent use cases)
@@ -67,15 +153,43 @@ export function createAnthropicToolChoice(
 export function convertActionsToAnthropicTools(
   actions: AgentActionDefinition[]
 ): Array<Record<string, unknown>> {
-  return actions.map((action) => {
-    const paramsSchema = z.toJSONSchema(action.actionParams, {
-      target: "draft-4",
-      io: "output",
-    });
+  let actionEntries: AgentActionDefinition[];
+  try {
+    actionEntries = Array.from(actions);
+  } catch (error) {
+    throw new Error(
+      `[LLM][SchemaConverter] Invalid action definitions payload: ${truncateActionDiagnostic(
+        formatUnknownError(error)
+      )}`
+    );
+  }
+
+  return actionEntries.map((action, index) => {
+    const actionTypeValue = safeReadActionField(action, "type");
+    const actionType =
+      typeof actionTypeValue === "string" &&
+      actionTypeValue.length > 0 &&
+      !isUnreadableFieldMarker(actionTypeValue)
+        ? actionTypeValue
+        : `unknown_action_${index + 1}`;
+    const actionParams = safeReadActionField(action, "actionParams");
+    const paramsSchema = convertActionParamsToSchema(actionParams);
+    const toolNameValue = safeReadActionField(action, "toolName");
+    const toolName =
+      typeof toolNameValue === "string" &&
+      toolNameValue.length > 0 &&
+      !isUnreadableFieldMarker(toolNameValue)
+        ? toolNameValue
+        : actionType;
 
     // Create enhanced description with structure example
-    const baseDescription =
-      action.toolDescription ?? action.actionParams.description;
+    const toolDescription = safeReadActionField(action, "toolDescription");
+    const actionParamsDescription = safeReadActionParamsDescription(actionParams);
+    const baseDescription = normalizeActionDescription(
+      typeof toolDescription === "undefined"
+        ? actionParamsDescription
+        : toolDescription
+    );
     const enhancedDescription = `${baseDescription}
 
 IMPORTANT: Response must have this exact structure:
@@ -83,7 +197,7 @@ IMPORTANT: Response must have this exact structure:
   "thoughts": "your reasoning",
   "memory": "summary of actions",
   "action": {
-    "type": "${action.type}",
+    "type": "${actionType}",
     "params": { ...action parameters here... }
   }
 }
@@ -91,7 +205,7 @@ IMPORTANT: Response must have this exact structure:
 Do NOT put params directly at root level. They MUST be nested inside action.params.`;
 
     return {
-      name: action.toolName ?? action.type,
+      name: toolName,
       description: enhancedDescription,
       input_schema: {
         type: "object",
@@ -107,17 +221,17 @@ Do NOT put params directly at root level. They MUST be nested inside action.para
           },
           action: {
             type: "object",
-            description: `The action object. MUST contain 'type' field set to "${action.type}" and 'params' field with the action parameters.`,
+            description: `The action object. MUST contain 'type' field set to "${actionType}" and 'params' field with the action parameters.`,
             additionalProperties: false,
             properties: {
               type: {
                 type: "string",
-                const: action.type,
-                description: `Must be exactly "${action.type}"`,
+                const: actionType,
+                description: `Must be exactly "${actionType}"`,
               },
               params: {
                 ...paramsSchema,
-                description: `Parameters for the ${action.type} action. These must be nested here, not at the root level.`,
+                description: `Parameters for the ${actionType} action. These must be nested here, not at the root level.`,
               },
             },
             required: ["type", "params"],
