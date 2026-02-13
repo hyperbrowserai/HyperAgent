@@ -49,6 +49,30 @@ describe("normalizeDiscoveredMCPTools", () => {
       normalizeDiscoveredMCPTools([createTool("sea\nrch")], {})
     ).toThrow("MCP tool name contains unsupported control characters");
   });
+
+  it("throws actionable error when includeTools filter matches nothing", () => {
+    expect(() =>
+      normalizeDiscoveredMCPTools([createTool("search"), createTool("notes")], {
+        includeTools: ["calendar"],
+      })
+    ).toThrow(
+      "No MCP tools matched includeTools filter (calendar). Available tools: search, notes."
+    );
+  });
+
+  it("truncates includeTools mismatch diagnostics for large tool sets", () => {
+    const tools = Array.from({ length: 14 }, (_, index) =>
+      createTool(`tool-${index}`)
+    );
+    const includeTools = Array.from({ length: 12 }, (_, index) => `missing-${index}`);
+    expect(() =>
+      normalizeDiscoveredMCPTools(tools, {
+        includeTools,
+      })
+    ).toThrow(
+      "No MCP tools matched includeTools filter (missing-0, missing-1, missing-2, missing-3, missing-4, missing-5, missing-6, missing-7, missing-8, missing-9, ... (+2 more)). Available tools: tool-0, tool-1, tool-2, tool-3, tool-4, tool-5, tool-6, tool-7, tool-8, tool-9, ... (+4 more)."
+    );
+  });
 });
 
 describe("normalizeMCPToolParams", () => {

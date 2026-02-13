@@ -36,6 +36,7 @@ const MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS = 128;
 const MAX_MCP_TOOL_NAME_CHARS = 256;
 const MAX_MCP_SERVER_ID_CHARS = 256;
 const MAX_MCP_AMBIGUOUS_SERVER_IDS = 5;
+const MAX_MCP_TOOL_DIAGNOSTIC_ITEMS = 10;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -135,6 +136,17 @@ function summarizeMCPServerIds(serverIds: string[]): string {
   return preview.join(", ");
 }
 
+function summarizeMCPToolNames(toolNames: string[]): string {
+  const preview = toolNames
+    .slice(0, MAX_MCP_TOOL_DIAGNOSTIC_ITEMS)
+    .map((name) => formatMCPIdentifier(name, "unknown-tool"));
+  const omitted = toolNames.length - preview.length;
+  if (omitted > 0) {
+    return `${preview.join(", ")}, ... (+${omitted} more)`;
+  }
+  return preview.join(", ");
+}
+
 export function normalizeDiscoveredMCPTools(
   tools: Tool[],
   options: MCPToolDiscoveryOptions
@@ -171,6 +183,17 @@ export function normalizeDiscoveredMCPTools(
       tool,
       normalizedName,
     });
+  }
+
+  if (includeSet && normalizedTools.length === 0) {
+    const includeNames = summarizeMCPToolNames(Array.from(includeSet));
+    const availableNames =
+      seenToolNames.size === 0
+        ? "none"
+        : summarizeMCPToolNames(Array.from(seenToolNames));
+    throw new Error(
+      `No MCP tools matched includeTools filter (${includeNames}). Available tools: ${availableNames}.`
+    );
   }
 
   return normalizedTools;
