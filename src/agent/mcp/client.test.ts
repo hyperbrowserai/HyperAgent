@@ -91,6 +91,14 @@ describe("normalizeMCPToolParams", () => {
     ).toThrow("MCP tool params cannot include keys with control characters");
   });
 
+  it("rejects keys that exceed maximum length", () => {
+    expect(() =>
+      normalizeMCPToolParams({
+        [String.raw`${"k".repeat(257)}`]: "value",
+      })
+    ).toThrow("MCP tool params cannot include keys longer than 256 characters");
+  });
+
   it("rejects string values with control characters", () => {
     expect(() =>
       normalizeMCPToolParams({
@@ -174,6 +182,15 @@ describe("normalizeMCPToolParams", () => {
         metadata: map as unknown as Record<string, unknown>,
       })
     ).toThrow('MCP tool params cannot include duplicate key after trimming: "key"');
+  });
+
+  it("rejects map keys that exceed maximum length", () => {
+    const map = new Map<unknown, unknown>([[`${"k".repeat(257)}`, "value"]]);
+    expect(() =>
+      normalizeMCPToolParams({
+        metadata: map as unknown as Record<string, unknown>,
+      })
+    ).toThrow("MCP tool params cannot include keys longer than 256 characters");
   });
 
   it("rejects circular references in direct object params", () => {

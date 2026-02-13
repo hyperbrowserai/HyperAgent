@@ -22,6 +22,7 @@ const MAX_MCP_PAYLOAD_CHARS = 4000;
 const MAX_MCP_TOOL_PARAMS_JSON_CHARS = 100_000;
 const MAX_MCP_PARAM_DEPTH = 25;
 const MAX_MCP_PARAM_STRING_CHARS = 20_000;
+const MAX_MCP_PARAM_KEY_CHARS = 256;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function hasUnsupportedControlChars(value: string): boolean {
@@ -150,6 +151,11 @@ export function normalizeMCPToolParams(
           if (trimmedKey.length === 0) {
             throw new Error("MCP tool params cannot include empty keys");
           }
+          if (trimmedKey.length > MAX_MCP_PARAM_KEY_CHARS) {
+            throw new Error(
+              `MCP tool params cannot include keys longer than ${MAX_MCP_PARAM_KEY_CHARS} characters`
+            );
+          }
           if (hasUnsupportedControlChars(trimmedKey)) {
             throw new Error(
               "MCP tool params cannot include keys with control characters"
@@ -187,6 +193,11 @@ export function normalizeMCPToolParams(
           const trimmedKey = key.trim();
           if (trimmedKey.length === 0) {
             throw new Error("MCP tool params cannot include empty keys");
+          }
+          if (trimmedKey.length > MAX_MCP_PARAM_KEY_CHARS) {
+            throw new Error(
+              `MCP tool params cannot include keys longer than ${MAX_MCP_PARAM_KEY_CHARS} characters`
+            );
           }
           if (hasUnsupportedControlChars(trimmedKey)) {
             throw new Error(
