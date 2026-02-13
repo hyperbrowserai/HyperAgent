@@ -1,15 +1,15 @@
 export const INPUT_FORMAT = `=== Final Goal ===
 [The final goal that needs to be accomplished]
-=== Open Tabs ===
-[The open tabs]
 === Current URL ===
 [The current URL]
+=== Open Tabs ===
+[The open tabs]
 === Variables ===
 [Variables that can be used in the task]
 - Variables are referenced using <<name>> syntax
 - Each variable has a name and description
 - Variables persist across actions and can be referenced in subsequent steps
-- Format: <<name>> - {description}
+- Format: <<name>> - {description} | current value: {json serialized value}
 === Elements ===
 [A list of the elements on the page in the following format]
 [encodedId] type: name attributes
@@ -29,5 +29,5 @@ export const INPUT_FORMAT = `=== Final Goal ===
 - A screenshot of the current page
 - In visual-debug mode, interactive elements are highlighted with their encodedId
 === Page State === (only in visual modes)
-- Pixels below: Number of pixels scrolled below current viewport
-- Pixels above: Number of pixels scrolled above current viewport`;
+- Pixels above: Number of pixels scrolled above current viewport
+- Pixels below: Number of pixels scrolled below current viewport`;
