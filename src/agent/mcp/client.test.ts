@@ -521,6 +521,52 @@ describe("MCPClient.executeTool server selection", () => {
     });
   });
 
+  it("normalizes JSON-string executeTool parameters before forwarding", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn().mockResolvedValue({ content: [] });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await mcpClient.executeTool("search", '{"query":"weather"}');
+
+    expect(callTool).toHaveBeenCalledWith({
+      name: "search",
+      arguments: { query: "weather" },
+    });
+  });
+
+  it("rejects invalid executeTool parameter payloads before dispatch", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn().mockResolvedValue({ content: [] });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-1",
+          {
+            tools: new Map([["search", {}]]),
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await expect(
+      mcpClient.executeTool("search", "[1,2,3]")
+    ).rejects.toThrow("must parse to a JSON object");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
   it("throws when only connected server lacks requested tool", async () => {
     const mcpClient = new MCPClient(false);
     const callTool = jest.fn();

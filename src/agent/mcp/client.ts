@@ -578,9 +578,10 @@ class MCPClient {
    */
   async executeTool(
     toolName: string,
-    parameters: Record<string, unknown>,
+    parameters: Record<string, unknown> | string,
     serverId?: string
   ): Promise<MCPToolResult> {
+    const normalizedParameters = normalizeMCPToolParams(parameters);
     const normalizedToolName = normalizeMCPExecutionToolName(toolName);
     const normalizedServerId = normalizeMCPExecutionServerId(serverId);
     const safeToolName = formatMCPIdentifier(normalizedToolName, "unknown-tool");
@@ -637,7 +638,7 @@ class MCPClient {
           : normalizedToolName;
       const result = await server.client.callTool({
         name: remoteToolName,
-        arguments: parameters,
+        arguments: normalizedParameters,
       });
 
       return result;
