@@ -62,6 +62,7 @@ export function SpreadsheetApp() {
   const [isRunningScenario, setIsRunningScenario] = useState(false);
   const [isRunningSelectedScenario, setIsRunningSelectedScenario] = useState(false);
   const [isRunningPreviewOps, setIsRunningPreviewOps] = useState(false);
+  const [isCopyingPreviewOps, setIsCopyingPreviewOps] = useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
@@ -541,6 +542,23 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyPreviewOperations() {
+    if (wizardScenarioOps.length === 0) {
+      return;
+    }
+    setIsCopyingPreviewOps(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(wizardScenarioOps, null, 2),
+      );
+      setUiError(null);
+    } catch {
+      setUiError("Failed to copy preview operations to clipboard.");
+    } finally {
+      setIsCopyingPreviewOps(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -881,9 +899,18 @@ export function SpreadsheetApp() {
             ) : null}
             {wizardScenarioOps.length > 0 ? (
               <div className="mt-2">
-                <p className="mb-1 text-[11px] text-slate-500">
-                  scenario operation preview
-                </p>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-slate-500">
+                    scenario operation preview
+                  </p>
+                  <button
+                    onClick={handleCopyPreviewOperations}
+                    disabled={isCopyingPreviewOps}
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingPreviewOps ? "Copying..." : "Copy JSON"}
+                  </button>
+                </div>
                 <div className="flex flex-wrap gap-1">
                   {wizardScenarioOps.map((operation, index) => (
                     <span
