@@ -2,9 +2,22 @@ import { buildAgentStepMessages } from "@/agent/messages/builder";
 import type { AgentStep } from "@/types/agent/types";
 import type { Page } from "playwright-core";
 
+jest.mock("@/utils/retry", () => ({
+  retry: jest.fn(),
+}));
+
+const { retry } = jest.requireMock("@/utils/retry") as {
+  retry: jest.Mock;
+};
+
 function createFakePage(url: string, urls: string[]): Page {
   return {
     url: () => url,
+    evaluate: jest.fn().mockResolvedValue({
+      scrollY: 10,
+      viewportHeight: 100,
+      totalHeight: 500,
+    }),
     context: () =>
       ({
         pages: () =>
@@ -36,6 +49,12 @@ function createStep(idx: number): AgentStep {
 }
 
 describe("buildAgentStepMessages", () => {
+  beforeEach(() => {
+    retry.mockImplementation(async ({ func }: { func: () => Promise<unknown> }) =>
+      func()
+    );
+  });
+
   it("includes open tabs and variable values while trimming old step history", async () => {
     const steps = Array.from({ length: 12 }, (_, idx) => createStep(idx));
     const page = createFakePage("https://example.com/current", [
@@ -109,5 +128,42 @@ describe("buildAgentStepMessages", () => {
       .join("\n");
 
     expect(joined).toContain('"self":"[Circular]"');
+  });
+
+  it("falls back to zeroed page state when scroll info lookup fails", async () => {
+    retry.mockRejectedValue({ reason: "scroll failed" });
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      "abc123",
+      []
+    );
+
+    const screenshotMessage = messages.find(
+      (message) => Array.isArray(message.content)
+    );
+    expect(screenshotMessage).toBeDefined();
+    if (!screenshotMessage || !Array.isArray(screenshotMessage.content)) {
+      return;
+    }
+
+    const textParts = screenshotMessage.content
+      .filter((part): part is { type: "text"; text: string } => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+    expect(textParts).toContain("Pixels above: 0");
+    expect(textParts).toContain("Pixels below: 0");
   });
 });

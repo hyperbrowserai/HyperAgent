@@ -20,6 +20,18 @@ function safeSerializeForPrompt(value: unknown): string {
   }
 }
 
+function normalizeScrollInfo(value: unknown): [number, number] {
+  if (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  ) {
+    return [value[0], value[1]];
+  }
+  return [0, 0];
+}
+
 export const buildAgentStepMessages = async (
   baseMessages: HyperAgentMessage[],
   steps: AgentStep[],
@@ -112,7 +124,9 @@ export const buildAgentStepMessages = async (
 
   // Add page screenshot section (only if screenshot is available)
   if (screenshot) {
-    const scrollInfo = await retry({ func: () => getScrollInfo(page) });
+    const scrollInfo = await retry({ func: () => getScrollInfo(page) })
+      .then((value) => normalizeScrollInfo(value))
+      .catch(() => [0, 0] as [number, number]);
     messages.push({
       role: "user",
       content: [
