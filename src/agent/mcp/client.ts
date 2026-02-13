@@ -717,13 +717,31 @@ class MCPClient {
    * @param toolName The name of the tool to check
    * @returns Boolean indicating if the tool exists and the server ID it exists on
    */
-  hasTool(toolName: string): { exists: boolean; serverId?: string } {
+  hasTool(toolName: string): {
+    exists: boolean;
+    serverId?: string;
+    serverIds?: string[];
+    isAmbiguous?: boolean;
+  } {
+    const normalizedToolName = normalizeMCPExecutionToolName(toolName);
+    const matchingServerIds: string[] = [];
     for (const [serverId, server] of this.servers.entries()) {
-      if (server.tools.has(toolName)) {
-        return { exists: true, serverId };
+      if (server.tools.has(normalizedToolName)) {
+        matchingServerIds.push(serverId);
       }
     }
-    return { exists: false };
+    if (matchingServerIds.length === 0) {
+      return { exists: false };
+    }
+    if (matchingServerIds.length === 1) {
+      return { exists: true, serverId: matchingServerIds[0] };
+    }
+    return {
+      exists: true,
+      serverId: matchingServerIds[0],
+      serverIds: matchingServerIds,
+      isAmbiguous: true,
+    };
   }
 
   /**

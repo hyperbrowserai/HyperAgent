@@ -1022,3 +1022,85 @@ describe("MCPClient disconnect lifecycle", () => {
     }
   });
 });
+
+describe("MCPClient.hasTool", () => {
+  function setServers(
+    client: MCPClient,
+    servers: Map<
+      string,
+      {
+        tools: Map<string, unknown>;
+      }
+    >
+  ): void {
+    setServersForClient(
+      client,
+      servers as unknown as Map<string, unknown>
+    );
+  }
+
+  it("returns normalized lookup result for matching tool names", () => {
+    const mcpClient = new MCPClient(false);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["search", {}]]),
+          },
+        ],
+      ])
+    );
+
+    expect(mcpClient.hasTool("  search  ")).toEqual({
+      exists: true,
+      serverId: "server-a",
+    });
+  });
+
+  it("returns ambiguity details when multiple servers expose same tool", () => {
+    const mcpClient = new MCPClient(false);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["search", {}]]),
+          },
+        ],
+        [
+          "server-b",
+          {
+            tools: new Map([["search", {}]]),
+          },
+        ],
+      ])
+    );
+
+    expect(mcpClient.hasTool("search")).toEqual({
+      exists: true,
+      serverId: "server-a",
+      serverIds: ["server-a", "server-b"],
+      isAmbiguous: true,
+    });
+  });
+
+  it("returns exists false when no matching tool exists", () => {
+    const mcpClient = new MCPClient(false);
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: new Map([["notes", {}]]),
+          },
+        ],
+      ])
+    );
+
+    expect(mcpClient.hasTool("search")).toEqual({ exists: false });
+  });
+});
