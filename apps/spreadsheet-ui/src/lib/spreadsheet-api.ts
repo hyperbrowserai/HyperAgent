@@ -401,6 +401,7 @@ export async function previewRemoveAgentOpsCacheEntriesByPrefix(
 }
 
 interface RemoveStaleAgentOpsCacheEntriesRequest {
+  request_id_prefix?: string;
   max_age_seconds: number;
   dry_run?: boolean;
   sample_limit?: number;
@@ -410,6 +411,7 @@ export async function removeStaleAgentOpsCacheEntries(
   workbookId: string,
   payload: RemoveStaleAgentOpsCacheEntriesRequest,
 ): Promise<RemoveStaleAgentOpsCacheEntriesResponse> {
+  const normalizedPrefix = payload.request_id_prefix?.trim();
   const safeSampleLimit = normalizeSampleLimit(payload.sample_limit);
   const safeMaxAgeSeconds =
     normalizePositiveInteger(payload.max_age_seconds) ?? 1;
@@ -420,6 +422,7 @@ export async function removeStaleAgentOpsCacheEntries(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...payload,
+        request_id_prefix: normalizedPrefix || undefined,
         max_age_seconds: safeMaxAgeSeconds,
         sample_limit: safeSampleLimit,
       }),

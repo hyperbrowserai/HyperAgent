@@ -1192,11 +1192,13 @@ async fn get_agent_schema(
       "sample_request_ids": "newest-first sample matching request ids"
     },
     "agent_ops_cache_remove_stale_request_shape": {
+      "request_id_prefix": "optional string filter (prefix match)",
       "max_age_seconds": "number > 0 (required)",
       "dry_run": "optional boolean (default false)",
       "sample_limit": "optional number (default 20, min 1, max 100)"
     },
     "agent_ops_cache_remove_stale_response_shape": {
+      "request_id_prefix": "echoed filter prefix when provided",
       "max_age_seconds": "requested max age threshold",
       "dry_run": "boolean",
       "cutoff_timestamp": "iso timestamp used for stale matching",
@@ -1940,6 +1942,17 @@ async fn remove_stale_agent_ops_cache_entries(
   Json(payload): Json<RemoveStaleAgentOpsCacheEntriesRequest>,
 ) -> Result<Json<RemoveStaleAgentOpsCacheEntriesResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
+  let normalized_prefix = payload
+    .request_id_prefix
+    .as_deref()
+    .map(str::trim)
+    .filter(|prefix| !prefix.is_empty());
+  if payload.request_id_prefix.is_some() && normalized_prefix.is_none() {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_REQUEST_ID_PREFIX",
+      "request_id_prefix must not be blank when provided.",
+    ));
+  }
   let dry_run = payload.dry_run.unwrap_or(false);
   let sample_limit = normalize_sample_limit(
     payload.sample_limit,
@@ -1956,6 +1969,7 @@ async fn remove_stale_agent_ops_cache_entries(
   ) = state
     .remove_stale_agent_ops_cache_entries(
       workbook_id,
+      normalized_prefix,
       cutoff_timestamp,
       dry_run,
       sample_limit,
@@ -1963,6 +1977,7 @@ async fn remove_stale_agent_ops_cache_entries(
     .await?;
 
   Ok(Json(RemoveStaleAgentOpsCacheEntriesResponse {
+    request_id_prefix: normalized_prefix.map(str::to_string),
     max_age_seconds: payload.max_age_seconds,
     dry_run,
     cutoff_timestamp,
@@ -2479,6 +2494,7 @@ mod tests {
     .expect("stats should load")
     .0;
     assert_eq!(stats.entries, 1);
+    assert_eq!(stats.request_id_prefix, None);
     assert_eq!(stats.max_age_seconds, None);
     assert!(stats.cutoff_timestamp.is_none());
     assert_eq!(stats.oldest_request_id.as_deref(), Some("handler-req-1"));
@@ -2514,6 +2530,7 @@ mod tests {
     .await
     .expect("age-scoped stats should load")
     .0;
+    assert_eq!(scoped_stats.request_id_prefix, None);
     assert_eq!(scoped_stats.max_age_seconds, Some(86_400));
     assert!(scoped_stats.cutoff_timestamp.is_some());
     assert_eq!(scoped_stats.entries, 0);
@@ -3204,6 +3221,7 @@ mod tests {
       State(state.clone()),
       Path(workbook.id),
       Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        request_id_prefix: None,
         max_age_seconds: 1,
         dry_run: Some(true),
         sample_limit: Some(1),
@@ -3213,6 +3231,7 @@ mod tests {
     .expect("stale preview should succeed")
     .0;
     assert!(preview.dry_run);
+    assert_eq!(preview.request_id_prefix, None);
     assert_eq!(preview.matched_entries, 2);
     assert_eq!(preview.sample_limit, 1);
     assert_eq!(preview.sample_request_ids.len(), 1);
@@ -3221,6 +3240,7 @@ mod tests {
       State(state.clone()),
       Path(workbook.id),
       Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        request_id_prefix: None,
         max_age_seconds: 1,
         dry_run: Some(true),
         sample_limit: Some(0),
@@ -3232,10 +3252,30 @@ mod tests {
     assert_eq!(clamped_preview.sample_limit, 1);
     assert_eq!(clamped_preview.sample_request_ids.len(), 1);
 
+    let prefix_scoped_preview = remove_stale_agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        request_id_prefix: Some("stale-a".to_string()),
+        max_age_seconds: 1,
+        dry_run: Some(true),
+        sample_limit: Some(10),
+      }),
+    )
+    .await
+    .expect("prefix-scoped stale preview should succeed")
+    .0;
+    assert_eq!(
+      prefix_scoped_preview.request_id_prefix.as_deref(),
+      Some("stale-a"),
+    );
+    assert_eq!(prefix_scoped_preview.matched_entries, 1);
+
     let remove = remove_stale_agent_ops_cache_entries(
       State(state.clone()),
       Path(workbook.id),
       Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        request_id_prefix: None,
         max_age_seconds: 0,
         dry_run: Some(false),
         sample_limit: None,
@@ -3250,10 +3290,30 @@ mod tests {
       _ => panic!("expected invalid max age to use custom error code"),
     }
 
+    let blank_prefix_error = remove_stale_agent_ops_cache_entries(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        request_id_prefix: Some("   ".to_string()),
+        max_age_seconds: 1,
+        dry_run: Some(true),
+        sample_limit: None,
+      }),
+    )
+    .await
+    .expect_err("blank stale prefix should fail");
+    match blank_prefix_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_REQUEST_ID_PREFIX");
+      }
+      _ => panic!("expected blank stale prefix to use custom error code"),
+    }
+
     let remove_all = remove_stale_agent_ops_cache_entries(
       State(state.clone()),
       Path(workbook.id),
       Json(RemoveStaleAgentOpsCacheEntriesRequest {
+        request_id_prefix: None,
         max_age_seconds: 1,
         dry_run: Some(false),
         sample_limit: Some(10),
@@ -3262,6 +3322,7 @@ mod tests {
     .await
     .expect("stale remove should succeed")
     .0;
+    assert_eq!(remove_all.request_id_prefix, None);
     assert_eq!(remove_all.matched_entries, 2);
     assert_eq!(remove_all.removed_entries, 2);
     assert_eq!(remove_all.remaining_entries, 0);

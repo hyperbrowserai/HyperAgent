@@ -207,6 +207,7 @@ pub struct PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoveStaleAgentOpsCacheEntriesRequest {
+  pub request_id_prefix: Option<String>,
   pub max_age_seconds: i64,
   pub dry_run: Option<bool>,
   pub sample_limit: Option<usize>,
@@ -214,6 +215,7 @@ pub struct RemoveStaleAgentOpsCacheEntriesRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoveStaleAgentOpsCacheEntriesResponse {
+  pub request_id_prefix: Option<String>,
   pub max_age_seconds: i64,
   pub dry_run: bool,
   pub cutoff_timestamp: DateTime<Utc>,

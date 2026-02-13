@@ -450,6 +450,7 @@ impl AppState {
   pub async fn remove_stale_agent_ops_cache_entries(
     &self,
     workbook_id: Uuid,
+    request_id_prefix: Option<&str>,
     cutoff_timestamp: DateTime<Utc>,
     dry_run: bool,
     sample_limit: usize,
@@ -459,15 +460,22 @@ impl AppState {
       .get_mut(&workbook_id)
       .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
 
+    let normalized_prefix = request_id_prefix
+      .map(str::trim)
+      .filter(|prefix| !prefix.is_empty());
     let matching_request_ids = record
       .agent_ops_cache_order
       .iter()
       .filter(|request_id| {
+        let prefix_matches = normalized_prefix
+          .map(|prefix| request_id.starts_with(prefix))
+          .unwrap_or(true);
         record
           .agent_ops_cache_timestamps
           .get(*request_id)
           .map(|cached_at| *cached_at <= cutoff_timestamp)
           .unwrap_or(false)
+          && prefix_matches
       })
       .cloned()
       .collect::<Vec<_>>();
@@ -478,11 +486,15 @@ impl AppState {
       .iter()
       .rev()
       .filter(|request_id| {
+        let prefix_matches = normalized_prefix
+          .map(|prefix| request_id.starts_with(prefix))
+          .unwrap_or(true);
         record
           .agent_ops_cache_timestamps
           .get(*request_id)
           .map(|cached_at| *cached_at <= cutoff_timestamp)
           .unwrap_or(false)
+          && prefix_matches
       })
       .take(sample_limit)
       .cloned()
@@ -1042,7 +1054,7 @@ mod tests {
 
     let cutoff_timestamp = Utc::now() + ChronoDuration::seconds(1);
     let preview = state
-      .remove_stale_agent_ops_cache_entries(workbook.id, cutoff_timestamp, true, 1)
+      .remove_stale_agent_ops_cache_entries(workbook.id, None, cutoff_timestamp, true, 1)
       .await
       .expect("stale preview should succeed");
     assert_eq!(preview.0, 2);
@@ -1051,11 +1063,68 @@ mod tests {
     assert_eq!(preview.3.len(), 1);
 
     let remove = state
-      .remove_stale_agent_ops_cache_entries(workbook.id, cutoff_timestamp, false, 10)
+      .remove_stale_agent_ops_cache_entries(workbook.id, None, cutoff_timestamp, false, 10)
       .await
       .expect("stale remove should succeed");
     assert_eq!(remove.0, 2);
     assert_eq!(remove.1, 2);
     assert_eq!(remove.2, 0);
+  }
+
+  #[tokio::test]
+  async fn should_preview_and_remove_stale_cache_entries_by_prefix() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-remove-stale-prefix".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["scenario-1", "scenario-2", "preset-1"] {
+      state
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id.to_string(),
+          vec![AgentOperation::Recalculate],
+          AgentOpsResponse {
+            request_id: Some(request_id.to_string()),
+            operations_signature: Some(format!("sig-{request_id}")),
+            served_from_cache: false,
+            results: Vec::new(),
+          },
+        )
+        .await
+        .expect("cache update should succeed");
+    }
+
+    let cutoff_timestamp = Utc::now() + ChronoDuration::seconds(1);
+    let preview = state
+      .remove_stale_agent_ops_cache_entries(
+        workbook.id,
+        Some("scenario-"),
+        cutoff_timestamp,
+        true,
+        5,
+      )
+      .await
+      .expect("stale preview should succeed");
+    assert_eq!(preview.0, 2);
+    assert_eq!(preview.1, 0);
+    assert_eq!(preview.2, 3);
+
+    let remove = state
+      .remove_stale_agent_ops_cache_entries(
+        workbook.id,
+        Some("scenario-"),
+        cutoff_timestamp,
+        false,
+        5,
+      )
+      .await
+      .expect("stale remove should succeed");
+    assert_eq!(remove.0, 2);
+    assert_eq!(remove.1, 2);
+    assert_eq!(remove.2, 1);
   }
 }

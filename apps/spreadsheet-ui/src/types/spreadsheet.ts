@@ -123,6 +123,7 @@ export interface PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
 }
 
 export interface RemoveStaleAgentOpsCacheEntriesResponse {
+  request_id_prefix: string | null;
   max_age_seconds: number;
   dry_run: boolean;
   cutoff_timestamp: string;

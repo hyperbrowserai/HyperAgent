@@ -151,6 +151,7 @@ export function SpreadsheetApp() {
   const [isPreviewingStaleCache, setIsPreviewingStaleCache] = useState(false);
   const [isRemovingStaleCache, setIsRemovingStaleCache] = useState(false);
   const [cacheStaleRemovalPreview, setCacheStaleRemovalPreview] = useState<{
+    requestIdPrefix: string | null;
     maxAgeSeconds: number;
     cutoffTimestamp: string;
     matchedEntries: number;
@@ -1755,6 +1756,7 @@ export function SpreadsheetApp() {
     if (maxAgeSeconds === null) {
       return;
     }
+    const normalizedPrefix = cacheRequestIdPrefix.trim() || undefined;
     const normalizedSampleLimit =
       typeof normalizedCacheStalePreviewSampleLimit === "number"
         ? Math.min(normalizedCacheStalePreviewSampleLimit, 100)
@@ -1763,11 +1765,13 @@ export function SpreadsheetApp() {
     try {
       clearUiError();
       const preview = await removeStaleAgentOpsCacheEntries(workbook.id, {
+        request_id_prefix: normalizedPrefix,
         max_age_seconds: maxAgeSeconds,
         dry_run: true,
         sample_limit: normalizedSampleLimit,
       });
       setCacheStaleRemovalPreview({
+        requestIdPrefix: preview.request_id_prefix,
         maxAgeSeconds: preview.max_age_seconds,
         cutoffTimestamp: preview.cutoff_timestamp,
         matchedEntries: preview.matched_entries,
@@ -1777,7 +1781,11 @@ export function SpreadsheetApp() {
       setNotice(
         `Previewed ${preview.matched_entries} stale cache entr${
           preview.matched_entries === 1 ? "y" : "ies"
-        } older than ${preview.max_age_seconds}s.`,
+        } older than ${preview.max_age_seconds}s${
+          preview.request_id_prefix
+            ? ` for prefix ${preview.request_id_prefix}`
+            : ""
+        }.`,
       );
     } catch (error) {
       applyUiError(error, "Failed to preview stale cache removal.");
@@ -1799,6 +1807,7 @@ export function SpreadsheetApp() {
     if (maxAgeSeconds === null) {
       return;
     }
+    const normalizedPrefix = cacheRequestIdPrefix.trim() || undefined;
     const normalizedSampleLimit =
       typeof normalizedCacheStalePreviewSampleLimit === "number"
         ? Math.min(normalizedCacheStalePreviewSampleLimit, 100)
@@ -1807,6 +1816,7 @@ export function SpreadsheetApp() {
     try {
       clearUiError();
       const response = await removeStaleAgentOpsCacheEntries(workbook.id, {
+        request_id_prefix: normalizedPrefix,
         max_age_seconds: maxAgeSeconds,
         dry_run: false,
         sample_limit: normalizedSampleLimit,
@@ -1820,7 +1830,11 @@ export function SpreadsheetApp() {
       setNotice(
         `Removed ${response.removed_entries} stale cache entr${
           response.removed_entries === 1 ? "y" : "ies"
-        } older than ${response.max_age_seconds}s.`,
+        } older than ${response.max_age_seconds}s${
+          response.request_id_prefix
+            ? ` for prefix ${response.request_id_prefix}`
+            : ""
+        }.`,
       );
       await Promise.all([
         queryClient.invalidateQueries({
@@ -2948,6 +2962,14 @@ export function SpreadsheetApp() {
                         <span className="font-mono">
                           {formatIsoTimestamp(cacheStaleRemovalPreview.cutoffTimestamp)}
                         </span>{" "}
+                        {cacheStaleRemovalPreview.requestIdPrefix ? (
+                          <>
+                            prefix{" "}
+                            <span className="font-mono">
+                              {cacheStaleRemovalPreview.requestIdPrefix}
+                            </span>{" "}
+                          </>
+                        ) : null}
                         matched{" "}
                         <span className="font-mono">
                           {cacheStaleRemovalPreview.matchedEntries}
