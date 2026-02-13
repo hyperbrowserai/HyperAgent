@@ -194,4 +194,31 @@ describe("dispatchCDPAction argument coercion", () => {
       | undefined;
     expect(selectArgs?.[0]?.value).toBe("0");
   });
+
+  it("still commits Enter for empty type action with commitEnter", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+
+    await dispatchCDPAction("type", ["", { commitEnter: true }], {
+      element: {
+        session,
+        frameId: "frame-1",
+        backendNodeId: 11,
+        objectId: "obj-1",
+      },
+    });
+
+    expect(calls.some((call) => call.method === "Input.insertText")).toBe(false);
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "Input.dispatchKeyEvent" &&
+          call.params?.type === "keyDown" &&
+          call.params?.key === "Enter"
+      )
+    ).toBe(true);
+  });
 });

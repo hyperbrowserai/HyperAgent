@@ -450,15 +450,15 @@ async function typeText(
   text: string,
   options?: TypeOptions
 ): Promise<void> {
-  if (!text) {
-    return;
-  }
-  const { element } = ctx;
-  const session = element.session;
+  const normalizedText = text ?? "";
+  if (normalizedText.length > 0) {
+    const { element } = ctx;
+    const session = element.session;
 
-  await focusElement(ctx);
-  await ensureInputEnabled(session);
-  await session.send("Input.insertText", { text });
+    await focusElement(ctx);
+    await ensureInputEnabled(session);
+    await session.send("Input.insertText", { text: normalizedText });
+  }
 
   if (options?.commitEnter) {
     await pressKey(ctx, "Enter");
