@@ -1004,7 +1004,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     ) as T extends "Hyperbrowser" ? HyperbrowserProvider : LocalBrowserProvider;
 
     if (params.customActions) {
-      params.customActions.forEach(this.registerAction, this);
+      params.customActions.forEach((action) => {
+        this.registerAction(action);
+      });
     }
 
     this.cdpActionsEnabled = params.cdpActions ?? true;
@@ -2723,19 +2725,35 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * Register a new action with the agent
    * @param action The action to register
    */
-  private registerAction(action: AgentActionDefinition): void {
-    if (action.type === "complete") {
+  private registerAction(
+    action: AgentActionDefinition,
+    knownActionType?: string
+  ): void {
+    const actionType =
+      knownActionType ??
+      this.normalizeServerId(this.safeReadField(action, "type"));
+    if (!actionType) {
+      throw new HyperagentError(
+        "Could not register action with an invalid action type.",
+        400
+      );
+    }
+    if (actionType === "complete") {
       throw new HyperagentError(
         "Could not add an action with the name 'complete'. Complete is a reserved action.",
         400
       );
     }
     const actionsList = new Set(
-      this.actions.map((registeredAction) => registeredAction.type)
+      this.actions
+        .map((registeredAction) =>
+          this.normalizeServerId(this.safeReadField(registeredAction, "type"))
+        )
+        .filter((type): type is string => typeof type === "string")
     );
-    if (actionsList.has(action.type)) {
+    if (actionsList.has(actionType)) {
       throw new Error(
-        `Could not register action of type ${action.type}. Action with the same name is already registered`
+        `Could not register action of type ${actionType}. Action with the same name is already registered`
       );
     } else {
       this.actions.push(action);
@@ -2747,7 +2765,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (removeTypes.size === 0) {
       return;
     }
-    this.actions = this.actions.filter((action) => !removeTypes.has(action.type));
+    this.actions = this.actions.filter((action) => {
+      const actionType = this.normalizeServerId(this.safeReadField(action, "type"));
+      return !actionType || !removeTypes.has(actionType);
+    });
   }
 
   private getRegisteredMCPActionTypes(): string[] {
@@ -2818,8 +2839,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const registeredActionTypes = new Set<string>();
     try {
       for (const action of actions) {
-        this.registerAction(action);
-        registeredActionTypes.add(action.type);
+        const actionType = this.normalizeServerId(
+          this.safeReadField(action, "type")
+        );
+        if (!actionType) {
+          throw new HyperagentError(
+            `Could not register MCP action from server ${serverId}: invalid action type`,
+            400
+          );
+        }
+        this.registerAction(action, actionType);
+        registeredActionTypes.add(actionType);
       }
       this.mcpActionTypesByServer.set(serverId, registeredActionTypes);
     } catch (error) {

@@ -389,4 +389,34 @@ describe("MCP lifecycle action registration", () => {
       consoleErrorSpy.mockRestore();
     }
   });
+
+  it("connects MCP actions with trap-prone type getters when first read succeeds", async () => {
+    let typeReads = 0;
+    const flakyTypeAction = {
+      get type(): string {
+        typeReads += 1;
+        if (typeReads === 1) {
+          return "mcp_flaky_action";
+        }
+        throw new Error("flaky type trap");
+      },
+      actionParams: z.object({}),
+      run: async () => ({
+        success: true,
+        message: "ok",
+      }),
+    } as unknown as AgentActionDefinition<z.ZodObject<{}>>;
+    connectToServerMock.mockResolvedValue({
+      serverId: "server-flaky",
+      actions: [flakyTypeAction],
+    });
+
+    const agent = new HyperAgent({ llm: createMockLLM() });
+    const serverId = await agent.connectToMCPServer({
+      command: "echo",
+    });
+
+    expect(serverId).toBe("server-flaky");
+    expect(disconnectServerMock).not.toHaveBeenCalled();
+  });
 });
