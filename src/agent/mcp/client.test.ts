@@ -28,6 +28,12 @@ describe("normalizeMCPToolParams", () => {
     );
   });
 
+  it("throws clear error for empty JSON strings", () => {
+    expect(() => normalizeMCPToolParams("   ")).toThrow(
+      "Invalid MCP tool params JSON string: input is empty"
+    );
+  });
+
   it("throws when parsed JSON is not an object", () => {
     expect(() => normalizeMCPToolParams("[1,2,3]")).toThrow(
       "must parse to a JSON object"

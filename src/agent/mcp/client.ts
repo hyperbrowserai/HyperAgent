@@ -44,6 +44,11 @@ export function normalizeMCPToolParams(
   input: MCPToolActionInput["params"]
 ): Record<string, unknown> {
   if (typeof input === "string") {
+    if (input.trim().length === 0) {
+      throw new Error(
+        "Invalid MCP tool params JSON string: input is empty"
+      );
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(input);
