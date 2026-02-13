@@ -378,6 +378,35 @@ describe("buildAgentStepMessages", () => {
     expect(tabLine.length).toBeLessThanOrEqual(560);
   });
 
+  it("sanitizes control characters in current URL and open tabs", async () => {
+    const noisyUrl = "https://example.com/\u0007a\nb\tc";
+    const page = createFakePage(noisyUrl, [noisyUrl]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("https://example.com/ a b c");
+    expect(joined).not.toContain("\u0007");
+  });
+
   it("includes current tab in summary even when beyond tab cap", async () => {
     const tabs = Array.from({ length: 25 }, (_, idx) => ({
       url: () => `https://example.com/${idx}`,

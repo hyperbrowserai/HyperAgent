@@ -24,10 +24,19 @@ function truncatePromptText(value: string): string {
 }
 
 function truncateTabUrl(url: string): string {
-  if (url.length <= MAX_TAB_URL_CHARS) {
-    return url;
+  const normalized = Array.from(url)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalized.length <= MAX_TAB_URL_CHARS) {
+    return normalized;
   }
-  return `${url.slice(0, MAX_TAB_URL_CHARS)}... [tab url truncated]`;
+  return `${normalized.slice(0, MAX_TAB_URL_CHARS)}... [tab url truncated]`;
 }
 
 function truncateDomState(domState: string): string {
