@@ -74,6 +74,18 @@ describe("normalizeOpenAIToolCalls", () => {
     ).toThrow('[LLM][DeepSeek] Unknown tool call type: {"id":"x","type":"mystery"}');
   });
 
+  it("truncates oversized tool-call diagnostics in errors", () => {
+    const huge = "x".repeat(3_500);
+    expect(() =>
+      normalizeOpenAIToolCalls([
+        {
+          type: "mystery",
+          payload: huge,
+        },
+      ])
+    ).toThrow("[truncated");
+  });
+
   it("normalizes whitespace-only ids and tool names safely", () => {
     expect(
       normalizeOpenAIToolCalls([
