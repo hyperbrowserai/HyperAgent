@@ -570,15 +570,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private normalizeLifecycleCancelledResult(
     result: AgentTaskOutput
   ): AgentTaskOutput {
-    const output = result.output;
-    const normalizedOutput =
-      typeof output === "string" && output.trim().length > 0
-        ? output
-        : "Task cancelled because agent was closed";
     return {
       ...result,
       status: TaskStatus.CANCELLED,
-      output: normalizedOutput,
+      output: "Task cancelled because agent was closed",
     };
   }
 

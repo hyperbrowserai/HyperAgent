@@ -2017,6 +2017,7 @@ describe("HyperAgent constructor and task controls", () => {
     });
     await expect(task.result).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
+      output: "Task cancelled because agent was closed",
     });
     expect(task.getStatus()).toBe(TaskStatus.CANCELLED);
     expect(internalAgent.actionCacheByTaskId).toEqual({});
@@ -2054,6 +2055,7 @@ describe("HyperAgent constructor and task controls", () => {
 
     await expect(execution).resolves.toMatchObject({
       status: TaskStatus.CANCELLED,
+      output: "Task cancelled because agent was closed",
     });
   });
 
