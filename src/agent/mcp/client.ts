@@ -1466,7 +1466,7 @@ class MCPClient {
     if (!resolvedServerId) {
       return;
     }
-    const server = this.servers.get(resolvedServerId);
+    const server = safeGetConnectedServer(this.servers, resolvedServerId);
     if (server) {
       let closeError: unknown;
       let unregisterError: unknown;

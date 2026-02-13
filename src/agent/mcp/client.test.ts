@@ -2191,6 +2191,26 @@ describe("MCPClient disconnect lifecycle", () => {
     await expect(mcpClient.disconnectServer("server-1")).resolves.toBeUndefined();
   });
 
+  it("disconnectServer safely ignores proxy-trapped server retrieval", async () => {
+    const mcpClient = new MCPClient(false);
+    const throwingMap = new Proxy(new Map(), {
+      get(target, prop, receiver): unknown {
+        if (prop === "has") {
+          return () => true;
+        }
+        if (prop === "get") {
+          return () => {
+            throw new Error("get trap");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
+
+    await expect(mcpClient.disconnectServer("server-1")).resolves.toBeUndefined();
+  });
+
   it("disconnect closes every connected server transport", async () => {
     const mcpClient = new MCPClient(false);
     const closeA = jest.fn().mockResolvedValue(undefined);
