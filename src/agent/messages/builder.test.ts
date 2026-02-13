@@ -378,6 +378,45 @@ describe("buildAgentStepMessages", () => {
     expect(tabLine.length).toBeLessThanOrEqual(560);
   });
 
+  it("includes current tab in summary even when beyond tab cap", async () => {
+    const tabs = Array.from({ length: 25 }, (_, idx) => ({
+      url: () => `https://example.com/${idx}`,
+    }));
+    const currentPage = tabs[24] as {
+      url: () => string;
+      context?: () => ReturnType<Page["context"]>;
+    };
+    currentPage.context = () =>
+      ({
+        pages: () => tabs,
+      } as unknown as ReturnType<Page["context"]>);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      currentPage as unknown as Page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[24] https://example.com/24 (current)");
+    expect(joined).toContain("... 5 more tabs omitted");
+    expect(joined).not.toContain("[19] https://example.com/19");
+  });
+
   it("truncates oversized thought, memory, and action output messages", async () => {
     const longText = "x".repeat(5000);
     const step = createStep(0);

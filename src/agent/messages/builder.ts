@@ -57,9 +57,23 @@ function normalizeScrollInfo(value: unknown): [number, number] {
 function getOpenTabsSummary(page: Page): string {
   try {
     const pages = page.context().pages();
-    const visibleTabs = pages.slice(0, MAX_OPEN_TAB_ENTRIES);
-    const hiddenCount = Math.max(0, pages.length - visibleTabs.length);
-    const tabLines = visibleTabs.map((openPage, index) => {
+    const pageEntries = pages.map((openPage, index) => ({ openPage, index }));
+    let visibleEntries = pageEntries.slice(0, MAX_OPEN_TAB_ENTRIES);
+    const currentEntry = pageEntries.find((entry) => entry.openPage === page);
+    if (
+      currentEntry &&
+      MAX_OPEN_TAB_ENTRIES > 0 &&
+      !visibleEntries.some((entry) => entry.openPage === page)
+    ) {
+      visibleEntries = [
+        ...pageEntries.slice(0, Math.max(0, MAX_OPEN_TAB_ENTRIES - 1)),
+        currentEntry,
+      ];
+    }
+
+    const visibleIndexSet = new Set(visibleEntries.map((entry) => entry.index));
+    const hiddenCount = Math.max(0, pages.length - visibleIndexSet.size);
+    const tabLines = visibleEntries.map(({ openPage, index }) => {
       const currentMarker = openPage === page ? " (current)" : "";
       const tabUrl = (() => {
         try {
