@@ -112,6 +112,7 @@ export function SpreadsheetApp() {
   >(null);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
+  const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -215,6 +216,7 @@ export function SpreadsheetApp() {
     queryKey: [
       "agent-ops-cache-entries",
       workbook?.id,
+      cacheRequestIdPrefix,
       cacheEntriesOffset,
       CACHE_ENTRIES_PREVIEW_LIMIT,
     ],
@@ -224,6 +226,7 @@ export function SpreadsheetApp() {
         workbook!.id,
         CACHE_ENTRIES_PREVIEW_LIMIT,
         cacheEntriesOffset,
+        cacheRequestIdPrefix,
       ),
   });
 
@@ -274,6 +277,10 @@ export function SpreadsheetApp() {
   useEffect(() => {
     setCacheEntriesOffset(0);
   }, [workbook?.id]);
+
+  useEffect(() => {
+    setCacheEntriesOffset(0);
+  }, [cacheRequestIdPrefix]);
 
   useEffect(() => {
     if (
@@ -2106,6 +2113,26 @@ export function SpreadsheetApp() {
                   </span>
                 </p>
                 <div className="mt-2 rounded border border-slate-800/80 bg-slate-900/40 p-2">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <label className="text-[10px] text-slate-500">
+                      request_id prefix
+                    </label>
+                    <input
+                      value={cacheRequestIdPrefix}
+                      onChange={(event) =>
+                        setCacheRequestIdPrefix(event.target.value)
+                      }
+                      placeholder="e.g. scenario-"
+                      className="h-6 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 focus:border-indigo-500"
+                    />
+                    <button
+                      onClick={() => setCacheRequestIdPrefix("")}
+                      disabled={!cacheRequestIdPrefix}
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Clear
+                    </button>
+                  </div>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-[11px] text-slate-500">
                       recent request IDs (newest first):
@@ -2155,6 +2182,15 @@ export function SpreadsheetApp() {
                       <span className="font-mono text-slate-300">
                         {agentOpsCacheEntriesQuery.data.total_entries}
                       </span>
+                      {agentOpsCacheEntriesQuery.data.request_id_prefix ? (
+                        <>
+                          {" "}
+                          filtered by{" "}
+                          <span className="font-mono text-indigo-300">
+                            {agentOpsCacheEntriesQuery.data.request_id_prefix}
+                          </span>
+                        </>
+                      ) : null}
                     </p>
                   ) : null}
                   {agentOpsCacheEntriesQuery.isLoading ? (

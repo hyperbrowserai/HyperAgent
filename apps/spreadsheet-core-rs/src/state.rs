@@ -274,26 +274,40 @@ impl AppState {
   pub async fn agent_ops_cache_entries(
     &self,
     workbook_id: Uuid,
+    request_id_prefix: Option<&str>,
     offset: usize,
     limit: usize,
-  ) -> Result<Vec<(String, Option<String>)>, ApiError> {
+  ) -> Result<(usize, Vec<(String, Option<String>)>), ApiError> {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
       .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
-
-    Ok(record
+    let normalized_prefix = request_id_prefix
+      .map(str::trim)
+      .filter(|prefix| !prefix.is_empty());
+    let filtered_request_ids = record
       .agent_ops_cache_order
       .iter()
       .rev()
+      .filter(|request_id| {
+        normalized_prefix
+          .map(|prefix| request_id.starts_with(prefix))
+          .unwrap_or(true)
+      })
+      .cloned()
+      .collect::<Vec<_>>();
+    let total_entries = filtered_request_ids.len();
+    let entries = filtered_request_ids
+      .into_iter()
       .skip(offset)
       .take(limit)
       .filter_map(|request_id| {
-        record.agent_ops_cache.get(request_id).map(|response| {
-          (request_id.clone(), response.operations_signature.clone())
+        record.agent_ops_cache.get(&request_id).map(|response| {
+          (request_id, response.operations_signature.clone())
         })
       })
-      .collect())
+      .collect::<Vec<_>>();
+    Ok((total_entries, entries))
   }
 
   pub async fn clear_agent_ops_cache(
@@ -529,21 +543,30 @@ mod tests {
         .expect("cache update should succeed");
     }
 
-    let entries = state
-      .agent_ops_cache_entries(workbook.id, 0, 2)
+    let (total_entries, entries) = state
+      .agent_ops_cache_entries(workbook.id, None, 0, 2)
       .await
       .expect("cache entries should load");
+    assert_eq!(total_entries, 3);
     assert_eq!(entries.len(), 2);
     assert_eq!(entries[0].0, "req-3");
     assert_eq!(entries[1].0, "req-2");
     assert_eq!(entries[0].1.as_deref(), Some("sig-3"));
 
-    let paged_entries = state
-      .agent_ops_cache_entries(workbook.id, 2, 2)
+    let (_, paged_entries) = state
+      .agent_ops_cache_entries(workbook.id, None, 2, 2)
       .await
       .expect("cache entries should load");
     assert_eq!(paged_entries.len(), 1);
     assert_eq!(paged_entries[0].0, "req-1");
+
+    let (filtered_total, filtered_entries) = state
+      .agent_ops_cache_entries(workbook.id, Some("req-2"), 0, 5)
+      .await
+      .expect("filtered cache entries should load");
+    assert_eq!(filtered_total, 1);
+    assert_eq!(filtered_entries.len(), 1);
+    assert_eq!(filtered_entries[0].0, "req-2");
   }
 
   #[tokio::test]

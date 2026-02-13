@@ -189,6 +189,7 @@ pub struct AgentOpsCacheEntry {
 pub struct AgentOpsCacheEntriesResponse {
   pub total_entries: usize,
   pub returned_entries: usize,
+  pub request_id_prefix: Option<String>,
   pub offset: usize,
   pub limit: usize,
   pub has_more: bool,
