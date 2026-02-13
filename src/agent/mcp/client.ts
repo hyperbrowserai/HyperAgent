@@ -190,14 +190,6 @@ function hasNonEmptyString(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function hasNonEmptyArray(value: unknown): boolean {
-  return Array.isArray(value) && value.length > 0;
-}
-
-function hasNonEmptyRecord(value: unknown): boolean {
-  return isPlainRecord(value) && Object.keys(value).length > 0;
-}
-
 function resolveMCPConnectionType(serverConfig: MCPServerConfig): "stdio" | "sse" {
   if (typeof serverConfig.connectionType !== "undefined") {
     return normalizeMCPConnectionType(serverConfig.connectionType);
@@ -216,25 +208,32 @@ function resolveMCPConnectionType(serverConfig: MCPServerConfig): "stdio" | "sse
 }
 
 function validateMCPConnectionFieldMix(
-  serverConfig: MCPServerConfig,
-  connectionType: "stdio" | "sse"
+  options: {
+    connectionType: "stdio" | "sse";
+    command?: string;
+    sseUrl?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    sseHeaders?: Record<string, string>;
+  }
 ): void {
+  const { connectionType, command, sseUrl, args, env, sseHeaders } = options;
   const stdioFields: string[] = [];
-  if (hasNonEmptyString(serverConfig.command)) {
+  if (hasNonEmptyString(command)) {
     stdioFields.push("command");
   }
-  if (hasNonEmptyArray(serverConfig.args)) {
+  if (typeof args !== "undefined") {
     stdioFields.push("args");
   }
-  if (hasNonEmptyRecord(serverConfig.env)) {
+  if (typeof env !== "undefined") {
     stdioFields.push("env");
   }
 
   const sseFields: string[] = [];
-  if (hasNonEmptyString(serverConfig.sseUrl)) {
+  if (hasNonEmptyString(sseUrl)) {
     sseFields.push("sseUrl");
   }
-  if (hasNonEmptyRecord(serverConfig.sseHeaders)) {
+  if (typeof sseHeaders !== "undefined") {
     sseFields.push("sseHeaders");
   }
 
@@ -874,12 +873,20 @@ class MCPClient {
       // Create transport for this server
       let transport;
       const connectionType = resolveMCPConnectionType(serverConfig);
-      validateMCPConnectionFieldMix(serverConfig, connectionType);
+      const args = normalizeMCPConnectionArgs(serverConfig.args);
       const env = normalizeMCPConnectionStringRecord("env", serverConfig.env);
       const sseHeaders = normalizeMCPConnectionStringRecord(
         "sseHeaders",
         serverConfig.sseHeaders
       );
+      validateMCPConnectionFieldMix({
+        connectionType,
+        command: serverConfig.command,
+        sseUrl: serverConfig.sseUrl,
+        args,
+        env,
+        sseHeaders,
+      });
 
       if (connectionType === "sse") {
         const sseUrl = normalizeMCPConnectionSSEUrl(serverConfig.sseUrl);
@@ -907,7 +914,6 @@ class MCPClient {
         };
       } else {
         const command = normalizeMCPConnectionCommand(serverConfig.command);
-        const args = normalizeMCPConnectionArgs(serverConfig.args);
 
         transport = new StdioClientTransport({
           command,

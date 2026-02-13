@@ -767,6 +767,24 @@ describe("MCPClient.connectToServer validation", () => {
     }
   });
 
+  it("rejects stdio connections that include empty SSE header objects", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "stdio",
+          command: "npx",
+          sseHeaders: {},
+        })
+      ).rejects.toThrow(
+        "MCP stdio connection cannot include sse fields: sseHeaders"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("rejects SSE connections that include stdio-only fields", async () => {
     const mcpClient = new MCPClient(false);
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
@@ -779,6 +797,42 @@ describe("MCPClient.connectToServer validation", () => {
         })
       ).rejects.toThrow(
         "MCP SSE connection cannot include stdio fields: command"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects SSE connections that include empty stdio args", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "sse",
+          sseUrl: "https://example.com/events",
+          args: [],
+        })
+      ).rejects.toThrow(
+        "MCP SSE connection cannot include stdio fields: args"
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("rejects SSE connections that include empty env records", async () => {
+    const mcpClient = new MCPClient(false);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          connectionType: "sse",
+          sseUrl: "https://example.com/events",
+          env: {},
+        })
+      ).rejects.toThrow(
+        "MCP SSE connection cannot include stdio fields: env"
       );
     } finally {
       errorSpy.mockRestore();
