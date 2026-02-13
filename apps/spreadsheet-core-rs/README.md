@@ -29,6 +29,7 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/sheets`
 - `POST /v1/workbooks/{id}/cells/set-batch`
 - `POST /v1/workbooks/{id}/agent/ops` (recommended for AI agents)
+- `GET /v1/workbooks/{id}/agent/presets`
 - `POST /v1/workbooks/{id}/agent/presets/{preset}`
 - `POST /v1/workbooks/{id}/cells/get`
 - `POST /v1/workbooks/{id}/formulas/recalculate`

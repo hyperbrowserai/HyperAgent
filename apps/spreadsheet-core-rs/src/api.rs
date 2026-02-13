@@ -37,6 +37,7 @@ pub fn create_router(state: AppState) -> Router {
     .route("/v1/workbooks/{id}/sheets", get(get_sheets))
     .route("/v1/workbooks/{id}/cells/set-batch", post(set_cells_batch))
     .route("/v1/workbooks/{id}/agent/ops", post(agent_ops))
+    .route("/v1/workbooks/{id}/agent/presets", get(list_agent_presets))
     .route(
       "/v1/workbooks/{id}/agent/presets/{preset}",
       post(run_agent_preset),
@@ -286,6 +287,21 @@ async fn upsert_chart(
   Ok(Json(json!({ "status": "ok" })))
 }
 
+fn preset_catalog() -> Vec<serde_json::Value> {
+  vec![
+    json!({
+      "preset": "seed_sales_demo",
+      "description": "Populate sample regional sales data, recalculate formulas, and upsert a bar chart metadata definition.",
+      "operations": ["set_cells", "recalculate", "upsert_chart"]
+    }),
+    json!({
+      "preset": "export_snapshot",
+      "description": "Recalculate workbook values and export an .xlsx snapshot.",
+      "operations": ["recalculate", "export_workbook"]
+    }),
+  ]
+}
+
 fn build_preset_operations(
   preset: &str,
   include_file_base64: Option<bool>,
@@ -361,6 +377,16 @@ fn build_preset_operations(
       "Unknown preset '{preset}'. Supported presets: seed_sales_demo, export_snapshot."
     ))),
   }
+}
+
+async fn list_agent_presets(
+  State(state): State<AppState>,
+  Path(workbook_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+  state.get_workbook(workbook_id).await?;
+  Ok(Json(json!({
+    "presets": preset_catalog()
+  })))
 }
 
 async fn execute_agent_operations(
@@ -626,6 +652,7 @@ async fn openapi() -> Json<serde_json::Value> {
       "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}},
       "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
       "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports export_workbook op)"}},
+      "/v1/workbooks/{id}/agent/presets": {"get": {"summary": "List available built-in agent presets"}},
       "/v1/workbooks/{id}/agent/presets/{preset}": {"post": {"summary": "Run built-in AI operation preset (seed_sales_demo/export_snapshot)"}},
       "/v1/workbooks/{id}/cells/get": {"post": {"summary": "Get range cells"}},
       "/v1/workbooks/{id}/formulas/recalculate": {"post": {"summary": "Recalculate formulas"}},
