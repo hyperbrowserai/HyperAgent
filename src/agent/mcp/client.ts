@@ -625,7 +625,7 @@ function safeGetMCPListToolsPayload(value: unknown): Tool[] {
   try {
     return normalizeMCPListToolsPayload(value);
   } catch (error) {
-    const message = formatUnknownError(error);
+    const message = formatMCPRuntimeDiagnostic(error);
     const prefix = "Invalid MCP listTools response:";
     if (message.startsWith(prefix)) {
       throw new Error(message);
@@ -990,7 +990,7 @@ export function normalizeMCPToolParams(
     try {
       parsed = JSON.parse(trimmedInput);
     } catch (error) {
-      const message = formatUnknownError(error);
+      const message = formatMCPRuntimeDiagnostic(error);
       throw new Error(`Invalid MCP tool params JSON string: ${message}`);
     }
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {

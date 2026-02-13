@@ -227,6 +227,47 @@ describe("normalizeMCPListToolsPayload", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("truncates oversized wrapped listTools normalization diagnostics", async () => {
+    const connectSpy = jest
+      .spyOn(Client.prototype, "connect")
+      .mockResolvedValue(undefined);
+    const oversizedTools = new Proxy(
+      [],
+      {
+        get(target, prop, receiver): unknown {
+          if (prop === "length") {
+            throw new Error("x".repeat(2_000));
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+    const listToolsSpy = jest.spyOn(Client.prototype, "listTools").mockResolvedValue(
+      {
+        tools: oversizedTools,
+      } as unknown as Awaited<ReturnType<Client["listTools"]>>
+    );
+    const closeSpy = jest
+      .spyOn(StdioClientTransport.prototype, "close")
+      .mockResolvedValue(undefined);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const mcpClient = new MCPClient(false);
+
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+        })
+      ).rejects.toThrow(/\[truncated/);
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      connectSpy.mockRestore();
+      listToolsSpy.mockRestore();
+      closeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
 });
 
 describe("normalizeMCPToolParams", () => {
