@@ -153,10 +153,18 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         );
       }
 
+      const supportsMultimodal = ctx.llm.getCapabilities().multimodal;
+      const includeScreenshot = Boolean(screenshotData && supportsMultimodal);
+      if (screenshotData && !supportsMultimodal && ctx.debug) {
+        console.warn(
+          "[extract] LLM does not support multimodal input; proceeding without screenshot."
+        );
+      }
+
       const markdownTokenBudget = computeMarkdownTokenBudget({
         tokenLimit: ctx.tokenLimit,
         objective,
-        hasScreenshot: Boolean(screenshotData),
+        hasScreenshot: includeScreenshot,
       });
       const trimmedMarkdown = trimMarkdownToTokenLimit(
         markdown,
@@ -170,7 +178,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         );
       }
 
-      const textPrompt = screenshotData
+      const textPrompt = includeScreenshot
         ? `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nHere is a screenshot of the page:\n`
         : `Extract the following information from the page according to this objective: "${objective}"\n\nPage content:\n${trimmedMarkdown}\nNo screenshot was available. Use the page content to extract the answer.`;
       const contentParts: HyperAgentContentPart[] = [
@@ -179,7 +187,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           text: textPrompt,
         },
       ];
-      if (screenshotData) {
+      if (includeScreenshot && screenshotData) {
         contentParts.push({
           type: "image",
           url: `data:image/png;base64,${screenshotData}`,

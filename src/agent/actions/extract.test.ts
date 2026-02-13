@@ -23,7 +23,10 @@ const { getCDPClient } = jest.requireMock("@/cdp") as {
   getCDPClient: jest.Mock;
 };
 
-function createMockLLM(invokeMock?: jest.Mock): HyperAgentLLM {
+function createMockLLM(
+  invokeMock?: jest.Mock,
+  options?: { multimodal?: boolean }
+): HyperAgentLLM {
   return {
     invoke: invokeMock
       ? (async (messages) => invokeMock(messages))
@@ -35,7 +38,7 @@ function createMockLLM(invokeMock?: jest.Mock): HyperAgentLLM {
     getProviderId: () => "mock",
     getModelId: () => "mock-model",
     getCapabilities: () => ({
-      multimodal: true,
+      multimodal: options?.multimodal ?? true,
       toolCalling: true,
       jsonMode: true,
     }),
@@ -209,6 +212,36 @@ describe("ExtractActionDefinition.run", () => {
       }>;
       const promptText = messages[0]?.content?.[0]?.text ?? "";
       expect(promptText).toContain("demo");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("skips screenshot content when model is not multimodal", async () => {
+    const invoke = jest.fn().mockResolvedValue({
+      role: "assistant",
+      content: "non multimodal extraction",
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const ctx = createContext(createMockLLM(invoke, { multimodal: false }), {
+      debug: true,
+    });
+
+    try {
+      const result = await ExtractActionDefinition.run(ctx, {
+        objective: "Extract content",
+      });
+
+      expect(result.success).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[extract] LLM does not support multimodal input; proceeding without screenshot."
+      );
+
+      const messages = invoke.mock.calls[0]?.[0] as Array<{
+        content: Array<{ type: string }>;
+      }>;
+      expect(messages[0]?.content).toHaveLength(1);
+      expect(messages[0]?.content?.[0]?.type).toBe("text");
     } finally {
       warnSpy.mockRestore();
     }
