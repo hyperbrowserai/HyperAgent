@@ -387,6 +387,13 @@ export function SpreadsheetApp() {
         setUiErrorCode(error.code);
         return true;
       }
+      if (error.code === "REQUEST_ID_CONFLICT") {
+        setUiError(
+          `${error.message} Use a new request_id or replay the original operation plan.`,
+        );
+        setUiErrorCode(error.code);
+        return true;
+      }
       if (error.code !== "OPERATION_SIGNATURE_MISMATCH") {
         return false;
       }

@@ -74,6 +74,7 @@ Response includes:
   - `INVALID_SIGNATURE_FORMAT`
   - `OPERATION_SIGNATURE_MISMATCH`
   - `EMPTY_OPERATION_LIST`
+  - `REQUEST_ID_CONFLICT` (same `request_id` reused with a different operation signature)
 
 Schema discovery endpoints (`/v1/workbooks/{id}/agent/schema`, `/v1/agent/wizard/schema`) expose these under `signature_error_codes`.
 The in-memory request-id idempotency cache keeps up to **256** recent `agent/ops` responses per workbook (oldest entries evict first).

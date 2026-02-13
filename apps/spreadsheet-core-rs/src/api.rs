@@ -190,6 +190,24 @@ fn ensure_non_empty_operations(
   Ok(())
 }
 
+fn validate_request_id_signature_consistency(
+  cached_signature: Option<&str>,
+  incoming_signature: &str,
+) -> Result<(), ApiError> {
+  let Some(cached_signature) = cached_signature else {
+    return Ok(());
+  };
+  if cached_signature == incoming_signature {
+    return Ok(());
+  }
+  Err(ApiError::bad_request_with_code(
+    "REQUEST_ID_CONFLICT",
+    format!(
+      "request_id already exists with a different operations signature. cached={cached_signature} incoming={incoming_signature}",
+    ),
+  ))
+}
+
 async fn import_bytes_into_workbook(
   state: &AppState,
   workbook_id: Uuid,
@@ -1007,7 +1025,8 @@ async fn get_agent_schema(
     "signature_error_codes": [
       "INVALID_SIGNATURE_FORMAT",
       "OPERATION_SIGNATURE_MISMATCH",
-      "EMPTY_OPERATION_LIST"
+      "EMPTY_OPERATION_LIST",
+      "REQUEST_ID_CONFLICT"
     ],
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
     "preset_run_request_shape": {
@@ -1035,7 +1054,8 @@ async fn get_agent_schema(
     "signature_error_codes": [
       "INVALID_SIGNATURE_FORMAT",
       "OPERATION_SIGNATURE_MISMATCH",
-      "EMPTY_OPERATION_LIST"
+      "EMPTY_OPERATION_LIST",
+      "REQUEST_ID_CONFLICT"
     ],
     "scenarios": scenario_catalog(),
     "wizard_endpoint": "/v1/agent/wizard/run",
@@ -1225,23 +1245,27 @@ async fn agent_ops(
 ) -> Result<Json<AgentOpsResponse>, ApiError> {
   state.get_workbook(workbook_id).await?;
   ensure_non_empty_operations(&payload.operations)?;
+  let operation_signature = operations_signature(&payload.operations)?;
+  validate_expected_operations_signature(
+    payload.expected_operations_signature.as_deref(),
+    operation_signature.as_str(),
+  )?;
   let request_id = payload.request_id.clone();
   if let Some(existing_request_id) = request_id.as_deref() {
     if let Some(mut cached_response) = state
       .get_cached_agent_ops_response(workbook_id, existing_request_id)
       .await?
     {
+      validate_request_id_signature_consistency(
+        cached_response.operations_signature.as_deref(),
+        operation_signature.as_str(),
+      )?;
       cached_response.served_from_cache = true;
       return Ok(Json(cached_response));
     }
   }
   let actor = payload.actor.unwrap_or_else(|| "agent".to_string());
   let stop_on_error = payload.stop_on_error.unwrap_or(false);
-  let operation_signature = operations_signature(&payload.operations)?;
-  validate_expected_operations_signature(
-    payload.expected_operations_signature.as_deref(),
-    operation_signature.as_str(),
-  )?;
   let results = execute_agent_operations(
     &state,
     workbook_id,
@@ -1498,6 +1522,7 @@ mod tests {
     build_preset_operations, build_scenario_operations, ensure_non_empty_operations,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
+    validate_request_id_signature_consistency,
   };
 
   #[test]
@@ -1695,5 +1720,26 @@ mod tests {
       ensure_non_empty_operations(&operations).is_ok(),
       "non-empty operation arrays should pass validation",
     );
+  }
+
+  #[test]
+  fn should_reject_request_id_signature_conflicts() {
+    assert!(
+      validate_request_id_signature_consistency(Some("abc"), "abc").is_ok(),
+      "matching cached and incoming signatures should pass",
+    );
+    assert!(
+      validate_request_id_signature_consistency(None, "abc").is_ok(),
+      "missing cached signature should be tolerated",
+    );
+    let conflict_error =
+      validate_request_id_signature_consistency(Some("abc"), "def")
+        .expect_err("signature mismatch should fail");
+    match conflict_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "REQUEST_ID_CONFLICT");
+      }
+      _ => panic!("expected bad request with custom error code"),
+    }
   }
 }
