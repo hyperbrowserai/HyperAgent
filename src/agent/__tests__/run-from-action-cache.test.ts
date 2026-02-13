@@ -344,6 +344,43 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.usedXPath).toBe(false);
   });
 
+  it("serializes non-Error replay failures from perform path", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockRejectedValue({ reason: "perform exploded" });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "trigger perform",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain(
+      'Replay step 0 failed: {"reason":"perform exploded"}'
+    );
+  });
+
   it("does not fail replay when debug file write throws", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

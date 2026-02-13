@@ -130,4 +130,24 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       })
     );
   });
+
+  it("formats non-Error execution failures with readable messages", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+    performAction.mockRejectedValue({ reason: "perform crashed" });
+
+    await expect(
+      agent.executeSingleAction("click login", page, {
+        maxElementRetries: 1,
+      })
+    ).rejects.toThrow(
+      'Failed to execute action: {"reason":"perform crashed"}'
+    );
+  });
 });

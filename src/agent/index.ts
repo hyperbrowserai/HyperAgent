@@ -72,6 +72,23 @@ import {
   REPLAY_SPECIAL_ACTION_TYPES,
 } from "./shared/replay-special-actions";
 
+const formatUnknownError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
+
 export class HyperAgent<T extends BrowserProviders = "Local"> {
   // aiAction configuration constants
   private static readonly AIACTION_CONFIG = {
@@ -710,7 +727,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           }
         }
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatUnknownError(error);
         result = {
           taskId: cache.taskId,
           status: TaskStatus.FAILED,
@@ -1213,7 +1230,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         throw error;
       }
       // Wrap other errors
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorMsg = formatUnknownError(error);
       throw new HyperagentError(`Failed to execute action: ${errorMsg}`, 500);
     }
   }
