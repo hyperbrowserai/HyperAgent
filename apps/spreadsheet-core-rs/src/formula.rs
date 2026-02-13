@@ -412,6 +412,30 @@ pub fn parse_tan_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_sinh_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "SINH" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_cosh_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "COSH" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_tanh_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "TANH" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_asin_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ASIN" && args.len() == 1 {
@@ -1018,8 +1042,8 @@ mod tests {
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
     parse_log_formula, parse_sin_formula, parse_cos_formula, parse_tan_formula,
-    parse_asin_formula, parse_acos_formula, parse_atan_formula, parse_atan2_formula,
-    parse_degrees_formula,
+    parse_sinh_formula, parse_cosh_formula, parse_tanh_formula, parse_asin_formula,
+    parse_acos_formula, parse_atan_formula, parse_atan2_formula, parse_degrees_formula,
     parse_radians_formula, parse_lower_formula,
     parse_match_formula, parse_maxifs_formula,
     parse_minifs_formula,
@@ -1179,6 +1203,9 @@ mod tests {
     assert_eq!(parse_sin_formula("=SIN(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_cos_formula("=COS(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_tan_formula("=TAN(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_sinh_formula("=SINH(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_cosh_formula("=COSH(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_tanh_formula("=TANH(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_asin_formula("=ASIN(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_acos_formula("=ACOS(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_atan_formula("=ATAN(A1)").as_deref(), Some("A1"));

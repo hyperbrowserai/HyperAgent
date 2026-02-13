@@ -7,8 +7,9 @@ use crate::{
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_pi_formula,
-    parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_asin_formula,
-    parse_acos_formula, parse_atan_formula, parse_atan2_formula,
+    parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_sinh_formula,
+    parse_cosh_formula, parse_tanh_formula, parse_asin_formula, parse_acos_formula,
+    parse_atan_formula, parse_atan2_formula,
     parse_degrees_formula, parse_radians_formula,
     parse_choose_formula, parse_left_formula,
     parse_ceiling_formula, parse_exact_formula, parse_floor_formula,
@@ -614,6 +615,21 @@ fn evaluate_formula(
   if let Some(tan_arg) = parse_tan_formula(formula) {
     let value = parse_required_float(connection, sheet, &tan_arg)?;
     return Ok(Some(value.tan().to_string()));
+  }
+
+  if let Some(sinh_arg) = parse_sinh_formula(formula) {
+    let value = parse_required_float(connection, sheet, &sinh_arg)?;
+    return Ok(Some(value.sinh().to_string()));
+  }
+
+  if let Some(cosh_arg) = parse_cosh_formula(formula) {
+    let value = parse_required_float(connection, sheet, &cosh_arg)?;
+    return Ok(Some(value.cosh().to_string()));
+  }
+
+  if let Some(tanh_arg) = parse_tanh_formula(formula) {
+    let value = parse_required_float(connection, sheet, &tanh_arg)?;
+    return Ok(Some(value.tanh().to_string()));
   }
 
   if let Some(asin_arg) = parse_asin_formula(formula) {
@@ -2905,12 +2921,30 @@ mod tests {
         value: None,
         formula: Some("=LOG(100,10)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 108,
+        value: None,
+        formula: Some("=SINH(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 109,
+        value: None,
+        formula: Some("=COSH(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 110,
+        value: None,
+        formula: Some("=TANH(0)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 105);
+    assert_eq!(updated_cells, 108);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2924,7 +2958,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 107,
+        end_col: 110,
       },
     )
     .expect("cells should be fetched");
@@ -3088,6 +3122,9 @@ mod tests {
       Some("2.718281828459045"),
     );
     assert_eq!(by_position(1, 107).evaluated_value.as_deref(), Some("2"));
+    assert_eq!(by_position(1, 108).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 109).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 110).evaluated_value.as_deref(), Some("0"));
   }
 
   #[test]
