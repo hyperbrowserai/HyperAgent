@@ -934,7 +934,7 @@ async fn get_agent_schema(
   Ok(Json(json!({
     "endpoint": "/v1/workbooks/{id}/agent/ops",
     "request_shape": {
-      "request_id": "optional string",
+      "request_id": "optional string (if repeated, returns cached response for idempotency)",
       "actor": "optional string",
       "stop_on_error": "optional boolean (default false)",
       "expected_operations_signature": "optional string for payload integrity checks",
@@ -1204,6 +1204,14 @@ async fn agent_ops(
   state.get_workbook(workbook_id).await?;
   ensure_non_empty_operations(&payload.operations)?;
   let request_id = payload.request_id.clone();
+  if let Some(existing_request_id) = request_id.as_deref() {
+    if let Some(cached_response) = state
+      .get_cached_agent_ops_response(workbook_id, existing_request_id)
+      .await?
+    {
+      return Ok(Json(cached_response));
+    }
+  }
   let actor = payload.actor.unwrap_or_else(|| "agent".to_string());
   let stop_on_error = payload.stop_on_error.unwrap_or(false);
   let operation_signature = operations_signature(&payload.operations)?;
@@ -1220,11 +1228,21 @@ async fn agent_ops(
   )
   .await;
 
-  Ok(Json(AgentOpsResponse {
+  let response = AgentOpsResponse {
     request_id,
     operations_signature: Some(operation_signature),
     results,
-  }))
+  };
+  if let Some(existing_request_id) = response.request_id.as_ref() {
+    state
+      .cache_agent_ops_response(
+        workbook_id,
+        existing_request_id.clone(),
+        response.clone(),
+      )
+      .await?;
+  }
+  Ok(Json(response))
 }
 
 async fn agent_ops_preview(

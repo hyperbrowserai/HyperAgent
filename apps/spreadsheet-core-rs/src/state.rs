@@ -1,13 +1,20 @@
 use crate::{
   error::ApiError,
-  models::{ChartSpec, WorkbookEvent, WorkbookSummary},
+  models::{AgentOpsResponse, ChartSpec, WorkbookEvent, WorkbookSummary},
 };
 use chrono::Utc;
 use duckdb::Connection;
 use serde_json::Value;
-use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
+use std::{
+  collections::{HashMap, VecDeque},
+  fs,
+  path::PathBuf,
+  sync::Arc,
+};
 use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
+
+const MAX_AGENT_OPS_CACHE_ENTRIES: usize = 256;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -21,6 +28,8 @@ pub struct WorkbookRecord {
   pub db_path: PathBuf,
   pub events_tx: broadcast::Sender<WorkbookEvent>,
   pub next_seq: u64,
+  pub agent_ops_cache: HashMap<String, AgentOpsResponse>,
+  pub agent_ops_cache_order: VecDeque<String>,
 }
 
 impl AppState {
@@ -56,6 +65,8 @@ impl AppState {
       db_path,
       events_tx,
       next_seq: 1,
+      agent_ops_cache: HashMap::new(),
+      agent_ops_cache_order: VecDeque::new(),
     };
 
     self.workbooks.write().await.insert(id, record);
@@ -181,6 +192,42 @@ impl AppState {
     let _ = record.events_tx.send(event);
     Ok(())
   }
+
+  pub async fn get_cached_agent_ops_response(
+    &self,
+    workbook_id: Uuid,
+    request_id: &str,
+  ) -> Result<Option<AgentOpsResponse>, ApiError> {
+    let guard = self.workbooks.read().await;
+    let record = guard
+      .get(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+    Ok(record.agent_ops_cache.get(request_id).cloned())
+  }
+
+  pub async fn cache_agent_ops_response(
+    &self,
+    workbook_id: Uuid,
+    request_id: String,
+    response: AgentOpsResponse,
+  ) -> Result<(), ApiError> {
+    let mut guard = self.workbooks.write().await;
+    let record = guard
+      .get_mut(&workbook_id)
+      .ok_or_else(|| ApiError::NotFound(format!("Workbook {workbook_id} was not found.")))?;
+
+    if !record.agent_ops_cache.contains_key(&request_id) {
+      record.agent_ops_cache_order.push_back(request_id.clone());
+    }
+    record.agent_ops_cache.insert(request_id, response);
+
+    while record.agent_ops_cache_order.len() > MAX_AGENT_OPS_CACHE_ENTRIES {
+      if let Some(evicted) = record.agent_ops_cache_order.pop_front() {
+        record.agent_ops_cache.remove(&evicted);
+      }
+    }
+    Ok(())
+  }
 }
 
 fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
@@ -203,4 +250,86 @@ fn initialize_duckdb(db_path: &PathBuf) -> Result<(), ApiError> {
     .map_err(ApiError::internal)?;
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{AppState, MAX_AGENT_OPS_CACHE_ENTRIES};
+  use crate::models::{AgentOperationResult, AgentOpsResponse};
+  use serde_json::json;
+  use tempfile::tempdir;
+
+  #[tokio::test]
+  async fn should_cache_and_retrieve_agent_ops_response() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-test".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let response = AgentOpsResponse {
+      request_id: Some("req-1".to_string()),
+      operations_signature: Some("abc".to_string()),
+      results: vec![AgentOperationResult {
+        op_index: 0,
+        op_type: "recalculate".to_string(),
+        ok: true,
+        data: json!({ "updated_cells": 0 }),
+      }],
+    };
+    state
+      .cache_agent_ops_response(workbook.id, "req-1".to_string(), response.clone())
+      .await
+      .expect("cache should be updated");
+
+    let cached = state
+      .get_cached_agent_ops_response(workbook.id, "req-1")
+      .await
+      .expect("cache lookup should succeed");
+    assert!(cached.is_some());
+    assert_eq!(
+      cached.and_then(|value| value.request_id),
+      Some("req-1".to_string()),
+    );
+  }
+
+  #[tokio::test]
+  async fn should_evict_oldest_agent_ops_cache_entry() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-eviction".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for index in 0..=MAX_AGENT_OPS_CACHE_ENTRIES {
+      let request_id = format!("req-{index}");
+      let response = AgentOpsResponse {
+        request_id: Some(request_id.clone()),
+        operations_signature: Some(request_id.clone()),
+        results: Vec::new(),
+      };
+      state
+        .cache_agent_ops_response(workbook.id, request_id, response)
+        .await
+        .expect("cache update should succeed");
+    }
+
+    let evicted = state
+      .get_cached_agent_ops_response(workbook.id, "req-0")
+      .await
+      .expect("cache lookup should succeed");
+    let newest = state
+      .get_cached_agent_ops_response(
+        workbook.id,
+        format!("req-{MAX_AGENT_OPS_CACHE_ENTRIES}").as_str(),
+      )
+      .await
+      .expect("cache lookup should succeed");
+    assert!(evicted.is_none(), "oldest entry should be evicted");
+    assert!(newest.is_some(), "newest entry should remain cached");
+  }
 }
