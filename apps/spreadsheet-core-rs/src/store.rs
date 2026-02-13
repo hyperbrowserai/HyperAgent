@@ -2,12 +2,13 @@ use crate::{
   error::ApiError,
   formula::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
-    parse_cell_address, parse_concat_formula, parse_countif_formula,
-    parse_date_formula, parse_day_formula,
+    parse_averageif_formula, parse_cell_address, parse_concat_formula,
+    parse_countif_formula, parse_date_formula, parse_day_formula,
     parse_if_formula, parse_left_formula, parse_len_formula, parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula,
-    parse_single_ref_formula, parse_today_formula, parse_vlookup_formula,
-    parse_xlookup_formula, parse_year_formula, VLookupFormula, XLookupFormula,
+    parse_single_ref_formula, parse_sumif_formula, parse_today_formula,
+    parse_vlookup_formula, parse_xlookup_formula, parse_year_formula,
+    ConditionalAggregateFormula, VLookupFormula, XLookupFormula,
   },
   models::{CellMutation, CellRange, CellSnapshot},
 };
@@ -265,6 +266,14 @@ fn evaluate_formula(
       .map(Some);
   }
 
+  if let Some(sumif_formula) = parse_sumif_formula(formula) {
+    return evaluate_sumif_formula(connection, sheet, &sumif_formula);
+  }
+
+  if let Some(averageif_formula) = parse_averageif_formula(formula) {
+    return evaluate_averageif_formula(connection, sheet, &averageif_formula);
+  }
+
   if let Some((condition, true_value, false_value)) = parse_if_formula(formula) {
     let condition_result = evaluate_if_condition(connection, sheet, &condition)?;
     let chosen_value = if condition_result {
@@ -439,6 +448,122 @@ fn evaluate_countif_formula(
   }
 
   Ok(count.to_string())
+}
+
+fn evaluate_sumif_formula(
+  connection: &Connection,
+  sheet: &str,
+  formula: &ConditionalAggregateFormula,
+) -> Result<Option<String>, ApiError> {
+  let criteria = resolve_scalar_operand(connection, sheet, &formula.criteria)?;
+  let Some(cell_pairs) = build_conditional_cell_pairs(formula) else {
+    return Ok(None);
+  };
+
+  let mut total = 0f64;
+  for (criteria_row, criteria_col, value_row, value_col) in cell_pairs {
+    let candidate =
+      load_cell_scalar(connection, sheet, criteria_row, criteria_col)?;
+    if !countif_matches_criteria(&candidate, &criteria) {
+      continue;
+    }
+    let value = load_cell_scalar(connection, sheet, value_row, value_col)?;
+    if let Ok(number) = value.trim().parse::<f64>() {
+      total += number;
+    }
+  }
+
+  Ok(Some(total.to_string()))
+}
+
+fn evaluate_averageif_formula(
+  connection: &Connection,
+  sheet: &str,
+  formula: &ConditionalAggregateFormula,
+) -> Result<Option<String>, ApiError> {
+  let criteria = resolve_scalar_operand(connection, sheet, &formula.criteria)?;
+  let Some(cell_pairs) = build_conditional_cell_pairs(formula) else {
+    return Ok(None);
+  };
+
+  let mut total = 0f64;
+  let mut numeric_matches = 0usize;
+  for (criteria_row, criteria_col, value_row, value_col) in cell_pairs {
+    let candidate =
+      load_cell_scalar(connection, sheet, criteria_row, criteria_col)?;
+    if !countif_matches_criteria(&candidate, &criteria) {
+      continue;
+    }
+    let value = load_cell_scalar(connection, sheet, value_row, value_col)?;
+    if let Ok(number) = value.trim().parse::<f64>() {
+      total += number;
+      numeric_matches += 1;
+    }
+  }
+
+  if numeric_matches == 0 {
+    return Ok(Some("0".to_string()));
+  }
+  Ok(Some((total / numeric_matches as f64).to_string()))
+}
+
+fn build_conditional_cell_pairs(
+  formula: &ConditionalAggregateFormula,
+) -> Option<Vec<(u32, u32, u32, u32)>> {
+  let criteria_start_row = formula
+    .criteria_range_start
+    .0
+    .min(formula.criteria_range_end.0);
+  let criteria_end_row = formula
+    .criteria_range_start
+    .0
+    .max(formula.criteria_range_end.0);
+  let criteria_start_col = formula
+    .criteria_range_start
+    .1
+    .min(formula.criteria_range_end.1);
+  let criteria_end_col = formula
+    .criteria_range_start
+    .1
+    .max(formula.criteria_range_end.1);
+  let criteria_height = criteria_end_row.saturating_sub(criteria_start_row) + 1;
+  let criteria_width = criteria_end_col.saturating_sub(criteria_start_col) + 1;
+
+  let (value_start_row, value_end_row, value_start_col, value_end_col) = match (
+    formula.value_range_start,
+    formula.value_range_end,
+  ) {
+    (Some(start), Some(end)) => (
+      start.0.min(end.0),
+      start.0.max(end.0),
+      start.1.min(end.1),
+      start.1.max(end.1),
+    ),
+    _ => (
+      criteria_start_row,
+      criteria_end_row,
+      criteria_start_col,
+      criteria_end_col,
+    ),
+  };
+  let value_height = value_end_row.saturating_sub(value_start_row) + 1;
+  let value_width = value_end_col.saturating_sub(value_start_col) + 1;
+  if criteria_height != value_height || criteria_width != value_width {
+    return None;
+  }
+
+  let mut pairs = Vec::new();
+  for row_offset in 0..criteria_height {
+    for col_offset in 0..criteria_width {
+      pairs.push((
+        criteria_start_row + row_offset,
+        criteria_start_col + col_offset,
+        value_start_row + row_offset,
+        value_start_col + col_offset,
+      ));
+    }
+  }
+  Some(pairs)
 }
 
 fn evaluate_if_condition(
@@ -1149,12 +1274,30 @@ mod tests {
         value: None,
         formula: Some(r#"=COUNTIF(E1:E2,"<>south")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 26,
+        value: None,
+        formula: Some(r#"=SUMIF(A1:A2,">=100",A1:A2)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 27,
+        value: None,
+        formula: Some(r#"=AVERAGEIF(A1:A2,">=80",A1:A2)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 28,
+        value: None,
+        formula: Some(r#"=AVERAGEIF(E1:E2,"south",A1:A2)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 23);
+    assert_eq!(updated_cells, 26);
     assert!(unsupported_formulas.is_empty());
 
     let snapshots = get_cells(
@@ -1164,7 +1307,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 25,
+        end_col: 28,
       },
     )
     .expect("cells should be fetched");
@@ -1218,6 +1361,9 @@ mod tests {
     assert_eq!(by_position(1, 23).evaluated_value.as_deref(), Some("1"));
     assert_eq!(by_position(1, 24).evaluated_value.as_deref(), Some("1"));
     assert_eq!(by_position(1, 25).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 26).evaluated_value.as_deref(), Some("120"));
+    assert_eq!(by_position(1, 27).evaluated_value.as_deref(), Some("100"));
+    assert_eq!(by_position(1, 28).evaluated_value.as_deref(), Some("80"));
   }
 
   #[test]
@@ -1283,6 +1429,57 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=XLOOKUP("north",A1:A1,B1:B1,"missing",1,1)"#.to_string()]
+    );
+  }
+
+  #[test]
+  fn should_leave_mismatched_sumif_ranges_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(10)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: Some(json!(20)),
+        formula: None,
+      },
+      CellMutation {
+        row: 3,
+        col: 2,
+        value: Some(json!(30)),
+        formula: None,
+      },
+      CellMutation {
+        row: 4,
+        col: 1,
+        value: None,
+        formula: Some(r#"=SUMIF(A1:A2,">=100",B1:B3)"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=SUMIF(A1:A2,">=100",B1:B3)"#.to_string()]
     );
   }
 }

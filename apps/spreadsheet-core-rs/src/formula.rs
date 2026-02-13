@@ -21,6 +21,15 @@ pub struct XLookupFormula {
   pub search_mode: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConditionalAggregateFormula {
+  pub criteria_range_start: (u32, u32),
+  pub criteria_range_end: (u32, u32),
+  pub criteria: String,
+  pub value_range_start: Option<(u32, u32)>,
+  pub value_range_end: Option<(u32, u32)>,
+}
+
 pub fn address_from_row_col(row: u32, col: u32) -> String {
   format!("{}{}", index_to_col(col), row)
 }
@@ -227,6 +236,42 @@ pub fn parse_countif_formula(formula: &str) -> Option<((u32, u32), (u32, u32), S
   Some((start, end, args[1].clone()))
 }
 
+pub fn parse_sumif_formula(formula: &str) -> Option<ConditionalAggregateFormula> {
+  parse_conditional_aggregate_formula(formula, "SUMIF")
+}
+
+pub fn parse_averageif_formula(
+  formula: &str,
+) -> Option<ConditionalAggregateFormula> {
+  parse_conditional_aggregate_formula(formula, "AVERAGEIF")
+}
+
+fn parse_conditional_aggregate_formula(
+  formula: &str,
+  function_name: &str,
+) -> Option<ConditionalAggregateFormula> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != function_name || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+
+  let (criteria_range_start, criteria_range_end) = parse_range_reference(&args[0])?;
+  let (value_range_start, value_range_end) = if args.len() == 3 {
+    let (start, end) = parse_range_reference(&args[2])?;
+    (Some(start), Some(end))
+  } else {
+    (None, None)
+  };
+
+  Some(ConditionalAggregateFormula {
+    criteria_range_start,
+    criteria_range_end,
+    criteria: args[1].clone(),
+    value_range_start,
+    value_range_end,
+  })
+}
+
 fn parse_function_arguments(formula: &str) -> Option<(String, Vec<String>)> {
   let expression = formula.trim();
   if !expression.starts_with('=') {
@@ -320,9 +365,11 @@ fn parse_range_reference(value: &str) -> Option<((u32, u32), (u32, u32))> {
 mod tests {
   use super::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
+    parse_averageif_formula,
     parse_concat_formula, parse_date_formula, parse_day_formula,
     parse_left_formula, parse_len_formula, parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
+    parse_sumif_formula,
     parse_if_formula, parse_today_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula,
     parse_year_formula,
@@ -427,5 +474,20 @@ mod tests {
     assert_eq!(countif.0, (1, 1));
     assert_eq!(countif.1, (5, 1));
     assert_eq!(countif.2, r#"">=10""#);
+
+    let sumif = parse_sumif_formula(r#"=SUMIF(A1:A5,">=10",B1:B5)"#)
+      .expect("sumif should parse");
+    assert_eq!(sumif.criteria_range_start, (1, 1));
+    assert_eq!(sumif.criteria_range_end, (5, 1));
+    assert_eq!(sumif.criteria, r#"">=10""#);
+    assert_eq!(sumif.value_range_start, Some((1, 2)));
+    assert_eq!(sumif.value_range_end, Some((5, 2)));
+
+    let averageif = parse_averageif_formula(r#"=AVERAGEIF(A1:A5,">=10")"#)
+      .expect("averageif should parse");
+    assert_eq!(averageif.criteria_range_start, (1, 1));
+    assert_eq!(averageif.criteria_range_end, (5, 1));
+    assert_eq!(averageif.value_range_start, None);
+    assert_eq!(averageif.value_range_end, None);
   }
 }
