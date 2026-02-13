@@ -193,4 +193,127 @@ describe("HyperAgent constructor and task controls", () => {
     };
     expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
   });
+
+  it("executeTaskAsync tolerates context listener attachment failures", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      context: { on: (event: string, handler: unknown) => void } | null;
+    };
+    internalAgent.context = {
+      on: () => {
+        throw new Error("context on trap");
+      },
+    };
+
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.COMPLETED,
+      output: "done",
+    });
+  });
+
+  it("executeTask tolerates context listener detach failures", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const on = jest.fn();
+    const off = jest.fn(() => {
+      throw new Error("context off trap");
+    });
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      context: {
+        on: typeof on;
+        off: typeof off;
+      } | null;
+    };
+    internalAgent.context = { on, off };
+
+    const fakePage = {} as unknown as Page;
+    const result = await agent.executeTask("test task", undefined, fakePage);
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(off).toHaveBeenCalledWith("page", expect.any(Function));
+  });
+
+  it("handles trap-prone tab URL reads in task page-follow callback", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const on = jest.fn();
+    const off = jest.fn();
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const internalAgent = agent as unknown as {
+      context: {
+        on: typeof on;
+        off: typeof off;
+      } | null;
+    };
+    internalAgent.context = { on, off };
+
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+    const onPageHandler = on.mock.calls[0]?.[1] as (page: Page) => Promise<void>;
+    const popupPage = {
+      opener: async () => fakePage,
+      url: () => {
+        throw new Error("url trap");
+      },
+    } as unknown as Page;
+
+    try {
+      await expect(onPageHandler(popupPage)).resolves.toBeUndefined();
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.COMPLETED,
+      });
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });

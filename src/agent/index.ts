@@ -105,6 +105,55 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private _variables: Record<string, HyperVariable> = {};
   private errorEmitter: ErrorEmitter;
 
+  private safeGetPageUrl(page: Page): string {
+    try {
+      const url = page.url();
+      if (typeof url !== "string") {
+        return "about:blank";
+      }
+      const normalized = url.replace(/\s+/g, " ").trim();
+      return normalized.length > 0 ? normalized : "about:blank";
+    } catch {
+      return "about:blank";
+    }
+  }
+
+  private attachPageListenerForTask(
+    onPage: (newPage: Page) => void | Promise<void>
+  ): () => void {
+    const context = this.context;
+    if (!context) {
+      return () => undefined;
+    }
+
+    try {
+      context.on("page", onPage);
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to attach task page listener: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+      return () => undefined;
+    }
+
+    return () => {
+      try {
+        context.off("page", onPage);
+      } catch (error) {
+        if (this.debug) {
+          console.warn(
+            `[HyperAgent] Failed to detach task page listener: ${formatUnknownError(
+              error
+            )}`
+          );
+        }
+      }
+    };
+  }
+
   public get currentPage(): HyperPage | null {
     if (this._currentPage) {
       return this.setupHyperPage(this._currentPage);
@@ -361,7 +410,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (lastPage && !lastPage.isClosed() && lastPage !== this._currentPage) {
         if (this.debug) {
           console.log(
-            `[HyperAgent] Polling detected new page, switching focus: ${lastPage.url()}`
+            `[HyperAgent] Polling detected new page, switching focus: ${this.safeGetPageUrl(
+              lastPage
+            )}`
           );
         }
         this._currentPage = lastPage;
@@ -437,7 +488,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         if (opener === activeTaskPage) {
           if (this.debug) {
             console.log(
-              `[HyperAgent] Task following new tab: ${newPage.url()}`
+              `[HyperAgent] Task following new tab: ${this.safeGetPageUrl(
+                newPage
+              )}`
             );
           }
           activeTaskPage = newPage;
@@ -446,8 +499,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         // Ignore
       }
     };
-    this.context?.on("page", onPage);
-    const cleanup = () => this.context?.off("page", onPage);
+    const cleanup = this.attachPageListenerForTask(onPage);
 
     const taskState: TaskState = {
       id: taskId,
@@ -530,7 +582,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         if (opener === activeTaskPage) {
           if (this.debug) {
             console.log(
-              `[HyperAgent] Task following new tab: ${newPage.url()}`
+              `[HyperAgent] Task following new tab: ${this.safeGetPageUrl(
+                newPage
+              )}`
             );
           }
           activeTaskPage = newPage;
@@ -539,7 +593,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         // Ignore
       }
     };
-    this.context?.on("page", onPage);
+    const cleanup = this.attachPageListenerForTask(onPage);
 
     const taskState: TaskState = {
       id: taskId,
@@ -565,12 +619,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         taskState,
         mergedParams
       );
-      this.context?.off("page", onPage);
+      cleanup();
       this.actionCacheByTaskId[taskId] = result.actionCache;
       delete this.tasks[taskId];
       return result;
     } catch (error) {
-      this.context?.off("page", onPage);
+      cleanup();
       taskState.status = TaskStatus.FAILED;
       delete this.tasks[taskId];
       throw error;
