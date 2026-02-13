@@ -13,6 +13,7 @@ interface FrameRiskSignal {
   name: string;
   weight: number;
   matched: boolean;
+  strong?: boolean;
 }
 
 const PIXEL_PATTERNS = [/\(1×1\)/i, /\(1x1\)/i];
@@ -86,6 +87,30 @@ const TRACKING_PARAMS = [
 
 const MIN_FILTER_SCORE = 2;
 
+function safeGetHostname(value: string | undefined): string | null {
+  if (!value || value.trim().length === 0) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isSameSiteFrame(url: string, parentUrl: string | undefined): boolean {
+  const hostname = safeGetHostname(url);
+  const parentHostname = safeGetHostname(parentUrl);
+  if (!hostname || !parentHostname) {
+    return false;
+  }
+  return (
+    hostname === parentHostname ||
+    hostname.endsWith(`.${parentHostname}`) ||
+    parentHostname.endsWith(`.${hostname}`)
+  );
+}
+
 /**
  * Check if a frame is likely an ad or tracking iframe
  *
@@ -95,7 +120,7 @@ const MIN_FILTER_SCORE = 2;
  * - Prevent single weak indicators (e.g. generic "sync" in URL) from dropping legitimate frames
  */
 export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
-  const { url, name } = context;
+  const { url, name, parentUrl } = context;
   const urlLower = url.toLowerCase();
   const nameLower = (name || "").toLowerCase();
 
@@ -108,6 +133,7 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
     {
       name: "pixel-pattern",
       weight: 2,
+      strong: true,
       matched: PIXEL_PATTERNS.some(
         (pattern) => pattern.test(urlLower) || pattern.test(nameLower)
       ),
@@ -127,16 +153,19 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
     {
       name: "known-ad-domain",
       weight: 2,
+      strong: true,
       matched: AD_DOMAINS.some((domain) => urlLower.includes(domain)),
     },
     {
       name: "tracking-query-param",
       weight: 2,
+      strong: true,
       matched: TRACKING_PARAMS.some((param) => urlLower.includes(param)),
     },
     {
       name: "data-uri",
       weight: 2,
+      strong: true,
       matched: urlLower.startsWith("data:"),
     },
   ];
@@ -146,6 +175,17 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
     0
   );
 
-  return riskScore >= MIN_FILTER_SCORE;
+  if (riskScore < MIN_FILTER_SCORE) {
+    return false;
+  }
+
+  const hasStrongSignal = signals.some(
+    (signal) => signal.matched && signal.strong === true
+  );
+  if (!hasStrongSignal && isSameSiteFrame(url, parentUrl)) {
+    return false;
+  }
+
+  return true;
 }
 

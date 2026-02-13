@@ -42,4 +42,22 @@ describe("isAdOrTrackingFrame", () => {
       })
     ).toBe(true);
   });
+
+  it("keeps same-site frames when only weak ad signals are present", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "https://app.example.com/assets/pixel.png?theme=dark",
+        parentUrl: "https://app.example.com/dashboard",
+      })
+    ).toBe(false);
+  });
+
+  it("still filters same-site frames when strong tracking signals exist", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "https://app.example.com/widget/frame?prebid=1",
+        parentUrl: "https://app.example.com/dashboard",
+      })
+    ).toBe(true);
+  });
 });
