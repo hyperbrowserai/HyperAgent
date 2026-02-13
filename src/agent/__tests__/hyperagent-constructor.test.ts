@@ -1212,4 +1212,30 @@ describe("HyperAgent constructor and task controls", () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(internalAgent._currentPage).toBeNull();
   });
+
+  it("closeAgent clears internal async task-result cache", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      taskResults: Record<string, Promise<AgentTaskOutput>>;
+    };
+    internalAgent.taskResults = {
+      "task-a": Promise.resolve({
+        taskId: "task-a",
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: "done",
+        actionCache: {
+          taskId: "task-a",
+          createdAt: new Date().toISOString(),
+          status: TaskStatus.COMPLETED,
+          steps: [],
+        },
+      }),
+    };
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    expect(internalAgent.taskResults).toEqual({});
+  });
 });
