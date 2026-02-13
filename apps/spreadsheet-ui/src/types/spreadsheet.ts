@@ -87,6 +87,7 @@ export interface AgentOpsCachePrefixesResponse {
   returned_prefixes: number;
   request_id_prefix: string | null;
   min_entry_count: number;
+  sort_by: string;
   max_age_seconds: number | null;
   cutoff_timestamp: string | null;
   limit: number;

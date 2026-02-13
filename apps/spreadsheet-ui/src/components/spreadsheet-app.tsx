@@ -146,6 +146,9 @@ export function SpreadsheetApp() {
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
   const [cachePrefixMinEntryCount, setCachePrefixMinEntryCount] = useState("");
+  const [cachePrefixSortBy, setCachePrefixSortBy] = useState<"count" | "recent">(
+    "count",
+  );
   const [cacheRemovePreviewSampleLimit, setCacheRemovePreviewSampleLimit] = useState("10");
   const [cacheStalePreviewSampleLimit, setCacheStalePreviewSampleLimit] = useState("10");
   const [cacheStaleMaxAgeSeconds, setCacheStaleMaxAgeSeconds] = useState("3600");
@@ -339,6 +342,7 @@ export function SpreadsheetApp() {
       cacheRequestIdPrefix,
       normalizedCacheEntriesMaxAgeSeconds,
       normalizedCachePrefixMinEntryCount,
+      cachePrefixSortBy,
     ],
     enabled: Boolean(workbook?.id)
       && !hasInvalidCacheEntriesMaxAgeInput
@@ -350,6 +354,7 @@ export function SpreadsheetApp() {
         cacheRequestIdPrefix,
         normalizedCacheEntriesMaxAgeSeconds,
         normalizedCachePrefixMinEntryCount,
+        cachePrefixSortBy,
       ),
   });
 
@@ -2800,6 +2805,19 @@ export function SpreadsheetApp() {
                     >
                       Clear min
                     </button>
+                    <label className="text-[10px] text-slate-500">
+                      prefix sort
+                    </label>
+                    <select
+                      value={cachePrefixSortBy}
+                      onChange={(event) =>
+                        setCachePrefixSortBy(event.target.value as "count" | "recent")
+                      }
+                      className="h-6 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-indigo-500"
+                    >
+                      <option value="count">count</option>
+                      <option value="recent">recent</option>
+                    </select>
                     <button
                       onClick={handlePreviewRemoveCacheEntriesByPrefix}
                       disabled={
@@ -3092,6 +3110,11 @@ export function SpreadsheetApp() {
                             (min count {agentOpsCachePrefixesQuery.data.min_entry_count})
                           </span>
                         ) : null}
+                      {agentOpsCachePrefixesQuery.data ? (
+                        <span className="text-[10px] text-slate-500">
+                          (sort {agentOpsCachePrefixesQuery.data.sort_by})
+                        </span>
+                      ) : null}
                       {typeof agentOpsCachePrefixesQuery.data?.max_age_seconds === "number" ? (
                         <span className="text-[10px] text-slate-500">
                           (older than {agentOpsCachePrefixesQuery.data.max_age_seconds}s)
@@ -3151,6 +3174,7 @@ export function SpreadsheetApp() {
                       && normalizedCachePrefixMinEntryCount > 1 ? (
                         <> (min count {normalizedCachePrefixMinEntryCount})</>
                       ) : null}
+                      <> (sort {cachePrefixSortBy})</>
                       .
                     </div>
                   ) : null}

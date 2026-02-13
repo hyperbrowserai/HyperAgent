@@ -57,6 +57,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Cache entries pager shows scoped totals and global totals when filters narrow results
 - Prefix suggestion row shows scoped/global prefix totals and active prefix scope echo when filters narrow suggestions
 - Prefix suggestion row supports optional minimum-match filtering (`min prefix count`) for high-signal cache triage
+- Prefix suggestion row supports selectable sort mode (`count` or `recent`) for cache triage priorities
 - Prefix suggestion row now shows an explicit empty-scope hint when active prefix/age filters yield zero suggestions
 - Cache age-filter control validates positive integer seconds inline
 - Prefix preview/remove actions are blocked while age-filter input is invalid

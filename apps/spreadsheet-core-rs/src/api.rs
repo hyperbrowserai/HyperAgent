@@ -1055,7 +1055,7 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
-    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&limit=8&max_age_seconds=3600",
+    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&sort_by=recent&limit=8&max_age_seconds=3600",
     "agent_ops_cache_stats_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter stats to entries older than or equal to this age)"
@@ -1069,6 +1069,7 @@ async fn get_agent_schema(
     "agent_ops_cache_prefixes_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
+      "sort_by": "optional string enum: count|recent (default count)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
       "limit": "optional number, default 8, max 100"
     },
@@ -1122,6 +1123,7 @@ async fn get_agent_schema(
       "returned_prefixes": "number of prefixes returned",
       "request_id_prefix": "echoed filter prefix when provided",
       "min_entry_count": "applied minimum entry count filter (default 1)",
+      "sort_by": "applied sort mode: count|recent",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "limit": "applied limit (default 8, max 100)",
@@ -1228,6 +1230,7 @@ async fn get_agent_schema(
       "INVALID_NEW_REQUEST_ID",
       "INVALID_MAX_AGE_SECONDS",
       "INVALID_MIN_ENTRY_COUNT",
+      "INVALID_PREFIX_SORT_BY",
       "INVALID_REQUEST_ID_PREFIX",
       "CACHE_ENTRY_NOT_FOUND"
     ],
@@ -1531,6 +1534,7 @@ struct AgentOpsCacheEntriesQuery {
 struct AgentOpsCachePrefixesQuery {
   request_id_prefix: Option<String>,
   min_entry_count: Option<usize>,
+  sort_by: Option<String>,
   max_age_seconds: Option<i64>,
   limit: Option<usize>,
 }
@@ -1698,6 +1702,7 @@ async fn agent_ops_cache_prefixes(
       "min_entry_count must be greater than zero when provided.",
     ));
   }
+  let sort_by = normalize_prefix_sort_by(query.sort_by.as_deref())?;
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
@@ -1708,6 +1713,7 @@ async fn agent_ops_cache_prefixes(
       normalized_prefix.as_deref(),
       cutoff_timestamp,
       min_entry_count,
+      sort_by == "recent",
       limit,
     )
     .await?;
@@ -1715,9 +1721,9 @@ async fn agent_ops_cache_prefixes(
     .into_iter()
     .map(
       |(prefix, entry_count, newest_request_id, newest_cached_at)| AgentOpsCachePrefix {
-      prefix,
-      entry_count,
-      newest_request_id,
+        prefix,
+        entry_count,
+        newest_request_id,
         newest_cached_at,
       },
     )
@@ -1728,6 +1734,7 @@ async fn agent_ops_cache_prefixes(
     returned_prefixes: mapped_prefixes.len(),
     request_id_prefix: normalized_prefix,
     min_entry_count,
+    sort_by,
     max_age_seconds: query.max_age_seconds,
     cutoff_timestamp,
     limit,
@@ -1957,6 +1964,22 @@ fn normalize_required_request_id_prefix(
     ));
   }
   Ok(normalized.to_string())
+}
+
+fn normalize_prefix_sort_by(sort_by: Option<&str>) -> Result<String, ApiError> {
+  match sort_by.map(str::trim).filter(|value| !value.is_empty()) {
+    None => Ok("count".to_string()),
+    Some(value) if value.eq_ignore_ascii_case("count") => {
+      Ok("count".to_string())
+    }
+    Some(value) if value.eq_ignore_ascii_case("recent") => {
+      Ok("recent".to_string())
+    }
+    Some(_) => Err(ApiError::bad_request_with_code(
+      "INVALID_PREFIX_SORT_BY",
+      "sort_by must be one of: count, recent.",
+    )),
+  }
 }
 
 fn max_age_cutoff_timestamp(
@@ -2866,6 +2889,7 @@ mod tests {
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: Some("   ".to_string()),
         min_entry_count: None,
+        sort_by: None,
         max_age_seconds: None,
         limit: Some(10),
       }),
@@ -2912,6 +2936,7 @@ mod tests {
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: None,
         min_entry_count: None,
+        sort_by: None,
         max_age_seconds: None,
         limit: Some(10),
       }),
@@ -2925,6 +2950,7 @@ mod tests {
     assert_eq!(prefixes.returned_prefixes, 2);
     assert_eq!(prefixes.request_id_prefix, None);
     assert_eq!(prefixes.min_entry_count, 1);
+    assert_eq!(prefixes.sort_by, "count");
     assert_eq!(prefixes.max_age_seconds, None);
     assert!(prefixes.cutoff_timestamp.is_none());
     assert_eq!(prefixes.prefixes[0].prefix, "scenario-");
@@ -2942,6 +2968,7 @@ mod tests {
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: None,
         min_entry_count: None,
+        sort_by: None,
         max_age_seconds: Some(86_400),
         limit: Some(10),
       }),
@@ -2951,6 +2978,7 @@ mod tests {
     .0;
     assert_eq!(age_filtered.max_age_seconds, Some(86_400));
     assert_eq!(age_filtered.min_entry_count, 1);
+    assert_eq!(age_filtered.sort_by, "count");
     assert!(age_filtered.cutoff_timestamp.is_some());
     assert_eq!(age_filtered.total_prefixes, 0);
     assert_eq!(age_filtered.unscoped_total_prefixes, 2);
@@ -2963,6 +2991,7 @@ mod tests {
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: Some("scenario-".to_string()),
         min_entry_count: None,
+        sort_by: None,
         max_age_seconds: None,
         limit: Some(10),
       }),
@@ -2977,6 +3006,7 @@ mod tests {
       Some("scenario-"),
     );
     assert_eq!(prefix_filtered.min_entry_count, 1);
+    assert_eq!(prefix_filtered.sort_by, "count");
     assert_eq!(prefix_filtered.prefixes.len(), 1);
     assert_eq!(prefix_filtered.prefixes[0].prefix, "scenario-");
     assert_eq!(prefix_filtered.prefixes[0].entry_count, 2);
@@ -2989,6 +3019,7 @@ mod tests {
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: None,
         min_entry_count: Some(2),
+        sort_by: None,
         max_age_seconds: None,
         limit: Some(10),
       }),
@@ -2997,6 +3028,7 @@ mod tests {
     .expect("min-entry-count filtered prefixes should load")
     .0;
     assert_eq!(min_filtered.min_entry_count, 2);
+    assert_eq!(min_filtered.sort_by, "count");
     assert_eq!(min_filtered.total_prefixes, 1);
     assert_eq!(min_filtered.unscoped_total_prefixes, 2);
     assert_eq!(min_filtered.returned_prefixes, 1);
@@ -3009,6 +3041,7 @@ mod tests {
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: None,
         min_entry_count: None,
+        sort_by: None,
         max_age_seconds: Some(0),
         limit: Some(10),
       }),
@@ -3023,11 +3056,12 @@ mod tests {
     }
 
     let invalid_min_error = agent_ops_cache_prefixes(
-      State(state),
+      State(state.clone()),
       Path(workbook.id),
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: None,
         min_entry_count: Some(0),
+        sort_by: None,
         max_age_seconds: None,
         limit: Some(10),
       }),
@@ -3039,6 +3073,44 @@ mod tests {
         assert_eq!(code, "INVALID_MIN_ENTRY_COUNT");
       }
       _ => panic!("expected invalid min entry count to use custom error code"),
+    }
+
+    let recent_sorted = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        sort_by: Some("recent".to_string()),
+        max_age_seconds: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect("recent-sorted prefixes should load")
+    .0;
+    assert_eq!(recent_sorted.sort_by, "recent");
+    assert_eq!(recent_sorted.prefixes[0].prefix, "preset-");
+    assert_eq!(recent_sorted.prefixes[1].prefix, "scenario-");
+
+    let invalid_sort_error = agent_ops_cache_prefixes(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        sort_by: Some("mystery".to_string()),
+        max_age_seconds: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect_err("unknown sort_by should fail");
+    match invalid_sort_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_PREFIX_SORT_BY");
+      }
+      _ => panic!("expected invalid sort to use custom error code"),
     }
   }
 
@@ -3907,7 +3979,7 @@ mod tests {
         .get("agent_ops_cache_prefixes_endpoint")
         .and_then(serde_json::Value::as_str),
       Some(
-        "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&limit=8&max_age_seconds=3600",
+        "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&sort_by=recent&limit=8&max_age_seconds=3600",
       ),
     );
     assert_eq!(
@@ -3916,6 +3988,13 @@ mod tests {
         .and_then(|value| value.get("min_entry_count"))
         .and_then(serde_json::Value::as_str),
       Some("optional number > 0 (filter out prefixes with fewer matches, default 1)"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_query_shape")
+        .and_then(|value| value.get("sort_by"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional string enum: count|recent (default count)"),
     );
     assert_eq!(
       schema
@@ -3978,6 +4057,13 @@ mod tests {
         .and_then(|value| value.get("min_entry_count"))
         .and_then(serde_json::Value::as_str),
       Some("applied minimum entry count filter (default 1)"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("sort_by"))
+        .and_then(serde_json::Value::as_str),
+      Some("applied sort mode: count|recent"),
     );
     assert_eq!(
       schema
@@ -4086,6 +4172,10 @@ mod tests {
     assert!(
       cache_validation_error_codes.contains(&"INVALID_MIN_ENTRY_COUNT"),
       "schema should advertise invalid min-entry-count error code",
+    );
+    assert!(
+      cache_validation_error_codes.contains(&"INVALID_PREFIX_SORT_BY"),
+      "schema should advertise invalid prefix-sort error code",
     );
   }
 }
