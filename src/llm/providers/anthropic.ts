@@ -32,6 +32,7 @@ const RESERVED_ANTHROPIC_PROVIDER_OPTION_KEYS = new Set([
   "tools",
   "tool_choice",
 ]);
+const MAX_ANTHROPIC_DIAGNOSTIC_CHARS = 300;
 
 function shouldDebugStructuredSchema(): boolean {
   const opts = getDebugOptions();
@@ -43,6 +44,86 @@ function shouldDebugStructuredSchema(): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatAnthropicDiagnostic(value: unknown): string {
+  const normalized = formatUnknownError(value);
+  if (normalized.length <= MAX_ANTHROPIC_DIAGNOSTIC_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(
+    0,
+    MAX_ANTHROPIC_DIAGNOSTIC_CHARS
+  )}... [truncated ${normalized.length - MAX_ANTHROPIC_DIAGNOSTIC_CHARS} chars]`;
+}
+
+function safeReadOptionalRecordField(
+  source: Record<string, unknown>,
+  key: string
+): unknown {
+  try {
+    return source[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function safeReadRequiredRecordField(
+  source: Record<string, unknown>,
+  key: string,
+  fieldLabel: string
+): unknown {
+  try {
+    return source[key];
+  } catch (error) {
+    throw new Error(
+      `[LLM][Anthropic] Invalid response payload: failed to read ${fieldLabel} (${formatAnthropicDiagnostic(
+        error
+      )})`
+    );
+  }
+}
+
+function extractAnthropicContentBlocks(response: unknown): unknown[] {
+  if (!isRecord(response)) {
+    throw new Error("[LLM][Anthropic] Invalid response payload: response must be an object");
+  }
+  const content = safeReadRequiredRecordField(response, "content", "content");
+  if (!Array.isArray(content)) {
+    throw new Error("[LLM][Anthropic] Invalid response payload: content must be an array");
+  }
+  try {
+    return Array.from(content);
+  } catch (error) {
+    throw new Error(
+      `[LLM][Anthropic] Invalid response payload: failed to iterate content (${formatAnthropicDiagnostic(
+        error
+      )})`
+    );
+  }
+}
+
+function findAnthropicToolUseBlock(contentBlocks: unknown[]): Record<string, unknown> | undefined {
+  return contentBlocks.find(
+    (block) =>
+      isRecord(block) &&
+      safeReadOptionalRecordField(block, "type") === "tool_use"
+  ) as Record<string, unknown> | undefined;
+}
+
+function safeReadAnthropicUsageTokens(
+  response: unknown,
+  key: "input_tokens" | "output_tokens"
+): number | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+  const usage = safeReadOptionalRecordField(response, "usage");
+  if (!isRecord(usage)) {
+    return undefined;
+  }
+  const value = safeReadOptionalRecordField(usage, key);
+  return typeof value === "number" ? value : undefined;
 }
 
 function stringifyRawPayload(value: unknown): string {
@@ -111,9 +192,18 @@ export class AnthropicClient implements HyperAgentLLM {
       ...providerOptions,
     });
 
-    const textBlocks = response.content.filter((block) => block.type === "text");
-    const textParts = textBlocks
-      .map((block) => block.text)
+    const contentBlocks = extractAnthropicContentBlocks(response);
+    const textParts = contentBlocks
+      .filter(
+        (block) =>
+          isRecord(block) &&
+          safeReadOptionalRecordField(block, "type") === "text"
+      )
+      .map((block) =>
+        isRecord(block)
+          ? safeReadOptionalRecordField(block, "text")
+          : undefined
+      )
       .filter((value): value is string => typeof value === "string");
     const content = textParts.join("\n\n");
     if (content.length === 0) {
@@ -124,8 +214,8 @@ export class AnthropicClient implements HyperAgentLLM {
       role: "assistant",
       content,
       usage: {
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        inputTokens: safeReadAnthropicUsageTokens(response, "input_tokens"),
+        outputTokens: safeReadAnthropicUsageTokens(response, "output_tokens"),
       },
     };
   }
@@ -203,21 +293,21 @@ export class AnthropicClient implements HyperAgentLLM {
       ...providerOptions,
     });
 
-    const toolContent = response.content.find(
-      (block: any) => block.type === "tool_use"
-    ) as
-      | { type: "tool_use"; name: string; input: Record<string, unknown> }
-      | undefined;
+    const responseContent = extractAnthropicContentBlocks(response);
+    const toolContent = findAnthropicToolUseBlock(responseContent);
 
     if (!toolContent) {
       return {
-        rawText: stringifyRawPayload(response.content ?? []),
+        rawText: stringifyRawPayload(responseContent),
         parsed: null,
       };
     }
 
+    const toolName = safeReadOptionalRecordField(toolContent, "name");
     const actionDefinition = request.actions.find(
-      (action) => (action.toolName ?? action.type) === toolContent.name
+      (action) =>
+        (action.toolName ?? action.type) ===
+        (typeof toolName === "string" ? toolName : "")
     );
     if (!actionDefinition) {
       return {
@@ -226,11 +316,14 @@ export class AnthropicClient implements HyperAgentLLM {
       };
     }
 
-    const input = isRecord(toolContent.input) ? toolContent.input : {};
-    const actionInput = isRecord(input.action) ? input.action : {};
-    const params = actionInput.params ?? {};
-    const thoughts = input.thoughts;
-    const memory = input.memory;
+    const inputValue = safeReadOptionalRecordField(toolContent, "input");
+    const input = isRecord(inputValue) ? inputValue : {};
+    const actionValue = safeReadOptionalRecordField(input, "action");
+    const actionInput = isRecord(actionValue) ? actionValue : {};
+    const paramsValue = safeReadOptionalRecordField(actionInput, "params");
+    const params = typeof paramsValue === "undefined" ? {} : paramsValue;
+    const thoughts = safeReadOptionalRecordField(input, "thoughts");
+    const memory = safeReadOptionalRecordField(input, "memory");
     let validatedParams: z.infer<typeof actionDefinition.actionParams>;
     try {
       validatedParams = actionDefinition.actionParams.parse(params);
@@ -303,7 +396,8 @@ export class AnthropicClient implements HyperAgentLLM {
       ),
     });
 
-    const content = response.content.find((block) => block.type === "tool_use");
+    const responseContent = extractAnthropicContentBlocks(response);
+    const content = findAnthropicToolUseBlock(responseContent);
     if (!content) {
       return {
         rawText: "",
@@ -311,7 +405,7 @@ export class AnthropicClient implements HyperAgentLLM {
       };
     }
 
-    const input = content.input;
+    const input = safeReadOptionalRecordField(content, "input");
     if (!isRecord(input)) {
       return {
         rawText: stringifyRawPayload(input),
@@ -320,7 +414,9 @@ export class AnthropicClient implements HyperAgentLLM {
     }
 
     try {
-      const validated = request.schema.parse(input.result);
+      const validated = request.schema.parse(
+        safeReadOptionalRecordField(input, "result")
+      );
       return {
         rawText: stringifyRawPayload(input),
         parsed: validated,

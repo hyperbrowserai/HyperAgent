@@ -134,6 +134,50 @@ describe("GeminiClient", () => {
     ).rejects.toThrow("No text response from Gemini");
   });
 
+  it("throws readable error when invoke response text is not a string", async () => {
+    generateContentMock.mockResolvedValue({
+      text: { value: "bad-shape" },
+    });
+
+    const client = new GeminiClient({
+      model: "gemini-test",
+    });
+
+    await expect(
+      client.invoke([{ role: "user", content: "hello" }])
+    ).rejects.toThrow(
+      '[LLM][Gemini] Invalid response payload: expected text string, received {"value":"bad-shape"}'
+    );
+  });
+
+  it("returns null structured output when response text getter throws", async () => {
+    const response = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "text") {
+            throw new Error("text getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+    generateContentMock.mockResolvedValue(response);
+
+    const client = new GeminiClient({
+      model: "gemini-test",
+    });
+
+    const result = await client.invokeStructured(
+      {
+        schema: z.object({ ok: z.boolean() }),
+      },
+      [{ role: "user", content: "hello" }]
+    );
+    expect(result.parsed).toBeNull();
+    expect(result.rawText).toContain("text getter trap");
+  });
+
   it("sanitizes reserved config keys from provider options", async () => {
     generateContentMock.mockResolvedValue({
       text: "result text",

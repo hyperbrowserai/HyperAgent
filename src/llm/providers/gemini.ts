@@ -12,6 +12,7 @@ import { convertToGeminiMessages } from "../utils/message-converter";
 import { convertToGeminiResponseSchema } from "../utils/schema-converter";
 import { sanitizeProviderOptions } from "../utils/provider-options";
 import { parseStructuredResponse } from "../utils/structured-response";
+import { formatUnknownError } from "@/utils";
 
 const RESERVED_GEMINI_CONFIG_OPTION_KEYS = new Set([
   "temperature",
@@ -20,6 +21,47 @@ const RESERVED_GEMINI_CONFIG_OPTION_KEYS = new Set([
   "responseMimeType",
   "responseSchema",
 ]);
+const MAX_GEMINI_DIAGNOSTIC_CHARS = 300;
+
+function formatGeminiDiagnostic(value: unknown): string {
+  const normalized = formatUnknownError(value);
+  if (normalized.length <= MAX_GEMINI_DIAGNOSTIC_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(
+    0,
+    MAX_GEMINI_DIAGNOSTIC_CHARS
+  )}... [truncated ${normalized.length - MAX_GEMINI_DIAGNOSTIC_CHARS} chars]`;
+}
+
+function safeReadGeminiResponseText(response: unknown): unknown {
+  try {
+    return (response as { text?: unknown }).text;
+  } catch (error) {
+    return `[Unreadable Gemini response text: ${formatGeminiDiagnostic(error)}]`;
+  }
+}
+
+function safeReadGeminiUsageTokens(
+  response: unknown,
+  key: "promptTokenCount" | "candidatesTokenCount"
+): number | undefined {
+  let usageMetadata: unknown;
+  try {
+    usageMetadata = (response as { usageMetadata?: unknown }).usageMetadata;
+  } catch {
+    return undefined;
+  }
+  if (!usageMetadata || typeof usageMetadata !== "object") {
+    return undefined;
+  }
+  try {
+    const value = (usageMetadata as Record<string, unknown>)[key];
+    return typeof value === "number" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface GeminiClientConfig {
   apiKey?: string;
@@ -92,17 +134,27 @@ export class GeminiClient implements HyperAgentLLM {
       config: this.buildGeminiConfig(options, systemInstruction),
     });
 
-    const text = response.text;
+    const text = safeReadGeminiResponseText(response);
     if (!text) {
       throw new Error("No text response from Gemini");
+    }
+    if (typeof text !== "string") {
+      throw new Error(
+        `[LLM][Gemini] Invalid response payload: expected text string, received ${formatGeminiDiagnostic(
+          text
+        )}`
+      );
     }
 
     return {
       role: "assistant",
       content: text,
       usage: {
-        inputTokens: response.usageMetadata?.promptTokenCount,
-        outputTokens: response.usageMetadata?.candidatesTokenCount,
+        inputTokens: safeReadGeminiUsageTokens(response, "promptTokenCount"),
+        outputTokens: safeReadGeminiUsageTokens(
+          response,
+          "candidatesTokenCount"
+        ),
       },
     };
   }
@@ -125,7 +177,7 @@ export class GeminiClient implements HyperAgentLLM {
       },
     });
 
-    const text = response.text;
+    const text = safeReadGeminiResponseText(response);
     return parseStructuredResponse(text, request.schema);
   }
 

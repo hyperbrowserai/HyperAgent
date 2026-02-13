@@ -357,4 +357,39 @@ describe("AnthropicClient", () => {
       })
     );
   });
+
+  it("throws readable error when response content field is unreadable", async () => {
+    const response = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "content") {
+            throw new Error("content getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+    createMessageMock.mockResolvedValue(response);
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    await expect(
+      client.invoke([{ role: "user", content: "hello" }])
+    ).rejects.toThrow(
+      "[LLM][Anthropic] Invalid response payload: failed to read content (content getter trap)"
+    );
+  });
+
+  it("throws readable error when response content is not an array", async () => {
+    createMessageMock.mockResolvedValue({
+      content: { bad: true },
+    });
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    await expect(
+      client.invoke([{ role: "user", content: "hello" }])
+    ).rejects.toThrow(
+      "[LLM][Anthropic] Invalid response payload: content must be an array"
+    );
+  });
 });
