@@ -484,6 +484,21 @@ pub fn parse_rept_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_replace_formula(
+  formula: &str,
+) -> Option<(String, String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "REPLACE" && args.len() == 4 {
+    return Some((
+      args[0].clone(),
+      args[1].clone(),
+      args[2].clone(),
+      args[3].clone(),
+    ));
+  }
+  None
+}
+
 pub fn parse_search_formula(
   formula: &str,
 ) -> Option<(String, String, Option<String>)> {
@@ -807,7 +822,7 @@ mod tests {
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
     parse_find_formula, parse_mid_formula, parse_rept_formula,
-    parse_search_formula,
+    parse_replace_formula, parse_search_formula,
     parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
@@ -1027,6 +1042,13 @@ mod tests {
       parse_rept_formula(r#"=REPT("na", 4)"#).expect("rept should parse");
     assert_eq!(rept_args.0, r#""na""#);
     assert_eq!(rept_args.1, "4");
+
+    let replace_args = parse_replace_formula(r#"=REPLACE("spreadsheet",1,6,"work")"#)
+      .expect("replace should parse");
+    assert_eq!(replace_args.0, r#""spreadsheet""#);
+    assert_eq!(replace_args.1, "1");
+    assert_eq!(replace_args.2, "6");
+    assert_eq!(replace_args.3, r#""work""#);
 
     let search_args = parse_search_formula(r#"=SEARCH("sheet","spreadsheet",2)"#)
       .expect("search should parse");
