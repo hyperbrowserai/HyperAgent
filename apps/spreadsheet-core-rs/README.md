@@ -67,6 +67,10 @@ Request options:
 
 Response includes:
 - `operations_signature` — sha256 signature over submitted operations.
+- Signature-related validation error codes:
+  - `INVALID_SIGNATURE_FORMAT`
+  - `OPERATION_SIGNATURE_MISMATCH`
+  - `EMPTY_OPERATION_LIST`
 
 Plan-preview helper:
 - `POST /v1/workbooks/{id}/agent/ops/preview` returns `{ operations_signature, operations }` without executing.

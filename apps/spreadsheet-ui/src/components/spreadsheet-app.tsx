@@ -341,7 +341,10 @@ export function SpreadsheetApp() {
     maybeMessage: string | null,
   ): Promise<boolean> {
     const message = maybeMessage ?? "";
-    if (!message.includes("Operation signature mismatch")) {
+    if (
+      !message.includes("OPERATION_SIGNATURE_MISMATCH") &&
+      !message.includes("Operation signature mismatch")
+    ) {
       return false;
     }
     await Promise.all([

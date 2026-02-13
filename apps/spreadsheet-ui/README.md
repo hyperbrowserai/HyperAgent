@@ -34,6 +34,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Formula-bar apply and agent demo flow also execute through signed `agent/ops` plans
 - Preview panels show signature sync status (`in-sync` / `stale`) against latest execution
 - Agent details panel can copy the most recent executed plan as a re-signed `agent/ops` payload
+- API client error handling preserves backend error codes in thrown messages (e.g. `OPERATION_SIGNATURE_MISMATCH: ...`)
 - Event stream viewer with per-event-type filtering
 
 ## Run

@@ -151,7 +151,8 @@ fn validate_expected_operations_signature(
     return Ok(());
   }
   if expected.len() != 64 || !expected.chars().all(|ch| ch.is_ascii_hexdigit()) {
-    return Err(ApiError::BadRequest(
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_SIGNATURE_FORMAT",
       "Expected operations signature must be a 64-character hexadecimal string."
         .to_string(),
     ));
@@ -159,16 +160,20 @@ fn validate_expected_operations_signature(
   if expected == actual_signature {
     return Ok(());
   }
-  Err(ApiError::BadRequest(format!(
-    "Operation signature mismatch. expected={expected} actual={actual_signature}",
-  )))
+  Err(ApiError::bad_request_with_code(
+    "OPERATION_SIGNATURE_MISMATCH",
+    format!(
+      "Operation signature mismatch. expected={expected} actual={actual_signature}",
+    ),
+  ))
 }
 
 fn ensure_non_empty_operations(
   operations: &[AgentOperation],
 ) -> Result<(), ApiError> {
   if operations.is_empty() {
-    return Err(ApiError::BadRequest(
+    return Err(ApiError::bad_request_with_code(
+      "EMPTY_OPERATION_LIST",
       "Operation list cannot be empty.".to_string(),
     ));
   }

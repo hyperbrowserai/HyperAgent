@@ -29,10 +29,11 @@ interface JsonError {
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const maybeError = (await response.json().catch(() => null)) as JsonError | null;
+    const code = maybeError?.error?.code;
     const message =
       maybeError?.error?.message ??
       `Request failed with status ${response.status}.`;
-    throw new Error(message);
+    throw new Error(code ? `${code}: ${message}` : message);
   }
   return (await response.json()) as T;
 }
