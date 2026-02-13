@@ -19,7 +19,10 @@ function normalizeOpenAICompatibleContentPart(
   if (part.type === "text") {
     return {
       type: "text",
-      text: typeof part.text === "string" ? part.text : "",
+      text:
+        typeof part.text === "string"
+          ? part.text
+          : formatUnknownError(part.text),
     };
   }
 

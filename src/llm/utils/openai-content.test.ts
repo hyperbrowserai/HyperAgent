@@ -19,6 +19,18 @@ describe("normalizeOpenAICompatibleContent", () => {
     ]);
   });
 
+  it("formats non-string text-part payloads safely", () => {
+    expect(
+      normalizeOpenAICompatibleContent([
+        { type: "text", text: 123 },
+        { type: "text", text: null },
+      ])
+    ).toEqual([
+      { type: "text", text: "123" },
+      { type: "text", text: "null" },
+    ]);
+  });
+
   it("formats unknown object payloads safely", () => {
     const circular: Record<string, unknown> = { kind: "mystery" };
     circular.self = circular;
