@@ -194,6 +194,178 @@ describe("HyperAgent constructor and task controls", () => {
     expect(Object.keys(internalAgent.tasks)).toHaveLength(0);
   });
 
+  it("returns variable snapshots without exposing internal mutable store", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    agent.addVariable({
+      key: "email",
+      value: "person@example.com",
+      description: "Email",
+    });
+
+    const variables = agent.getVariables();
+    variables.email = {
+      key: "email",
+      value: "mutated@example.com",
+      description: "mutated",
+    };
+
+    expect(agent.getVariable("email")?.value).toBe("person@example.com");
+  });
+
+  it("rejects variables with invalid keys", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+
+    expect(() =>
+      agent.addVariable({
+        key: "   ",
+        value: "value",
+        description: "desc",
+      })
+    ).toThrow("Variable key must be a non-empty string");
+  });
+
+  it("returns null action cache for invalid cache identifiers", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+
+    const result = agent.getActionCache("   ");
+    expect(result).toBeNull();
+  });
+
+  it("returns empty cache steps when cache step iteration traps throw", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      actionCacheByTaskId: Record<string, unknown>;
+    };
+    internalAgent.actionCacheByTaskId["task-id"] = {
+      taskId: "task-id",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: new Proxy(
+        [],
+        {
+          get: (target, prop, receiver) => {
+            if (prop === Symbol.iterator) {
+              throw new Error("steps iterator trap");
+            }
+            return Reflect.get(target, prop, receiver);
+          },
+        }
+      ),
+    };
+
+    const cache = agent.getActionCache("task-id");
+    expect(cache?.steps).toEqual([]);
+  });
+
+  it("surfaces readable errors when getPages cannot enumerate context pages", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => {
+        throw new Error("pages trap");
+      },
+    };
+
+    await expect(agent.getPages()).rejects.toThrow(
+      "Failed to list pages from context: pages trap"
+    );
+  });
+
+  it("surfaces readable errors when newPage creation fails", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { newPage: () => Promise<Page> } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      newPage: async () => {
+        throw new Error("newPage trap");
+      },
+    };
+
+    await expect(agent.newPage()).rejects.toThrow(
+      "Failed to create new page: newPage trap"
+    );
+  });
+
+  it("continues getPages when hyperpage context listener attachment fails", async () => {
+    const page = {
+      on: jest.fn(),
+      context: () => ({
+        on: () => {
+          throw new Error("context listener trap");
+        },
+        off: jest.fn(),
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const logSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+
+    try {
+      const pages = await agent.getPages();
+      expect(pages).toHaveLength(1);
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to attach context page listener")
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("returns null session when browser provider getSession throws", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      browserProvider: { getSession: () => unknown };
+    };
+    internalAgent.browserProvider = {
+      getSession: () => {
+        throw new Error("session trap");
+      },
+    };
+
+    try {
+      expect(agent.getSession()).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[HyperAgent] Failed to read browser session: session trap"
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("executeTaskAsync tolerates context listener attachment failures", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({

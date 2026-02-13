@@ -154,6 +154,45 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
   }
 
+  private getVariableEntries(): Array<[string, HyperVariable]> {
+    const source = this._variables;
+    if (!source || typeof source !== "object") {
+      return [];
+    }
+    try {
+      return Object.entries(source) as Array<[string, HyperVariable]>;
+    } catch {
+      return [];
+    }
+  }
+
+  private getVariableSnapshot(): Record<string, HyperVariable> {
+    return this.getVariableEntries().reduce<Record<string, HyperVariable>>(
+      (acc, [key, value]) => {
+        if (typeof key !== "string" || key.trim().length === 0) {
+          return acc;
+        }
+        acc[key] = value;
+        return acc;
+      },
+      {}
+    );
+  }
+
+  private getVariableValues(): HyperVariable[] {
+    return this.getVariableEntries()
+      .map(([, value]) => value)
+      .filter((value) => value != null);
+  }
+
+  private normalizeVariableKey(value: unknown): string | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
   public get currentPage(): HyperPage | null {
     if (this._currentPage) {
       return this.setupHyperPage(this._currentPage);
@@ -265,7 +304,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Record of variables
    */
   public getVariables(): Record<string, HyperVariable> {
-    return this._variables;
+    return this.getVariableSnapshot();
   }
 
   /**
@@ -274,7 +313,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @param value Value of the variable
    */
   public addVariable(variable: HyperVariable): void {
-    this._variables[variable.key] = variable;
+    const key = this.normalizeVariableKey((variable as { key?: unknown })?.key);
+    if (!key) {
+      throw new HyperagentError("Variable key must be a non-empty string", 400);
+    }
+    try {
+      this._variables[key] = variable;
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to set variable "${key}": ${formatUnknownError(error)}`,
+        500
+      );
+    }
   }
 
   /**
@@ -283,7 +333,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @returns Value of the variable
    */
   public getVariable(key: string): HyperVariable | undefined {
-    return this._variables[key];
+    const normalizedKey = this.normalizeVariableKey(key);
+    if (!normalizedKey) {
+      return undefined;
+    }
+    try {
+      return this._variables[normalizedKey];
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -291,15 +349,38 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
    * @param key Key of the variable
    */
   public deleteVariable(key: string): void {
-    delete this._variables[key];
+    const normalizedKey = this.normalizeVariableKey(key);
+    if (!normalizedKey) {
+      return;
+    }
+    try {
+      delete this._variables[normalizedKey];
+    } catch {
+      // no-op
+    }
   }
 
   public getActionCache(taskId: string): ActionCacheOutput | null {
-    const cache = this.actionCacheByTaskId[taskId];
+    const normalizedTaskId = this.normalizeVariableKey(taskId);
+    if (!normalizedTaskId) {
+      return null;
+    }
+    let cache: ActionCacheOutput | undefined;
+    try {
+      cache = this.actionCacheByTaskId[normalizedTaskId];
+    } catch {
+      return null;
+    }
     if (!cache) return null;
+    let steps: ActionCacheOutput["steps"] = [];
+    try {
+      steps = Array.from(cache.steps ?? []);
+    } catch {
+      steps = [];
+    }
     return {
       ...cache,
-      steps: [...cache.steps],
+      steps,
     };
   }
 
@@ -314,7 +395,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.context) {
       throw new HyperagentError("No context found");
     }
-    return this.context.pages().map(this.setupHyperPage.bind(this), this);
+    let pages: Page[] = [];
+    try {
+      pages = Array.from(this.context.pages());
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to list pages from context: ${formatUnknownError(error)}`,
+        500
+      );
+    }
+    return pages.map(this.setupHyperPage.bind(this), this);
   }
 
   /**
@@ -328,7 +418,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!this.context) {
       throw new HyperagentError("No context found");
     }
-    const page = await this.context.newPage();
+    let page: Page;
+    try {
+      page = await this.context.newPage();
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to create new page: ${formatUnknownError(error)}`,
+        500
+      );
+    }
     return this.setupHyperPage(page);
   }
 
@@ -1574,7 +1672,19 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   public getSession() {
-    const session = this.browserProvider.getSession();
+    let session: unknown;
+    try {
+      session = this.browserProvider.getSession();
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to read browser session: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+      return null;
+    }
     if (!session) {
       return null;
     }
@@ -1596,7 +1706,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     // Clean up existing listener if this page was already setup
     if (scopedPage._scopeListenerCleanup) {
-      scopedPage._scopeListenerCleanup();
+      try {
+        scopedPage._scopeListenerCleanup();
+      } catch {
+        // no-op
+      }
     }
 
     // History Stack: [Root, Tab1, Tab2, ...]
@@ -1614,7 +1728,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     };
     // Listen for close on the root page
-    page.on("close", () => handleClose(page));
+    try {
+      page.on("close", () => handleClose(page));
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperPage] Failed to attach close listener: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
 
     // Handle new tabs (Push)
     const onPage = async (newPage: Page) => {
@@ -1624,13 +1748,25 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         if (opener === getActivePage()) {
           if (this.debug) {
             console.log(
-              `[HyperPage] Auto-switching to new tab (Push): ${newPage.url()}`
+              `[HyperPage] Auto-switching to new tab (Push): ${this.safeGetPageUrl(
+                newPage
+              )}`
             );
           }
           // Update the scope to follow the new tab
           pageStack.push(newPage);
           // Listen for close on the new page
-          newPage.on("close", () => handleClose(newPage));
+          try {
+            newPage.on("close", () => handleClose(newPage));
+          } catch (error) {
+            if (this.debug) {
+              console.warn(
+                `[HyperPage] Failed to attach close listener for new tab: ${formatUnknownError(
+                  error
+                )}`
+              );
+            }
+          }
         }
       } catch {
         // Ignore
@@ -1638,9 +1774,35 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
 
     // Attach a persistent listener to track page flow for the lifetime of this wrapper
-    page.context().on("page", onPage);
+    let pageContext: BrowserContext | null = null;
+    try {
+      pageContext = page.context();
+    } catch {
+      pageContext = null;
+    }
+
+    if (pageContext) {
+      try {
+        pageContext.on("page", onPage);
+      } catch (error) {
+        if (this.debug) {
+          console.warn(
+            `[HyperPage] Failed to attach context page listener: ${formatUnknownError(
+              error
+            )}`
+          );
+        }
+      }
+    }
     scopedPage._scopeListenerCleanup = () => {
-      page.context().off("page", onPage);
+      if (!pageContext) {
+        return;
+      }
+      try {
+        pageContext.off("page", onPage);
+      } catch {
+        // no-op
+      }
     };
 
     const executeSingleActionWithRetry = async (
@@ -1702,7 +1864,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       tokenLimit: this.tokenLimit,
       llm: this.llm,
       mcpClient: this.mcpClient,
-      variables: Object.values(this._variables),
+      variables: this.getVariableValues(),
       cdpActionsEnabled: this.cdpActionsEnabled,
     };
     attachCachedActionHelpers(deps, hyperPage);
