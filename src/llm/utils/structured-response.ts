@@ -3,41 +3,62 @@ import { HyperAgentStructuredResult } from "@/llm/types";
 import { parseJsonMaybe } from "@/llm/utils/safe-json";
 import { formatUnknownError } from "@/utils";
 
+const MAX_STRUCTURED_RAW_TEXT_CHARS = 100_000;
+
+function truncateStructuredRawText(value: string): string {
+  if (value.length <= MAX_STRUCTURED_RAW_TEXT_CHARS) {
+    return value;
+  }
+  return `${value.slice(
+    0,
+    MAX_STRUCTURED_RAW_TEXT_CHARS
+  )}... [truncated ${value.length - MAX_STRUCTURED_RAW_TEXT_CHARS} chars]`;
+}
+
 export function parseStructuredResponse<TSchema extends z.ZodTypeAny>(
   rawText: unknown,
   schema: TSchema
 ): HyperAgentStructuredResult<TSchema> {
   if (typeof rawText !== "string") {
     return {
-      rawText: formatUnknownError(rawText),
+      rawText: truncateStructuredRawText(formatUnknownError(rawText)),
       parsed: null,
     };
   }
 
   const text = rawText;
+  const normalizedRawText = truncateStructuredRawText(text);
   if (text.trim().length === 0) {
     return {
-      rawText: text,
+      rawText: normalizedRawText,
       parsed: null,
     };
   }
 
-  const parsed = parseJsonMaybe(text);
+  let parsed: unknown;
+  try {
+    parsed = parseJsonMaybe(text);
+  } catch {
+    return {
+      rawText: normalizedRawText,
+      parsed: null,
+    };
+  }
   if (typeof parsed === "string") {
     return {
-      rawText: text,
+      rawText: normalizedRawText,
       parsed: null,
     };
   }
 
   try {
     return {
-      rawText: text,
+      rawText: normalizedRawText,
       parsed: schema.parse(parsed),
     };
   } catch {
     return {
-      rawText: text,
+      rawText: normalizedRawText,
       parsed: null,
     };
   }

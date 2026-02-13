@@ -29,6 +29,16 @@ describe("parseStructuredResponse", () => {
     expect(result.parsed).toBeNull();
   });
 
+  it("truncates oversized non-string diagnostics", () => {
+    const result = parseStructuredResponse(
+      { payload: "x".repeat(120_000) },
+      schema
+    );
+    expect(result.rawText).toContain("[truncated");
+    expect(result.rawText.length).toBeLessThan(101_000);
+    expect(result.parsed).toBeNull();
+  });
+
   it("returns null parsed output when schema validation fails", () => {
     const result = parseStructuredResponse('{"action":1}', schema);
     expect(result.parsed).toBeNull();
@@ -37,7 +47,7 @@ describe("parseStructuredResponse", () => {
   it("skips oversized payload parsing safely", () => {
     const huge = `"${"x".repeat(120_000)}"`;
     const result = parseStructuredResponse(huge, z.string());
-    expect(result.rawText).toBe(huge);
+    expect(result.rawText).toContain("[truncated");
     expect(result.parsed).toBeNull();
   });
 });
