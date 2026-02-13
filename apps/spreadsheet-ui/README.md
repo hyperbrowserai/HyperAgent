@@ -39,6 +39,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Signature-related validation codes (`OPERATION_SIGNATURE_MISMATCH`, `INVALID_SIGNATURE_FORMAT`, `EMPTY_OPERATION_LIST`) map to recovery messaging in UI actions
 - Signature recovery uses structured API error codes (not substring-only matching)
 - Error banner displays backend error code badges when available for faster debugging
+- Wizard and agent integration panels display discovered signature error-code lists from schema endpoints
 - Event stream viewer with per-event-type filtering
 
 ## Run

@@ -70,6 +70,7 @@ export interface AgentSchemaInfo {
   agent_ops_preview_endpoint?: string;
   agent_ops_preview_request_shape?: Record<string, string>;
   agent_ops_preview_response_shape?: Record<string, string>;
+  signature_error_codes?: string[];
   operation_payloads: Record<string, unknown>;
   presets: AgentPresetInfo[];
 }
@@ -109,6 +110,7 @@ export interface AgentWizardSchemaInfo {
   preset_operations_endpoint?: string;
   scenarios_endpoint?: string;
   scenario_operations_endpoint?: string;
+  signature_error_codes?: string[];
   request_multipart_fields?: string[];
   request_json_fields?: Record<string, string>;
   operations_preview_response_shape?: Record<string, string>;

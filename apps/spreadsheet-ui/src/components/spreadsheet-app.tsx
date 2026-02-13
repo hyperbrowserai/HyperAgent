@@ -1313,6 +1313,14 @@ export function SpreadsheetApp() {
                 </span>
               </div>
             ) : null}
+            {wizardSchemaQuery.data?.signature_error_codes?.length ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                signature codes:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.signature_error_codes.join(", ")}
+                </span>
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={wizardScenario}
@@ -1720,6 +1728,14 @@ export function SpreadsheetApp() {
                 Supported ops:{" "}
                 <span className="font-mono text-slate-200">
                   {Object.keys(agentSchemaQuery.data.operation_payloads).join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.signature_error_codes?.length ? (
+              <p className="mb-2 text-xs text-slate-400">
+                signature codes:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.signature_error_codes.join(", ")}
                 </span>
               </p>
             ) : null}

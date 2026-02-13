@@ -981,6 +981,11 @@ async fn get_agent_schema(
       "operations_signature": "sha256 signature over submitted operations",
       "operations": "echoed operation array"
     },
+    "signature_error_codes": [
+      "INVALID_SIGNATURE_FORMAT",
+      "OPERATION_SIGNATURE_MISMATCH",
+      "EMPTY_OPERATION_LIST"
+    ],
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
     "preset_run_request_shape": {
       "request_id": "optional string",
@@ -1004,6 +1009,11 @@ async fn get_agent_schema(
       "operations_signature": "sha256 signature over generated operations",
       "operations": "array of operation objects"
     },
+    "signature_error_codes": [
+      "INVALID_SIGNATURE_FORMAT",
+      "OPERATION_SIGNATURE_MISMATCH",
+      "EMPTY_OPERATION_LIST"
+    ],
     "scenarios": scenario_catalog(),
     "wizard_endpoint": "/v1/agent/wizard/run",
     "wizard_json_endpoint": "/v1/agent/wizard/run-json",

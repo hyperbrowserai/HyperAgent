@@ -72,6 +72,8 @@ Response includes:
   - `OPERATION_SIGNATURE_MISMATCH`
   - `EMPTY_OPERATION_LIST`
 
+Schema discovery endpoints (`/v1/workbooks/{id}/agent/schema`, `/v1/agent/wizard/schema`) expose these under `signature_error_codes`.
+
 Plan-preview helper:
 - `POST /v1/workbooks/{id}/agent/ops/preview` returns `{ operations_signature, operations }` without executing.
 
