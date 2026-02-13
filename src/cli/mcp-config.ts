@@ -5,6 +5,16 @@ import { formatUnknownError } from "@/utils";
 const MAX_MCP_CONFIG_FILE_CHARS = 1_000_000;
 const UNSAFE_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
+function hasUnsupportedControlChars(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const code = char.charCodeAt(0);
+    return (
+      (code >= 0 && code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+      code === 127
+    );
+  });
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -166,6 +176,11 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
   if (normalizedConfig.includes("\u0000")) {
     throw new Error(
       "Invalid MCP config JSON: config appears to be binary or contains null bytes."
+    );
+  }
+  if (hasUnsupportedControlChars(normalizedConfig)) {
+    throw new Error(
+      "Invalid MCP config JSON: config contains unsupported control characters."
     );
   }
   if (normalizedConfig.length > MAX_MCP_CONFIG_FILE_CHARS) {

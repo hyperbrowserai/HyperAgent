@@ -59,6 +59,12 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("throws clear message when config contains unsupported control characters", () => {
+    expect(() => parseMCPServersConfig("\u0007[]")).toThrow(
+      "Invalid MCP config JSON: config contains unsupported control characters."
+    );
+  });
+
   it("throws when raw config exceeds maximum allowed size", () => {
     expect(() => parseMCPServersConfig("x".repeat(1_000_001))).toThrow(
       "Invalid MCP config JSON: config exceeds 1000000 characters."
