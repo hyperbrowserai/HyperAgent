@@ -537,26 +537,33 @@ export function normalizeDiscoveredMCPTools(
 }
 
 export function normalizeMCPListToolsPayload(value: unknown): Tool[] {
-  if (
-    !isPlainRecord(value) ||
-    !Object.prototype.hasOwnProperty.call(value, "tools") ||
-    !Array.isArray(value.tools)
-  ) {
+  if (!isPlainRecord(value) || !Object.prototype.hasOwnProperty.call(value, "tools")) {
     throw new Error("Invalid MCP listTools response: expected a tools array");
   }
-  if (value.tools.length > MAX_MCP_DISCOVERED_TOOLS) {
+  let toolsValue: unknown;
+  try {
+    toolsValue = value.tools;
+  } catch {
+    throw new Error(
+      "Invalid MCP listTools response: unable to read tools array"
+    );
+  }
+  if (!Array.isArray(toolsValue)) {
+    throw new Error("Invalid MCP listTools response: expected a tools array");
+  }
+  if (toolsValue.length > MAX_MCP_DISCOVERED_TOOLS) {
     throw new Error(
       `Invalid MCP listTools response: received more than ${MAX_MCP_DISCOVERED_TOOLS} tools`
     );
   }
   if (
-    value.tools.some((tool) => typeof tool !== "object" || tool === null)
+    toolsValue.some((tool) => typeof tool !== "object" || tool === null)
   ) {
     throw new Error(
       "Invalid MCP listTools response: each tool entry must be an object"
     );
   }
-  return value.tools as Tool[];
+  return toolsValue as Tool[];
 }
 
 function findConnectedServerId(

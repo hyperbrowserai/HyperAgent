@@ -170,6 +170,19 @@ describe("normalizeMCPListToolsPayload", () => {
       "Invalid MCP listTools response: each tool entry must be an object"
     );
   });
+
+  it("rejects listTools payloads when tools getter throws", () => {
+    const payload = {};
+    Object.defineProperty(payload, "tools", {
+      get(): unknown {
+        throw new Error("tools read failed");
+      },
+    });
+
+    expect(() => normalizeMCPListToolsPayload(payload)).toThrow(
+      "Invalid MCP listTools response: unable to read tools array"
+    );
+  });
 });
 
 describe("normalizeMCPToolParams", () => {
