@@ -17,6 +17,10 @@ export const ExtractAction = z
 export type ExtractActionType = z.infer<typeof ExtractAction>;
 
 const EXTRACT_TRUNCATION_NOTICE = "\n[Content truncated due to token limit]";
+const MAX_EXTRACT_OBJECTIVE_CHARS = 1_000;
+const MAX_EXTRACT_RESPONSE_CHARS = 12_000;
+const EXTRACT_RESPONSE_TRUNCATION_NOTICE = "\n[Extraction output truncated]";
+const MAX_EXTRACT_HTML_CHARS = 1_000_000;
 
 export function estimateTextTokenCount(text: string): number {
   if (text.trim().length === 0) {
@@ -126,6 +130,72 @@ function normalizeTokenLimit(value: number): number {
   return Math.floor(value);
 }
 
+function safeReadRecordField(value: unknown, key: string): unknown {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return undefined;
+  }
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeObjective(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_EXTRACT_OBJECTIVE_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, MAX_EXTRACT_OBJECTIVE_CHARS)}…`;
+}
+
+function normalizeExtractedContent(value: string): string {
+  const normalized = value.trim();
+  if (normalized.length <= MAX_EXTRACT_RESPONSE_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, MAX_EXTRACT_RESPONSE_CHARS)}${EXTRACT_RESPONSE_TRUNCATION_NOTICE}`;
+}
+
+function extractTextResponse(content: unknown): string {
+  if (typeof content === "string") {
+    return normalizeExtractedContent(content);
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  let parts: unknown[] = [];
+  try {
+    parts = Array.from(content);
+  } catch {
+    return "";
+  }
+
+  const textParts: string[] = [];
+  for (const part of parts) {
+    const type = safeReadRecordField(part, "type");
+    if (type !== "text") {
+      continue;
+    }
+    const text = safeReadRecordField(part, "text");
+    if (typeof text === "string" && text.length > 0) {
+      textParts.push(text);
+    }
+  }
+  return normalizeExtractedContent(textParts.join(""));
+}
+
+function supportsMultimodalInput(ctx: ActionContext): boolean {
+  try {
+    return ctx.llm.getCapabilities().multimodal === true;
+  } catch {
+    return false;
+  }
+}
+
 export const ExtractActionDefinition: AgentActionDefinition = {
   type: "extract" as const,
   actionParams: ExtractAction,
@@ -134,14 +204,40 @@ export const ExtractActionDefinition: AgentActionDefinition = {
     action: ExtractActionType
   ): Promise<ActionOutput> => {
     try {
-      const objective = action.objective.trim();
+      const objective = normalizeObjective(
+        safeReadRecordField(action, "objective")
+      );
       if (objective.length === 0) {
         return {
           success: false,
           message: "Extraction objective cannot be empty.",
         };
       }
-      const content = await ctx.page.content();
+
+      let contentMethod: unknown;
+      try {
+        contentMethod = ctx.page.content;
+      } catch (error) {
+        return {
+          success: false,
+          message: `Failed to extract content: unable to access page content method (${formatUnknownError(
+            error
+          )})`,
+        };
+      }
+      if (typeof contentMethod !== "function") {
+        return {
+          success: false,
+          message: "Failed to extract content: page content method is unavailable.",
+        };
+      }
+
+      const rawContent = await contentMethod.call(ctx.page);
+      const normalizedHtmlSource =
+        typeof rawContent === "string"
+          ? rawContent
+          : formatUnknownError(rawContent);
+      const content = normalizedHtmlSource.slice(0, MAX_EXTRACT_HTML_CHARS);
       const normalizedTokenLimit = normalizeTokenLimit(ctx.tokenLimit);
       const debugDir = ctx.debugDir
         ? ensureDebugDirSafe(ctx.debugDir, ctx.debug)
@@ -162,7 +258,7 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         markdown = fallbackMarkdownFromHtml(content);
       }
 
-      const supportsMultimodal = ctx.llm.getCapabilities().multimodal;
+      const supportsMultimodal = supportsMultimodalInput(ctx);
       if (!supportsMultimodal && ctx.debug) {
         console.warn(
           "[extract] LLM does not support multimodal input; proceeding without screenshot."
@@ -240,17 +336,9 @@ export const ExtractActionDefinition: AgentActionDefinition = {
           content: contentParts,
         },
       ]);
-      // Handle both string and HyperAgentContentPart[] responses
-      let extractedContent = "";
-      if (typeof response.content === "string") {
-        extractedContent = response.content;
-      } else if (Array.isArray(response.content)) {
-        // Extract text from content parts
-        extractedContent = response.content
-          .filter((part) => part.type === "text")
-          .map((part) => part.text)
-          .join("");
-      }
+      const extractedContent = extractTextResponse(
+        safeReadRecordField(response, "content")
+      );
 
       if (extractedContent.trim().length === 0) {
         return {

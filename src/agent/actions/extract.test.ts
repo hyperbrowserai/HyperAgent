@@ -263,6 +263,43 @@ describe("ExtractActionDefinition.run", () => {
     expect(result.message).toContain("No content extracted");
   });
 
+  it("returns failure when page.content is unavailable", async () => {
+    const ctx = createContext(undefined, {
+      page: {} as unknown as ActionContext["page"],
+    });
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "Extract content",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("page content method is unavailable");
+  });
+
+  it("handles page.content getter traps gracefully", async () => {
+    const trappedPage = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "content") {
+            throw new Error("content getter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as ActionContext["page"];
+    const ctx = createContext(undefined, {
+      page: trappedPage,
+    });
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "Extract content",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("content getter trap");
+  });
+
   it("returns failure when llm text content is only whitespace", async () => {
     const whitespaceLlm = createMockLLM(
       jest.fn().mockResolvedValue({
@@ -271,6 +308,48 @@ describe("ExtractActionDefinition.run", () => {
       })
     );
     const ctx = createContext(whitespaceLlm);
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "Extract content",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("No content extracted");
+  });
+
+  it("truncates oversized extracted text outputs", async () => {
+    const largeOutput = "x".repeat(15_000);
+    const oversizedLlm = createMockLLM(
+      jest.fn().mockResolvedValue({
+        role: "assistant",
+        content: largeOutput,
+      })
+    );
+    const ctx = createContext(oversizedLlm);
+
+    const result = await ExtractActionDefinition.run(ctx, {
+      objective: "Extract content",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("[Extraction output truncated]");
+    expect(result.message.length).toBeLessThan(13_000);
+  });
+
+  it("handles response content arrays with getter traps safely", async () => {
+    const trapContentPart = {
+      type: "text",
+      get text(): string {
+        throw new Error("text getter trap");
+      },
+    };
+    const trapLlm = createMockLLM(
+      jest.fn().mockResolvedValue({
+        role: "assistant",
+        content: [trapContentPart],
+      })
+    );
+    const ctx = createContext(trapLlm);
 
     const result = await ExtractActionDefinition.run(ctx, {
       objective: "Extract content",
@@ -437,6 +516,36 @@ describe("ExtractActionDefinition.run", () => {
       }>;
       expect(messages[0]?.content).toHaveLength(1);
       expect(messages[0]?.content?.[0]?.type).toBe("text");
+      expect(getCDPClient).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("falls back to markdown-only mode when capabilities getter throws", async () => {
+    const invoke = jest.fn().mockResolvedValue({
+      role: "assistant",
+      content: "capability trap fallback",
+    });
+    const llm = createMockLLM(invoke);
+    const trappedLlm = {
+      ...llm,
+      getCapabilities: () => {
+        throw new Error("capability getter trap");
+      },
+    };
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const ctx = createContext(trappedLlm, { debug: true });
+
+    try {
+      const result = await ExtractActionDefinition.run(ctx, {
+        objective: "Extract content",
+      });
+
+      expect(result.success).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[extract] LLM does not support multimodal input; proceeding without screenshot."
+      );
       expect(getCDPClient).not.toHaveBeenCalled();
     } finally {
       warnSpy.mockRestore();
