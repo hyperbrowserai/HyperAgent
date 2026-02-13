@@ -53,6 +53,12 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("throws when raw config exceeds maximum allowed size", () => {
+    expect(() => parseMCPServersConfig("x".repeat(1_000_001))).toThrow(
+      "Invalid MCP config JSON: config exceeds 1000000 characters."
+    );
+  });
+
   it("throws when payload is not servers-shaped", () => {
     expect(() => parseMCPServersConfig('{"foo":1}')).toThrow(
       'MCP config must be a JSON array or an object with a "servers" array.'
@@ -251,6 +257,11 @@ describe("parseMCPServersConfig", () => {
       'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
     );
     expect(() =>
+      parseMCPServersConfig('[{"command":"npx","env":{" Constructor ":"oops"}}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "env" as an object of string key/value pairs.'
+    );
+    expect(() =>
       parseMCPServersConfig(
         '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"__proto__":"oops"}}]'
       )
@@ -278,6 +289,13 @@ describe("parseMCPServersConfig", () => {
       )
     ).toThrow(
       'MCP server entry at index 0 has duplicate "sseHeaders" key "Authorization" after trimming.'
+    );
+    expect(() =>
+      parseMCPServersConfig(
+        '[{"connectionType":"sse","sseUrl":"https://example.com/sse","sseHeaders":{"Authorization":"a","authorization":"b"}}]'
+      )
+    ).toThrow(
+      'MCP server entry at index 0 has duplicate "sseHeaders" key "authorization" after trimming.'
     );
   });
 

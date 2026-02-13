@@ -3,6 +3,7 @@ import { MCPServerConfig } from "@/types/config";
 import { formatUnknownError } from "@/utils";
 
 const MAX_MCP_CONFIG_FILE_CHARS = 1_000_000;
+const UNSAFE_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -48,10 +49,11 @@ function normalizeOptionalStringRecord(
   }
 
   const normalized: Record<string, string> = Object.create(null);
+  const seenKeys = new Set<string>();
   for (const [rawKey, rawValue] of Object.entries(value)) {
     const key = rawKey.trim();
-    const isUnsafeKey =
-      key === "__proto__" || key === "prototype" || key === "constructor";
+    const normalizedKey = key.toLowerCase();
+    const isUnsafeKey = UNSAFE_RECORD_KEYS.has(normalizedKey);
     if (key.length === 0 || typeof rawValue !== "string" || isUnsafeKey) {
       throw new Error(
         `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
@@ -64,11 +66,13 @@ function normalizeOptionalStringRecord(
         `MCP server entry at index ${index} must provide "${field}" as an object of string key/value pairs.`
       );
     }
-    if (Object.prototype.hasOwnProperty.call(normalized, key)) {
+    const duplicateLookupKey = field === "sseHeaders" ? normalizedKey : key;
+    if (seenKeys.has(duplicateLookupKey)) {
       throw new Error(
         `MCP server entry at index ${index} has duplicate "${field}" key "${key}" after trimming.`
       );
     }
+    seenKeys.add(duplicateLookupKey);
     normalized[key] = normalizedValue;
   }
   return normalized;
@@ -159,6 +163,11 @@ function normalizeServersPayload(payload: unknown): unknown[] {
 export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
   let parsed: unknown;
   const normalizedConfig = rawConfig.replace(/^\uFEFF/, "").trim();
+  if (normalizedConfig.length > MAX_MCP_CONFIG_FILE_CHARS) {
+    throw new Error(
+      `Invalid MCP config JSON: config exceeds ${MAX_MCP_CONFIG_FILE_CHARS} characters.`
+    );
+  }
   try {
     parsed = JSON.parse(normalizedConfig);
   } catch (error) {
