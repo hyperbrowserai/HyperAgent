@@ -23,4 +23,22 @@ describe("closeAgentSafely", () => {
       message: '{"reason":"close failed"}',
     });
   });
+
+  it("reuses in-flight shutdown result for repeated calls", async () => {
+    const closeAgent = jest.fn().mockResolvedValue(undefined);
+    const agent = { closeAgent };
+
+    const [first, second] = await Promise.all([
+      closeAgentSafely(
+        agent as unknown as Parameters<typeof closeAgentSafely>[0]
+      ),
+      closeAgentSafely(
+        agent as unknown as Parameters<typeof closeAgentSafely>[0]
+      ),
+    ]);
+
+    expect(first).toEqual({ success: true });
+    expect(second).toEqual({ success: true });
+    expect(closeAgent).toHaveBeenCalledTimes(1);
+  });
 });
