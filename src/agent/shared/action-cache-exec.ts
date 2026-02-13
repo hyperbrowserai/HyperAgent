@@ -9,6 +9,7 @@ import { formatUnknownError } from "@/utils";
 
 const DEFAULT_MAX_STEPS = 3;
 const MAX_PERFORM_VALUE_CHARS = 20_000;
+const MAX_PERFORM_HELPER_DIAGNOSTIC_CHARS = 400;
 
 export const PAGE_ACTION_METHODS = [
   "click",
@@ -53,6 +54,25 @@ export function dispatchPerformHelper(
   value: string | undefined,
   options: PerformOptions
 ): Promise<TaskOutput> {
+  const formatPerformHelperDiagnostic = (error: unknown): string => {
+    const normalized = Array.from(formatUnknownError(error), (char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    })
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+    const fallback = normalized.length > 0 ? normalized : "unknown error";
+    if (fallback.length <= MAX_PERFORM_HELPER_DIAGNOSTIC_CHARS) {
+      return fallback;
+    }
+    const omitted = fallback.length - MAX_PERFORM_HELPER_DIAGNOSTIC_CHARS;
+    return `${fallback.slice(
+      0,
+      MAX_PERFORM_HELPER_DIAGNOSTIC_CHARS
+    )}... [truncated ${omitted} chars]`;
+  };
+
   const invoke = (
     helperName: string,
     helperArgs: unknown[]
@@ -63,7 +83,9 @@ export function dispatchPerformHelper(
     } catch (error) {
       return Promise.reject(
         new Error(
-          `[Replay] Failed to access ${helperName}: ${formatUnknownError(error)}`
+          `[Replay] Failed to access ${helperName}: ${formatPerformHelperDiagnostic(
+            error
+          )}`
         )
       );
     }
@@ -75,7 +97,7 @@ export function dispatchPerformHelper(
     } catch (error) {
       return Promise.reject(
         new Error(
-          `[Replay] ${helperName} failed before execution: ${formatUnknownError(
+          `[Replay] ${helperName} failed before execution: ${formatPerformHelperDiagnostic(
             error
           )}`
         )

@@ -139,12 +139,42 @@ describe("action-cache perform helper dispatch", () => {
     );
   });
 
+  it("truncates oversized helper access diagnostics", async () => {
+    const page = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "performClick") {
+            throw new Error(`x${"y".repeat(2_000)}\nhelper getter trap`);
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as HyperPage;
+
+    await expect(
+      dispatchPerformHelper(page, "click", "//button[1]", undefined, {})
+    ).rejects.toThrow(/\[truncated/);
+  });
+
   it("throws readable error when helper method is missing", async () => {
     const page = {} as unknown as HyperPage;
 
     await expect(
       dispatchPerformHelper(page, "click", "//button[1]", undefined, {})
     ).rejects.toThrow("[Replay] Missing perform helper: performClick");
+  });
+
+  it("truncates oversized helper pre-execution diagnostics", async () => {
+    const page = {
+      performClick: (): never => {
+        throw new Error(`x${"y".repeat(2_000)}\nhelper execution trap`);
+      },
+    } as unknown as HyperPage;
+
+    await expect(
+      dispatchPerformHelper(page, "click", "//button[1]", undefined, {})
+    ).rejects.toThrow(/\[truncated/);
   });
 
   it("normalizes trap-prone options and large args when attaching helpers", async () => {
