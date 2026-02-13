@@ -61,7 +61,7 @@ const ChartPreview = dynamic(
 
 const CACHE_ENTRIES_PREVIEW_LIMIT = 6;
 const CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT = "12";
-const CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT: "count" | "recent" = "count";
+const CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT: "count" | "recent" | "alpha" = "count";
 
 function parsePositiveIntegerInput(value: string): number | undefined {
   const normalized = value.trim();
@@ -152,7 +152,7 @@ export function SpreadsheetApp() {
     CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT,
   );
   const [cachePrefixMinEntryCount, setCachePrefixMinEntryCount] = useState("");
-  const [cachePrefixSortBy, setCachePrefixSortBy] = useState<"count" | "recent">(
+  const [cachePrefixSortBy, setCachePrefixSortBy] = useState<"count" | "recent" | "alpha">(
     CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT,
   );
   const [cacheRemovePreviewSampleLimit, setCacheRemovePreviewSampleLimit] = useState("10");
@@ -2908,12 +2908,15 @@ export function SpreadsheetApp() {
                     <select
                       value={cachePrefixSortBy}
                       onChange={(event) =>
-                        setCachePrefixSortBy(event.target.value as "count" | "recent")
+                        setCachePrefixSortBy(
+                          event.target.value as "count" | "recent" | "alpha",
+                        )
                       }
                       className="h-6 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-indigo-500"
                     >
                       <option value="count">count</option>
                       <option value="recent">recent</option>
+                      <option value="alpha">alpha</option>
                     </select>
                     <button
                       onClick={resetCachePrefixSuggestionControls}

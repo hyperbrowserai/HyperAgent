@@ -280,7 +280,7 @@ export async function getAgentOpsCachePrefixes(
   requestIdPrefix?: string,
   maxAgeSeconds?: number,
   minEntryCount?: number,
-  sortBy: "count" | "recent" = "count",
+  sortBy: "count" | "recent" | "alpha" = "count",
 ): Promise<AgentOpsCachePrefixesResponse> {
   const safeLimit = Math.max(1, Math.min(limit, 100));
   const safeOffset = Math.max(0, offset);

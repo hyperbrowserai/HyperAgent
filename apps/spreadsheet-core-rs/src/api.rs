@@ -1069,7 +1069,7 @@ async fn get_agent_schema(
     "agent_ops_cache_prefixes_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
-      "sort_by": "optional string enum: count|recent (default count)",
+      "sort_by": "optional string enum: count|recent|alpha (default count)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
       "offset": "optional number, default 0",
       "limit": "optional number, default 8, min 1, max 100"
@@ -1127,7 +1127,7 @@ async fn get_agent_schema(
       "returned_entry_count": "total cache entries represented by returned prefixes in this page",
       "request_id_prefix": "echoed filter prefix when provided",
       "min_entry_count": "applied minimum entry count filter (default 1)",
-      "sort_by": "applied sort mode: count|recent",
+      "sort_by": "applied sort mode: count|recent|alpha",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "offset": "start index in sorted prefix list",
@@ -1729,7 +1729,7 @@ async fn agent_ops_cache_prefixes(
       normalized_prefix.as_deref(),
       cutoff_timestamp,
       min_entry_count,
-      sort_by == "recent",
+      sort_by.as_str(),
       offset,
       limit,
     )
@@ -2002,9 +2002,12 @@ fn normalize_prefix_sort_by(sort_by: Option<&str>) -> Result<String, ApiError> {
     Some(value) if value.eq_ignore_ascii_case("recent") => {
       Ok("recent".to_string())
     }
+    Some(value) if value.eq_ignore_ascii_case("alpha") => {
+      Ok("alpha".to_string())
+    }
     Some(_) => Err(ApiError::bad_request_with_code(
       "INVALID_PREFIX_SORT_BY",
-      "sort_by must be one of: count, recent.",
+      "sort_by must be one of: count, recent, alpha.",
     )),
   }
 }
@@ -3206,6 +3209,25 @@ mod tests {
     assert_eq!(recent_sorted.prefixes[0].prefix, "preset-");
     assert_eq!(recent_sorted.prefixes[1].prefix, "scenario-");
 
+    let alpha_sorted = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        sort_by: Some("alpha".to_string()),
+        max_age_seconds: None,
+        offset: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect("alpha-sorted prefixes should load")
+    .0;
+    assert_eq!(alpha_sorted.sort_by, "alpha");
+    assert_eq!(alpha_sorted.prefixes[0].prefix, "preset-");
+    assert_eq!(alpha_sorted.prefixes[1].prefix, "scenario-");
+
     let invalid_sort_error = agent_ops_cache_prefixes(
       State(state),
       Path(workbook.id),
@@ -4115,7 +4137,7 @@ mod tests {
         .get("agent_ops_cache_prefixes_query_shape")
         .and_then(|value| value.get("sort_by"))
         .and_then(serde_json::Value::as_str),
-      Some("optional string enum: count|recent (default count)"),
+      Some("optional string enum: count|recent|alpha (default count)"),
     );
     assert_eq!(
       schema
@@ -4205,7 +4227,7 @@ mod tests {
         .get("agent_ops_cache_prefixes_response_shape")
         .and_then(|value| value.get("sort_by"))
         .and_then(serde_json::Value::as_str),
-      Some("applied sort mode: count|recent"),
+      Some("applied sort mode: count|recent|alpha"),
     );
     assert_eq!(
       schema

@@ -573,7 +573,7 @@ impl AppState {
     request_id_prefix: Option<&str>,
     cutoff_timestamp: Option<DateTime<Utc>>,
     min_entry_count: usize,
-    sort_by_recent: bool,
+    sort_by: &str,
     offset: usize,
     limit: usize,
   ) -> Result<(usize, usize, usize, usize, Vec<(String, usize, String, Option<DateTime<Utc>>)>), ApiError> {
@@ -644,22 +644,28 @@ impl AppState {
     prefixes.retain(|(_, entry_count, _, _)| *entry_count >= min_entry_count);
     let total_prefixes = prefixes.len();
     let scoped_total_entries = prefixes.iter().map(|(_, entry_count, _, _)| *entry_count).sum();
-    if sort_by_recent {
-      prefixes.sort_by(|left, right| {
+    match sort_by {
+      "recent" => prefixes.sort_by(|left, right| {
         right
           .3
           .cmp(&left.3)
           .then_with(|| right.1.cmp(&left.1))
           .then_with(|| left.0.cmp(&right.0))
-      });
-    } else {
-      prefixes.sort_by(|left, right| {
+      }),
+      "alpha" => prefixes.sort_by(|left, right| {
+        left
+          .0
+          .cmp(&right.0)
+          .then_with(|| right.1.cmp(&left.1))
+          .then_with(|| right.3.cmp(&left.3))
+      }),
+      _ => prefixes.sort_by(|left, right| {
         right
           .1
           .cmp(&left.1)
           .then_with(|| right.3.cmp(&left.3))
           .then_with(|| left.0.cmp(&right.0))
-      });
+      }),
     }
     let paged_prefixes = prefixes
       .into_iter()
@@ -1131,7 +1137,7 @@ mod tests {
       scoped_total_entries,
       prefixes,
     ) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 0, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, "count", 0, 5)
       .await
       .expect("prefix suggestions should load");
     assert_eq!(total_prefixes, 2);
@@ -1156,7 +1162,7 @@ mod tests {
       filtered_scoped_total_entries,
       filtered_prefixes,
     ) = state
-      .agent_ops_cache_prefixes(workbook.id, None, Some(cutoff_timestamp), 1, false, 0, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, Some(cutoff_timestamp), 1, "count", 0, 5)
       .await
       .expect("age-filtered prefixes should load");
     assert_eq!(filtered_total_prefixes, 0);
@@ -1172,7 +1178,7 @@ mod tests {
       prefix_scoped_total_entries,
       prefix_scoped_prefixes,
     ) = state
-      .agent_ops_cache_prefixes(workbook.id, Some("scenario-"), None, 1, false, 0, 5)
+      .agent_ops_cache_prefixes(workbook.id, Some("scenario-"), None, 1, "count", 0, 5)
       .await
       .expect("prefix-scoped suggestions should load");
     assert_eq!(prefix_scoped_total_prefixes, 1);
@@ -1192,7 +1198,7 @@ mod tests {
       min_filtered_scoped_total_entries,
       min_filtered_prefixes,
     ) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 3, false, 0, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 3, "count", 0, 5)
       .await
       .expect("min-entry-count filtered suggestions should load");
     assert_eq!(min_filtered_total_prefixes, 1);
@@ -1233,7 +1239,7 @@ mod tests {
     }
 
     let (_, _, _, _, prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 0, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, "count", 0, 5)
       .await
       .expect("prefix suggestions should load");
     assert_eq!(prefixes.len(), 2);
@@ -1270,18 +1276,25 @@ mod tests {
     }
 
     let (_, _, _, _, count_sorted_prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 0, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, "count", 0, 5)
       .await
       .expect("count-sorted prefixes should load");
     assert_eq!(count_sorted_prefixes[0].0, "many-");
     assert_eq!(count_sorted_prefixes[1].0, "few-");
 
     let (_, _, _, _, recent_sorted_prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, true, 0, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, "recent", 0, 5)
       .await
       .expect("recent-sorted prefixes should load");
     assert_eq!(recent_sorted_prefixes[0].0, "few-");
     assert_eq!(recent_sorted_prefixes[1].0, "many-");
+
+    let (_, _, _, _, alpha_sorted_prefixes) = state
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, "alpha", 0, 5)
+      .await
+      .expect("alpha-sorted prefixes should load");
+    assert_eq!(alpha_sorted_prefixes[0].0, "few-");
+    assert_eq!(alpha_sorted_prefixes[1].0, "many-");
   }
 
   #[tokio::test]
@@ -1313,7 +1326,7 @@ mod tests {
     }
 
     let (total_prefixes, _, unscoped_total_entries, scoped_total_entries, first_page) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, true, 0, 2)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, "recent", 0, 2)
       .await
       .expect("first page should load");
     assert_eq!(total_prefixes, 3);
@@ -1324,7 +1337,7 @@ mod tests {
     assert_eq!(first_page[1].0, "beta-");
 
     let (_, _, _, _, second_page) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, true, 2, 2)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, "recent", 2, 2)
       .await
       .expect("second page should load");
     assert_eq!(second_page.len(), 1);

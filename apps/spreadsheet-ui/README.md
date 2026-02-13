@@ -57,7 +57,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Cache entries pager shows scoped totals and global totals when filters narrow results
 - Prefix suggestion row shows scoped/global prefix totals and active prefix scope echo when filters narrow suggestions
 - Prefix suggestion row supports optional minimum-match filtering (`min prefix count`) for high-signal cache triage
-- Prefix suggestion row supports selectable sort mode (`count` or `recent`) for cache triage priorities
+- Prefix suggestion row supports selectable sort mode (`count`, `recent`, or `alpha`) for cache triage priorities
 - Prefix suggestion row supports configurable suggestion limit (`prefix limit`) for denser/sparser cache hinting
 - Prefix suggestion row includes pager controls (`Newer`/`Older`) backed by server offset pagination
 - Prefix suggestion summary shows prefix coverage plus entry coverage (`page/scoped/global`) for each suggestion page
