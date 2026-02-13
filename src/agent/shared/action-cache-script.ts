@@ -10,6 +10,9 @@ const getSortStepIndex = (value: number): number =>
 
 const MAX_SCRIPT_WAIT_MS = 120_000;
 const MAX_SCRIPT_TIMEOUT_MS = 120_000;
+const MAX_SCRIPT_STEPS = 1_000;
+const MAX_SCRIPT_IDENTIFIER_CHARS = 128;
+const MAX_SCRIPT_TEXT_ARG_CHARS = 4_000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -34,6 +37,47 @@ const asNumber = (value: unknown): number | undefined => {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+};
+
+const sanitizeScriptText = (value: string): string => {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+};
+
+const truncateScriptText = (value: string, maxChars: number): string => {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omitted = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omitted} chars]`;
+};
+
+const sanitizeScriptIdentifier = (value: unknown, fallback: string): string => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = sanitizeScriptText(value);
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncateScriptText(normalized, MAX_SCRIPT_IDENTIFIER_CHARS);
+};
+
+const sanitizeScriptArgText = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = sanitizeScriptText(value);
+  if (normalized.length === 0) {
+    return undefined;
+  }
+  return truncateScriptText(normalized, MAX_SCRIPT_TEXT_ARG_CHARS);
 };
 
 const safeReadStepField = (
@@ -146,9 +190,7 @@ export function createScriptFromActionCache(
       typeof stepIndexValue === "number" && Number.isFinite(stepIndexValue)
         ? stepIndexValue
         : -1;
-    const actionType = isNonEmptyString(actionTypeValue)
-      ? actionTypeValue
-      : "unknown";
+    const actionType = sanitizeScriptIdentifier(actionTypeValue, "unknown");
 
     if (actionType === "complete") {
       return `${indent}// Step ${safeStepIndex} (complete skipped in script)`;
@@ -159,10 +201,10 @@ export function createScriptFromActionCache(
         ? actionParamsValue
         : undefined;
       const argumentUrl =
-        asNonEmptyTrimmedString(safeReadArrayIndex(argumentsValue, 0)) ?? "";
+        sanitizeScriptArgText(safeReadArrayIndex(argumentsValue, 0)) ?? "";
       const urlArg =
         argumentUrl ||
-        (asNonEmptyTrimmedString(actionParams?.url) ?? "") ||
+        (sanitizeScriptArgText(actionParams?.url) ?? "") ||
         "https://example.com";
       return `${indent}// Step ${safeStepIndex}
 ${indent}await page.goto(
@@ -206,7 +248,7 @@ ${indent}await page.waitForLoadState(${JSON.stringify(waitUntil)});`;
     }
 
     if (actionType === "extract") {
-      const extractInstruction = asNonEmptyTrimmedString(instructionValue);
+      const extractInstruction = sanitizeScriptArgText(instructionValue);
       if (!extractInstruction) {
         return `${indent}// Step ${safeStepIndex} (extract skipped: missing instruction)`;
       }
@@ -219,12 +261,13 @@ ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
     );
     const call = normalizedMethod ? METHOD_TO_CALL[normalizedMethod] : undefined;
     if (call) {
-      const normalizedXPath = asNonEmptyTrimmedString(xpathValue);
+      const normalizedXPath = sanitizeScriptArgText(xpathValue);
       if (!normalizedXPath) {
-        return `${indent}// Step ${safeStepIndex} (unsupported actionType=${actionType}, method=${typeof methodValue === "string" ? methodValue : "N/A"}, reason=missing xpath)`;
+        const methodLabel = sanitizeScriptIdentifier(methodValue, "N/A");
+        return `${indent}// Step ${safeStepIndex} (unsupported actionType=${actionType}, method=${methodLabel}, reason=missing xpath)`;
       }
       const options: Record<string, unknown> = {};
-      const performInstruction = asNonEmptyTrimmedString(instructionValue);
+      const performInstruction = sanitizeScriptArgText(instructionValue);
       if (performInstruction) {
         options.performInstruction = performInstruction;
       }
@@ -247,7 +290,9 @@ ${indent}await page.extract(${JSON.stringify(extractInstruction)});`;
       const callArgs = [
         `${argIndent}${JSON.stringify(normalizedXPath)},`,
         call.needsValue
-          ? `${argIndent}${JSON.stringify(safeReadArrayIndex(argumentsValue, 0) ?? "")},`
+          ? `${argIndent}${JSON.stringify(
+              sanitizeScriptArgText(safeReadArrayIndex(argumentsValue, 0)) ?? ""
+            )},`
           : null,
         optionsBlock ? `${optionsBlock},` : null,
       ]
@@ -260,13 +305,23 @@ ${callArgs}
 ${indent});`;
     }
 
-    return `${indent}// Step ${safeStepIndex} (unsupported actionType=${actionType}, method=${typeof methodValue === "string" ? methodValue : "N/A"})`;
+    const methodLabel = sanitizeScriptIdentifier(methodValue, "N/A");
+    return `${indent}// Step ${safeStepIndex} (unsupported actionType=${actionType}, method=${methodLabel})`;
   };
 
-  const stepSnippets = [...steps]
-    .sort((a, b) => getSortStepIndex(a.stepIndex) - getSortStepIndex(b.stepIndex))
-    .map((step) => formatCall(step))
-    .join("\n\n");
+  let omittedSteps = 0;
+  const sortedSteps = [...steps].sort(
+    (a, b) => getSortStepIndex(a.stepIndex) - getSortStepIndex(b.stepIndex)
+  );
+  if (sortedSteps.length > MAX_SCRIPT_STEPS) {
+    omittedSteps = sortedSteps.length - MAX_SCRIPT_STEPS;
+    sortedSteps.length = MAX_SCRIPT_STEPS;
+  }
+  const stepSnippets = sortedSteps.map((step) => formatCall(step)).join("\n\n");
+  const truncatedComment =
+    omittedSteps > 0
+      ? `\n\n  // Script truncated after ${MAX_SCRIPT_STEPS} steps; ${omittedSteps} additional step(s) were skipped`
+      : "";
 
   const script = `import { HyperAgent } from "@hyperbrowser/agent";
 async function main() {
@@ -277,6 +332,7 @@ async function main() {
   const page = await agent.newPage();
 
 ${stepSnippets}
+${truncatedComment}
 
   await agent.closeAgent();
 }
