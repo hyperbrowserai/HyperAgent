@@ -380,37 +380,7 @@ export function SpreadsheetApp() {
     try {
       setUiError(null);
       const isFormula = formulaInput.trim().startsWith("=");
-      const response = await runAgentOps(workbook.id, {
-        request_id: `formula-${Date.now()}`,
-        actor: "ui-formula-bar",
-        stop_on_error: true,
-        operations: [
-          {
-            op_type: "set_cells",
-            sheet: activeSheet,
-            cells: [
-              {
-                row,
-                col,
-                ...(isFormula
-                  ? { formula: formulaInput.trim() }
-                  : { value: formulaInput }),
-              },
-            ],
-          },
-          {
-            op_type: "get_cells",
-            sheet: activeSheet,
-            range: {
-              start_row: row,
-              end_row: row,
-              start_col: col,
-              end_col: col,
-            },
-          },
-        ],
-      });
-      setLastExecutedOperations([
+      const operations: AgentOperationPreview[] = [
         {
           op_type: "set_cells",
           sheet: activeSheet,
@@ -434,7 +404,16 @@ export function SpreadsheetApp() {
             end_col: col,
           },
         },
-      ]);
+      ];
+      const signedPlan = await signOperationsForExecution(operations);
+      const response = await runAgentOps(workbook.id, {
+        request_id: `formula-${Date.now()}`,
+        actor: "ui-formula-bar",
+        stop_on_error: true,
+        expected_operations_signature: signedPlan.operationsSignature,
+        operations: signedPlan.operations,
+      });
+      setLastExecutedOperations(signedPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentOps(response.results);
@@ -501,40 +480,7 @@ export function SpreadsheetApp() {
     setIsRunningAgentFlow(true);
     try {
       setUiError(null);
-      const response = await runAgentOps(workbook.id, {
-        request_id: `agent-demo-${Date.now()}`,
-        actor: "ui-agent-demo",
-        stop_on_error: true,
-        operations: [
-          {
-            op_type: "set_cells",
-            sheet: activeSheet,
-            cells: [
-              { row: 1, col: 1, value: "North" },
-              { row: 2, col: 1, value: "South" },
-              { row: 3, col: 1, value: "West" },
-              { row: 1, col: 2, value: 120 },
-              { row: 2, col: 2, value: 90 },
-              { row: 3, col: 2, value: 75 },
-              { row: 4, col: 2, formula: "=SUM(B1:B3)" },
-            ],
-          },
-          { op_type: "recalculate" },
-          {
-            op_type: "upsert_chart",
-            chart: {
-              id: "chart-agent-demo",
-              sheet: activeSheet,
-              chart_type: "bar",
-              title: "Regional Totals",
-              categories_range: `${activeSheet}!$A$1:$A$3`,
-              values_range: `${activeSheet}!$B$1:$B$3`,
-            },
-          },
-          { op_type: "export_workbook", include_file_base64: false },
-        ],
-      });
-      setLastExecutedOperations([
+      const operations: AgentOperationPreview[] = [
         {
           op_type: "set_cells",
           sheet: activeSheet,
@@ -561,7 +507,16 @@ export function SpreadsheetApp() {
           },
         },
         { op_type: "export_workbook", include_file_base64: false },
-      ]);
+      ];
+      const signedPlan = await signOperationsForExecution(operations);
+      const response = await runAgentOps(workbook.id, {
+        request_id: `agent-demo-${Date.now()}`,
+        actor: "ui-agent-demo",
+        stop_on_error: true,
+        expected_operations_signature: signedPlan.operationsSignature,
+        operations: signedPlan.operations,
+      });
+      setLastExecutedOperations(signedPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentOps(response.results);
