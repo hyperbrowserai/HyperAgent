@@ -468,6 +468,22 @@ pub fn parse_right_formula(formula: &str) -> Option<(String, Option<String>)> {
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_mid_formula(formula: &str) -> Option<(String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "MID" && args.len() == 3 {
+    return Some((args[0].clone(), args[1].clone(), args[2].clone()));
+  }
+  None
+}
+
+pub fn parse_rept_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "REPT" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_date_formula(formula: &str) -> Option<(String, String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "DATE" && args.len() == 3 {
@@ -770,6 +786,7 @@ mod tests {
     parse_minifs_formula,
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
+    parse_mid_formula, parse_rept_formula,
     parse_cell_address,
     parse_mod_formula, parse_sign_formula,
     parse_power_formula,
@@ -978,6 +995,17 @@ mod tests {
       parse_right_formula(r#"=RIGHT("spreadsheet", 5)"#).expect("right should parse");
     assert_eq!(right_args.0, r#""spreadsheet""#);
     assert_eq!(right_args.1.as_deref(), Some("5"));
+
+    let mid_args =
+      parse_mid_formula(r#"=MID("spreadsheet", 2, 4)"#).expect("mid should parse");
+    assert_eq!(mid_args.0, r#""spreadsheet""#);
+    assert_eq!(mid_args.1, "2");
+    assert_eq!(mid_args.2, "4");
+
+    let rept_args =
+      parse_rept_formula(r#"=REPT("na", 4)"#).expect("rept should parse");
+    assert_eq!(rept_args.0, r#""na""#);
+    assert_eq!(rept_args.1, "4");
 
     let date_parts = parse_date_formula("=DATE(2026,2,13)").expect("date should parse");
     assert_eq!(date_parts, ("2026".to_string(), "2".to_string(), "13".to_string()));

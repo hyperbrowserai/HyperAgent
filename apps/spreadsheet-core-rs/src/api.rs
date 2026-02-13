@@ -86,6 +86,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "EXACT",
   "LEFT",
   "RIGHT",
+  "MID",
+  "REPT",
   "UPPER",
   "LOWER",
   "TRIM",

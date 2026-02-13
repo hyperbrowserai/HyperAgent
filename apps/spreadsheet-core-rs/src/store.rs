@@ -13,10 +13,11 @@ use crate::{
     parse_istext_formula,
     parse_len_formula, parse_lower_formula, parse_hlookup_formula,
     parse_match_formula, parse_maxifs_formula, parse_minifs_formula,
-    parse_mod_formula, parse_month_formula,
+    parse_mid_formula, parse_mod_formula, parse_month_formula,
     parse_not_formula,
     parse_power_formula,
-    parse_or_formula, parse_right_formula, parse_single_ref_formula,
+    parse_or_formula, parse_rept_formula, parse_right_formula,
+    parse_single_ref_formula,
     parse_xor_formula,
     parse_sign_formula,
     parse_round_formula, parse_rounddown_formula, parse_roundup_formula,
@@ -616,6 +617,33 @@ fn evaluate_formula(
     let skip_count = total.saturating_sub(char_count);
     let value = text.chars().skip(skip_count).collect::<String>();
     return Ok(Some(value));
+  }
+
+  if let Some((text_arg, start_arg, count_arg)) = parse_mid_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &text_arg)?;
+    let start = parse_required_integer(connection, sheet, &start_arg)?;
+    let count = parse_required_integer(connection, sheet, &count_arg)?;
+    if start < 1 || count < 0 {
+      return Ok(None);
+    }
+    let start_index = usize::try_from(start - 1).unwrap_or(0);
+    let char_count = usize::try_from(count).unwrap_or(0);
+    let value = text
+      .chars()
+      .skip(start_index)
+      .take(char_count)
+      .collect::<String>();
+    return Ok(Some(value));
+  }
+
+  if let Some((text_arg, count_arg)) = parse_rept_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &text_arg)?;
+    let count = parse_required_integer(connection, sheet, &count_arg)?;
+    if count < 0 {
+      return Ok(None);
+    }
+    let repeat_count = usize::try_from(count).unwrap_or(0);
+    return Ok(Some(text.repeat(repeat_count)));
   }
 
   if let Some((year_arg, month_arg, day_arg)) = parse_date_formula(formula) {
@@ -2354,12 +2382,24 @@ mod tests {
         value: None,
         formula: Some("=ISODD(A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 74,
+        value: None,
+        formula: Some(r#"=MID("spreadsheet",2,5)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 75,
+        value: None,
+        formula: Some(r#"=REPT("na",4)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 71);
+    assert_eq!(updated_cells, 73);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2373,7 +2413,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 73,
+        end_col: 75,
       },
     )
     .expect("cells should be fetched");
@@ -2482,6 +2522,8 @@ mod tests {
     assert_eq!(by_position(1, 71).evaluated_value.as_deref(), Some("36"));
     assert_eq!(by_position(1, 72).evaluated_value.as_deref(), Some("true"));
     assert_eq!(by_position(1, 73).evaluated_value.as_deref(), Some("false"));
+    assert_eq!(by_position(1, 74).evaluated_value.as_deref(), Some("pread"));
+    assert_eq!(by_position(1, 75).evaluated_value.as_deref(), Some("nananana"));
   }
 
   #[test]
@@ -2608,6 +2650,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec![r#"=ISODD("north")"#.to_string()]);
+  }
+
+  #[test]
+  fn should_leave_rept_negative_count_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=REPT("na",-1)"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=REPT("na",-1)"#.to_string()]);
   }
 
   #[test]
