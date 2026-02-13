@@ -96,6 +96,7 @@ type SelectOptionResult =
   | { status: "notfound" };
 const MAX_INTERACTION_DIAGNOSTIC_CHARS = 200;
 const MAX_SELECT_OPTION_INPUT_CHARS = 2_000;
+const MAX_ACTION_TEXT_INPUT_CHARS = 20_000;
 
 interface ScrollDebugMetrics {
   targetTagName: string | null;
@@ -300,6 +301,18 @@ function formatActionMethodDiagnostic(value: unknown): string {
   )}... [truncated ${normalized.length - MAX_INTERACTION_DIAGNOSTIC_CHARS} chars]`;
 }
 
+function ensureActionTextInputSize(
+  value: string,
+  actionLabel: "type" | "fill"
+): string {
+  if (value.length <= MAX_ACTION_TEXT_INPUT_CHARS) {
+    return value;
+  }
+  throw new Error(
+    `[CDP][Interactions] ${actionLabel} input exceeds ${MAX_ACTION_TEXT_INPUT_CHARS} characters`
+  );
+}
+
 export async function dispatchCDPAction(
   method: CDPActionMethod,
   args: unknown[],
@@ -330,14 +343,14 @@ export async function dispatchCDPAction(
     case "type":
       await typeText(
         ctx,
-        coerceActionStringArg(args[0]),
+        ensureActionTextInputSize(coerceActionStringArg(args[0]), "type"),
         args[1] as TypeOptions
       );
       return;
     case "fill":
       await fillElement(
         ctx,
-        coerceActionStringArg(args[0]),
+        ensureActionTextInputSize(coerceActionStringArg(args[0]), "fill"),
         args[1] as FillOptions
       );
       return;

@@ -399,6 +399,48 @@ describe("dispatchCDPAction argument coercion", () => {
     expect(fillArgs?.[0]?.value).toBe("0");
   });
 
+  it("rejects oversized type input before dispatch", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+    const oversized = "x".repeat(20_001);
+
+    await expect(
+      dispatchCDPAction("type", [oversized], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow("[CDP][Interactions] type input exceeds 20000 characters");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("rejects oversized fill input before dispatch", async () => {
+    const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+    const session = createSession(async (method, params) => {
+      calls.push({ method, params });
+      return {};
+    });
+    const oversized = "x".repeat(20_001);
+
+    await expect(
+      dispatchCDPAction("fill", [oversized], {
+        element: {
+          session,
+          frameId: "frame-1",
+          backendNodeId: 11,
+          objectId: "obj-1",
+        },
+      })
+    ).rejects.toThrow("[CDP][Interactions] fill input exceeds 20000 characters");
+    expect(calls).toHaveLength(0);
+  });
+
   it("preserves numeric zero values for selectOption action", async () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session = createSession(async (method, params) => {
