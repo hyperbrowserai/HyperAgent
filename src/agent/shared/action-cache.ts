@@ -30,15 +30,9 @@ const extractInstruction = (action: ActionType): string | undefined => {
   const params = action.params as Record<string, unknown>;
   switch (action.type) {
     case "extract":
-      if (isString(params.objective)) {
-        return params.objective;
-      }
-      throw new Error(`Missing objective for extract action`);
+      return isString(params.objective) ? params.objective : undefined;
     case "actElement":
-      if (isString(params.instruction)) {
-        return params.instruction;
-      }
-      throw new Error(`Missing instruction for actElement action`);
+      return isString(params.instruction) ? params.instruction : undefined;
     default:
       // Actions like goToUrl, refreshPage, wait, analyzePdf do not require an instruction
       return isString(params.instruction) ? params.instruction : undefined;

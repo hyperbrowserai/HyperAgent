@@ -33,6 +33,47 @@ describe("action cache helpers", () => {
     expect(entry.arguments).toEqual(["https://example.com"]);
   });
 
+  it("does not throw when required instruction-like params are missing", () => {
+    const domState: A11yDOMState = {
+      elements: new Map(),
+      domState: "",
+      xpathMap: {},
+      backendNodeMap: {},
+    };
+    const actionOutput: ActionOutput = {
+      success: true,
+      message: "ok",
+    };
+
+    const extractEntry = buildActionCacheEntry({
+      stepIndex: 0,
+      action: {
+        type: "extract",
+        params: {},
+      } as unknown as ActionType,
+      actionOutput,
+      domState,
+    });
+
+    const actEntry = buildActionCacheEntry({
+      stepIndex: 1,
+      action: {
+        type: "actElement",
+        params: {
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+        },
+      } as unknown as ActionType,
+      actionOutput,
+      domState,
+    });
+
+    expect(extractEntry.instruction).toBeUndefined();
+    expect(actEntry.instruction).toBeUndefined();
+    expect(actEntry.method).toBe("click");
+  });
+
   it("uses actionParams url when goToUrl argument is whitespace", () => {
     const goToEntry: ActionCacheEntry = {
       stepIndex: 1,
