@@ -777,6 +777,54 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } else {
         const method = step.method;
         if (method && validHelperMethods.has(method)) {
+          const xpath = step.xpath;
+          const hasXPath =
+            typeof xpath === "string" && xpath.trim().length > 0;
+          if (!hasXPath) {
+            if (step.instruction) {
+              result = await hyperPage.perform(step.instruction);
+            } else {
+              result = {
+                taskId: cache.taskId,
+                status: TaskStatus.FAILED,
+                steps: [],
+                output: `Cannot replay action type "${step.actionType}" with method "${method}" without XPath or instruction`,
+                replayStepMeta: {
+                  usedCachedAction: false,
+                  fallbackUsed: false,
+                  retries: 0,
+                  cachedXPath: null,
+                  fallbackXPath: null,
+                  fallbackElementId: null,
+                },
+              };
+            }
+            const finalMeta = result.replayStepMeta;
+            const finalSuccess = result.status === TaskStatus.COMPLETED;
+
+            stepsResult.push({
+              stepIndex: step.stepIndex,
+              actionType: step.actionType,
+              usedXPath: finalMeta?.usedCachedAction ?? false,
+              fallbackUsed: finalMeta?.fallbackUsed ?? false,
+              cachedXPath: finalMeta?.cachedXPath ?? null,
+              fallbackXPath: finalMeta?.fallbackXPath ?? null,
+              fallbackElementId: finalMeta?.fallbackElementId ?? null,
+              retries: finalMeta?.retries ?? 0,
+              success: finalSuccess,
+              message:
+                result.output ||
+                (finalSuccess
+                  ? "Completed"
+                  : "Failed to execute cached action"),
+            });
+
+            if (!finalSuccess) {
+              replayStatus = TaskStatus.FAILED;
+              break;
+            }
+            continue;
+          }
           const options: PerformOptions = {
             performInstruction: step.instruction ?? null,
             maxSteps: maxXPathRetries,
@@ -788,7 +836,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           result = await dispatchPerformHelper(
             hyperPage,
             method,
-            step.xpath ?? "",
+            xpath,
             valueArg,
             options
           );
