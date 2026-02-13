@@ -15,11 +15,87 @@ export interface PerformActionParams {
 }
 
 const VARIABLE_TOKEN_PATTERN = /<<([^>]+)>>/g;
+const MAX_ACTION_ARGS = 50;
+const MAX_ACTION_ARG_CHARS = 20_000;
+const MAX_ACTION_METHOD_CHARS = 128;
+const MAX_ACTION_TEXT_CHARS = 1_000;
+
+function safeReadRecordField(
+  value: unknown,
+  key: string
+): unknown {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return undefined;
+  }
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeTextInput(
+  value: unknown,
+  fallback: string,
+  maxChars: number
+): string {
+  const source =
+    typeof value === "string" ? value : value == null ? fallback : formatUnknownError(value);
+  const normalized = source.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars)}…`;
+}
+
+function normalizeMethodInput(value: unknown): string {
+  return normalizeTextInput(value, "click", MAX_ACTION_METHOD_CHARS);
+}
+
+function normalizeActionArguments(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_ACTION_ARGS).map((arg) =>
+    normalizeTextInput(arg, "", MAX_ACTION_ARG_CHARS)
+  );
+}
+
+function readVariables(ctx: ActionContext): Array<{ key: string; value: string }> {
+  const rawVariables = safeReadRecordField(ctx, "variables");
+  if (!Array.isArray(rawVariables)) {
+    return [];
+  }
+  const normalized: Array<{ key: string; value: string }> = [];
+  for (const entry of rawVariables) {
+    const key = normalizeTextInput(
+      safeReadRecordField(entry, "key"),
+      "",
+      MAX_ACTION_METHOD_CHARS
+    );
+    if (key.length === 0) {
+      continue;
+    }
+    const value = normalizeTextInput(safeReadRecordField(entry, "value"), "", MAX_ACTION_ARG_CHARS);
+    normalized.push({ key, value });
+  }
+  return normalized;
+}
+
+function buildFailureMessage(instruction: string, error: unknown): string {
+  return `Failed to execute "${normalizeTextInput(
+    instruction,
+    "task",
+    MAX_ACTION_TEXT_CHARS
+  )}": ${normalizeTextInput(formatUnknownError(error), "unknown error", MAX_ACTION_TEXT_CHARS)}`;
+}
 
 function interpolateVariables(value: string, ctx: ActionContext): string {
+  const variables = readVariables(ctx);
   return value.replace(VARIABLE_TOKEN_PATTERN, (match, key) => {
     const normalizedKey = key.trim();
-    const variable = ctx.variables.find((entry) => entry.key === normalizedKey);
+    const variable = variables.find((entry) => entry.key === normalizedKey);
     return variable ? variable.value : match;
   });
 }
@@ -32,17 +108,21 @@ export async function performAction(
   ctx: ActionContext,
   params: PerformActionParams
 ): Promise<ActionOutput> {
-  const {
-    instruction,
-    elementId,
-    method,
-    arguments: methodArgs = [],
-    confidence,
-  } = params;
-  const resolvedInstruction = interpolateVariables(instruction, ctx);
-  const resolvedMethodArgs = methodArgs.map((arg) =>
-    interpolateVariables(arg, ctx)
+  const instruction = normalizeTextInput(
+    safeReadRecordField(params, "instruction"),
+    "Execute action",
+    MAX_ACTION_TEXT_CHARS
   );
+  const elementId = normalizeTextInput(
+    safeReadRecordField(params, "elementId"),
+    "",
+    MAX_ACTION_METHOD_CHARS
+  );
+  const method = normalizeMethodInput(safeReadRecordField(params, "method"));
+  const confidence = safeReadRecordField(params, "confidence");
+  const methodArgs = normalizeActionArguments(safeReadRecordField(params, "arguments"));
+  const resolvedInstruction = interpolateVariables(instruction, ctx);
+  const resolvedMethodArgs = methodArgs.map((arg) => interpolateVariables(arg, ctx));
 
   if (!isEncodedId(elementId)) {
     return {
@@ -51,8 +131,28 @@ export async function performAction(
     };
   }
 
+  const domState = safeReadRecordField(ctx, "domState");
+  const elements = safeReadRecordField(domState, "elements");
+  if (!(elements instanceof Map)) {
+    return {
+      success: false,
+      message: `Failed to execute "${resolvedInstruction}": current DOM elements are unavailable.`,
+    };
+  }
+
   const encodedId = elementId;
-  const elementMetadata = ctx.domState.elements.get(encodedId);
+  let elementMetadata: unknown;
+  try {
+    elementMetadata = elements.get(encodedId);
+  } catch (error) {
+    return {
+      success: false,
+      message: buildFailureMessage(
+        resolvedInstruction,
+        `DOM element lookup failed: ${formatUnknownError(error)}`
+      ),
+    };
+  }
   if (!elementMetadata) {
     return {
       success: false,
@@ -60,9 +160,11 @@ export async function performAction(
     };
   }
 
-  const timings: Record<string, number> | undefined = ctx.debug ? {} : undefined;
+  const isDebug = safeReadRecordField(ctx, "debug") === true;
+  const debugDir = safeReadRecordField(ctx, "debugDir");
+  const timings: Record<string, number> | undefined = isDebug ? {} : undefined;
   const debugInfo =
-    ctx.debug && elementMetadata
+    isDebug && elementMetadata
       ? {
           requestedAction: {
             elementId,
@@ -76,22 +178,46 @@ export async function performAction(
         }
       : undefined;
 
+  const cdp = safeReadRecordField(ctx, "cdp");
+  const cdpClient = safeReadRecordField(cdp, "client");
+  const resolveElement = safeReadRecordField(cdp, "resolveElement");
+  const dispatchCDPAction = safeReadRecordField(cdp, "dispatchCDPAction");
+  const backendNodeMap = safeReadRecordField(domState, "backendNodeMap");
+  const xpathMap = safeReadRecordField(domState, "xpathMap");
+  const frameMap = safeReadRecordField(domState, "frameMap");
+  const boundingBoxMap = safeReadRecordField(domState, "boundingBoxMap");
+  const frameContextManager = safeReadRecordField(cdp, "frameContextManager");
+  const preferScriptBoundingBox = safeReadRecordField(cdp, "preferScriptBoundingBox");
+  const normalizedBackendNodeMap =
+    backendNodeMap && typeof backendNodeMap === "object"
+      ? (backendNodeMap as Record<string, number>)
+      : undefined;
+  const normalizedXpathMap =
+    xpathMap && typeof xpathMap === "object"
+      ? (xpathMap as Record<string, string>)
+      : {};
+  const normalizedFrameMap = frameMap instanceof Map ? frameMap : undefined;
+
   const shouldUseCDP =
-    !!ctx.cdp && ctx.cdpActions !== false && !!ctx.domState.backendNodeMap;
+    ctx.cdpActions !== false &&
+    !!cdpClient &&
+    typeof resolveElement === "function" &&
+    typeof dispatchCDPAction === "function" &&
+    !!normalizedBackendNodeMap;
 
   if (shouldUseCDP) {
     const resolvedElementsCache = new Map<EncodedId, ResolvedCDPElement>();
     try {
       const resolveStart = performance.now();
-      const resolved = await ctx.cdp!.resolveElement(encodedId, {
+      const resolved = await resolveElement(encodedId, {
         page: ctx.page,
-        cdpClient: ctx.cdp!.client,
-        backendNodeMap: ctx.domState.backendNodeMap,
-        xpathMap: ctx.domState.xpathMap,
-        frameMap: ctx.domState.frameMap,
+        cdpClient,
+        backendNodeMap: normalizedBackendNodeMap,
+        xpathMap: normalizedXpathMap,
+        frameMap: normalizedFrameMap,
         resolvedElementsCache,
-        frameContextManager: ctx.cdp!.frameContextManager,
-        debug: ctx.debug,
+        frameContextManager: frameContextManager as unknown,
+        debug: isDebug,
         strictFrameValidation: true,
       });
       if (timings) {
@@ -99,14 +225,17 @@ export async function performAction(
       }
 
       const dispatchStart = performance.now();
-      await ctx.cdp!.dispatchCDPAction(method as CDPActionMethod, resolvedMethodArgs, {
+      await dispatchCDPAction(method as CDPActionMethod, resolvedMethodArgs, {
         element: {
           ...resolved,
-          xpath: ctx.domState.xpathMap?.[encodedId],
+          xpath: normalizedXpathMap[encodedId],
         },
-        boundingBox: ctx.domState.boundingBoxMap?.get(encodedId) ?? undefined,
-        preferScriptBoundingBox: ctx.cdp!.preferScriptBoundingBox,
-        debug: ctx.cdp?.debug ?? ctx.debug,
+        boundingBox:
+          boundingBoxMap instanceof Map
+            ? boundingBoxMap.get(encodedId) ?? undefined
+            : undefined,
+        preferScriptBoundingBox: preferScriptBoundingBox as boolean | undefined,
+        debug: safeReadRecordField(cdp, "debug") ?? isDebug,
       });
       if (timings) {
         timings.dispatchMs = Math.round(performance.now() - dispatchStart);
@@ -118,10 +247,9 @@ export async function performAction(
         debug: debugInfo,
       };
     } catch (error) {
-      const errorMessage = formatUnknownError(error);
       return {
         success: false,
-        message: `Failed to execute "${resolvedInstruction}": ${errorMessage}`,
+        message: buildFailureMessage(resolvedInstruction, error),
         debug: debugInfo,
       };
     }
@@ -132,10 +260,10 @@ export async function performAction(
     const locatorStart = performance.now();
     const { locator } = await getElementLocator(
       elementId,
-      ctx.domState.xpathMap,
+      normalizedXpathMap,
       ctx.page,
-      ctx.domState.frameMap,
-      !!ctx.debugDir
+      normalizedFrameMap,
+      typeof debugDir === "string" && debugDir.trim().length > 0
     );
     if (timings) {
       timings.locatorMs = Math.round(performance.now() - locatorStart);
@@ -145,7 +273,7 @@ export async function performAction(
     const pwStart = performance.now();
     await executePlaywrightMethod(method, resolvedMethodArgs, locator, {
       clickTimeout: 3500,
-      debug: !!ctx.debugDir,
+      debug: typeof debugDir === "string" && debugDir.trim().length > 0,
     });
     if (timings) {
       timings.playwrightActionMs = Math.round(performance.now() - pwStart);
@@ -157,10 +285,9 @@ export async function performAction(
       debug: debugInfo,
     };
   } catch (error) {
-    const errorMessage = formatUnknownError(error);
     return {
       success: false,
-      message: `Failed to execute "${resolvedInstruction}": ${errorMessage}`,
+      message: buildFailureMessage(resolvedInstruction, error),
       debug: debugInfo,
     };
   }

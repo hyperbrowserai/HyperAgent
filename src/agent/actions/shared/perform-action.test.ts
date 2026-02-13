@@ -22,6 +22,39 @@ const { executePlaywrightMethod } = jest.requireMock(
 };
 
 describe("performAction variable interpolation", () => {
+  const createContext = (overrides?: Partial<ActionContext>): ActionContext => ({
+    page: {} as Page,
+    domState: {
+      elements: new Map([
+        [
+          "0-1",
+          {
+            role: "textbox",
+          },
+        ],
+      ]),
+      domState: "",
+      xpathMap: { "0-1": "//input[1]" },
+      backendNodeMap: {},
+    },
+    llm: {
+      invoke: async () => ({ role: "assistant", content: "ok" }),
+      invokeStructured: async () => ({ rawText: "{}", parsed: null }),
+      getProviderId: () => "mock",
+      getModelId: () => "mock-model",
+      getCapabilities: () => ({
+        multimodal: false,
+        toolCalling: true,
+        jsonMode: true,
+      }),
+    },
+    tokenLimit: 10000,
+    variables: [],
+    cdpActions: false,
+    invalidateDomCache: jest.fn(),
+    ...overrides,
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     getElementLocator.mockResolvedValue({
@@ -32,33 +65,7 @@ describe("performAction variable interpolation", () => {
   });
 
   it("interpolates variables in instruction and method arguments", async () => {
-    const context: ActionContext = {
-      page: {} as Page,
-      domState: {
-        elements: new Map([
-          [
-            "0-1",
-            {
-              role: "textbox",
-            },
-          ],
-        ]),
-        domState: "",
-        xpathMap: { "0-1": "//input[1]" },
-        backendNodeMap: {},
-      },
-      llm: {
-        invoke: async () => ({ role: "assistant", content: "ok" }),
-        invokeStructured: async () => ({ rawText: "{}", parsed: null }),
-        getProviderId: () => "mock",
-        getModelId: () => "mock-model",
-        getCapabilities: () => ({
-          multimodal: false,
-          toolCalling: true,
-          jsonMode: true,
-        }),
-      },
-      tokenLimit: 10000,
+    const context = createContext({
       variables: [
         {
           key: "email",
@@ -66,9 +73,7 @@ describe("performAction variable interpolation", () => {
           description: "Email address",
         },
       ],
-      cdpActions: false,
-      invalidateDomCache: jest.fn(),
-    };
+    });
 
     const result = await performAction(context, {
       elementId: "0-1",
@@ -88,33 +93,7 @@ describe("performAction variable interpolation", () => {
   });
 
   it("interpolates variables when token keys include surrounding whitespace", async () => {
-    const context: ActionContext = {
-      page: {} as Page,
-      domState: {
-        elements: new Map([
-          [
-            "0-1",
-            {
-              role: "textbox",
-            },
-          ],
-        ]),
-        domState: "",
-        xpathMap: { "0-1": "//input[1]" },
-        backendNodeMap: {},
-      },
-      llm: {
-        invoke: async () => ({ role: "assistant", content: "ok" }),
-        invokeStructured: async () => ({ rawText: "{}", parsed: null }),
-        getProviderId: () => "mock",
-        getModelId: () => "mock-model",
-        getCapabilities: () => ({
-          multimodal: false,
-          toolCalling: true,
-          jsonMode: true,
-        }),
-      },
-      tokenLimit: 10000,
+    const context = createContext({
       variables: [
         {
           key: "email",
@@ -122,9 +101,7 @@ describe("performAction variable interpolation", () => {
           description: "Email address",
         },
       ],
-      cdpActions: false,
-      invalidateDomCache: jest.fn(),
-    };
+    });
 
     const result = await performAction(context, {
       elementId: "0-1",
@@ -146,37 +123,7 @@ describe("performAction variable interpolation", () => {
   it("formats non-Error failures from Playwright execution", async () => {
     executePlaywrightMethod.mockRejectedValue({ reason: "playwright failed" });
 
-    const context: ActionContext = {
-      page: {} as Page,
-      domState: {
-        elements: new Map([
-          [
-            "0-1",
-            {
-              role: "textbox",
-            },
-          ],
-        ]),
-        domState: "",
-        xpathMap: { "0-1": "//input[1]" },
-        backendNodeMap: {},
-      },
-      llm: {
-        invoke: async () => ({ role: "assistant", content: "ok" }),
-        invokeStructured: async () => ({ rawText: "{}", parsed: null }),
-        getProviderId: () => "mock",
-        getModelId: () => "mock-model",
-        getCapabilities: () => ({
-          multimodal: false,
-          toolCalling: true,
-          jsonMode: true,
-        }),
-      },
-      tokenLimit: 10000,
-      variables: [],
-      cdpActions: false,
-      invalidateDomCache: jest.fn(),
-    };
+    const context = createContext();
 
     const result = await performAction(context, {
       elementId: "0-1",
@@ -187,5 +134,97 @@ describe("performAction variable interpolation", () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toContain('{"reason":"playwright failed"}');
+  });
+
+  it("defaults to empty method arguments when params.arguments is invalid", async () => {
+    const context = createContext();
+
+    const result = await performAction(context, {
+      elementId: "0-1",
+      method: "click",
+      arguments: "not-an-array" as unknown as string[],
+      instruction: "Click submit",
+    });
+
+    expect(result.success).toBe(true);
+    expect(executePlaywrightMethod).toHaveBeenCalledWith(
+      "click",
+      [],
+      {},
+      expect.objectContaining({ clickTimeout: 3500 })
+    );
+  });
+
+  it("handles unreadable variables without crashing interpolation", async () => {
+    const variable = {
+      description: "bad var",
+      get key(): string {
+        throw new Error("key trap");
+      },
+      get value(): string {
+        throw new Error("value trap");
+      },
+    };
+    const context = createContext({
+      variables: [variable as unknown as ActionContext["variables"][number]],
+    });
+
+    const result = await performAction(context, {
+      elementId: "0-1",
+      method: "fill",
+      arguments: ["<<email>>"],
+      instruction: "Fill input with <<email>>",
+    });
+
+    expect(result.success).toBe(true);
+    expect(executePlaywrightMethod).toHaveBeenCalledWith(
+      "fill",
+      ["<<email>>"],
+      {},
+      expect.objectContaining({ clickTimeout: 3500 })
+    );
+  });
+
+  it("returns readable failure when DOM elements map is unavailable", async () => {
+    const baseContext = createContext();
+    const context = createContext({
+      domState: {
+        ...baseContext.domState,
+        elements:
+          undefined as unknown as ActionContext["domState"]["elements"],
+      } as ActionContext["domState"],
+    });
+
+    const result = await performAction(context, {
+      elementId: "0-1",
+      method: "click",
+      arguments: [],
+      instruction: "Click submit",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("current DOM elements are unavailable");
+  });
+
+  it("falls back to Playwright when CDP hooks are invalid", async () => {
+    const invalidCdp = {
+      client: {} as unknown,
+      resolveElement: "invalid",
+      dispatchCDPAction: "invalid",
+    } as unknown as NonNullable<ActionContext["cdp"]>;
+    const context = createContext({
+      cdpActions: true,
+      cdp: invalidCdp,
+    });
+
+    const result = await performAction(context, {
+      elementId: "0-1",
+      method: "click",
+      arguments: [],
+      instruction: "Click submit",
+    });
+
+    expect(result.success).toBe(true);
+    expect(executePlaywrightMethod).toHaveBeenCalledTimes(1);
   });
 });
