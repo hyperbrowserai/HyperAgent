@@ -214,6 +214,44 @@ describe("OpenAIClient", () => {
     );
   });
 
+  it("sanitizes nested unsafe keys and circular provider options", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: "ok",
+          },
+        },
+      ],
+    });
+
+    const circular: Record<string, unknown> = { id: "node" };
+    circular.self = circular;
+
+    const client = new OpenAIClient({ model: "gpt-test" });
+    await client.invoke([{ role: "user", content: "hello" }], {
+      providerOptions: {
+        metadata: {
+          safe: "yes",
+          constructor: "bad",
+          nested: circular,
+        },
+      },
+    });
+
+    expect(createCompletionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {
+          safe: "yes",
+          nested: {
+            id: "node",
+            self: "[Circular]",
+          },
+        },
+      })
+    );
+  });
+
   it("does not crash structured-schema debug logging on circular schema payloads", async () => {
     const circularSchema: Record<string, unknown> = {};
     circularSchema.self = circularSchema;

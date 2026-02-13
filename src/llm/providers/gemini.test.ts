@@ -197,4 +197,48 @@ describe("GeminiClient", () => {
       })
     );
   });
+
+  it("sanitizes nested unsafe keys and circular provider options", async () => {
+    generateContentMock.mockResolvedValue({
+      text: "result text",
+    });
+
+    const circular: Record<string, unknown> = { id: "node" };
+    circular.self = circular;
+
+    const client = new GeminiClient({
+      model: "gemini-test",
+      temperature: 0.1,
+      maxTokens: 50,
+    });
+    await client.invoke(
+      [{ role: "user", content: "hello" }],
+      {
+        providerOptions: {
+          metadata: {
+            safe: "yes",
+            constructor: "bad",
+            nested: circular,
+          },
+        },
+      }
+    );
+
+    expect(generateContentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: {
+          metadata: {
+            safe: "yes",
+            nested: {
+              id: "node",
+              self: "[Circular]",
+            },
+          },
+          temperature: 0.1,
+          maxOutputTokens: 50,
+          systemInstruction: "follow system rules",
+        },
+      })
+    );
+  });
 });

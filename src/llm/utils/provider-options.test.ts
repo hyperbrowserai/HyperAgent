@@ -40,18 +40,63 @@ describe("sanitizeProviderOptions", () => {
   });
 
   it("drops unsafe prototype-like keys", () => {
+    const options = {
+      ["__proto__"]: { polluted: true },
+      constructor: "bad",
+      prototype: "bad",
+      top_p: 0.95,
+    };
+
     expect(
-      sanitizeProviderOptions(
-        {
-          __proto__: { polluted: true },
-          constructor: "bad",
-          prototype: "bad",
-          top_p: 0.95,
-        },
-        reserved
-      )
+      sanitizeProviderOptions(options, reserved)
     ).toEqual({
       top_p: 0.95,
+    });
+  });
+
+  it("recursively removes unsafe keys from nested objects", () => {
+    const result = sanitizeProviderOptions(
+      {
+        top_p: 0.95,
+        metadata: {
+          safe: "ok",
+          constructor: "bad",
+          nested: {
+            ["__proto__"]: "bad",
+            keep: true,
+          },
+        },
+      },
+      reserved
+    );
+
+    expect(result).toEqual({
+      top_p: 0.95,
+      metadata: {
+        safe: "ok",
+        nested: {
+          keep: true,
+        },
+      },
+    });
+  });
+
+  it("replaces circular nested values with safe marker", () => {
+    const circular: Record<string, unknown> = { id: "node" };
+    circular.self = circular;
+
+    const result = sanitizeProviderOptions(
+      {
+        metadata: circular,
+      },
+      reserved
+    );
+
+    expect(result).toEqual({
+      metadata: {
+        id: "node",
+        self: "[Circular]",
+      },
     });
   });
 });

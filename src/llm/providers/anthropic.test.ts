@@ -321,4 +321,40 @@ describe("AnthropicClient", () => {
     ]);
     expect(payload?.tool_choice).toEqual({ type: "tool" });
   });
+
+  it("sanitizes nested unsafe keys and circular provider options", async () => {
+    createMessageMock.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      usage: {
+        input_tokens: 1,
+        output_tokens: 2,
+      },
+    });
+
+    const circular: Record<string, unknown> = { id: "node" };
+    circular.self = circular;
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    await client.invoke([{ role: "user", content: "hello" }], {
+      providerOptions: {
+        metadata: {
+          safe: "yes",
+          constructor: "bad",
+          nested: circular,
+        },
+      },
+    });
+
+    expect(createMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {
+          safe: "yes",
+          nested: {
+            id: "node",
+            self: "[Circular]",
+          },
+        },
+      })
+    );
+  });
 });

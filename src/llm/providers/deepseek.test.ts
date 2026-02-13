@@ -192,4 +192,42 @@ describe("DeepSeekClient", () => {
       })
     );
   });
+
+  it("sanitizes nested unsafe keys and circular provider options", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: "ok",
+          },
+        },
+      ],
+    });
+
+    const circular: Record<string, unknown> = { id: "node" };
+    circular.self = circular;
+
+    const client = new DeepSeekClient({ model: "deepseek-test" });
+    await client.invoke([{ role: "user", content: "hello" }], {
+      providerOptions: {
+        metadata: {
+          safe: "yes",
+          constructor: "bad",
+          nested: circular,
+        },
+      },
+    });
+
+    expect(createCompletionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {
+          safe: "yes",
+          nested: {
+            id: "node",
+            self: "[Circular]",
+          },
+        },
+      })
+    );
+  });
 });
