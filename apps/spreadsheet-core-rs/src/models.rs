@@ -173,11 +173,13 @@ pub struct RemoveAgentOpsCacheEntryResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoveAgentOpsCacheEntriesByPrefixRequest {
   pub request_id_prefix: String,
+  pub max_age_seconds: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoveAgentOpsCacheEntriesByPrefixResponse {
   pub request_id_prefix: String,
+  pub max_age_seconds: Option<i64>,
   pub removed_entries: usize,
   pub remaining_entries: usize,
 }
@@ -185,6 +187,7 @@ pub struct RemoveAgentOpsCacheEntriesByPrefixResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
   pub request_id_prefix: String,
+  pub max_age_seconds: Option<i64>,
   pub matched_entries: usize,
   pub sample_limit: usize,
   pub sample_request_ids: Vec<String>,
@@ -193,6 +196,7 @@ pub struct PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
   pub request_id_prefix: String,
+  pub max_age_seconds: Option<i64>,
   pub sample_limit: Option<usize>,
 }
 

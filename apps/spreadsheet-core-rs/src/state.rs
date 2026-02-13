@@ -375,6 +375,7 @@ impl AppState {
     &self,
     workbook_id: Uuid,
     request_id_prefix: &str,
+    cutoff_timestamp: Option<DateTime<Utc>>,
   ) -> Result<(usize, usize), ApiError> {
     let mut guard = self.workbooks.write().await;
     let record = guard
@@ -384,15 +385,32 @@ impl AppState {
     let matching_request_ids = record
       .agent_ops_cache_order
       .iter()
-      .filter(|request_id| request_id.starts_with(request_id_prefix))
+      .filter(|request_id| {
+        let prefix_matches = request_id.starts_with(request_id_prefix);
+        let within_cutoff = cutoff_timestamp
+          .as_ref()
+          .map(|cutoff| {
+            record
+              .agent_ops_cache_timestamps
+              .get(*request_id)
+              .map(|cached_at| cached_at <= cutoff)
+              .unwrap_or(false)
+          })
+          .unwrap_or(true);
+        prefix_matches && within_cutoff
+      })
       .cloned()
       .collect::<Vec<_>>();
     let removed_entries = matching_request_ids.len();
 
     if removed_entries > 0 {
+      let matching_request_id_set = matching_request_ids
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
       record
         .agent_ops_cache_order
-        .retain(|request_id| !request_id.starts_with(request_id_prefix));
+        .retain(|request_id| !matching_request_id_set.contains(request_id));
       for request_id in matching_request_ids {
         record.agent_ops_cache.remove(&request_id);
         record.agent_ops_cached_operations.remove(&request_id);
@@ -867,7 +885,7 @@ mod tests {
     }
 
     let (removed_entries, remaining_entries) = state
-      .remove_agent_ops_cache_entries_by_prefix(workbook.id, "scenario-")
+      .remove_agent_ops_cache_entries_by_prefix(workbook.id, "scenario-", None)
       .await
       .expect("prefix removal should succeed");
     assert_eq!(removed_entries, 2);
@@ -883,6 +901,18 @@ mod tests {
       .await
       .expect("cache lookup should succeed");
     assert!(preset_entry.is_some());
+
+    let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
+    let (age_removed_entries, age_remaining_entries) = state
+      .remove_agent_ops_cache_entries_by_prefix(
+        workbook.id,
+        "preset-",
+        Some(cutoff_timestamp),
+      )
+      .await
+      .expect("age-filtered prefix removal should succeed");
+    assert_eq!(age_removed_entries, 0);
+    assert_eq!(age_remaining_entries, 1);
   }
 
   #[tokio::test]

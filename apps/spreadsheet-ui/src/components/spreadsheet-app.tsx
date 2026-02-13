@@ -160,6 +160,7 @@ export function SpreadsheetApp() {
   const [cacheRerunRequestId, setCacheRerunRequestId] = useState("");
   const [cachePrefixRemovalPreview, setCachePrefixRemovalPreview] = useState<{
     requestIdPrefix: string;
+    maxAgeSeconds: number | null;
     matchedEntries: number;
     sampleLimit: number;
     sampleRequestIds: string[];
@@ -1587,6 +1588,7 @@ export function SpreadsheetApp() {
       const response = await removeAgentOpsCacheEntriesByPrefix(
         workbook.id,
         normalizedPrefix,
+        normalizedCacheEntriesMaxAgeSeconds,
       );
       if (
         response.removed_entries > 0
@@ -1599,7 +1601,11 @@ export function SpreadsheetApp() {
       setNotice(
         `Removed ${response.removed_entries} cache entr${
           response.removed_entries === 1 ? "y" : "ies"
-        } for prefix ${response.request_id_prefix}.`,
+        } for prefix ${response.request_id_prefix}${
+          typeof response.max_age_seconds === "number"
+            ? ` (older than ${response.max_age_seconds}s)`
+            : ""
+        }.`,
       );
       await Promise.all([
         queryClient.invalidateQueries({
@@ -1638,9 +1644,11 @@ export function SpreadsheetApp() {
         workbook.id,
         normalizedPrefix,
         normalizedSampleLimit,
+        normalizedCacheEntriesMaxAgeSeconds,
       );
       setCachePrefixRemovalPreview({
         requestIdPrefix: preview.request_id_prefix,
+        maxAgeSeconds: preview.max_age_seconds,
         matchedEntries: preview.matched_entries,
         sampleLimit: preview.sample_limit,
         sampleRequestIds: preview.sample_request_ids,
@@ -1648,7 +1656,11 @@ export function SpreadsheetApp() {
       setNotice(
         `Previewed ${preview.matched_entries} cache entr${
           preview.matched_entries === 1 ? "y" : "ies"
-        } for prefix ${preview.request_id_prefix}.`,
+        } for prefix ${preview.request_id_prefix}${
+          typeof preview.max_age_seconds === "number"
+            ? ` (older than ${preview.max_age_seconds}s)`
+            : ""
+        }.`,
       );
     } catch (error) {
       applyUiError(error, "Failed to preview cache removal by prefix.");
@@ -2753,6 +2765,15 @@ export function SpreadsheetApp() {
                         <span className="font-mono">
                           {cachePrefixRemovalPreview.requestIdPrefix}
                         </span>{" "}
+                        {typeof cachePrefixRemovalPreview.maxAgeSeconds === "number" ? (
+                          <>
+                            older than{" "}
+                            <span className="font-mono">
+                              {cachePrefixRemovalPreview.maxAgeSeconds}s
+                            </span>{" "}
+                          </>
+                        ) : null}
+                        {" "}
                         matches{" "}
                         <span className="font-mono">
                           {cachePrefixRemovalPreview.matchedEntries}

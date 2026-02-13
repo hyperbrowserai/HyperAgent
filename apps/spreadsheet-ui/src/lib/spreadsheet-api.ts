@@ -335,13 +335,24 @@ export async function removeAgentOpsCacheEntry(
 export async function removeAgentOpsCacheEntriesByPrefix(
   workbookId: string,
   requestIdPrefix: string,
+  maxAgeSeconds?: number,
 ): Promise<RemoveAgentOpsCacheEntriesByPrefixResponse> {
+  const normalizedMaxAgeSeconds =
+    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
+      ? Math.floor(maxAgeSeconds)
+      : undefined;
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove-by-prefix`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ request_id_prefix: requestIdPrefix }),
+      body: JSON.stringify({
+        request_id_prefix: requestIdPrefix,
+        max_age_seconds:
+          normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0
+            ? normalizedMaxAgeSeconds
+            : undefined,
+      }),
     },
   );
   return parseJsonResponse<RemoveAgentOpsCacheEntriesByPrefixResponse>(response);
@@ -351,10 +362,15 @@ export async function previewRemoveAgentOpsCacheEntriesByPrefix(
   workbookId: string,
   requestIdPrefix: string,
   sampleLimit?: number,
+  maxAgeSeconds?: number,
 ): Promise<PreviewRemoveAgentOpsCacheEntriesByPrefixResponse> {
   const safeSampleLimit =
     typeof sampleLimit === "number"
       ? Math.max(1, Math.min(sampleLimit, 100))
+      : undefined;
+  const normalizedMaxAgeSeconds =
+    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
+      ? Math.floor(maxAgeSeconds)
       : undefined;
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove-by-prefix/preview`,
@@ -363,6 +379,10 @@ export async function previewRemoveAgentOpsCacheEntriesByPrefix(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         request_id_prefix: requestIdPrefix,
+        max_age_seconds:
+          normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0
+            ? normalizedMaxAgeSeconds
+            : undefined,
         sample_limit: safeSampleLimit,
       }),
     },

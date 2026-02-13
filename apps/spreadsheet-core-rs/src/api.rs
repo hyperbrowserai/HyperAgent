@@ -1159,19 +1159,23 @@ async fn get_agent_schema(
       "remaining_entries": "entries left in cache after removal"
     },
     "agent_ops_cache_remove_by_prefix_request_shape": {
-      "request_id_prefix": "string (required)"
+      "request_id_prefix": "string (required)",
+      "max_age_seconds": "optional number > 0 (remove only entries older than or equal to this age)"
     },
     "agent_ops_cache_remove_by_prefix_response_shape": {
       "request_id_prefix": "string",
+      "max_age_seconds": "echoed age filter when provided",
       "removed_entries": "number of removed cache entries matching prefix",
       "remaining_entries": "entries left in cache after removal"
     },
     "agent_ops_cache_remove_by_prefix_preview_request_shape": {
       "request_id_prefix": "string (required)",
+      "max_age_seconds": "optional number > 0 (preview only entries older than or equal to this age)",
       "sample_limit": "optional number (default 20, min 1, max 100)"
     },
     "agent_ops_cache_remove_by_prefix_preview_response_shape": {
       "request_id_prefix": "string",
+      "max_age_seconds": "echoed age filter when provided",
       "matched_entries": "number of cache entries matching prefix",
       "sample_limit": "max sample request ids returned",
       "sample_request_ids": "newest-first sample matching request ids"
@@ -1835,11 +1839,28 @@ async fn remove_agent_ops_cache_entries_by_prefix(
       "request_id_prefix is required to remove cache entries by prefix.",
     ));
   }
+  if payload
+    .max_age_seconds
+    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
+  {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MAX_AGE_SECONDS",
+      "max_age_seconds must be greater than 0.",
+    ));
+  }
+  let cutoff_timestamp = payload
+    .max_age_seconds
+    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
   let (removed_entries, remaining_entries) = state
-    .remove_agent_ops_cache_entries_by_prefix(workbook_id, request_id_prefix)
+    .remove_agent_ops_cache_entries_by_prefix(
+      workbook_id,
+      request_id_prefix,
+      cutoff_timestamp,
+    )
     .await?;
   Ok(Json(RemoveAgentOpsCacheEntriesByPrefixResponse {
     request_id_prefix: request_id_prefix.to_string(),
+    max_age_seconds: payload.max_age_seconds,
     removed_entries,
     remaining_entries,
   }))
@@ -1879,11 +1900,23 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
     DEFAULT_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
     MAX_REMOVE_BY_PREFIX_PREVIEW_SAMPLE_LIMIT,
   );
+  if payload
+    .max_age_seconds
+    .is_some_and(|max_age_seconds| max_age_seconds <= 0)
+  {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MAX_AGE_SECONDS",
+      "max_age_seconds must be greater than 0.",
+    ));
+  }
+  let cutoff_timestamp = payload
+    .max_age_seconds
+    .map(|max_age_seconds| Utc::now() - ChronoDuration::seconds(max_age_seconds));
   let (matched_entries, entries) = state
     .agent_ops_cache_entries(
       workbook_id,
       Some(request_id_prefix),
-      None,
+      cutoff_timestamp,
       0,
       sample_limit,
     )
@@ -1894,6 +1927,7 @@ async fn preview_remove_agent_ops_cache_entries_by_prefix(
     .collect::<Vec<_>>();
   Ok(Json(PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
     request_id_prefix: request_id_prefix.to_string(),
+    max_age_seconds: payload.max_age_seconds,
     matched_entries,
     sample_limit,
     sample_request_ids,
@@ -2843,17 +2877,34 @@ mod tests {
       .expect("agent ops should succeed");
     }
 
+    let age_filtered_remove = remove_agent_ops_cache_entries_by_prefix(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(RemoveAgentOpsCacheEntriesByPrefixRequest {
+        request_id_prefix: "scenario-".to_string(),
+        max_age_seconds: Some(86_400),
+      }),
+    )
+    .await
+    .expect("age-filtered prefix remove should succeed")
+    .0;
+    assert_eq!(age_filtered_remove.max_age_seconds, Some(86_400));
+    assert_eq!(age_filtered_remove.removed_entries, 0);
+    assert_eq!(age_filtered_remove.remaining_entries, 3);
+
     let remove_response = remove_agent_ops_cache_entries_by_prefix(
       State(state.clone()),
       Path(workbook.id),
       Json(RemoveAgentOpsCacheEntriesByPrefixRequest {
         request_id_prefix: "scenario-".to_string(),
+        max_age_seconds: None,
       }),
     )
     .await
     .expect("prefix remove should succeed")
     .0;
     assert_eq!(remove_response.request_id_prefix, "scenario-");
+    assert_eq!(remove_response.max_age_seconds, None);
     assert_eq!(remove_response.removed_entries, 2);
     assert_eq!(remove_response.remaining_entries, 1);
 
@@ -2905,6 +2956,7 @@ mod tests {
       Path(workbook.id),
       Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
         request_id_prefix: "scenario-".to_string(),
+        max_age_seconds: None,
         sample_limit: Some(1),
       }),
     )
@@ -2912,16 +2964,34 @@ mod tests {
     .expect("prefix preview should succeed")
     .0;
     assert_eq!(preview.request_id_prefix, "scenario-");
+    assert_eq!(preview.max_age_seconds, None);
     assert_eq!(preview.matched_entries, 2);
     assert_eq!(preview.sample_limit, 1);
     assert_eq!(preview.sample_request_ids.len(), 1);
     assert_eq!(preview.sample_request_ids[0], "scenario-b");
 
-    let clamped_preview = preview_remove_agent_ops_cache_entries_by_prefix(
-      State(state),
+    let age_filtered_preview = preview_remove_agent_ops_cache_entries_by_prefix(
+      State(state.clone()),
       Path(workbook.id),
       Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
         request_id_prefix: "scenario-".to_string(),
+        max_age_seconds: Some(86_400),
+        sample_limit: Some(10),
+      }),
+    )
+    .await
+    .expect("age-filtered preview should succeed")
+    .0;
+    assert_eq!(age_filtered_preview.max_age_seconds, Some(86_400));
+    assert_eq!(age_filtered_preview.matched_entries, 0);
+    assert!(age_filtered_preview.sample_request_ids.is_empty());
+
+    let clamped_preview = preview_remove_agent_ops_cache_entries_by_prefix(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
+        request_id_prefix: "scenario-".to_string(),
+        max_age_seconds: None,
         sample_limit: Some(0),
       }),
     )
@@ -2930,6 +3000,24 @@ mod tests {
     .0;
     assert_eq!(clamped_preview.sample_limit, 1);
     assert_eq!(clamped_preview.sample_request_ids.len(), 1);
+
+    let invalid_age_error = preview_remove_agent_ops_cache_entries_by_prefix(
+      State(state),
+      Path(workbook.id),
+      Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
+        request_id_prefix: "scenario-".to_string(),
+        max_age_seconds: Some(0),
+        sample_limit: None,
+      }),
+    )
+    .await
+    .expect_err("non-positive max age should fail for preview");
+    match invalid_age_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_MAX_AGE_SECONDS");
+      }
+      _ => panic!("expected invalid max age preview to use custom error code"),
+    }
   }
 
   #[tokio::test]
@@ -2947,6 +3035,7 @@ mod tests {
       Path(workbook.id),
       Json(RemoveAgentOpsCacheEntriesByPrefixRequest {
         request_id_prefix: "   ".to_string(),
+        max_age_seconds: None,
       }),
     )
     .await
@@ -2957,6 +3046,35 @@ mod tests {
         assert_eq!(code, "INVALID_REQUEST_ID_PREFIX");
       }
       _ => panic!("expected invalid prefix to use custom error code"),
+    }
+  }
+
+  #[tokio::test]
+  async fn should_reject_non_positive_max_age_when_removing_cache_entries_by_prefix() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("handler-cache-remove-prefix-invalid-age".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let error = remove_agent_ops_cache_entries_by_prefix(
+      State(state),
+      Path(workbook.id),
+      Json(RemoveAgentOpsCacheEntriesByPrefixRequest {
+        request_id_prefix: "scenario-".to_string(),
+        max_age_seconds: Some(0),
+      }),
+    )
+    .await
+    .expect_err("non-positive max age should fail");
+
+    match error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_MAX_AGE_SECONDS");
+      }
+      _ => panic!("expected invalid max age to use custom error code"),
     }
   }
 
@@ -2975,6 +3093,7 @@ mod tests {
       Path(workbook.id),
       Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
         request_id_prefix: "   ".to_string(),
+        max_age_seconds: None,
         sample_limit: None,
       }),
     )

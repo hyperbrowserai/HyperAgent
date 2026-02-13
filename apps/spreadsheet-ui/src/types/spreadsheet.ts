@@ -102,12 +102,14 @@ export interface RemoveAgentOpsCacheEntryResponse {
 
 export interface RemoveAgentOpsCacheEntriesByPrefixResponse {
   request_id_prefix: string;
+  max_age_seconds: number | null;
   removed_entries: number;
   remaining_entries: number;
 }
 
 export interface PreviewRemoveAgentOpsCacheEntriesByPrefixResponse {
   request_id_prefix: string;
+  max_age_seconds: number | null;
   matched_entries: number;
   sample_limit: number;
   sample_request_ids: string[];
