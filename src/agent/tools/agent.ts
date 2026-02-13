@@ -519,7 +519,12 @@ export const runAgentTask = async (
                 return result;
               })(),
             onError: (...args: Array<unknown>) => {
-              console.error("[LLM][StructuredOutput] Retry error", ...args);
+              const [attemptLabel, failure] = args;
+              console.error(
+                `[LLM][StructuredOutput] Retry error ${formatUnknownError(
+                  attemptLabel
+                )}: ${formatUnknownError(failure)}`
+              );
             },
           });
 

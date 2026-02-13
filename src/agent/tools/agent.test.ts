@@ -259,6 +259,52 @@ function createSchemaRetryCtx(rawText: string): AgentCtx {
   };
 }
 
+function createTransientStructuredFailureCtx(): AgentCtx {
+  const parsedAction = {
+    thoughts: "done",
+    memory: "done",
+    action: {
+      type: "complete",
+      params: {
+        success: true,
+        text: "final answer",
+      },
+    },
+  };
+
+  const invokeStructured = jest
+    .fn()
+    .mockRejectedValueOnce({ reason: "temporary llm failure" })
+    .mockResolvedValue({
+      rawText: JSON.stringify(parsedAction),
+      parsed: parsedAction,
+    });
+
+  const llm = {
+    invoke: async () => ({
+      role: "assistant" as const,
+      content: "ok",
+    }),
+    invokeStructured,
+    getProviderId: () => "mock",
+    getModelId: () => "mock-model",
+    getCapabilities: () => ({
+      multimodal: false,
+      toolCalling: true,
+      jsonMode: true,
+    }),
+  } as unknown as AgentCtx["llm"];
+
+  return {
+    llm,
+    actions: [createCompleteActionDefinition()],
+    tokenLimit: 10000,
+    debug: false,
+    variables: {},
+    cdpActions: false,
+  };
+}
+
 function createTaskState(page: Page): TaskState {
   return {
     id: "task-1",
@@ -489,6 +535,26 @@ describe("runAgentTask completion behavior", () => {
       expect(structuredLogLine).toBeDefined();
       expect(structuredLogLine).toContain("[truncated");
       expect(structuredLogLine).not.toContain(hugeRaw);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("formats structured-output retry failures with readable messages", async () => {
+    const page = createMockPage();
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createTransientStructuredFailureCtx();
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page));
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+
+      const retryLogLine = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes("[LLM][StructuredOutput] Retry error"));
+      expect(retryLogLine).toBe(
+        '[LLM][StructuredOutput] Retry error Retry Attempt 1/3: {"reason":"temporary llm failure"}'
+      );
     } finally {
       errorSpy.mockRestore();
     }
