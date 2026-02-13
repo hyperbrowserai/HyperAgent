@@ -135,6 +135,31 @@ describe("createLLMClient", () => {
     ).toThrow("LLM model must be a non-empty string");
   });
 
+  it("strips control characters from model identifiers", () => {
+    createLLMClient({
+      provider: "openai",
+      model: "gpt-\u0000test",
+    });
+
+    expect(createOpenAIClientMock).toHaveBeenCalledWith({
+      apiKey: undefined,
+      model: "gpt-test",
+      temperature: undefined,
+      maxTokens: undefined,
+      baseURL: undefined,
+    });
+  });
+
+  it("rejects excessively long model identifiers", () => {
+    const hugeModel = "m".repeat(300);
+    expect(() =>
+      createLLMClient({
+        provider: "openai",
+        model: hugeModel,
+      })
+    ).toThrow("LLM model exceeds maximum length of 200 characters");
+  });
+
   it("rejects invalid baseURL values", () => {
     expect(() =>
       createLLMClient({

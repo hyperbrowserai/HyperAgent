@@ -15,6 +15,8 @@ export interface LLMConfig {
   baseURL?: string; // For OpenAI custom endpoints
 }
 
+const MAX_MODEL_ID_CHARS = 200;
+
 function normalizeProvider(provider: unknown): LLMProvider {
   if (typeof provider !== "string") {
     throw new Error("LLM provider must be a string");
@@ -34,10 +36,21 @@ function normalizeProvider(provider: unknown): LLMProvider {
 }
 
 function normalizeModel(model: unknown): string {
-  if (typeof model !== "string" || model.trim().length === 0) {
+  if (typeof model !== "string") {
     throw new Error("LLM model must be a non-empty string");
   }
-  return model.trim();
+  const normalized = model
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim();
+  if (normalized.length === 0) {
+    throw new Error("LLM model must be a non-empty string");
+  }
+  if (normalized.length > MAX_MODEL_ID_CHARS) {
+    throw new Error(
+      `LLM model exceeds maximum length of ${MAX_MODEL_ID_CHARS} characters`
+    );
+  }
+  return normalized;
 }
 
 function normalizeTemperature(value: unknown): number | undefined {
