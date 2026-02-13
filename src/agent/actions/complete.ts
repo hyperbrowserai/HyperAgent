@@ -1,5 +1,40 @@
 import { z } from "zod";
 import { ActionOutput, AgentActionDefinition } from "@/types";
+import { formatUnknownError } from "@/utils";
+
+const MAX_COMPLETE_TEXT_CHARS = 20_000;
+
+function safeReadRecordField(value: unknown, key: string): unknown {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return undefined;
+  }
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeCompleteText(value: unknown, fallback: string): string {
+  const raw =
+    typeof value === "string"
+      ? value
+      : value == null
+        ? fallback
+        : formatUnknownError(value);
+  const normalized = raw.replace(/\r\n?/g, "\n").trim();
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  if (normalized.length <= MAX_COMPLETE_TEXT_CHARS) {
+    return normalized;
+  }
+  const omitted = normalized.length - MAX_COMPLETE_TEXT_CHARS;
+  return `${normalized.slice(
+    0,
+    MAX_COMPLETE_TEXT_CHARS
+  )}\n... [truncated ${omitted} chars]`;
+}
 
 export const CompleteAction = z
   .object({
@@ -20,11 +55,18 @@ export type CompleteActionType = z.infer<typeof CompleteAction>;
 export const CompleteActionDefinition: AgentActionDefinition = {
   type: "complete" as const,
   actionParams: CompleteAction,
-  run: async (): Promise<ActionOutput> => {
-    return { success: true, message: "Task Complete" };
+  run: async (_ctx, params): Promise<ActionOutput> => {
+    const success = safeReadRecordField(params, "success") === true;
+    return {
+      success,
+      message: success ? "Task Complete" : "Task marked as failed",
+    };
   },
   completeAction: async (params: CompleteActionType) => {
-    return params.text ?? "No response text found";
+    return normalizeCompleteText(
+      safeReadRecordField(params, "text"),
+      "No response text found"
+    );
   },
   pprintAction: function (params: CompleteActionType): string {
     return `Complete task with ${params.success ? "success" : "failure"}`;
