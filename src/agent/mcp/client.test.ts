@@ -54,6 +54,9 @@ describe("MCPClient.connectToServer validation", () => {
           command: "echo",
         })
       ).rejects.toThrow('MCP server with ID "server-1" is already connected');
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Failed to connect to MCP server: MCP server with ID "server-1" is already connected'
+      );
     } finally {
       errorSpy.mockRestore();
     }

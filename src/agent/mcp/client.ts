@@ -199,7 +199,9 @@ class MCPClient {
       }
       return { serverId, actions };
     } catch (error) {
-      console.error("Failed to connect to MCP server:", formatUnknownError(error));
+      console.error(
+        `Failed to connect to MCP server: ${formatUnknownError(error)}`
+      );
       throw error;
     }
   }
