@@ -60,6 +60,7 @@ export function SpreadsheetApp() {
   const [isRunningAgentFlow, setIsRunningAgentFlow] = useState(false);
   const [isRunningPreset, setIsRunningPreset] = useState(false);
   const [isRunningScenario, setIsRunningScenario] = useState(false);
+  const [isRunningSelectedScenario, setIsRunningSelectedScenario] = useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
@@ -475,6 +476,38 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleRunSelectedScenarioOnCurrentWorkbook() {
+    if (!workbook) {
+      return;
+    }
+    setIsRunningSelectedScenario(true);
+    try {
+      setUiError(null);
+      const response = await runAgentScenario(workbook.id, wizardScenario, {
+        request_id: `scenario-selected-${wizardScenario}-${Date.now()}`,
+        actor: "ui-scenario-selected",
+        stop_on_error: true,
+        include_file_base64: wizardIncludeFileBase64,
+      });
+      setLastScenario(response.scenario);
+      setLastPreset(null);
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastAgentOps(response.results);
+      setLastWizardImportSummary(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["cells", workbook.id, activeSheet],
+      });
+    } catch (error) {
+      setUiError(
+        error instanceof Error
+          ? error.message
+          : `Failed to run selected scenario ${wizardScenario}.`,
+      );
+    } finally {
+      setIsRunningSelectedScenario(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -772,6 +805,19 @@ export function SpreadsheetApp() {
                 className="rounded bg-teal-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-400 disabled:opacity-40"
               >
                 {isRunningWizard ? "Running wizard..." : "Run Wizard"}
+              </button>
+              <button
+                onClick={handleRunSelectedScenarioOnCurrentWorkbook}
+                disabled={
+                  !workbook ||
+                  isRunningSelectedScenario ||
+                  (wizardScenariosQuery.data ?? []).length === 0
+                }
+                className="rounded bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-400 disabled:opacity-40"
+              >
+                {isRunningSelectedScenario
+                  ? "Running in workbook..."
+                  : "Run in Current Workbook"}
               </button>
             </div>
             {(wizardPresetsQuery.data ?? []).length > 0 ? (

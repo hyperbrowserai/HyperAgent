@@ -15,6 +15,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard flow: optional XLSX upload + scenario execution in one action
 - Wizard metadata discovery (schema/presets/scenarios) with scenario operation preview
 - Wizard can toggle export payload embedding (`include_file_base64`) before execution
+- Wizard can run selected scenario either on a new workbook flow or current workbook context
 - Event stream viewer with per-event-type filtering
 
 ## Run
