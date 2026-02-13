@@ -151,6 +151,43 @@ describe("runCachedStep", () => {
     expect(result.output).toBe("Unsupported cached action");
   });
 
+  it("treats whitespace xpath or method as unsupported cached action", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+
+    const whitespaceXPathResult = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "   ",
+        method: "click",
+      },
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    const whitespaceMethodResult = await runCachedStep({
+      page: createMockPage(),
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        xpath: "//button[1]",
+        method: "   ",
+      },
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(whitespaceXPathResult.status).toBe(TaskStatus.FAILED);
+    expect(whitespaceXPathResult.output).toBe("Unsupported cached action");
+    expect(whitespaceMethodResult.status).toBe(TaskStatus.FAILED);
+    expect(whitespaceMethodResult.output).toBe("Unsupported cached action");
+  });
+
   it("falls back to perform when cached attempts fail", async () => {
     executeReplaySpecialAction.mockResolvedValue(null);
     resolveXPathWithCDP.mockRejectedValue(new Error("xpath resolution failed"));

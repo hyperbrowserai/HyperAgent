@@ -76,6 +76,13 @@ export async function runCachedStep(
 
   const taskId = uuidv4();
   const attempts = normalizeMaxSteps(maxSteps);
+  const normalizedXPath = cachedAction.xpath?.trim();
+  const normalizedMethod = cachedAction.method?.trim();
+  const normalizedCachedAction: CachedActionInput = {
+    ...cachedAction,
+    xpath: normalizedXPath,
+    method: normalizedMethod,
+  };
 
   const specialActionResult = await executeReplaySpecialAction({
     taskId,
@@ -98,7 +105,7 @@ export async function runCachedStep(
         usedCachedAction: true,
         fallbackUsed: false,
         retries: 1,
-        cachedXPath: cachedAction.xpath ?? null,
+        cachedXPath: normalizedXPath ?? null,
         fallbackXPath: null,
         fallbackElementId: null,
       },
@@ -110,8 +117,8 @@ export async function runCachedStep(
 
   if (
     cachedAction.actionType !== "actElement" ||
-    !cachedAction.xpath ||
-    !cachedAction.method
+    !normalizedXPath ||
+    !normalizedMethod
   ) {
     return {
       taskId,
@@ -128,7 +135,7 @@ export async function runCachedStep(
     const attemptResult = await runCachedAttempt({
       page,
       instruction,
-      cachedAction,
+      cachedAction: normalizedCachedAction,
       debug,
       tokenLimit,
       llm,
@@ -165,7 +172,7 @@ export async function runCachedStep(
           usedCachedAction: true,
           fallbackUsed: false,
           retries: attemptIndex,
-          cachedXPath: cachedAction.xpath ?? null,
+          cachedXPath: normalizedXPath ?? null,
           fallbackXPath: null,
           fallbackElementId: null,
         },
@@ -186,14 +193,14 @@ export async function runCachedStep(
           usedCachedAction: true,
           fallbackUsed: true,
           retries: attempts,
-          cachedXPath: cachedAction.xpath ?? null,
+          cachedXPath: normalizedXPath ?? null,
           fallbackXPath: null,
           fallbackElementId: null,
         },
       } satisfies TaskOutput;
     });
     if (debug) {
-      const cachedXPath = cachedAction.xpath || "N/A";
+      const cachedXPath = normalizedXPath || "N/A";
       const resolvedXPath = fb.replayStepMeta?.fallbackXPath || "N/A";
       // eslint-disable-next-line no-console
       console.log(
@@ -211,7 +218,7 @@ export async function runCachedStep(
         usedCachedAction: true,
         fallbackUsed: true,
         retries: attempts,
-        cachedXPath: cachedAction.xpath ?? null,
+        cachedXPath: normalizedXPath ?? null,
         fallbackXPath: fb.replayStepMeta?.fallbackXPath ?? null,
         fallbackElementId: fb.replayStepMeta?.fallbackElementId ?? null,
       },
@@ -230,7 +237,7 @@ export async function runCachedStep(
       usedCachedAction: true,
       fallbackUsed: false,
       retries: attempts,
-      cachedXPath: cachedAction.xpath ?? null,
+      cachedXPath: normalizedXPath ?? null,
       fallbackXPath: null,
       fallbackElementId: null,
     },
