@@ -23,6 +23,8 @@ Server defaults to `http://localhost:8787`.
 
 ## Key Endpoints
 
+- `GET /v1/agent/wizard/schema`
+- `GET /v1/agent/wizard/scenarios`
 - `POST /v1/agent/wizard/run`
 - `POST /v1/workbooks`
 - `POST /v1/workbooks/import`
@@ -83,6 +85,10 @@ Supported `scenario` values:
 ### AI Agent wizard endpoint
 
 `POST /v1/agent/wizard/run` creates a workbook, optionally imports an `.xlsx`, then runs a selected scenario.
+
+Discovery helpers:
+- `GET /v1/agent/wizard/schema`
+- `GET /v1/agent/wizard/scenarios`
 
 Multipart fields:
 - `scenario` (required)

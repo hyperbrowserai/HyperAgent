@@ -33,6 +33,8 @@ pub fn create_router(state: AppState) -> Router {
   Router::new()
     .route("/health", get(health))
     .route("/v1/openapi", get(openapi))
+    .route("/v1/agent/wizard/schema", get(get_agent_wizard_schema))
+    .route("/v1/agent/wizard/scenarios", get(list_wizard_scenarios))
     .route("/v1/agent/wizard/run", post(run_agent_wizard))
     .route("/v1/workbooks", post(create_workbook))
     .route("/v1/workbooks/import", post(import_workbook))
@@ -266,6 +268,30 @@ async fn run_agent_wizard(
     request_id,
     results,
     import: import_result,
+  }))
+}
+
+async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
+  Json(json!({
+    "endpoint": "/v1/agent/wizard/run",
+    "scenarios_endpoint": "/v1/agent/wizard/scenarios",
+    "request_multipart_fields": [
+      "scenario (required)",
+      "file (optional .xlsx)",
+      "workbook_name (optional)",
+      "request_id (optional)",
+      "actor (optional)",
+      "stop_on_error (optional boolean)",
+      "include_file_base64 (optional boolean)"
+    ],
+    "scenarios": scenario_catalog(),
+    "presets": preset_catalog()
+  }))
+}
+
+async fn list_wizard_scenarios() -> Json<serde_json::Value> {
+  Json(json!({
+    "scenarios": scenario_catalog()
   }))
 }
 
@@ -1035,6 +1061,8 @@ async fn openapi() -> Json<serde_json::Value> {
       "version": "1.0.0"
     },
     "paths": {
+      "/v1/agent/wizard/schema": {"get": {"summary": "Get schema for wizard orchestration endpoint"}},
+      "/v1/agent/wizard/scenarios": {"get": {"summary": "List wizard scenarios without requiring workbook context"}},
       "/v1/agent/wizard/run": {"post": {"summary": "Wizard endpoint: optional import + scenario execution + optional export payload"}},
       "/v1/workbooks": {"post": {"summary": "Create workbook"}},
       "/v1/workbooks/import": {"post": {"summary": "Import .xlsx"}},
