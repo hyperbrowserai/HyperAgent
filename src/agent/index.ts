@@ -1827,15 +1827,44 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         ? value.trim()
         : "unknown-action";
     };
-    const readCacheSteps = (): unknown[] => {
+    const readCacheSteps = (): {
+      steps: unknown[];
+      omittedFromRead: number;
+      omittedIsLowerBound: boolean;
+    } => {
+      const maxReadableSteps = HyperAgent.MAX_REPLAY_STEPS + 1;
       const steps = (cache as { steps?: unknown })?.steps;
       if (Array.isArray(steps)) {
-        return [...steps];
+        const totalStepCount = steps.length;
+        const limitedSteps = steps.slice(0, maxReadableSteps);
+        return {
+          steps: [...limitedSteps],
+          omittedFromRead: Math.max(0, totalStepCount - limitedSteps.length),
+          omittedIsLowerBound: false,
+        };
       }
       if (!steps) {
-        return [];
+        return {
+          steps: [],
+          omittedFromRead: 0,
+          omittedIsLowerBound: false,
+        };
       }
-      return Array.from(steps as Iterable<unknown>);
+      const limitedSteps: unknown[] = [];
+      let omittedIsLowerBound = false;
+      for (const step of steps as Iterable<unknown>) {
+        if (limitedSteps.length < maxReadableSteps) {
+          limitedSteps.push(step);
+          continue;
+        }
+        omittedIsLowerBound = true;
+        break;
+      }
+      return {
+        steps: limitedSteps,
+        omittedFromRead: omittedIsLowerBound ? 1 : 0,
+        omittedIsLowerBound,
+      };
     };
 
     const stepsResult: ActionCacheReplayResult["steps"] = [];
@@ -1973,14 +2002,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     let sortedSteps: unknown[] = [];
     let omittedReplaySteps = 0;
+    let omittedReplayStepsIsLowerBound = false;
     try {
-      sortedSteps = readCacheSteps().sort(
+      const readResult = readCacheSteps();
+      sortedSteps = readResult.steps.sort(
         (a, b) =>
           getSortStepIndex(getStepIndexValue(a)) -
           getSortStepIndex(getStepIndexValue(b))
       );
+      omittedReplaySteps = readResult.omittedFromRead;
+      omittedReplayStepsIsLowerBound = readResult.omittedIsLowerBound;
       if (sortedSteps.length > HyperAgent.MAX_REPLAY_STEPS) {
-        omittedReplaySteps = sortedSteps.length - HyperAgent.MAX_REPLAY_STEPS;
+        omittedReplaySteps += sortedSteps.length - HyperAgent.MAX_REPLAY_STEPS;
         sortedSteps = sortedSteps.slice(0, HyperAgent.MAX_REPLAY_STEPS);
       }
     } catch (error) {
@@ -2220,6 +2253,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     if (omittedReplaySteps > 0 && !replayStoppedByLifecycle) {
       replayStatus = TaskStatus.FAILED;
+      const omittedDescriptor = omittedReplayStepsIsLowerBound
+        ? `at least ${omittedReplaySteps}`
+        : `${omittedReplaySteps}`;
       stepsResult.push({
         stepIndex: -1,
         actionType: "replay-limit",
@@ -2230,7 +2266,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         fallbackElementId: null,
         retries: 0,
         success: false,
-        message: `Replay truncated after ${HyperAgent.MAX_REPLAY_STEPS} steps; ${omittedReplaySteps} additional step(s) were skipped`,
+        message: `Replay truncated after ${HyperAgent.MAX_REPLAY_STEPS} steps; ${omittedDescriptor} additional step(s) were skipped`,
       });
     }
 
