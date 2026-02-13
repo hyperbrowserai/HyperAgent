@@ -676,6 +676,55 @@ describe("runFromActionCache hardening", () => {
     }
   });
 
+  it("truncates oversized replay debug write diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+      debug: true,
+    });
+    const waitForTimeout = jest.fn().mockResolvedValue(undefined);
+    const page = {
+      waitForTimeout,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "wait",
+          elementId: null,
+          method: null,
+          arguments: [],
+          actionParams: { duration: 10 },
+          frameIndex: null,
+          xpath: null,
+          actionType: "wait",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+    const writeSpy = jest
+      .spyOn(fs, "writeFileSync")
+      .mockImplementation(() => {
+        throw new Error("x".repeat(2_000));
+      });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const replay = await agent.runFromActionCache(cache, page, { debug: true });
+
+      expect(replay.status).toBe(TaskStatus.COMPLETED);
+      const firstMessage = String(errorSpy.mock.calls[0]?.[0] ?? "");
+      expect(firstMessage).toContain("[truncated");
+    } finally {
+      writeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("preserves empty replay output messages instead of replacing them", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
@@ -944,6 +993,28 @@ describe("runFromActionCache hardening", () => {
     expect(replay.status).toBe(TaskStatus.FAILED);
     expect(replay.steps[0]?.message).toContain("Failed to read cached steps");
     expect(replay.steps[0]?.message).toContain("steps trap");
+  });
+
+  it("truncates oversized cached-step read diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const page = {} as import("@/types/agent/types").HyperPage;
+    const cache = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      get steps(): unknown[] {
+        throw new Error("x".repeat(2_000));
+      },
+    } as unknown as ActionCacheOutput;
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    expect(replay.steps[0]?.message).toContain("Failed to read cached steps");
+    expect(replay.steps[0]?.message).toContain("[truncated");
   });
 
   it("fails replay step cleanly when page getter throws", async () => {

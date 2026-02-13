@@ -83,6 +83,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     MAX_LABEL_LENGTH: 60,
   };
   private static readonly MAX_REPLAY_OUTPUT_CHARS = 4_000;
+  private static readonly MAX_REPLAY_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_REPLAY_STEPS = 1_000;
   private static readonly MAX_ACTION_CACHE_ENTRIES = 200;
 
@@ -1367,6 +1368,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       "unknown-task";
     const shouldWriteReplayDebug = (): boolean =>
       debug && this.isTaskLifecycleGenerationActive(replayLifecycleGeneration);
+    const formatReplayDiagnostic = (value: unknown): string => {
+      const normalized = formatUnknownError(value).replace(/\s+/g, " ").trim();
+      const fallback = normalized.length > 0 ? normalized : "unknown error";
+      if (fallback.length <= HyperAgent.MAX_REPLAY_DIAGNOSTIC_CHARS) {
+        return fallback;
+      }
+      const omitted = fallback.length - HyperAgent.MAX_REPLAY_DIAGNOSTIC_CHARS;
+      return `${fallback.slice(
+        0,
+        HyperAgent.MAX_REPLAY_DIAGNOSTIC_CHARS
+      )}... [truncated ${omitted} chars]`;
+    };
     const safeReadStepField = (step: unknown, key: string): unknown => {
       if (!step || (typeof step !== "object" && typeof step !== "function")) {
         return undefined;
@@ -1489,7 +1502,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             fallbackElementId: null,
             retries: 0,
             success: false,
-            message: `Failed to read cached steps: ${formatUnknownError(error)}`,
+            message: `Failed to read cached steps: ${formatReplayDiagnostic(
+              error
+            )}`,
           },
         ],
         status: TaskStatus.FAILED,
@@ -1504,7 +1519,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           );
         } catch (debugError) {
           console.error(
-            `[runFromActionCache] Failed to write replay debug: ${formatUnknownError(
+            `[runFromActionCache] Failed to write replay debug: ${formatReplayDiagnostic(
               debugError
             )}`
           );
@@ -1740,7 +1755,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         );
       } catch (error) {
         console.error(
-          `[runFromActionCache] Failed to write replay debug: ${formatUnknownError(error)}`
+          `[runFromActionCache] Failed to write replay debug: ${formatReplayDiagnostic(
+            error
+          )}`
         );
       }
     }
