@@ -1,4 +1,5 @@
 import { sleep } from "./sleep";
+import { formatUnknownError } from "./format-unknown-error";
 
 const DEFAULT_RETRY_COUNT = 3;
 
@@ -25,7 +26,13 @@ export async function retry<T>({
       const resp = await func();
       return resp;
     } catch (error) {
-      onError?.(`Retry Attempt ${attempt + 1}/${retryCount}`, error);
+      try {
+        onError?.(`Retry Attempt ${attempt + 1}/${retryCount}`, error);
+      } catch (handlerError) {
+        console.warn(
+          `[retry] onError handler failed: ${formatUnknownError(handlerError)}`
+        );
+      }
       lastError = error;
       if (attempt < retryCount - 1) {
         await sleep(Math.pow(2, attempt) * 1000);

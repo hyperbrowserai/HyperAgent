@@ -63,4 +63,30 @@ describe("retry", () => {
       expect.any(Error)
     );
   });
+
+  it("continues retrying when onError callback throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const onError = jest.fn(() => {
+      throw { reason: "onError crashed" };
+    });
+    const func = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("first"))
+      .mockResolvedValue("ok");
+
+    try {
+      const result = await retry({
+        func,
+        params: { retryCount: 2 },
+        onError,
+      });
+
+      expect(result).toBe("ok");
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[retry] onError handler failed: {"reason":"onError crashed"}'
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
