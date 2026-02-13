@@ -3682,6 +3682,41 @@ mod tests {
         .and_then(serde_json::Value::as_u64),
       Some(AGENT_OPS_CACHE_MAX_ENTRIES as u64),
     );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_stats_query_shape")
+        .and_then(|value| value.get("request_id_prefix"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional string filter (prefix match)"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_entries_response_shape")
+        .and_then(|value| value.get("cutoff_timestamp"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional iso timestamp used for max_age_seconds filtering"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("cutoff_timestamp"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional iso timestamp used for max_age_seconds filtering"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_remove_stale_request_shape")
+        .and_then(|value| value.get("request_id_prefix"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional string filter (prefix match)"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_remove_stale_response_shape")
+        .and_then(|value| value.get("request_id_prefix"))
+        .and_then(serde_json::Value::as_str),
+      Some("echoed filter prefix when provided"),
+    );
 
     let signature_error_codes = schema
       .get("signature_error_codes")
