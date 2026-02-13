@@ -5,8 +5,10 @@ import {
   TaskOutput,
 } from "@/types/agent/types";
 import * as cachedRunner from "./run-cached-action";
+import { formatUnknownError } from "@/utils";
 
 const DEFAULT_MAX_STEPS = 3;
+const MAX_PERFORM_VALUE_CHARS = 20_000;
 
 export const PAGE_ACTION_METHODS = [
   "click",
@@ -51,34 +53,113 @@ export function dispatchPerformHelper(
   value: string | undefined,
   options: PerformOptions
 ): Promise<TaskOutput> {
+  const invoke = (
+    helperName: string,
+    helperArgs: unknown[]
+  ): Promise<TaskOutput> => {
+    let helper: unknown;
+    try {
+      helper = (hp as unknown as Record<string, unknown>)[helperName];
+    } catch (error) {
+      return Promise.reject(
+        new Error(
+          `[Replay] Failed to access ${helperName}: ${formatUnknownError(error)}`
+        )
+      );
+    }
+    if (typeof helper !== "function") {
+      return Promise.reject(new Error(`[Replay] Missing perform helper: ${helperName}`));
+    }
+    try {
+      return helper(...helperArgs) as Promise<TaskOutput>;
+    } catch (error) {
+      return Promise.reject(
+        new Error(
+          `[Replay] ${helperName} failed before execution: ${formatUnknownError(
+            error
+          )}`
+        )
+      );
+    }
+  };
+
   switch (method) {
     case "click":
-      return hp.performClick(xpath, options);
+      return invoke("performClick", [xpath, options]);
     case "hover":
-      return hp.performHover(xpath, options);
+      return invoke("performHover", [xpath, options]);
     case "type":
-      return hp.performType(xpath, value ?? "", options);
+      return invoke("performType", [xpath, value ?? "", options]);
     case "fill":
-      return hp.performFill(xpath, value ?? "", options);
+      return invoke("performFill", [xpath, value ?? "", options]);
     case "press":
-      return hp.performPress(xpath, value ?? "", options);
+      return invoke("performPress", [xpath, value ?? "", options]);
     case "selectOptionFromDropdown":
-      return hp.performSelectOption(xpath, value ?? "", options);
+      return invoke("performSelectOption", [xpath, value ?? "", options]);
     case "check":
-      return hp.performCheck(xpath, options);
+      return invoke("performCheck", [xpath, options]);
     case "uncheck":
-      return hp.performUncheck(xpath, options);
+      return invoke("performUncheck", [xpath, options]);
     case "scrollToElement":
-      return hp.performScrollToElement(xpath, options);
+      return invoke("performScrollToElement", [xpath, options]);
     case "scrollToPercentage":
-      return hp.performScrollToPercentage(xpath, value ?? "", options);
+      return invoke("performScrollToPercentage", [xpath, value ?? "", options]);
     case "nextChunk":
-      return hp.performNextChunk(xpath, options);
+      return invoke("performNextChunk", [xpath, options]);
     case "prevChunk":
-      return hp.performPrevChunk(xpath, options);
+      return invoke("performPrevChunk", [xpath, options]);
     default:
       throw new Error(`Unknown perform helper method: ${method}`);
   }
+}
+
+function safeReadOptionField(
+  options: PerformOptions | undefined,
+  key: keyof PerformOptions
+): unknown {
+  if (!options || typeof options !== "object") {
+    return undefined;
+  }
+  try {
+    return (options as unknown as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeInstruction(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function normalizeOptionalTextArg(value: string | number): string | number {
+  if (typeof value !== "string") {
+    return value;
+  }
+  if (value.length <= MAX_PERFORM_VALUE_CHARS) {
+    return value;
+  }
+  return value.slice(0, MAX_PERFORM_VALUE_CHARS);
+}
+
+function normalizeMaxSteps(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_MAX_STEPS;
+  }
+  return Math.floor(value);
+}
+
+function normalizeFrameIndex(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  if (value < 0) {
+    return null;
+  }
+  return Math.floor(value);
 }
 
 function runCachedAction(
@@ -90,25 +171,39 @@ function runCachedAction(
   args: Array<string | number>,
   options?: PerformOptions
 ): Promise<TaskOutput> {
-  const normalizedPerformInstruction = options?.performInstruction?.trim();
-  const normalizedDefaultInstruction = instruction.trim();
+  const normalizedDefaultInstruction = normalizeInstruction(
+    instruction,
+    "Execute cached action"
+  );
+  const normalizedPerformInstruction = normalizeInstruction(
+    safeReadOptionField(options, "performInstruction"),
+    ""
+  );
   const runInstruction =
-    normalizedPerformInstruction && normalizedPerformInstruction.length > 0
+    normalizedPerformInstruction.length > 0
       ? normalizedPerformInstruction
-      : normalizedDefaultInstruction || "Execute cached action";
+      : normalizedDefaultInstruction;
+  const normalizedXPath = normalizeInstruction(xpath, "//");
+  const normalizedArgs = args.map(normalizeOptionalTextArg);
+  const normalizedFrameIndex = normalizeFrameIndex(
+    safeReadOptionField(options, "frameIndex")
+  );
+  const normalizedMaxSteps = normalizeMaxSteps(
+    safeReadOptionField(options, "maxSteps")
+  );
   const cachedAction = {
     actionType: "actElement",
     method,
-    arguments: args,
-    frameIndex: options?.frameIndex ?? 0,
-    xpath,
+    arguments: normalizedArgs,
+    frameIndex: normalizedFrameIndex ?? 0,
+    xpath: normalizedXPath,
   };
 
   return cachedRunner.runCachedStep({
     page,
     instruction: runInstruction,
     cachedAction,
-    maxSteps: options?.maxSteps ?? DEFAULT_MAX_STEPS,
+    maxSteps: normalizedMaxSteps,
     debug: agent.debug,
     tokenLimit: agent.tokenLimit,
     llm: agent.llm,
@@ -116,7 +211,7 @@ function runCachedAction(
     variables: agent.variables ?? [],
     preferScriptBoundingBox: agent.debug,
     cdpActionsEnabled: agent.cdpActionsEnabled,
-    performFallback: options?.performInstruction
+    performFallback: normalizedPerformInstruction
       ? (instr) => page.perform(instr)
       : undefined,
   });

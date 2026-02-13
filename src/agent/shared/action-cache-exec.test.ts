@@ -118,4 +118,79 @@ describe("action-cache perform helper dispatch", () => {
       })
     );
   });
+
+  it("throws readable error when helper access traps throw", async () => {
+    const page = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "performClick") {
+            throw new Error("helper getter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as HyperPage;
+
+    await expect(
+      dispatchPerformHelper(page, "click", "//button[1]", undefined, {})
+    ).rejects.toThrow(
+      "[Replay] Failed to access performClick: helper getter trap"
+    );
+  });
+
+  it("throws readable error when helper method is missing", async () => {
+    const page = {} as unknown as HyperPage;
+
+    await expect(
+      dispatchPerformHelper(page, "click", "//button[1]", undefined, {})
+    ).rejects.toThrow("[Replay] Missing perform helper: performClick");
+  });
+
+  it("normalizes trap-prone options and large args when attaching helpers", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+    const trappedOptions = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (
+            prop === "performInstruction" ||
+            prop === "maxSteps" ||
+            prop === "frameIndex"
+          ) {
+            throw new Error("options trap");
+          }
+          return undefined;
+        },
+      }
+    );
+    const huge = "x".repeat(25_000);
+
+    await page.performType("//input[1]", huge, trappedOptions as never);
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: "Type text",
+        maxSteps: 3,
+        cachedAction: expect.objectContaining({
+          frameIndex: 0,
+          arguments: [expect.stringMatching(/^x+$/)],
+        }),
+      })
+    );
+    const cachedAction = (
+      runCachedStep.mock.calls[0]?.[0] as {
+        cachedAction?: { arguments?: string[] };
+      }
+    ).cachedAction;
+    expect(cachedAction?.arguments?.[0]?.length).toBe(20_000);
+  });
 });
