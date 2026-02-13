@@ -617,7 +617,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         retries: finalMeta?.retries ?? 0,
         success: finalSuccess,
         message:
-          result.output ||
+          result.output ??
           (finalSuccess ? "Completed" : "Failed to execute cached action"),
       });
 

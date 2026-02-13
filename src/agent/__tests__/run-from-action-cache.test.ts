@@ -428,4 +428,49 @@ describe("runFromActionCache hardening", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("preserves empty replay output messages instead of replacing them", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      taskId: "perform-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "",
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "empty output path",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.COMPLETED);
+    expect(replay.steps[0]?.message).toBe("");
+  });
 });
