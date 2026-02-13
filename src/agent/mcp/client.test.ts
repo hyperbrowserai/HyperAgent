@@ -1840,6 +1840,38 @@ describe("MCPClient.executeTool server selection", () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
+  it("throws readable errors when tool registry lookups fail", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn();
+    const throwingTools = new Proxy(new Map([["search", {}]]), {
+      get(target, prop, receiver): unknown {
+        if (prop === "has") {
+          return () => {
+            throw new Error("tool registry unavailable");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: throwingTools as unknown as Map<string, unknown>,
+            client: { callTool },
+          },
+        ],
+      ])
+    );
+
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "server-a")
+    ).rejects.toThrow("MCP tool registry lookup failed: tool registry unavailable");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
   it("sanitizes tool names in missing-tool diagnostics", async () => {
     const mcpClient = new MCPClient(false);
     const callTool = jest.fn();
@@ -2264,6 +2296,33 @@ describe("MCPClient.hasTool", () => {
       },
     });
     setServersForClient(mcpClient, throwingMap as unknown as Map<string, unknown>);
+
+    expect(mcpClient.hasTool("search")).toEqual({ exists: false });
+  });
+
+  it("returns exists false when tool-registry lookups throw", () => {
+    const mcpClient = new MCPClient(false);
+    const throwingTools = new Proxy(new Map([["search", {}]]), {
+      get(target, prop, receiver): unknown {
+        if (prop === "has") {
+          return () => {
+            throw new Error("tool registry unavailable");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    setServers(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: throwingTools as unknown as Map<string, unknown>,
+          },
+        ],
+      ])
+    );
 
     expect(mcpClient.hasTool("search")).toEqual({ exists: false });
   });

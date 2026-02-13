@@ -681,11 +681,33 @@ function resolveMCPToolNameOnServer(
   tools: Map<string, Tool>,
   requestedToolName: string
 ): { toolName?: string; ambiguousMatches?: string[] } {
-  if (tools.has(requestedToolName)) {
+  let hasExactToolMatch = false;
+  try {
+    hasExactToolMatch = tools.has(requestedToolName);
+  } catch (error) {
+    throw new Error(
+      `MCP tool registry lookup failed: ${formatMCPIdentifier(
+        error,
+        "unknown-error"
+      )}`
+    );
+  }
+  if (hasExactToolMatch) {
     return { toolName: requestedToolName };
   }
   const requestedLookup = requestedToolName.toLowerCase();
-  const caseInsensitiveMatches = Array.from(tools.keys()).filter(
+  let toolNames: string[];
+  try {
+    toolNames = Array.from(tools.keys());
+  } catch (error) {
+    throw new Error(
+      `MCP tool registry lookup failed: ${formatMCPIdentifier(
+        error,
+        "unknown-error"
+      )}`
+    );
+  }
+  const caseInsensitiveMatches = toolNames.filter(
     (toolName) => toolName.toLowerCase() === requestedLookup
   );
   if (caseInsensitiveMatches.length === 1) {
