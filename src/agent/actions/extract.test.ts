@@ -155,6 +155,23 @@ describe("ExtractActionDefinition.run", () => {
     }
   });
 
+  it("prepares debug directory before writing artifacts", async () => {
+    const mkdirSpy = jest
+      .spyOn(fs, "mkdirSync")
+      .mockImplementation(() => undefined);
+    const ctx = createContext(undefined, { debugDir: "debug", debug: true });
+
+    try {
+      const result = await ExtractActionDefinition.run(ctx, {
+        objective: "Extract title",
+      });
+      expect(result.success).toBe(true);
+      expect(mkdirSpy).toHaveBeenCalledWith("debug", { recursive: true });
+    } finally {
+      mkdirSpy.mockRestore();
+    }
+  });
+
   it("returns failure when llm responds without text content", async () => {
     const emptyTextLlm = createMockLLM(
       jest.fn().mockResolvedValue({

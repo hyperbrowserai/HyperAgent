@@ -83,6 +83,21 @@ function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function ensureDebugDirSafe(debugDir: string, debug?: boolean): string | null {
+  try {
+    fs.mkdirSync(debugDir, { recursive: true });
+    return debugDir;
+  } catch (error) {
+    if (debug) {
+      console.error(
+        `[extract] Failed to prepare debug directory "${debugDir}":`,
+        error
+      );
+    }
+    return null;
+  }
+}
+
 function fallbackMarkdownFromHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -130,6 +145,9 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         };
       }
       const normalizedTokenLimit = normalizeTokenLimit(ctx.tokenLimit);
+      const debugDir = ctx.debugDir
+        ? ensureDebugDirSafe(ctx.debugDir, ctx.debug)
+        : null;
       let markdown: string;
       try {
         markdown = await parseMarkdown(content);
@@ -171,9 +189,9 @@ export const ExtractActionDefinition: AgentActionDefinition = {
       }
 
       // Save screenshot to debug dir if exists
-      if (ctx.debugDir && screenshotData) {
+      if (debugDir && screenshotData) {
         writeDebugFileSafe(
-          `${ctx.debugDir}/extract-screenshot.png`,
+          `${debugDir}/extract-screenshot.png`,
           Buffer.from(screenshotData, "base64"),
           ctx.debug
         );
@@ -190,9 +208,9 @@ export const ExtractActionDefinition: AgentActionDefinition = {
         markdown,
         markdownTokenBudget
       );
-      if (ctx.debugDir) {
+      if (debugDir) {
         writeDebugFileSafe(
-          `${ctx.debugDir}/extract-markdown-content.md`,
+          `${debugDir}/extract-markdown-content.md`,
           trimmedMarkdown,
           ctx.debug
         );
