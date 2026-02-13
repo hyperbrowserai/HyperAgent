@@ -2,6 +2,8 @@ import { z } from "zod";
 import { ActionOutput } from "./actions/types";
 import { Page } from "playwright-core";
 import { ErrorEmitter } from "@/utils";
+import type { HyperAgentLLM } from "@/llm/types";
+import type { MCPClient } from "@/agent/mcp/client";
 
 export const AgentOutputFn = (
   actionsSchema: z.ZodUnion<readonly [z.ZodType<any>, ...z.ZodType<any>[]]>
@@ -177,8 +179,8 @@ export interface TaskState {
 export interface AgentDeps {
   debug?: boolean;
   tokenLimit: number;
-  llm: unknown;
-  mcpClient: unknown;
+  llm: HyperAgentLLM;
+  mcpClient?: MCPClient;
   variables: Array<{ key: string; value: string; description: string }>;
   cdpActionsEnabled?: boolean;
 }

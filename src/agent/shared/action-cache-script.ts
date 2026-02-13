@@ -5,6 +5,9 @@ interface CreateScriptFromActionCacheParams {
   steps: ActionCacheEntry[];
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
 export function createScriptFromActionCache(
   params: CreateScriptFromActionCacheParams
 ): string {
@@ -60,9 +63,13 @@ ${indent}await page.reload({ waitUntil: "domcontentloaded" });`;
     }
 
     if (step.actionType === "wait") {
+      const actionParams = isRecord(step.actionParams)
+        ? step.actionParams
+        : undefined;
+      const durationParam = actionParams?.duration;
       const waitMs =
         (step.arguments && Number(step.arguments[0])) ||
-        (step.actionParams as any)?.duration ||
+        (typeof durationParam === "number" ? durationParam : 0) ||
         1000;
       return `${indent}// Step ${step.stepIndex}
 ${indent}await page.waitForTimeout(${waitMs});`;

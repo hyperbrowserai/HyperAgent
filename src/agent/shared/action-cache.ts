@@ -10,6 +10,9 @@ const TEXT_NODE_SUFFIX = /\/text\(\)(\[\d+\])?$/iu;
 const isString = (value: unknown): value is string =>
   typeof value === "string";
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
 const isStringOrNumberArray = (
   value: unknown
 ): value is Array<string | number> =>
@@ -112,13 +115,13 @@ export const buildActionCacheEntry = ({
 
   // Normalize goToUrl to use arguments[0] for URL to simplify replay paths
   let normalizedArgs = args;
+  const actionParamsRecord = isRecord(action.params) ? action.params : undefined;
   if (
     action.type === "goToUrl" &&
     (!args || args.length === 0) &&
-    action.params &&
-    typeof (action.params as any).url === "string"
+    typeof actionParamsRecord?.url === "string"
   ) {
-    normalizedArgs = [(action.params as any).url as string];
+    normalizedArgs = [actionParamsRecord.url];
   }
 
   const xpathFromDom = encodedId ? domState.xpathMap?.[encodedId] || null : null;
@@ -132,7 +135,7 @@ export const buildActionCacheEntry = ({
     elementId,
     method,
     arguments: normalizedArgs,
-    actionParams: (action.params as Record<string, unknown>) || undefined,
+    actionParams: actionParamsRecord,
     frameIndex,
     xpath,
     actionType: action.type,

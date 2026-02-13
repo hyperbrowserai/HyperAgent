@@ -25,13 +25,16 @@ export interface RunCachedStepParams {
   maxSteps?: number;
   debug?: boolean;
   tokenLimit: number;
-  llm: any;
-  mcpClient: any;
+  llm: ActionContext["llm"];
+  mcpClient: ActionContext["mcpClient"];
   variables: Array<{ key: string; value: string; description: string }>;
   preferScriptBoundingBox?: boolean;
   cdpActionsEnabled?: boolean;
   performFallback?: (instruction: string) => Promise<TaskOutput>;
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
 export async function runCachedStep(
   params: RunCachedStepParams
@@ -53,9 +56,12 @@ export async function runCachedStep(
   const taskId = uuidv4();
 
   if (cachedAction.actionType === "goToUrl") {
+    const actionParams = isRecord(cachedAction.actionParams)
+      ? cachedAction.actionParams
+      : undefined;
     const url =
       (cachedAction.arguments && cachedAction.arguments[0]) ||
-      (cachedAction.actionParams as any)?.url ||
+      (typeof actionParams?.url === "string" ? actionParams.url : "") ||
       "";
     if (!url || typeof url !== "string") {
       return {
@@ -216,8 +222,8 @@ async function runCachedAttempt(args: {
   cachedAction: CachedActionInput;
   debug?: boolean;
   tokenLimit: number;
-  llm: any;
-  mcpClient: any;
+  llm: ActionContext["llm"];
+  mcpClient: ActionContext["mcpClient"];
   variables: Array<{ key: string; value: string; description: string }>;
   preferScriptBoundingBox?: boolean;
   cdpActionsEnabled?: boolean;
