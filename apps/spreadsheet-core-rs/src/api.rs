@@ -1232,6 +1232,25 @@ mod tests {
   }
 
   #[test]
+  fn should_apply_include_file_flag_to_export_in_scenarios() {
+    let operations = build_scenario_operations("refresh_and_export", Some(false))
+      .expect("refresh_and_export should be supported");
+    let export_op = operations
+      .iter()
+      .find(|operation| {
+        matches!(operation, crate::models::AgentOperation::ExportWorkbook { .. })
+      })
+      .expect("export operation should exist");
+
+    match export_op {
+      crate::models::AgentOperation::ExportWorkbook {
+        include_file_base64,
+      } => assert_eq!(*include_file_base64, Some(false)),
+      _ => panic!("expected export operation variant"),
+    }
+  }
+
+  #[test]
   fn should_parse_optional_boolean_fields() {
     assert_eq!(
       parse_optional_bool(Some("true".to_string()), "flag")
