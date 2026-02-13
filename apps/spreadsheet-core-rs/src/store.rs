@@ -5,6 +5,8 @@ use crate::{
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
     parse_counta_formula, parse_countblank_formula, parse_sumproduct_formula,
+    parse_row_formula, parse_column_formula, parse_rows_formula,
+    parse_columns_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
@@ -360,6 +362,70 @@ fn evaluate_formula(
       }
     }
     return Ok(Some(count.to_string()));
+  }
+
+  if let Some(row_arg) = parse_row_formula(formula) {
+    let cleaned = row_arg.trim().replace('$', "");
+    if let Some((row_index, _col_index)) = parse_cell_address(&cleaned) {
+      return Ok(Some(row_index.to_string()));
+    }
+    if let Some((start, _end)) = cleaned.split_once(':') {
+      if let Some((row_index, _col_index)) = parse_cell_address(start.trim()) {
+        return Ok(Some(row_index.to_string()));
+      }
+    }
+    return Ok(None);
+  }
+
+  if let Some(column_arg) = parse_column_formula(formula) {
+    let cleaned = column_arg.trim().replace('$', "");
+    if let Some((_row_index, col_index)) = parse_cell_address(&cleaned) {
+      return Ok(Some(col_index.to_string()));
+    }
+    if let Some((start, _end)) = cleaned.split_once(':') {
+      if let Some((_row_index, col_index)) = parse_cell_address(start.trim()) {
+        return Ok(Some(col_index.to_string()));
+      }
+    }
+    return Ok(None);
+  }
+
+  if let Some(rows_arg) = parse_rows_formula(formula) {
+    let cleaned = rows_arg.trim().replace('$', "");
+    if let Some((row_index, _col_index)) = parse_cell_address(&cleaned) {
+      let _ = row_index;
+      return Ok(Some("1".to_string()));
+    }
+    if let Some((start, end)) = cleaned.split_once(':') {
+      let Some(start_ref) = parse_cell_address(start.trim()) else {
+        return Ok(None);
+      };
+      let Some(end_ref) = parse_cell_address(end.trim()) else {
+        return Ok(None);
+      };
+      let bounds = normalized_range_bounds(start_ref, end_ref);
+      return Ok(Some(bounds.height.to_string()));
+    }
+    return Ok(None);
+  }
+
+  if let Some(columns_arg) = parse_columns_formula(formula) {
+    let cleaned = columns_arg.trim().replace('$', "");
+    if let Some((_row_index, col_index)) = parse_cell_address(&cleaned) {
+      let _ = col_index;
+      return Ok(Some("1".to_string()));
+    }
+    if let Some((start, end)) = cleaned.split_once(':') {
+      let Some(start_ref) = parse_cell_address(start.trim()) else {
+        return Ok(None);
+      };
+      let Some(end_ref) = parse_cell_address(end.trim()) else {
+        return Ok(None);
+      };
+      let bounds = normalized_range_bounds(start_ref, end_ref);
+      return Ok(Some(bounds.width.to_string()));
+    }
+    return Ok(None);
   }
 
   if let Some(ranges) = parse_sumproduct_formula(formula) {
@@ -3259,12 +3325,36 @@ mod tests {
         value: None,
         formula: Some("=PRODUCT(A1:A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 125,
+        value: None,
+        formula: Some("=ROW(B7:C9)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 126,
+        value: None,
+        formula: Some("=COLUMN(AB3:AD3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 127,
+        value: None,
+        formula: Some("=ROWS(A1:C3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 128,
+        value: None,
+        formula: Some("=COLUMNS(A1:C3)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 122);
+    assert_eq!(updated_cells, 126);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3278,7 +3368,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 124,
+        end_col: 128,
       },
     )
     .expect("cells should be fetched");
@@ -3459,6 +3549,10 @@ mod tests {
     assert_eq!(by_position(1, 122).evaluated_value.as_deref(), Some("200"));
     assert_eq!(by_position(1, 123).evaluated_value.as_deref(), Some("20800.0"));
     assert_eq!(by_position(1, 124).evaluated_value.as_deref(), Some("9600"));
+    assert_eq!(by_position(1, 125).evaluated_value.as_deref(), Some("7"));
+    assert_eq!(by_position(1, 126).evaluated_value.as_deref(), Some("28"));
+    assert_eq!(by_position(1, 127).evaluated_value.as_deref(), Some("3"));
+    assert_eq!(by_position(1, 128).evaluated_value.as_deref(), Some("3"));
   }
 
   #[test]
@@ -3741,6 +3835,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec![r#"=EVEN("north")"#.to_string()]);
+  }
+
+  #[test]
+  fn should_leave_rows_non_range_input_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=ROWS("north")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec![r#"=ROWS("north")"#.to_string()]);
   }
 
   #[test]

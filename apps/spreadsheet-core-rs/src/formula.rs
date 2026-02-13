@@ -905,6 +905,38 @@ pub fn parse_countblank_formula(
   parse_range_reference(&args[0])
 }
 
+pub fn parse_row_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ROW" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_column_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "COLUMN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_rows_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ROWS" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_columns_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "COLUMNS" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_sumproduct_formula(
   formula: &str,
 ) -> Option<Vec<((u32, u32), (u32, u32))>> {
@@ -1159,7 +1191,8 @@ mod tests {
     parse_trunc_formula, parse_even_formula, parse_odd_formula,
     parse_sqrt_formula,
     parse_countifs_formula, parse_sumproduct_formula, parse_sumif_formula,
-    parse_sumifs_formula,
+    parse_sumifs_formula, parse_row_formula, parse_column_formula,
+    parse_rows_formula, parse_columns_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_true_formula,
@@ -1504,6 +1537,16 @@ mod tests {
       .expect("countblank should parse");
     assert_eq!(countblank.0, (1, 1));
     assert_eq!(countblank.1, (5, 1));
+    assert_eq!(parse_row_formula("=ROW(B7)").as_deref(), Some("B7"));
+    assert_eq!(
+      parse_column_formula("=COLUMN(AB3)").as_deref(),
+      Some("AB3"),
+    );
+    assert_eq!(parse_rows_formula("=ROWS(A1:C3)").as_deref(), Some("A1:C3"));
+    assert_eq!(
+      parse_columns_formula("=COLUMNS(A1:C3)").as_deref(),
+      Some("A1:C3"),
+    );
 
     let sumproduct =
       parse_sumproduct_formula("=SUMPRODUCT(A1:A5,B1:B5)")
