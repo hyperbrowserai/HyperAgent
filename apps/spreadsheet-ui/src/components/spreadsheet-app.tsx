@@ -3066,7 +3066,11 @@ export function SpreadsheetApp() {
                               );
                             }
                           }}
-                          title={`latest: ${suggestion.newest_request_id} (Shift+click to inspect)`}
+                          title={`latest: ${suggestion.newest_request_id}${
+                            suggestion.newest_cached_at
+                              ? ` @ ${formatIsoTimestamp(suggestion.newest_cached_at)} (${formatRelativeAge(suggestion.newest_cached_at)})`
+                              : ""
+                          } (Shift+click to inspect)`}
                           className={`rounded border px-1.5 py-0.5 text-[10px] ${
                             cacheRequestIdPrefix.trim() === suggestion.prefix
                               ? "border-indigo-500/80 bg-indigo-500/20 text-indigo-200"
@@ -3077,6 +3081,11 @@ export function SpreadsheetApp() {
                           <span className="ml-1 text-slate-400">
                             {suggestion.entry_count}
                           </span>
+                          {suggestion.newest_cached_at ? (
+                            <span className="ml-1 text-slate-500">
+                              {formatRelativeAge(suggestion.newest_cached_at)}
+                            </span>
+                          ) : null}
                         </button>
                       ))}
                     </div>

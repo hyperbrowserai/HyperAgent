@@ -299,6 +299,7 @@ pub struct AgentOpsCachePrefix {
   pub prefix: String,
   pub entry_count: usize,
   pub newest_request_id: String,
+  pub newest_cached_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

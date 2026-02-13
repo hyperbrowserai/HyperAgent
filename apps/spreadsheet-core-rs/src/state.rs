@@ -573,7 +573,7 @@ impl AppState {
     request_id_prefix: Option<&str>,
     cutoff_timestamp: Option<DateTime<Utc>>,
     limit: usize,
-  ) -> Result<(usize, usize, Vec<(String, usize, String)>), ApiError> {
+  ) -> Result<(usize, usize, Vec<(String, usize, String, Option<DateTime<Utc>>)>), ApiError> {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
@@ -581,6 +581,7 @@ impl AppState {
 
     let mut prefix_counts: HashMap<String, usize> = HashMap::new();
     let mut newest_request_ids: HashMap<String, String> = HashMap::new();
+    let mut newest_cached_ats: HashMap<String, Option<DateTime<Utc>>> = HashMap::new();
     let mut unscoped_prefix_counts: HashMap<String, usize> = HashMap::new();
     let normalized_prefix = request_id_prefix
       .map(str::trim)
@@ -615,6 +616,10 @@ impl AppState {
       let entry = prefix_counts.entry(prefix.clone()).or_insert(0);
       *entry += 1;
       newest_request_ids.insert(prefix.clone(), request_id.clone());
+      newest_cached_ats.insert(
+        prefix.clone(),
+        record.agent_ops_cache_timestamps.get(request_id).cloned(),
+      );
     }
 
     let total_prefixes = prefix_counts.len();
@@ -626,7 +631,11 @@ impl AppState {
           .get(&prefix)
           .cloned()
           .unwrap_or_default();
-        (prefix, entry_count, newest_request_id)
+        let newest_cached_at = newest_cached_ats
+          .get(&prefix)
+          .cloned()
+          .unwrap_or(None);
+        (prefix, entry_count, newest_request_id, newest_cached_at)
       })
       .collect::<Vec<_>>();
     prefixes.sort_by(|left, right| {
@@ -1094,14 +1103,14 @@ mod tests {
     assert_eq!(total_prefixes, 2);
     assert_eq!(unscoped_total_prefixes, 2);
     assert_eq!(prefixes.len(), 2);
-    assert_eq!(
-      prefixes[0],
-      ("preset-".to_string(), 3, "preset-c".to_string()),
-    );
-    assert_eq!(
-      prefixes[1],
-      ("scenario-".to_string(), 2, "scenario-b".to_string()),
-    );
+    assert_eq!(prefixes[0].0, "preset-");
+    assert_eq!(prefixes[0].1, 3);
+    assert_eq!(prefixes[0].2, "preset-c");
+    assert!(prefixes[0].3.is_some());
+    assert_eq!(prefixes[1].0, "scenario-");
+    assert_eq!(prefixes[1].1, 2);
+    assert_eq!(prefixes[1].2, "scenario-b");
+    assert!(prefixes[1].3.is_some());
 
     let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
     let (filtered_total_prefixes, filtered_unscoped_total_prefixes, filtered_prefixes) = state
@@ -1119,10 +1128,10 @@ mod tests {
     assert_eq!(prefix_scoped_total_prefixes, 1);
     assert_eq!(prefix_scoped_unscoped_total_prefixes, 2);
     assert_eq!(prefix_scoped_prefixes.len(), 1);
-    assert_eq!(
-      prefix_scoped_prefixes[0],
-      ("scenario-".to_string(), 2, "scenario-b".to_string()),
-    );
+    assert_eq!(prefix_scoped_prefixes[0].0, "scenario-");
+    assert_eq!(prefix_scoped_prefixes[0].1, 2);
+    assert_eq!(prefix_scoped_prefixes[0].2, "scenario-b");
+    assert!(prefix_scoped_prefixes[0].3.is_some());
   }
 
   #[tokio::test]
