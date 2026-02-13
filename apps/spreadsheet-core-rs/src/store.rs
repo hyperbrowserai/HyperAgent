@@ -4,9 +4,9 @@ use crate::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
     parse_concat_formula, parse_countif_formula, parse_countifs_formula,
-    parse_date_formula, parse_day_formula, parse_if_formula, parse_left_formula,
-    parse_index_formula, parse_isblank_formula, parse_isnumber_formula,
-    parse_istext_formula, parse_len_formula, parse_lower_formula,
+    parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
+    parse_left_formula, parse_index_formula, parse_isblank_formula,
+    parse_isnumber_formula, parse_istext_formula, parse_len_formula, parse_lower_formula,
     parse_match_formula, parse_month_formula, parse_not_formula,
     parse_or_formula, parse_right_formula, parse_single_ref_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
@@ -301,6 +301,13 @@ fn evaluate_formula(
     return resolve_scalar_operand(connection, sheet, &chosen_value).map(Some);
   }
 
+  if let Some((value_expression, fallback_expression)) = parse_iferror_formula(formula) {
+    if let Some(value) = evaluate_formula_argument(connection, sheet, &value_expression)? {
+      return Ok(Some(value));
+    }
+    return resolve_scalar_operand(connection, sheet, &fallback_expression).map(Some);
+  }
+
   if let Some(concat_args) = parse_concat_formula(formula) {
     let mut output = String::new();
     for argument in concat_args {
@@ -505,6 +512,37 @@ fn evaluate_countif_formula(
   }
 
   Ok(count.to_string())
+}
+
+fn evaluate_formula_argument(
+  connection: &Connection,
+  sheet: &str,
+  expression: &str,
+) -> Result<Option<String>, ApiError> {
+  let trimmed = expression.trim();
+  if trimmed.is_empty() {
+    return Ok(Some(String::new()));
+  }
+  if trimmed.starts_with('"') && trimmed.ends_with('"') {
+    return resolve_scalar_operand(connection, sheet, trimmed).map(Some);
+  }
+  if parse_cell_address(trimmed).is_some() {
+    return resolve_scalar_operand(connection, sheet, trimmed).map(Some);
+  }
+  if trimmed.parse::<f64>().is_ok() {
+    return Ok(Some(trimmed.to_string()));
+  }
+
+  let normalized = if trimmed.starts_with('=') {
+    trimmed.to_string()
+  } else {
+    format!("={trimmed}")
+  };
+  match evaluate_formula(connection, sheet, &normalized) {
+    Ok(Some(value)) => Ok(Some(value)),
+    Ok(None) => Ok(None),
+    Err(_) => Ok(None),
+  }
 }
 
 fn evaluate_sumif_formula(
@@ -1720,12 +1758,30 @@ mod tests {
         value: None,
         formula: Some("=ISTEXT(E1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 43,
+        value: None,
+        formula: Some(r#"=IFERROR(VLOOKUP("south",E1:F2,2,TRUE),"fallback")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 44,
+        value: None,
+        formula: Some(r#"=IFERROR(MATCH("south",E1:E2,1),"fallback")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 45,
+        value: None,
+        formula: Some("=IFERROR(A1,0)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 40);
+    assert_eq!(updated_cells, 43);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -1739,7 +1795,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 42,
+        end_col: 45,
       },
     )
     .expect("cells should be fetched");
@@ -1810,6 +1866,9 @@ mod tests {
     assert_eq!(by_position(1, 40).evaluated_value.as_deref(), Some("true"));
     assert_eq!(by_position(1, 41).evaluated_value.as_deref(), Some("true"));
     assert_eq!(by_position(1, 42).evaluated_value.as_deref(), Some("true"));
+    assert_eq!(by_position(1, 43).evaluated_value.as_deref(), Some("fallback"));
+    assert_eq!(by_position(1, 44).evaluated_value.as_deref(), Some("fallback"));
+    assert_eq!(by_position(1, 45).evaluated_value.as_deref(), Some("120"));
   }
 
   #[test]

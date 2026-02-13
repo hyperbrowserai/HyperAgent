@@ -122,6 +122,15 @@ pub fn parse_if_formula(formula: &str) -> Option<(String, String, String)> {
   Some((args[0].clone(), args[1].clone(), args[2].clone()))
 }
 
+pub fn parse_iferror_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "IFERROR" || args.len() != 2 {
+    return None;
+  }
+
+  Some((args[0].clone(), args[1].clone()))
+}
+
 pub fn parse_concat_formula(formula: &str) -> Option<Vec<String>> {
   let (function, args) = parse_function_arguments(formula)?;
   if (function != "CONCAT" && function != "CONCATENATE") || args.is_empty() {
@@ -547,7 +556,7 @@ mod tests {
     parse_month_formula,
     parse_not_formula, parse_or_formula, parse_right_formula, parse_cell_address,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
-    parse_if_formula, parse_today_formula, parse_vlookup_formula,
+    parse_if_formula, parse_iferror_formula, parse_today_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula,
     parse_year_formula, parse_upper_formula, parse_trim_formula,
   };
@@ -580,6 +589,12 @@ mod tests {
     let concat = parse_concat_formula(r#"=CONCAT("sales-", A2, "-", B2)"#)
       .expect("concat formula should parse");
     assert_eq!(concat, vec![r#""sales-""#, "A2", r#""-""#, "B2"]);
+
+    let iferror =
+      parse_iferror_formula(r#"=IFERROR(VLOOKUP(A1,D1:E5,2,TRUE),"fallback")"#)
+        .expect("iferror should parse");
+    assert_eq!(iferror.0, "VLOOKUP(A1,D1:E5,2,TRUE)");
+    assert_eq!(iferror.1, r#""fallback""#);
   }
 
   #[test]

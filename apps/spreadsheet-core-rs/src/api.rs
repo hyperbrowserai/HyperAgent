@@ -45,7 +45,7 @@ use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::BroadcastStream;
 use uuid::Uuid;
 
-const FORMULA_SUPPORTED_FUNCTIONS: &str = "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, ISBLANK, ISNUMBER, ISTEXT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode, MATCH exact-match mode, INDEX";
+const FORMULA_SUPPORTED_FUNCTIONS: &str = "SUM, AVERAGE, MIN, MAX, COUNT, COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS, direct references, arithmetic expressions, IF, IFERROR, AND, OR, NOT, CONCAT, CONCATENATE, LEN, LEFT, RIGHT, UPPER, LOWER, TRIM, ISBLANK, ISNUMBER, ISTEXT, TODAY, DATE, YEAR, MONTH, DAY, VLOOKUP exact-match mode, XLOOKUP exact-match mode, MATCH exact-match mode, INDEX";
 const FORMULA_UNSUPPORTED_BEHAVIORS: &str = "VLOOKUP with range_lookup TRUE/1, XLOOKUP non-exact match_mode/search_mode variants, and MATCH non-exact match_type variants remain unsupported and are surfaced via unsupported_formulas";
 const FORMULA_FALLBACK_BEHAVIOR: &str = "unsupported formulas are preserved and reported by formula.recalculated payloads";
 
