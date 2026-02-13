@@ -61,6 +61,25 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
+function normalizePositiveInteger(value?: number): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const normalized = Math.floor(value);
+  if (normalized <= 0) {
+    return undefined;
+  }
+  return normalized;
+}
+
+function normalizeSampleLimit(value?: number): number | undefined {
+  const normalized = normalizePositiveInteger(value);
+  if (typeof normalized !== "number") {
+    return undefined;
+  }
+  return Math.min(normalized, 100);
+}
+
 export async function createWorkbook(
   name?: string,
 ): Promise<WorkbookSummary> {
@@ -201,11 +220,8 @@ export async function getAgentOpsCacheStats(
   maxAgeSeconds?: number,
 ): Promise<AgentOpsCacheStatsResponse> {
   const params = new URLSearchParams();
-  const normalizedMaxAgeSeconds =
-    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
-      ? Math.floor(maxAgeSeconds)
-      : undefined;
-  if (normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0) {
+  const normalizedMaxAgeSeconds = normalizePositiveInteger(maxAgeSeconds);
+  if (typeof normalizedMaxAgeSeconds === "number") {
     params.set("max_age_seconds", String(normalizedMaxAgeSeconds));
   }
   const suffix = params.toString();
@@ -232,11 +248,8 @@ export async function getAgentOpsCacheEntries(
   if (normalizedPrefix) {
     params.set("request_id_prefix", normalizedPrefix);
   }
-  const normalizedMaxAgeSeconds =
-    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
-      ? Math.floor(maxAgeSeconds)
-      : undefined;
-  if (normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0) {
+  const normalizedMaxAgeSeconds = normalizePositiveInteger(maxAgeSeconds);
+  if (typeof normalizedMaxAgeSeconds === "number") {
     params.set("max_age_seconds", String(normalizedMaxAgeSeconds));
   }
   const response = await fetch(
@@ -264,11 +277,8 @@ export async function getAgentOpsCachePrefixes(
   const params = new URLSearchParams({
     limit: String(safeLimit),
   });
-  const normalizedMaxAgeSeconds =
-    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
-      ? Math.floor(maxAgeSeconds)
-      : undefined;
-  if (normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0) {
+  const normalizedMaxAgeSeconds = normalizePositiveInteger(maxAgeSeconds);
+  if (typeof normalizedMaxAgeSeconds === "number") {
     params.set("max_age_seconds", String(normalizedMaxAgeSeconds));
   }
   const response = await fetch(
@@ -347,10 +357,7 @@ export async function removeAgentOpsCacheEntriesByPrefix(
   requestIdPrefix: string,
   maxAgeSeconds?: number,
 ): Promise<RemoveAgentOpsCacheEntriesByPrefixResponse> {
-  const normalizedMaxAgeSeconds =
-    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
-      ? Math.floor(maxAgeSeconds)
-      : undefined;
+  const normalizedMaxAgeSeconds = normalizePositiveInteger(maxAgeSeconds);
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove-by-prefix`,
     {
@@ -358,10 +365,7 @@ export async function removeAgentOpsCacheEntriesByPrefix(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         request_id_prefix: requestIdPrefix,
-        max_age_seconds:
-          normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0
-            ? normalizedMaxAgeSeconds
-            : undefined,
+        max_age_seconds: normalizedMaxAgeSeconds,
       }),
     },
   );
@@ -374,14 +378,8 @@ export async function previewRemoveAgentOpsCacheEntriesByPrefix(
   sampleLimit?: number,
   maxAgeSeconds?: number,
 ): Promise<PreviewRemoveAgentOpsCacheEntriesByPrefixResponse> {
-  const safeSampleLimit =
-    typeof sampleLimit === "number"
-      ? Math.max(1, Math.min(sampleLimit, 100))
-      : undefined;
-  const normalizedMaxAgeSeconds =
-    typeof maxAgeSeconds === "number" && Number.isFinite(maxAgeSeconds)
-      ? Math.floor(maxAgeSeconds)
-      : undefined;
+  const safeSampleLimit = normalizeSampleLimit(sampleLimit);
+  const normalizedMaxAgeSeconds = normalizePositiveInteger(maxAgeSeconds);
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove-by-prefix/preview`,
     {
@@ -389,10 +387,7 @@ export async function previewRemoveAgentOpsCacheEntriesByPrefix(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         request_id_prefix: requestIdPrefix,
-        max_age_seconds:
-          normalizedMaxAgeSeconds && normalizedMaxAgeSeconds > 0
-            ? normalizedMaxAgeSeconds
-            : undefined,
+        max_age_seconds: normalizedMaxAgeSeconds,
         sample_limit: safeSampleLimit,
       }),
     },
@@ -410,11 +405,9 @@ export async function removeStaleAgentOpsCacheEntries(
   workbookId: string,
   payload: RemoveStaleAgentOpsCacheEntriesRequest,
 ): Promise<RemoveStaleAgentOpsCacheEntriesResponse> {
-  const safeSampleLimit =
-    typeof payload.sample_limit === "number"
-      ? Math.max(1, Math.min(Math.floor(payload.sample_limit), 100))
-      : undefined;
-  const safeMaxAgeSeconds = Math.max(1, Math.floor(payload.max_age_seconds));
+  const safeSampleLimit = normalizeSampleLimit(payload.sample_limit);
+  const safeMaxAgeSeconds =
+    normalizePositiveInteger(payload.max_age_seconds) ?? 1;
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/remove-stale`,
     {
