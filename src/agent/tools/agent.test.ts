@@ -322,6 +322,41 @@ describe("runAgentTask completion behavior", () => {
     }
   });
 
+  it("skips step artifact writes when step debug directory creation fails", async () => {
+    const page = createMockPage();
+    const mkdirSpy = jest
+      .spyOn(fs, "mkdirSync")
+      .mockImplementation((dirPath: fs.PathLike) => {
+        if (String(dirPath).includes("step-0")) {
+          throw new Error("step dir denied");
+        }
+        return undefined;
+      });
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      return undefined;
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.debug = true;
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page), {
+        debugDir: "debug/test",
+      });
+
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      const writtenFiles = writeSpy.mock.calls.map((call) => String(call[0]));
+      expect(writtenFiles.some((path) => path.includes("step-0"))).toBe(false);
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      mkdirSpy.mockRestore();
+      writeSpy.mockRestore();
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
   it("continues task when visual screenshot composition fails", async () => {
     const page = createMockPage();
     const getCDPClientSpy = jest

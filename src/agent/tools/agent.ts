@@ -365,9 +365,8 @@ export const runAgentTask = async (
       const stepMetrics: Record<string, unknown> = {
         stepIndex: currStep,
       };
-      if (debugArtifactsEnabled) {
-        ensureDirectorySafe(debugStepDir, ctx.debug);
-      }
+      const stepDebugArtifactsEnabled =
+        debugArtifactsEnabled && ensureDirectorySafe(debugStepDir, ctx.debug);
 
       // Get A11y DOM State (visual mode optional, default false for performance)
       let domState: A11yDOMState | null = null;
@@ -379,7 +378,7 @@ export const runAgentTask = async (
           useCache: useDomCache,
           debug: ctx.debug,
           enableVisualMode: params?.enableVisualMode ?? false,
-          debugStepDir: debugArtifactsEnabled ? debugStepDir : undefined,
+          debugStepDir: stepDebugArtifactsEnabled ? debugStepDir : undefined,
           enableStreaming: enableDomStreaming,
           onFrameChunk: enableDomStreaming
             ? () => {
@@ -441,8 +440,7 @@ export const runAgentTask = async (
       }
 
       // Store Dom State for Debugging
-      if (debugArtifactsEnabled) {
-        ensureDirectorySafe(debugDir, ctx.debug);
+      if (stepDebugArtifactsEnabled) {
         writeDebugFileSafe(`${debugStepDir}/elems.txt`, domState.domState, ctx.debug);
         if (trimmedScreenshot) {
           writeDebugFileSafe(
@@ -481,7 +479,7 @@ export const runAgentTask = async (
       }
 
       // Store Agent Step Messages for Debugging
-      if (debugArtifactsEnabled) {
+      if (stepDebugArtifactsEnabled) {
         writeDebugFileSafe(
           `${debugStepDir}/msgs.json`,
           JSON.stringify(msgs, null, 2),
@@ -766,7 +764,7 @@ export const runAgentTask = async (
       );
       stepMetrics.totalMs = Math.round(totalDuration);
 
-      if (debugArtifactsEnabled) {
+      if (stepDebugArtifactsEnabled) {
         await writeFrameGraphSnapshot(page, debugStepDir, ctx.debug);
         writeDebugFileSafe(
           `${debugStepDir}/stepOutput.json`,
