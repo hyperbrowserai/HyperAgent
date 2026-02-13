@@ -1,6 +1,7 @@
 import { HyperAgent } from "@/agent";
 import { TaskStatus, type ActionCacheOutput } from "@/types/agent/types";
 import type { HyperAgentLLM } from "@/llm/types";
+import fs from "fs";
 
 function createMockLLM(): HyperAgentLLM {
   return {
@@ -219,5 +220,53 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toContain("Replay step 0 failed");
     expect(replay.steps[0]?.message).toContain("helper click failed");
     expect(replay.steps[0]?.usedXPath).toBe(true);
+  });
+
+  it("does not fail replay when debug file write throws", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+      debug: true,
+    });
+    const waitForTimeout = jest.fn().mockResolvedValue(undefined);
+    const page = {
+      waitForTimeout,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "wait",
+          elementId: null,
+          method: null,
+          arguments: [],
+          actionParams: { duration: 10 },
+          frameIndex: null,
+          xpath: null,
+          actionType: "wait",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+    const writeSpy = jest
+      .spyOn(fs, "writeFileSync")
+      .mockImplementation(() => {
+        throw new Error("disk full");
+      });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const replay = await agent.runFromActionCache(cache, page, { debug: true });
+
+      expect(replay.status).toBe(TaskStatus.COMPLETED);
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      writeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
   });
 });

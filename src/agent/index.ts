@@ -727,12 +727,16 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
 
     if (debug) {
-      const debugDir = "debug/action-cache";
-      fs.mkdirSync(debugDir, { recursive: true });
-      fs.writeFileSync(
-        `${debugDir}/replay-${replayId}.json`,
-        JSON.stringify(replayResult, null, 2)
-      );
+      try {
+        const debugDir = "debug/action-cache";
+        fs.mkdirSync(debugDir, { recursive: true });
+        fs.writeFileSync(
+          `${debugDir}/replay-${replayId}.json`,
+          JSON.stringify(replayResult, null, 2)
+        );
+      } catch (error) {
+        console.error("[runFromActionCache] Failed to write replay debug:", error);
+      }
     }
 
     return replayResult;
