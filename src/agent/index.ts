@@ -1601,7 +1601,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           const normalizedTaskError =
             error instanceof Error
               ? error
-              : new Error(formatUnknownError(error));
+              : new Error(this.formatHelperDiagnostic(error));
           const taskFailureError =
             new HyperagentTaskError(taskId, normalizedTaskError);
           const lifecycleActive = this.isTaskLifecycleGenerationActive(
@@ -1769,7 +1769,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           : this.buildCancelledTaskOutput(taskId, taskState);
       }
       this.cleanupTaskLifecycle(taskId);
-      throw error;
+      throw error instanceof Error
+        ? error
+        : new Error(this.formatHelperDiagnostic(error));
     }
   }
 

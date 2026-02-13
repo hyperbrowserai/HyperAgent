@@ -47,6 +47,7 @@ const MAX_MCP_CONFIG_RECORD_KEY_CHARS = 256;
 const MAX_MCP_CONFIG_RECORD_VALUE_CHARS = 4_000;
 const MAX_MCP_DISCOVERED_TOOLS = 500;
 const MAX_MCP_TOOL_DESCRIPTION_CHARS = 2_000;
+const MAX_MCP_RUNTIME_DIAGNOSTIC_CHARS = 400;
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const UNSAFE_MCP_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
@@ -106,6 +107,16 @@ function formatMCPIdentifier(value: unknown, fallback: string): string {
     0,
     MAX_MCP_IDENTIFIER_DIAGNOSTIC_CHARS
   )}... [truncated]`;
+}
+
+function formatMCPRuntimeDiagnostic(value: unknown): string {
+  const normalized = formatUnknownError(value).replace(/\s+/g, " ").trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_MCP_RUNTIME_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_MCP_RUNTIME_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(0, MAX_MCP_RUNTIME_DIAGNOSTIC_CHARS)}... [truncated ${omitted} chars]`;
 }
 
 function normalizeMCPExecutionToolName(toolName: unknown): string {
@@ -1080,7 +1091,7 @@ class MCPClient {
         );
 
         transport.onerror = (error: unknown) => {
-          const message = formatUnknownError(error);
+          const message = formatMCPRuntimeDiagnostic(error);
           console.error(`SSE error: ${message}`);
         };
       } else {
@@ -1214,7 +1225,7 @@ class MCPClient {
         } catch (cleanupError) {
           if (this.debug) {
             console.warn(
-              `Failed to clean up MCP transport after connect failure: ${formatUnknownError(
+              `Failed to clean up MCP transport after connect failure: ${formatMCPRuntimeDiagnostic(
                 cleanupError
               )}`
             );
@@ -1222,7 +1233,7 @@ class MCPClient {
         }
       }
       console.error(
-        `Failed to connect to MCP server: ${formatUnknownError(error)}`
+        `Failed to connect to MCP server: ${formatMCPRuntimeDiagnostic(error)}`
       );
       throw error;
     }
@@ -1337,7 +1348,7 @@ class MCPClient {
 
       return result;
     } catch (error) {
-      const message = formatUnknownError(error);
+      const message = formatMCPRuntimeDiagnostic(error);
       console.error(
         `Error executing tool ${safeToolName} on server ${safeServerId()}: ${message}`
       );
@@ -1390,7 +1401,7 @@ class MCPClient {
         this.servers.delete(resolvedServerId);
       }
       if (closeError) {
-        throw new Error(formatUnknownError(closeError));
+        throw new Error(formatMCPRuntimeDiagnostic(closeError));
       }
       if (this.debug) {
         console.log(`Disconnected from MCP server with ID: ${resolvedServerId}`);
@@ -1407,7 +1418,7 @@ class MCPClient {
         await this.disconnectServer(serverId);
       } catch (error) {
         console.error(
-          `Failed to disconnect MCP server ${serverId}: ${formatUnknownError(error)}`
+          `Failed to disconnect MCP server ${serverId}: ${formatMCPRuntimeDiagnostic(error)}`
         );
       }
     }

@@ -597,6 +597,42 @@ describe("HyperAgent constructor and task controls", () => {
     );
   });
 
+  it("truncates oversized non-Error async task failures", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockRejectedValue({
+      reason: "x".repeat(2_000),
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+    const emittedErrorPromise = new Promise<Error>((resolve) => {
+      task.emitter.once("error", resolve);
+    });
+
+    await expect(task.result).rejects.toBeInstanceOf(HyperagentTaskError);
+    const emittedError = await emittedErrorPromise;
+    expect((emittedError as HyperagentTaskError).cause.message).toContain(
+      "[truncated"
+    );
+  });
+
+  it("serializes non-Error sync task failures with readable cause", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockRejectedValue({ reason: "sync object boom" });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+
+    await expect(agent.executeTask("sync task", undefined, fakePage)).rejects.toThrow(
+      '{"reason":"sync object boom"}'
+    );
+  });
+
   it("preserves cancelled status when async task rejects after cancel", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     let rejectTask!: (error: unknown) => void;
