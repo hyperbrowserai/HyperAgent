@@ -18,6 +18,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function safeReadRecordField(
+  value: Record<string, unknown>,
+  key: string
+): unknown {
+  try {
+    return value[key];
+  } catch {
+    return undefined;
+  }
+}
+
 function normalizeOptionalString(
   value: unknown,
   maxChars: number
@@ -45,8 +56,12 @@ function sanitizeToolArguments(value: unknown): unknown {
     : sanitized.arguments;
 }
 
-function normalizeProviderLabel(providerLabel: string): string {
-  const normalized = providerLabel
+function normalizeProviderLabel(providerLabel: unknown): string {
+  const rawLabel =
+    typeof providerLabel === "string"
+      ? providerLabel
+      : formatUnknownError(providerLabel);
+  const normalized = rawLabel
     .replace(/[\u0000-\u001F\u007F]/g, " ")
     .trim()
     .replace(/\s+/g, " ");
@@ -78,32 +93,63 @@ export function normalizeOpenAIToolCalls(
   }
 
   const normalizedProviderLabel = normalizeProviderLabel(providerLabel);
-  return toolCalls.map((toolCall) => {
+  let entries: unknown[];
+  try {
+    entries = Array.from(toolCalls);
+  } catch (error) {
+    throw new Error(
+      `[LLM][${normalizedProviderLabel}] Unknown tool calls payload: ${formatToolCallDiagnostic(
+        error
+      )}`
+    );
+  }
+
+  return entries.map((toolCall) => {
     if (!isRecord(toolCall)) {
       throw new Error(
         `[LLM][${normalizedProviderLabel}] Unknown tool call payload: ${formatToolCallDiagnostic(toolCall)}`
       );
     }
 
-    if (toolCall.type === "function") {
-      const fn = isRecord(toolCall.function) ? toolCall.function : {};
+    const toolCallType = safeReadRecordField(toolCall, "type");
+
+    if (toolCallType === "function") {
+      const functionValue = safeReadRecordField(toolCall, "function");
+      const fn = isRecord(functionValue) ? functionValue : {};
       return {
-        id: normalizeOptionalString(toolCall.id, MAX_TOOL_CALL_ID_CHARS),
+        id: normalizeOptionalString(
+          safeReadRecordField(toolCall, "id"),
+          MAX_TOOL_CALL_ID_CHARS
+        ),
         name:
-          normalizeOptionalString(fn.name, MAX_TOOL_CALL_NAME_CHARS) ??
+          normalizeOptionalString(
+            safeReadRecordField(fn, "name"),
+            MAX_TOOL_CALL_NAME_CHARS
+          ) ??
           "unknown-tool",
-        arguments: sanitizeToolArguments(parseJsonMaybe(fn.arguments)),
+        arguments: sanitizeToolArguments(
+          parseJsonMaybe(safeReadRecordField(fn, "arguments"))
+        ),
       };
     }
 
-    if (toolCall.type === "custom") {
-      const custom = isRecord(toolCall.custom) ? toolCall.custom : {};
+    if (toolCallType === "custom") {
+      const customValue = safeReadRecordField(toolCall, "custom");
+      const custom = isRecord(customValue) ? customValue : {};
       return {
-        id: normalizeOptionalString(toolCall.id, MAX_TOOL_CALL_ID_CHARS),
+        id: normalizeOptionalString(
+          safeReadRecordField(toolCall, "id"),
+          MAX_TOOL_CALL_ID_CHARS
+        ),
         name:
-          normalizeOptionalString(custom.name, MAX_TOOL_CALL_NAME_CHARS) ??
+          normalizeOptionalString(
+            safeReadRecordField(custom, "name"),
+            MAX_TOOL_CALL_NAME_CHARS
+          ) ??
           "unknown-tool",
-        arguments: sanitizeToolArguments(parseJsonMaybe(custom.input)),
+        arguments: sanitizeToolArguments(
+          parseJsonMaybe(safeReadRecordField(custom, "input"))
+        ),
       };
     }
 

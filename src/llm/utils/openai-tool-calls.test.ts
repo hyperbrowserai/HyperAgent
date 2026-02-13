@@ -237,4 +237,84 @@ describe("normalizeOpenAIToolCalls", () => {
     expect(normalized?.id).not.toContain("\u0000");
     expect(normalized?.name).not.toContain("\u0000");
   });
+
+  it("handles function tool fields with throwing getters", () => {
+    const trappedFunction = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "name" || prop === "arguments") {
+            throw new Error("function field trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    expect(
+      normalizeOpenAIToolCalls([
+        {
+          id: "fn-1",
+          type: "function",
+          function: trappedFunction,
+        },
+      ])
+    ).toEqual([
+      {
+        id: "fn-1",
+        name: "unknown-tool",
+        arguments: {},
+      },
+    ]);
+  });
+
+  it("handles tool-call type getters that throw", () => {
+    const trappedToolCall = new Proxy(
+      {
+        id: "fn-1",
+      },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "type") {
+            throw new Error("type trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+
+    expect(() => normalizeOpenAIToolCalls([trappedToolCall])).toThrow(
+      '[LLM][OpenAI] Unknown tool call type: {"id":"fn-1"}'
+    );
+  });
+
+  it("throws readable error when tool-call array traversal fails", () => {
+    const trappedArray = new Proxy([{}], {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.iterator) {
+          throw new Error("tool-call iterator trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    expect(() =>
+      normalizeOpenAIToolCalls(trappedArray)
+    ).toThrow(
+      "[LLM][OpenAI] Unknown tool calls payload: tool-call iterator trap"
+    );
+  });
+
+  it("normalizes non-string provider labels safely", () => {
+    expect(() =>
+      normalizeOpenAIToolCalls(
+        [
+          {
+            type: "mystery",
+          },
+        ],
+        { provider: "mystery" } as unknown as string
+      )
+    ).toThrow('[LLM][{"provider":"mystery"}] Unknown tool call type: {"type":"mystery"}');
+  });
 });
