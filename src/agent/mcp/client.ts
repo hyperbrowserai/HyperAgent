@@ -610,6 +610,16 @@ export function normalizeMCPListToolsPayload(value: unknown): Tool[] {
   return toolsValue as Tool[];
 }
 
+function safeGetMCPListToolsPayload(value: unknown): Tool[] {
+  try {
+    return normalizeMCPListToolsPayload(value);
+  } catch (error) {
+    throw new Error(
+      `Invalid MCP listTools response: ${formatUnknownError(error)}`
+    );
+  }
+}
+
 function findConnectedServerId(
   servers: Map<string, ServerConnection>,
   requestedId: string
@@ -1053,7 +1063,7 @@ class MCPClient {
       await client.connect(transport);
 
       const toolsResult = await client.listTools();
-      const listedTools = normalizeMCPListToolsPayload(toolsResult);
+      const listedTools = safeGetMCPListToolsPayload(toolsResult);
       const toolsMap = new Map<string, Tool>();
 
       const discoveredTools = normalizeDiscoveredMCPTools(

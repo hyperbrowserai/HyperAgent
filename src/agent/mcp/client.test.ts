@@ -197,6 +197,36 @@ describe("normalizeMCPListToolsPayload", () => {
       "Invalid MCP listTools response: unable to read tools array"
     );
   });
+
+  it("surfaces wrapped listTools payload normalization errors from connectToServer", async () => {
+    const connectSpy = jest
+      .spyOn(Client.prototype, "connect")
+      .mockResolvedValue(undefined);
+    const listToolsSpy = jest.spyOn(Client.prototype, "listTools").mockResolvedValue(
+      {} as unknown as Awaited<ReturnType<Client["listTools"]>>
+    );
+    const closeSpy = jest
+      .spyOn(StdioClientTransport.prototype, "close")
+      .mockResolvedValue(undefined);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const mcpClient = new MCPClient(false);
+
+    try {
+      await expect(
+        mcpClient.connectToServer({
+          command: "npx",
+        })
+      ).rejects.toThrow(
+        "Invalid MCP listTools response: Invalid MCP listTools response: expected a tools array"
+      );
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      connectSpy.mockRestore();
+      listToolsSpy.mockRestore();
+      closeSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
 });
 
 describe("normalizeMCPToolParams", () => {
