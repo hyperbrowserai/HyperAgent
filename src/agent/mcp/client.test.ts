@@ -2148,6 +2148,28 @@ describe("MCPClient.executeTool server selection", () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
+  it("throws readable errors when server tool registry shape is invalid", async () => {
+    const mcpClient = new MCPClient(false);
+    const callTool = jest.fn();
+    setServersForClient(
+      mcpClient,
+      new Map([
+        [
+          "server-a",
+          {
+            tools: {},
+            client: { callTool },
+          },
+        ],
+      ]) as unknown as Map<string, unknown>
+    );
+
+    await expect(
+      mcpClient.executeTool("search", { query: "missing" }, "server-a")
+    ).rejects.toThrow("MCP server tools are unavailable: invalid tools registry");
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
   it("sanitizes tool names in missing-tool diagnostics", async () => {
     const mcpClient = new MCPClient(false);
     const callTool = jest.fn();

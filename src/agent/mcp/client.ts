@@ -711,6 +711,16 @@ function readServerTools(server: ServerConnection): Map<string, Tool> {
   if (!tools || typeof tools !== "object") {
     throw new Error("MCP server tools are unavailable: invalid tools registry");
   }
+  const hasMethod = (method: string): boolean => {
+    try {
+      return typeof (tools as Record<string, unknown>)[method] === "function";
+    } catch {
+      return false;
+    }
+  };
+  if (!hasMethod("has") || !hasMethod("get") || !hasMethod("keys")) {
+    throw new Error("MCP server tools are unavailable: invalid tools registry");
+  }
   return tools as Map<string, Tool>;
 }
 
