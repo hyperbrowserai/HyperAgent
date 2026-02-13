@@ -93,8 +93,50 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("person@example.com");
     expect(joined).toContain("older steps omitted");
     expect(joined).toContain("latest 10 of 12 steps");
+    expect(joined).toContain("=== Earlier Actions Summary ===");
+    expect(joined).toContain("Step 0: action=wait");
     expect(joined).not.toContain("thought-0");
     expect(joined).toContain("thought-11");
+  });
+
+  it("bounds omitted-step summary details for oversized histories", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const steps = Array.from({ length: 25 }, (_, idx) => {
+      const step = createStep(idx);
+      step.actionOutput.message = `message-${idx} ${"x".repeat(2_000)}`;
+      step.agentOutput.action.type = `action-${idx}-${"y".repeat(500)}`;
+      return step;
+    });
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      steps,
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const summaryMessage = messages.find(
+      (message) =>
+        typeof message.content === "string" &&
+        message.content.includes("=== Earlier Actions Summary ===")
+    );
+    expect(summaryMessage).toBeDefined();
+    const summaryContent =
+      typeof summaryMessage?.content === "string" ? summaryMessage.content : "";
+    expect(summaryContent).toContain("[summary truncated");
+    expect(summaryContent).toContain("Step 10");
+    expect(summaryContent).not.toContain("Step 9");
+    expect(summaryContent.length).toBeLessThan(2_200);
   });
 
   it("does not crash when step extract payload is circular", async () => {

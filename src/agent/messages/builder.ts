@@ -13,6 +13,10 @@ const MAX_DOM_STATE_CHARS = 50_000;
 const MAX_OPEN_TAB_ENTRIES = 20;
 const MAX_TAB_URL_CHARS = 500;
 const MAX_VARIABLE_KEY_CHARS = 120;
+const MAX_OMITTED_STEP_SUMMARY_STEPS = 5;
+const MAX_OMITTED_STEP_SUMMARY_CHARS = 1_500;
+const MAX_OMITTED_STEP_ACTION_CHARS = 120;
+const MAX_OMITTED_STEP_OUTCOME_CHARS = 220;
 
 function truncatePromptText(value: string): string {
   if (value.length <= MAX_SERIALIZED_PROMPT_VALUE_CHARS) {
@@ -60,6 +64,66 @@ function stripControlChars(value: string): string {
       return (code >= 0 && code < 32) || code === 127 ? " " : char;
     })
     .join("");
+}
+
+function normalizeCompactStepText(
+  value: unknown,
+  fallback: string,
+  maxChars: number
+): string {
+  const rawValue = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = stripControlChars(rawValue).replace(/\s+/g, " ").trim();
+  const safeValue = normalized.length > 0 ? normalized : fallback;
+  if (safeValue.length <= maxChars) {
+    return safeValue;
+  }
+  return `${safeValue.slice(0, maxChars)}... [truncated]`;
+}
+
+function truncateOmittedSummary(value: string): string {
+  if (value.length <= MAX_OMITTED_STEP_SUMMARY_CHARS) {
+    return value;
+  }
+  const omitted = value.length - MAX_OMITTED_STEP_SUMMARY_CHARS;
+  return `${value.slice(0, MAX_OMITTED_STEP_SUMMARY_CHARS)}... [summary truncated ${omitted} chars]`;
+}
+
+function getStepIndexLabel(step: AgentStep, fallback: number): number {
+  const idx = safeReadRecordField(step, "idx");
+  if (typeof idx === "number" && Number.isFinite(idx) && idx >= 0) {
+    return Math.floor(idx);
+  }
+  return fallback;
+}
+
+function buildOmittedStepsSummary(steps: AgentStep[]): string {
+  if (steps.length === 0) {
+    return "";
+  }
+
+  const summarizedSteps = steps.slice(-MAX_OMITTED_STEP_SUMMARY_STEPS);
+  const omittedSummaryCount = steps.length - summarizedSteps.length;
+  const lines = summarizedSteps.map((step, index) => {
+    const { action, message } = getStepPromptData(step);
+    const actionType = normalizeCompactStepText(
+      safeReadRecordField(action, "type"),
+      "unknown",
+      MAX_OMITTED_STEP_ACTION_CHARS
+    );
+    const outcome = normalizeCompactStepText(
+      message,
+      "Action output unavailable",
+      MAX_OMITTED_STEP_OUTCOME_CHARS
+    );
+    const stepIndex = getStepIndexLabel(step, index);
+    return `- Step ${stepIndex}: action=${actionType}; outcome=${outcome}`;
+  });
+
+  const prefix =
+    omittedSummaryCount > 0
+      ? `(${omittedSummaryCount} earlier omitted step${omittedSummaryCount === 1 ? "" : "s"} not summarized)\n`
+      : "";
+  return truncatePromptText(truncateOmittedSummary(`${prefix}${lines.join("\n")}`));
 }
 
 function normalizeVariableKey(value: unknown, index: number): string {
@@ -299,6 +363,8 @@ export const buildAgentStepMessages = async (
         ? steps.slice(-MAX_HISTORY_STEPS)
         : steps;
     const hiddenStepCount = steps.length - relevantSteps.length;
+    const omittedSteps =
+      hiddenStepCount > 0 ? steps.slice(0, hiddenStepCount) : [];
 
     messages.push({
       role: "user",
@@ -307,6 +373,15 @@ export const buildAgentStepMessages = async (
           ? `=== Previous Actions ===\n(Showing latest ${relevantSteps.length} of ${steps.length} steps; ${hiddenStepCount} older steps omitted for context budget.)\n`
           : "=== Previous Actions ===\n",
     });
+    if (hiddenStepCount > 0) {
+      const omittedSummary = buildOmittedStepsSummary(omittedSteps);
+      if (omittedSummary.length > 0) {
+        messages.push({
+          role: "user",
+          content: `=== Earlier Actions Summary ===\n${omittedSummary}\n`,
+        });
+      }
+    }
     for (const step of relevantSteps) {
       const {
         thoughts,
