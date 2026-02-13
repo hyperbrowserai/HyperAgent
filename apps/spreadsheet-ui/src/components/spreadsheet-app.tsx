@@ -297,6 +297,21 @@ export function SpreadsheetApp() {
         ? "Syncing updates..."
         : "Ready";
 
+  async function handleSignatureMismatchRecovery(
+    maybeMessage: string | null,
+  ): Promise<boolean> {
+    const message = maybeMessage ?? "";
+    if (!message.includes("Operation signature mismatch")) {
+      return false;
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["wizard-scenario-ops"] }),
+      queryClient.invalidateQueries({ queryKey: ["wizard-preset-ops"] }),
+    ]);
+    setUiError(`${message} Refreshed operation previews. Please retry.`);
+    return true;
+  }
+
   async function handleSaveFormula() {
     if (!workbook) {
       return;
@@ -484,6 +499,12 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error.message))
+      ) {
+        return;
+      }
       setUiError(
         error instanceof Error ? error.message : `Failed to run preset ${preset}.`,
       );
@@ -517,6 +538,12 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error.message))
+      ) {
+        return;
+      }
       setUiError(
         error instanceof Error
           ? error.message
@@ -551,6 +578,12 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error.message))
+      ) {
+        return;
+      }
       setUiError(
         error instanceof Error
           ? error.message
@@ -585,6 +618,12 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error.message))
+      ) {
+        return;
+      }
       setUiError(
         error instanceof Error
           ? error.message
@@ -619,6 +658,12 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error.message))
+      ) {
+        return;
+      }
       setUiError(
         error instanceof Error
           ? error.message
@@ -653,6 +698,12 @@ export function SpreadsheetApp() {
         queryKey: ["cells", workbook.id, activeSheet],
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error.message))
+      ) {
+        return;
+      }
       setUiError(
         error instanceof Error
           ? error.message
@@ -753,6 +804,12 @@ export function SpreadsheetApp() {
         queryClient.invalidateQueries({ queryKey: ["agent-schema", response.workbook.id] }),
       ]);
     } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error.message))
+      ) {
+        return;
+      }
       setUiError(
         error instanceof Error ? error.message : "Failed to run wizard flow.",
       );
