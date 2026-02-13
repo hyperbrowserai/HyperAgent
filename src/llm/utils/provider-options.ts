@@ -2,22 +2,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 const UNSAFE_OPTION_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function sanitizeOptionValue(
   value: unknown,
   seen: WeakSet<object>
 ): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeOptionValue(entry, seen));
-  }
-
-  if (isRecord(value)) {
+  if (typeof value === "object" && value !== null) {
     if (seen.has(value)) {
       return "[Circular]";
     }
-
     seen.add(value);
+  }
+
+  if (Array.isArray(value)) {
+    const sanitizedArray = value.map((entry) => sanitizeOptionValue(entry, seen));
+    seen.delete(value);
+    return sanitizedArray;
+  }
+
+  if (isPlainRecord(value)) {
     const sanitized = Object.fromEntries(
       Object.entries(value)
         .filter(([key]) => !UNSAFE_OPTION_KEYS.has(key))
@@ -25,6 +37,10 @@ function sanitizeOptionValue(
     );
     seen.delete(value);
     return sanitized;
+  }
+
+  if (typeof value === "object" && value !== null) {
+    seen.delete(value);
   }
 
   return value;

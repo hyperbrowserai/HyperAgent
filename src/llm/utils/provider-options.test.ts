@@ -99,4 +99,38 @@ describe("sanitizeProviderOptions", () => {
       },
     });
   });
+
+  it("replaces circular arrays with safe markers", () => {
+    const circularArray: unknown[] = [];
+    circularArray.push(circularArray);
+
+    const result = sanitizeProviderOptions(
+      {
+        list: circularArray,
+      },
+      reserved
+    );
+
+    expect(result).toEqual({
+      list: ["[Circular]"],
+    });
+  });
+
+  it("preserves non-plain objects like Date values", () => {
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    const result = sanitizeProviderOptions(
+      {
+        metadata: {
+          createdAt,
+        },
+      },
+      reserved
+    );
+
+    expect(result).toEqual({
+      metadata: {
+        createdAt,
+      },
+    });
+  });
 });
