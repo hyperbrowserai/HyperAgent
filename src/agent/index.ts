@@ -991,6 +991,53 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!taskState) {
       throw new HyperagentError(`Task ${taskId} not found`);
     }
+    const taskEmitter = new ErrorEmitter();
+    const onTaskError = (error: Error): void => {
+      if (!(error instanceof HyperagentTaskError) || error.taskId !== taskId) {
+        return;
+      }
+      let listenerCount = 0;
+      try {
+        listenerCount = taskEmitter.listenerCount("error");
+      } catch {
+        listenerCount = 0;
+      }
+      if (listenerCount === 0) {
+        return;
+      }
+      try {
+        taskEmitter.emit("error", error);
+      } catch (emitError) {
+        if (this.debug) {
+          console.warn(
+            `[HyperAgent] Failed to emit task-scoped error for ${taskId}: ${formatUnknownError(
+              emitError
+            )}`
+          );
+        }
+      }
+    };
+    try {
+      this.errorEmitter.on("error", onTaskError);
+    } catch (error) {
+      if (this.debug) {
+        console.warn(
+          `[HyperAgent] Failed to register task-scoped error listener for ${taskId}: ${formatUnknownError(
+            error
+          )}`
+        );
+      }
+    }
+    void result
+      .finally(() => {
+        try {
+          this.errorEmitter.off("error", onTaskError);
+        } catch {
+          // no-op
+        }
+      })
+      .catch(() => undefined);
+
     return {
       id: taskId,
       getStatus: () => this.readTaskStatus(taskState, TaskStatus.FAILED),
@@ -1020,7 +1067,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         return status;
       },
       result,
-      emitter: this.errorEmitter,
+      emitter: taskEmitter,
     };
   }
 

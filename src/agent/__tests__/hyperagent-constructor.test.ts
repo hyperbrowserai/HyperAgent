@@ -251,6 +251,94 @@ describe("HyperAgent constructor and task controls", () => {
     expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
   });
 
+  it("isolates task-scoped emitters across concurrent tasks", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveSecondTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation((_, state) => {
+      if (state.task === "first task") {
+        return Promise.reject(new Error("first task failure"));
+      }
+      return new Promise<AgentTaskOutput>((resolve) => {
+        resolveSecondTask = resolve;
+      });
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const firstTask = await agent.executeTaskAsync(
+      "first task",
+      undefined,
+      fakePage
+    );
+    const secondTask = await agent.executeTaskAsync(
+      "second task",
+      undefined,
+      fakePage
+    );
+    const secondErrorSpy = jest.fn();
+    secondTask.emitter.on("error", secondErrorSpy);
+
+    await expect(firstTask.result).rejects.toBeInstanceOf(HyperagentTaskError);
+    expect(secondErrorSpy).not.toHaveBeenCalled();
+
+    resolveSecondTask({
+      taskId: secondTask.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: secondTask.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+    await expect(secondTask.result).resolves.toMatchObject({
+      status: TaskStatus.COMPLETED,
+    });
+  });
+
+  it("removes task-scoped error forwarding listeners after task settles", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      errorEmitter: { listenerCount: (event: string) => number };
+    };
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("listener cleanup", undefined, fakePage);
+    expect(internalAgent.errorEmitter.listenerCount("error")).toBeGreaterThan(0);
+
+    resolveTask({
+      taskId: task.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.COMPLETED,
+    });
+    await Promise.resolve();
+    expect(internalAgent.errorEmitter.listenerCount("error")).toBe(0);
+  });
+
   it("surfaces HyperagentTaskError without requiring error listeners", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockRejectedValue(new Error("boom without listeners"));
