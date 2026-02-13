@@ -16,6 +16,8 @@ interface ServerConnection {
   actions: AgentActionDefinition[];
 }
 
+type MCPToolResult = Awaited<ReturnType<Client["callTool"]>>;
+
 const MCPToolActionParams = z.object({
   params: z
     .union([z.string(), z.record(z.string(), z.unknown())])
@@ -93,8 +95,10 @@ class MCPClient {
             : undefined
         );
 
-        transport.onerror = (error: any) => {
-          console.error(`SSE error: ${error.message}`);
+        transport.onerror = (error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          console.error(`SSE error: ${message}`);
         };
       } else {
         if (!serverConfig.command) {
@@ -206,9 +210,9 @@ class MCPClient {
    */
   async executeTool(
     toolName: string,
-    parameters: Record<string, any>,
+    parameters: Record<string, unknown>,
     serverId?: string
-  ): Promise<any> {
+  ): Promise<MCPToolResult> {
     // If no server ID provided and only one server exists, use that one
     if (!serverId && this.servers.size === 1) {
       serverId = [...this.servers.keys()][0];
