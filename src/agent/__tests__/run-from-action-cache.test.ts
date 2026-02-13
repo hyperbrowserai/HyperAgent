@@ -512,6 +512,97 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toBe("");
   });
 
+  it("formats non-string replay outputs into readable diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      taskId: "perform-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: { reason: "object output" } as unknown as string,
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "non string output path",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.COMPLETED);
+    expect(replay.steps[0]?.message).toBe('{"reason":"object output"}');
+  });
+
+  it("truncates oversized replay output diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      taskId: "perform-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "x".repeat(9_000),
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "oversized output path",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+    const message = replay.steps[0]?.message ?? "";
+
+    expect(message).toContain("[truncated");
+    expect(message.length).toBeLessThanOrEqual(4_100);
+  });
+
   it("handles malformed non-finite step indices safely", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

@@ -82,6 +82,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     MAX_DEBUG_ELEMENTS_TO_STORE: 50,
     MAX_LABEL_LENGTH: 60,
   };
+  private static readonly MAX_REPLAY_OUTPUT_CHARS = 4_000;
 
   private llm: HyperAgentLLM;
   private tasks: Record<string, TaskState> = {};
@@ -594,6 +595,28 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       Number.isFinite(value) ? value : -1;
     const getSortStepIndex = (value: number): number =>
       Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+    const truncateReplayOutput = (value: string): string => {
+      if (value.length <= HyperAgent.MAX_REPLAY_OUTPUT_CHARS) {
+        return value;
+      }
+      const omitted = value.length - HyperAgent.MAX_REPLAY_OUTPUT_CHARS;
+      return `${value.slice(
+        0,
+        HyperAgent.MAX_REPLAY_OUTPUT_CHARS
+      )}... [truncated ${omitted} chars]`;
+    };
+    const normalizeReplayOutput = (
+      output: unknown,
+      isSuccess: boolean
+    ): string => {
+      if (typeof output === "string") {
+        return truncateReplayOutput(output);
+      }
+      if (typeof output === "undefined") {
+        return isSuccess ? "Completed" : "Failed to execute cached action";
+      }
+      return truncateReplayOutput(formatUnknownError(output));
+    };
     const recordReplayStep = (
       step: ActionCacheOutput["steps"][number],
       result: TaskOutput
@@ -612,9 +635,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         fallbackElementId: finalMeta?.fallbackElementId ?? null,
         retries: finalMeta?.retries ?? 0,
         success: finalSuccess,
-        message:
-          result.output ??
-          (finalSuccess ? "Completed" : "Failed to execute cached action"),
+        message: normalizeReplayOutput(result.output, finalSuccess),
       });
 
       if (!finalSuccess) {
