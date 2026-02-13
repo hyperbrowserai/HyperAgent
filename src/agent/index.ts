@@ -63,7 +63,7 @@ import { createScriptFromActionCache } from "./shared/action-cache-script";
 import {
   attachCachedActionHelpers,
   dispatchPerformHelper,
-  isPageActionMethod,
+  normalizePageActionMethod,
 } from "./shared/action-cache-exec";
 import { AgentDeps } from "@/types/agent/types";
 import { parseExtractOutput } from "./shared/parse-extract-output";
@@ -670,8 +670,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           attemptedCachedAction = true;
           result = replaySpecialResult;
         } else {
-          const method = step.method?.trim();
-          if (method && isPageActionMethod(method)) {
+          const method = normalizePageActionMethod(step.method);
+          if (method) {
             const xpath = step.xpath?.trim();
             const hasXPath = typeof xpath === "string" && xpath.length > 0;
             const replayInstruction = getReplayInstruction(step.instruction);

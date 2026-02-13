@@ -100,7 +100,7 @@ describe("runFromActionCache hardening", () => {
           stepIndex: 0,
           instruction: "  click login  ",
           elementId: "0-1",
-          method: " click ",
+          method: " CLICK ",
           arguments: [],
           frameIndex: 0,
           xpath: "  //button[1]  ",

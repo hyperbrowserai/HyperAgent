@@ -2,6 +2,7 @@ import {
   attachCachedActionHelpers,
   dispatchPerformHelper,
   isPageActionMethod,
+  normalizePageActionMethod,
 } from "@/agent/shared/action-cache-exec";
 import type { AgentDeps, HyperPage } from "@/types/agent/types";
 import type { HyperAgentLLM } from "@/llm/types";
@@ -64,6 +65,14 @@ describe("action-cache perform helper dispatch", () => {
   it("validates known page action methods", () => {
     expect(isPageActionMethod("click")).toBe(true);
     expect(isPageActionMethod("not-a-method")).toBe(false);
+  });
+
+  it("normalizes page action methods case-insensitively", () => {
+    expect(normalizePageActionMethod(" CLICK ")).toBe("click");
+    expect(normalizePageActionMethod("SelectOptionFromDropdown")).toBe(
+      "selectOptionFromDropdown"
+    );
+    expect(normalizePageActionMethod("unknown")).toBeNull();
   });
 
   it("dispatches fill with value argument", async () => {

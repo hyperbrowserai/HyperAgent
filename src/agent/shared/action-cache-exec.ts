@@ -24,8 +24,21 @@ export const PAGE_ACTION_METHODS = [
 ] as const;
 
 const pageActionMethodSet: ReadonlySet<string> = new Set(PAGE_ACTION_METHODS);
+const pageActionMethodMap: ReadonlyMap<string, PageAction> = new Map(
+  PAGE_ACTION_METHODS.map((method) => [method.toLowerCase(), method])
+);
 
 export type PageAction = (typeof PAGE_ACTION_METHODS)[number];
+
+export function normalizePageActionMethod(
+  method: string | null | undefined
+): PageAction | null {
+  const normalizedMethod = method?.trim().toLowerCase();
+  if (!normalizedMethod) {
+    return null;
+  }
+  return pageActionMethodMap.get(normalizedMethod) ?? null;
+}
 
 export function isPageActionMethod(method: string): method is PageAction {
   return pageActionMethodSet.has(method);
