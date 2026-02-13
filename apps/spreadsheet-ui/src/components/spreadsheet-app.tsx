@@ -63,7 +63,7 @@ const CACHE_ENTRIES_PREVIEW_LIMIT = 6;
 
 function parsePositiveIntegerInput(value: string): number | undefined {
   const normalized = value.trim();
-  if (!normalized) {
+  if (!normalized || !/^\d+$/.test(normalized)) {
     return undefined;
   }
   const parsedValue = Number.parseInt(normalized, 10);
@@ -180,6 +180,18 @@ export function SpreadsheetApp() {
   const hasInvalidCacheEntriesMaxAgeInput =
     cacheEntriesMaxAgeSeconds.trim().length > 0
     && typeof normalizedCacheEntriesMaxAgeSeconds !== "number";
+  const normalizedCacheRemovePreviewSampleLimit = parsePositiveIntegerInput(
+    cacheRemovePreviewSampleLimit,
+  );
+  const hasInvalidCacheRemovePreviewSampleLimitInput =
+    cacheRemovePreviewSampleLimit.trim().length > 0
+    && typeof normalizedCacheRemovePreviewSampleLimit !== "number";
+  const normalizedCacheStalePreviewSampleLimit = parsePositiveIntegerInput(
+    cacheStalePreviewSampleLimit,
+  );
+  const hasInvalidCacheStalePreviewSampleLimitInput =
+    cacheStalePreviewSampleLimit.trim().length > 0
+    && typeof normalizedCacheStalePreviewSampleLimit !== "number";
   const normalizedCacheStaleMaxAgeSeconds = parsePositiveIntegerInput(
     cacheStaleMaxAgeSeconds,
   );
@@ -1645,6 +1657,11 @@ export function SpreadsheetApp() {
     if (!workbook) {
       return;
     }
+    if (hasInvalidCacheRemovePreviewSampleLimitInput) {
+      setUiError("prefix preview sample limit must be a positive integer.");
+      setUiErrorCode("INVALID_SAMPLE_LIMIT");
+      return;
+    }
     if (hasInvalidCacheEntriesMaxAgeInput) {
       setUiError("older-than filter must be a positive integer (seconds).");
       setUiErrorCode("INVALID_MAX_AGE_SECONDS");
@@ -1654,10 +1671,10 @@ export function SpreadsheetApp() {
     if (!normalizedPrefix) {
       return;
     }
-    const parsedSampleLimit = Number.parseInt(cacheRemovePreviewSampleLimit, 10);
-    const normalizedSampleLimit = Number.isNaN(parsedSampleLimit)
-      ? undefined
-      : Math.max(1, Math.min(parsedSampleLimit, 100));
+    const normalizedSampleLimit =
+      typeof normalizedCacheRemovePreviewSampleLimit === "number"
+        ? Math.min(normalizedCacheRemovePreviewSampleLimit, 100)
+        : undefined;
     setIsPreviewingCacheByPrefix(true);
     try {
       clearUiError();
@@ -1703,14 +1720,19 @@ export function SpreadsheetApp() {
     if (!workbook) {
       return;
     }
+    if (hasInvalidCacheStalePreviewSampleLimitInput) {
+      setUiError("stale preview sample limit must be a positive integer.");
+      setUiErrorCode("INVALID_SAMPLE_LIMIT");
+      return;
+    }
     const maxAgeSeconds = parseStaleMaxAgeSecondsInput();
     if (maxAgeSeconds === null) {
       return;
     }
-    const parsedSampleLimit = Number.parseInt(cacheStalePreviewSampleLimit, 10);
-    const normalizedSampleLimit = Number.isNaN(parsedSampleLimit)
-      ? undefined
-      : Math.max(1, Math.min(parsedSampleLimit, 100));
+    const normalizedSampleLimit =
+      typeof normalizedCacheStalePreviewSampleLimit === "number"
+        ? Math.min(normalizedCacheStalePreviewSampleLimit, 100)
+        : undefined;
     setIsPreviewingStaleCache(true);
     try {
       clearUiError();
@@ -1742,14 +1764,19 @@ export function SpreadsheetApp() {
     if (!workbook) {
       return;
     }
+    if (hasInvalidCacheStalePreviewSampleLimitInput) {
+      setUiError("stale preview sample limit must be a positive integer.");
+      setUiErrorCode("INVALID_SAMPLE_LIMIT");
+      return;
+    }
     const maxAgeSeconds = parseStaleMaxAgeSecondsInput();
     if (maxAgeSeconds === null) {
       return;
     }
-    const parsedSampleLimit = Number.parseInt(cacheStalePreviewSampleLimit, 10);
-    const normalizedSampleLimit = Number.isNaN(parsedSampleLimit)
-      ? undefined
-      : Math.max(1, Math.min(parsedSampleLimit, 100));
+    const normalizedSampleLimit =
+      typeof normalizedCacheStalePreviewSampleLimit === "number"
+        ? Math.min(normalizedCacheStalePreviewSampleLimit, 100)
+        : undefined;
     setIsRemovingStaleCache(true);
     try {
       clearUiError();
@@ -2693,6 +2720,7 @@ export function SpreadsheetApp() {
                       disabled={
                         isPreviewingCacheByPrefix
                         || !cacheRequestIdPrefix.trim()
+                        || hasInvalidCacheRemovePreviewSampleLimitInput
                         || hasInvalidCacheEntriesMaxAgeInput
                       }
                       className="rounded border border-amber-700/70 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-900/40 disabled:opacity-50"
@@ -2708,7 +2736,11 @@ export function SpreadsheetApp() {
                         setCacheRemovePreviewSampleLimit(event.target.value)
                       }
                       inputMode="numeric"
-                      className="h-6 w-14 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-amber-500"
+                      className={`h-6 w-14 rounded bg-slate-950 px-2 text-[11px] text-slate-200 outline-none ${
+                        hasInvalidCacheRemovePreviewSampleLimitInput
+                          ? "border border-rose-500/80 focus:border-rose-400"
+                          : "border border-slate-700 focus:border-amber-500"
+                      }`}
                     />
                     <button
                       onClick={handleRemoveCacheEntriesByPrefix}
@@ -2764,13 +2796,18 @@ export function SpreadsheetApp() {
                         setCacheStalePreviewSampleLimit(event.target.value)
                       }
                       inputMode="numeric"
-                      className="h-6 w-14 rounded border border-slate-700 bg-slate-950 px-2 text-[11px] text-slate-200 outline-none focus:border-amber-500"
+                      className={`h-6 w-14 rounded bg-slate-950 px-2 text-[11px] text-slate-200 outline-none ${
+                        hasInvalidCacheStalePreviewSampleLimitInput
+                          ? "border border-rose-500/80 focus:border-rose-400"
+                          : "border border-slate-700 focus:border-amber-500"
+                      }`}
                     />
                     <button
                       onClick={handlePreviewRemoveStaleCacheEntries}
                       disabled={
                         isPreviewingStaleCache
                         || isRemovingStaleCache
+                        || hasInvalidCacheStalePreviewSampleLimitInput
                         || hasInvalidCacheStaleMaxAgeInput
                       }
                       className="rounded border border-amber-700/70 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-900/40 disabled:opacity-50"
@@ -2782,6 +2819,7 @@ export function SpreadsheetApp() {
                       disabled={
                         isRemovingStaleCache
                         || isPreviewingStaleCache
+                        || hasInvalidCacheStalePreviewSampleLimitInput
                         || hasInvalidCacheStaleMaxAgeInput
                         || (agentOpsCacheEntriesQuery.data?.total_entries ?? 0) === 0
                       }
@@ -2796,9 +2834,19 @@ export function SpreadsheetApp() {
                       entries/prefix queries are paused until corrected.
                     </p>
                   ) : null}
+                  {hasInvalidCacheRemovePreviewSampleLimitInput ? (
+                    <p className="mb-2 text-[10px] text-rose-300">
+                      prefix preview sample limit must be a positive integer.
+                    </p>
+                  ) : null}
                   {hasInvalidCacheStaleMaxAgeInput ? (
                     <p className="mb-2 text-[10px] text-rose-300">
                       stale age filter must be a positive integer (seconds).
+                    </p>
+                  ) : null}
+                  {hasInvalidCacheStalePreviewSampleLimitInput ? (
+                    <p className="mb-2 text-[10px] text-rose-300">
+                      stale sample limit must be a positive integer.
                     </p>
                   ) : null}
                   {cachePrefixRemovalPreview ? (
