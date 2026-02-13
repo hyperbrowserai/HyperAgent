@@ -93,6 +93,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "ISNUMBER",
   "ISTEXT",
   "TODAY",
+  "NOW",
   "DATE",
   "YEAR",
   "MONTH",

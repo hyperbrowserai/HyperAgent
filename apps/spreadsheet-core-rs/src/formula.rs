@@ -165,6 +165,14 @@ pub fn parse_today_formula(formula: &str) -> Option<()> {
   None
 }
 
+pub fn parse_now_formula(formula: &str) -> Option<()> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "NOW" && args.is_empty() {
+    return Some(());
+  }
+  None
+}
+
 pub fn parse_vlookup_formula(formula: &str) -> Option<VLookupFormula> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "VLOOKUP" || !(args.len() == 3 || args.len() == 4) {
@@ -728,7 +736,7 @@ mod tests {
     parse_sqrt_formula,
     parse_countifs_formula, parse_sumif_formula, parse_sumifs_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
-    parse_today_formula, parse_vlookup_formula,
+    parse_today_formula, parse_now_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
     parse_year_formula, parse_upper_formula, parse_trim_formula,
   };
@@ -778,6 +786,8 @@ mod tests {
   fn should_parse_today_and_vlookup_formulas() {
     assert!(parse_today_formula("=TODAY()").is_some());
     assert!(parse_today_formula("=TODAY(1)").is_none());
+    assert!(parse_now_formula("=NOW()").is_some());
+    assert!(parse_now_formula("=NOW(1)").is_none());
 
     let parsed = parse_vlookup_formula("=VLOOKUP(A2, D2:E6, 2, FALSE)")
       .expect("vlookup formula should parse");

@@ -22,7 +22,8 @@ use crate::{
     parse_trunc_formula,
     parse_sqrt_formula,
     parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
-    parse_today_formula, parse_upper_formula, parse_vlookup_formula,
+    parse_today_formula, parse_now_formula, parse_upper_formula,
+    parse_vlookup_formula,
     parse_xlookup_formula, parse_year_formula, ConditionalAggregateFormula,
     HLookupFormula, IndexFormula, MatchFormula, MultiCriteriaAggregateFormula,
     VLookupFormula, XLookupFormula,
@@ -351,6 +352,10 @@ fn evaluate_formula(
 
   if parse_today_formula(formula).is_some() {
     return Ok(Some(Utc::now().date_naive().to_string()));
+  }
+
+  if parse_now_formula(formula).is_some() {
+    return Ok(Some(Utc::now().to_rfc3339()));
   }
 
   if let Some(vlookup_formula) = parse_vlookup_formula(formula) {
@@ -1778,7 +1783,7 @@ fn json_value_to_string(value: &Value) -> Result<String, String> {
 mod tests {
   use super::{get_cells, recalculate_formulas, set_cells};
   use crate::models::{CellMutation, CellRange};
-  use chrono::NaiveDate;
+  use chrono::{DateTime, NaiveDate};
   use duckdb::Connection;
   use serde_json::json;
   use std::path::PathBuf;
@@ -2237,12 +2242,18 @@ mod tests {
         value: None,
         formula: Some("=XOR(A1>=100,A2>=100)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 68,
+        value: None,
+        formula: Some("=NOW()".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 65);
+    assert_eq!(updated_cells, 66);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -2256,7 +2267,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 67,
+        end_col: 68,
       },
     )
     .expect("cells should be fetched");
@@ -2352,6 +2363,14 @@ mod tests {
     assert_eq!(by_position(1, 65).evaluated_value.as_deref(), Some("false"));
     assert_eq!(by_position(1, 66).evaluated_value.as_deref(), Some("true"));
     assert_eq!(by_position(1, 67).evaluated_value.as_deref(), Some("true"));
+    let now_value = by_position(1, 68)
+      .evaluated_value
+      .as_deref()
+      .expect("now formula should evaluate");
+    assert!(
+      DateTime::parse_from_rfc3339(now_value).is_ok(),
+      "now formula should produce an RFC3339 timestamp",
+    );
   }
 
   #[test]
