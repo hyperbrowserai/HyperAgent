@@ -119,6 +119,24 @@ describe("resolveXPathWithCDP", () => {
     );
   });
 
+  it("truncates oversized CDP session acquisition diagnostics", async () => {
+    const session = createSession();
+    const client = {
+      ...createClient(session),
+      acquireSession: jest.fn(async () => {
+        throw new Error(`x${"y".repeat(2_000)}\nsession failure`);
+      }),
+    } as CDPClient;
+
+    await expect(
+      resolveXPathWithCDP({
+        xpath: "//button[1]",
+        frameIndex: 0,
+        cdpClient: client,
+      })
+    ).rejects.toThrow(/\[truncated/);
+  });
+
   it("throws when iframe execution context is missing", async () => {
     const session = createSession();
     const client = createClient(session);
@@ -190,6 +208,36 @@ describe("resolveXPathWithCDP", () => {
     ).rejects.toThrow(
       "Failed while waiting for execution context (frame-1): wait failed"
     );
+  });
+
+  it("truncates oversized execution-context wait diagnostics", async () => {
+    const session = createSession();
+    const client = createClient(session);
+    const manager = {
+      getFrameByIndex: jest.fn(() => ({ frameId: "frame-1" })),
+      waitForExecutionContext: jest.fn(async () => {
+        throw new Error(`x${"y".repeat(2_000)}\nwait failed`);
+      }),
+      getFrameIndex: jest.fn(() => 1),
+      frameGraph: {
+        getAllFrames: jest.fn(() => [
+          {
+            frameId: "frame-1",
+            parentFrameId: null,
+            lastUpdated: Date.now(),
+          },
+        ]),
+      },
+    } as unknown as FrameContextManager;
+
+    await expect(
+      resolveXPathWithCDP({
+        xpath: "//button[1]",
+        frameIndex: 1,
+        cdpClient: client,
+        frameContextManager: manager,
+      })
+    ).rejects.toThrow(/\[truncated/);
   });
 
   it("falls back to empty frame diagnostics when frame graph access traps throw", async () => {

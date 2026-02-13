@@ -3,6 +3,8 @@ import { FrameContextManager } from "@/cdp/frame-context-manager";
 import { HyperagentError } from "../error";
 import { formatUnknownError } from "@/utils";
 
+const MAX_XPATH_CDP_DIAGNOSTIC_CHARS = 400;
+
 export interface ResolvedCDPFromXPath {
   backendNodeId: number;
   frameId: string;
@@ -15,6 +17,25 @@ export interface ResolveXPathWithCDPParams {
   cdpClient: CDPClient;
   frameContextManager?: FrameContextManager;
   debug?: boolean;
+}
+
+function formatXPathCDPDiagnostic(value: unknown): string {
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_XPATH_CDP_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_XPATH_CDP_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_XPATH_CDP_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
 }
 
 export async function resolveXPathWithCDP(
@@ -30,7 +51,7 @@ export async function resolveXPathWithCDP(
     session = await cdpClient.acquireSession("dom");
   } catch (error) {
     throw new HyperagentError(
-      `Failed to acquire CDP session for XPath resolution: ${formatUnknownError(
+      `Failed to acquire CDP session for XPath resolution: ${formatXPathCDPDiagnostic(
         error
       )}`,
       500
@@ -89,7 +110,7 @@ export async function resolveXPathWithCDP(
     });
   } catch (error) {
     throw new HyperagentError(
-      `Failed to evaluate XPath in frame ${normalizedFrameIndex}: ${formatUnknownError(
+      `Failed to evaluate XPath in frame ${normalizedFrameIndex}: ${formatXPathCDPDiagnostic(
         error
       )}`,
       500
@@ -111,7 +132,7 @@ export async function resolveXPathWithCDP(
     }>("DOM.describeNode", { objectId });
   } catch (error) {
     throw new HyperagentError(
-      `Failed to describe resolved XPath node in frame ${normalizedFrameIndex}: ${formatUnknownError(
+      `Failed to describe resolved XPath node in frame ${normalizedFrameIndex}: ${formatXPathCDPDiagnostic(
         error
       )}`,
       500
@@ -161,7 +182,7 @@ async function safeWaitForExecutionContext(
     return await frameContextManager.waitForExecutionContext(targetFrameId);
   } catch (error) {
     throw new HyperagentError(
-      `Failed while waiting for execution context (${targetFrameId}): ${formatUnknownError(
+      `Failed while waiting for execution context (${targetFrameId}): ${formatXPathCDPDiagnostic(
         error
       )}`,
       500
