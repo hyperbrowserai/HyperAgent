@@ -390,4 +390,20 @@ describe("loadMCPServersFromFile", () => {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("throws when config file exceeds maximum allowed size", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-mcp-config-")
+    );
+    const filePath = path.join(tempDir, "mcp.json");
+    await fs.promises.writeFile(filePath, "x".repeat(1_000_001), "utf-8");
+
+    try {
+      await expect(loadMCPServersFromFile(filePath)).rejects.toThrow(
+        `Invalid MCP config file "${filePath}": config exceeds 1000000 characters.`
+      );
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

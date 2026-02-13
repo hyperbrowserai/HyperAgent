@@ -2,6 +2,8 @@ import fs from "node:fs";
 import { MCPServerConfig } from "@/types/config";
 import { formatUnknownError } from "@/utils";
 
+const MAX_MCP_CONFIG_FILE_CHARS = 1_000_000;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -313,6 +315,12 @@ export async function loadMCPServersFromFile(
   } catch (error) {
     throw new Error(
       `Failed to read MCP config file "${filePath}": ${formatUnknownError(error)}`
+    );
+  }
+
+  if (fileContent.length > MAX_MCP_CONFIG_FILE_CHARS) {
+    throw new Error(
+      `Invalid MCP config file "${filePath}": config exceeds ${MAX_MCP_CONFIG_FILE_CHARS} characters.`
     );
   }
 
