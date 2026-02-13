@@ -1,5 +1,6 @@
 import {
   AgentOpsResponse,
+  AgentOperationPreview,
   AgentSchemaInfo,
   AgentPresetInfo,
   AgentPresetResponse,
@@ -223,6 +224,22 @@ export async function getWizardPresets(): Promise<AgentPresetInfo[]> {
 export async function getWizardSchema(): Promise<AgentWizardSchemaInfo> {
   const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/schema`);
   return parseJsonResponse<AgentWizardSchemaInfo>(response);
+}
+
+export async function getWizardScenarioOperations(
+  scenario: string,
+  includeFileBase64: boolean,
+): Promise<AgentOperationPreview[]> {
+  const query = new URLSearchParams({
+    include_file_base64: String(includeFileBase64),
+  });
+  const response = await fetch(
+    `${API_BASE_URL}/v1/agent/wizard/scenarios/${scenario}/operations?${query.toString()}`,
+  );
+  const data = await parseJsonResponse<{ operations: AgentOperationPreview[] }>(
+    response,
+  );
+  return data.operations;
 }
 
 interface AgentScenarioRequest {

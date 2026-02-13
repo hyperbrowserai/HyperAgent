@@ -100,3 +100,8 @@ export interface AgentWizardSchemaInfo {
   presets: AgentPresetInfo[];
   scenarios: AgentScenarioInfo[];
 }
+
+export interface AgentOperationPreview {
+  op_type: string;
+  [key: string]: unknown;
+}

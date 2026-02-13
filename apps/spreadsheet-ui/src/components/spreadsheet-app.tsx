@@ -15,6 +15,7 @@ import {
   getAgentPresets,
   getAgentScenarios,
   getWizardPresets,
+  getWizardScenarioOperations,
   getWizardSchema,
   getWizardScenarios,
   getCells,
@@ -144,6 +145,12 @@ export function SpreadsheetApp() {
     queryFn: getWizardSchema,
   });
 
+  const wizardScenarioOpsQuery = useQuery({
+    queryKey: ["wizard-scenario-ops", wizardScenario],
+    enabled: wizardScenario.length > 0,
+    queryFn: () => getWizardScenarioOperations(wizardScenario, false),
+  });
+
   useEffect(() => {
     if (!workbook && !createWorkbookMutation.isPending) {
       createWorkbookMutation.mutate();
@@ -230,6 +237,7 @@ export function SpreadsheetApp() {
     }
     return eventLog.filter((event) => event.event_type === eventFilter);
   }, [eventFilter, eventLog]);
+  const wizardScenarioOps = wizardScenarioOpsQuery.data ?? [];
 
   const statusText =
     createWorkbookMutation.isPending || importMutation.isPending
@@ -757,6 +765,23 @@ export function SpreadsheetApp() {
                     preset: {presetInfo.preset}
                   </span>
                 ))}
+              </div>
+            ) : null}
+            {wizardScenarioOps.length > 0 ? (
+              <div className="mt-2">
+                <p className="mb-1 text-[11px] text-slate-500">
+                  scenario operation preview
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {wizardScenarioOps.map((operation, index) => (
+                    <span
+                      key={`${operation.op_type}-${index}`}
+                      className="rounded border border-indigo-500/30 bg-indigo-500/15 px-2 py-0.5 text-[11px] text-indigo-100"
+                    >
+                      {index + 1}. {operation.op_type}
+                    </span>
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>
