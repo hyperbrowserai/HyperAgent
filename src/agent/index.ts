@@ -104,6 +104,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private _currentPage: Page | null = null;
   private _variables: Record<string, HyperVariable> = {};
   private errorEmitter: ErrorEmitter;
+  private static readonly TASK_STATUS_VALUES = new Set<string>(
+    Object.values(TaskStatus)
+  );
 
   private safeGetPageUrl(page: Page): string {
     try {
@@ -116,6 +119,45 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     } catch {
       return "about:blank";
     }
+  }
+
+  private safeIsPageClosed(page: Page): boolean {
+    try {
+      return page.isClosed();
+    } catch {
+      return false;
+    }
+  }
+
+  private readTaskStatus(
+    taskState: TaskState,
+    fallback: TaskStatus = TaskStatus.FAILED
+  ): TaskStatus {
+    try {
+      const value = taskState.status;
+      if (
+        typeof value === "string" &&
+        HyperAgent.TASK_STATUS_VALUES.has(value)
+      ) {
+        return value as TaskStatus;
+      }
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private writeTaskStatus(
+    taskState: TaskState,
+    nextStatus: TaskStatus,
+    fallback: TaskStatus = TaskStatus.FAILED
+  ): TaskStatus {
+    try {
+      taskState.status = nextStatus;
+    } catch {
+      return fallback;
+    }
+    return this.readTaskStatus(taskState, fallback);
   }
 
   private attachPageListenerForTask(
@@ -565,8 +607,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     });
     for (const taskId in this.tasks) {
       const task = this.tasks[taskId];
-      if (!endTaskStatuses.has(task.status)) {
-        task.status = TaskStatus.CANCELLED;
+      const currentStatus = this.readTaskStatus(task, TaskStatus.FAILED);
+      if (!endTaskStatuses.has(currentStatus)) {
+        this.writeTaskStatus(task, TaskStatus.CANCELLED, currentStatus);
       }
     }
 
@@ -624,12 +667,21 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     // Poll context for new pages to catch any that opened since the last check
     // This handles race conditions where the 'page' event might not have fired yet
     // or where we missed it during a heavy operation.
-    const pages = this.context.pages();
+    let pages: Page[] = [];
+    try {
+      pages = Array.from(this.context.pages());
+    } catch {
+      pages = [];
+    }
     if (pages.length > 0) {
       const lastPage = pages[pages.length - 1];
       // If the last page is different and not closed, switch to it
       // We prefer the newest page as it's likely the result of the user's last action
-      if (lastPage && !lastPage.isClosed() && lastPage !== this._currentPage) {
+      if (
+        lastPage &&
+        !this.safeIsPageClosed(lastPage) &&
+        lastPage !== this._currentPage
+      ) {
         if (this.debug) {
           console.log(
             `[HyperAgent] Polling detected new page, switching focus: ${this.safeGetPageUrl(
@@ -641,12 +693,20 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     }
 
-    if (!this.currentPage || this.currentPage.isClosed()) {
-      this._currentPage = await this.context.newPage();
+    const currentPage = this.currentPage;
+    if (!currentPage || this.safeIsPageClosed(currentPage)) {
+      try {
+        this._currentPage = await this.context.newPage();
+      } catch (error) {
+        throw new HyperagentError(
+          `Failed to create current page: ${formatUnknownError(error)}`,
+          500
+        );
+      }
 
       return this.setupHyperPage(this._currentPage);
     }
-    return this.currentPage;
+    return currentPage;
   }
 
   /**
@@ -664,24 +724,27 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     return {
       id: taskId,
-      getStatus: () => taskState.status,
+      getStatus: () => this.readTaskStatus(taskState, TaskStatus.FAILED),
       pause: () => {
-        if (taskState.status === TaskStatus.RUNNING) {
-          taskState.status = TaskStatus.PAUSED;
+        const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
+        if (status === TaskStatus.RUNNING) {
+          return this.writeTaskStatus(taskState, TaskStatus.PAUSED, status);
         }
-        return taskState.status;
+        return status;
       },
       resume: () => {
-        if (taskState.status === TaskStatus.PAUSED) {
-          taskState.status = TaskStatus.RUNNING;
+        const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
+        if (status === TaskStatus.PAUSED) {
+          return this.writeTaskStatus(taskState, TaskStatus.RUNNING, status);
         }
-        return taskState.status;
+        return status;
       },
       cancel: () => {
-        if (taskState.status !== TaskStatus.COMPLETED) {
-          taskState.status = TaskStatus.CANCELLED;
+        const status = this.readTaskStatus(taskState, TaskStatus.FAILED);
+        if (status !== TaskStatus.COMPLETED) {
+          return this.writeTaskStatus(taskState, TaskStatus.CANCELLED, status);
         }
-        return taskState.status;
+        return status;
       },
       result,
       emitter: this.errorEmitter,
@@ -763,7 +826,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         const taskFailureError =
           new HyperagentTaskError(taskId, normalizedTaskError);
         if (failedTaskState) {
-          failedTaskState.status = TaskStatus.FAILED;
+          this.writeTaskStatus(failedTaskState, TaskStatus.FAILED);
           failedTaskState.error = taskFailureError.cause.message;
           // Emit error on the central emitter, including the taskId
           this.errorEmitter.emit("error", taskFailureError);
@@ -849,7 +912,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return result;
     } catch (error) {
       cleanup();
-      taskState.status = TaskStatus.FAILED;
+      this.writeTaskStatus(taskState, TaskStatus.FAILED);
       delete this.tasks[taskId];
       throw error;
     }

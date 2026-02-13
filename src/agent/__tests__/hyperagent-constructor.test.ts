@@ -5,7 +5,7 @@ import { getDebugOptions, setDebugOptions } from "@/debug/options";
 import type { AgentActionDefinition } from "@/types";
 import type { HyperAgentLLM } from "@/llm/types";
 import { runAgentTask } from "@/agent/tools/agent";
-import { TaskStatus } from "@/types/agent/types";
+import { TaskStatus, type AgentTaskOutput } from "@/types/agent/types";
 import { HyperagentError, HyperagentTaskError } from "@/agent/error";
 import type { ActionCacheEntry } from "@/types/agent/types";
 
@@ -867,5 +867,140 @@ describe("HyperAgent constructor and task controls", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+
+  it("getCurrentPage tolerates context.pages traps when current page exists", async () => {
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: jest.fn(),
+        off: jest.fn(),
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+      url: () => "https://example.com",
+    } as unknown as Page;
+    const newPage = jest.fn();
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[]; newPage: typeof newPage } | null;
+      _currentPage: Page | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => {
+        throw new Error("pages trap");
+      },
+      newPage,
+    };
+    internalAgent._currentPage = page;
+
+    const currentPage = await agent.getCurrentPage();
+
+    expect(currentPage).toBe(page);
+    expect(newPage).not.toHaveBeenCalled();
+  });
+
+  it("getCurrentPage surfaces readable errors when newPage creation fails", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: {
+        pages: () => Page[];
+        newPage: () => Promise<Page>;
+      } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [],
+      newPage: async () => {
+        throw new Error("new current page trap");
+      },
+    };
+
+    await expect(agent.getCurrentPage()).rejects.toThrow(
+      "Failed to create current page: new current page trap"
+    );
+  });
+
+  it("task controls return safe status when task state traps throw", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTaskResult!: (value: AgentTaskOutput) => void;
+    const pendingResult = new Promise<AgentTaskOutput>((resolve) => {
+      resolveTaskResult = resolve;
+    });
+    mockedRunAgentTask.mockReturnValue(pendingResult);
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", undefined, fakePage);
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, { status: TaskStatus }>;
+    };
+    const trappedTaskState = internalAgent.tasks[task.id];
+    Object.defineProperty(trappedTaskState, "status", {
+      configurable: true,
+      get: () => {
+        throw new Error("status trap");
+      },
+      set: () => {
+        throw new Error("status set trap");
+      },
+    });
+
+    expect(task.getStatus()).toBe(TaskStatus.FAILED);
+    expect(task.pause()).toBe(TaskStatus.FAILED);
+    expect(task.resume()).toBe(TaskStatus.FAILED);
+    expect(task.cancel()).toBe(TaskStatus.FAILED);
+
+    resolveTaskResult({
+      taskId: task.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.COMPLETED,
+    });
+  });
+
+  it("closeAgent tolerates trap-prone task status fields", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      tasks: Record<string, { status: TaskStatus }>;
+    };
+    internalAgent.tasks["task-a"] = {
+      status: TaskStatus.RUNNING,
+    };
+    const trappedTask = {};
+    Object.defineProperty(trappedTask, "status", {
+      configurable: true,
+      get: () => {
+        throw new Error("close status trap");
+      },
+      set: () => {
+        throw new Error("close status trap");
+      },
+    });
+    internalAgent.tasks["task-b"] = trappedTask as { status: TaskStatus };
+
+    await expect(agent.closeAgent()).resolves.toBeUndefined();
+    expect(internalAgent.tasks["task-a"]?.status).toBe(TaskStatus.CANCELLED);
   });
 });
