@@ -1135,6 +1135,31 @@ describe("HyperAgent constructor and task controls", () => {
     ).toThrow("Variable key must be a non-empty string");
   });
 
+  it("truncates oversized variable-set diagnostics", () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      _variables: Record<string, unknown>;
+    };
+    internalAgent._variables = new Proxy(
+      {},
+      {
+        set: () => {
+          throw new Error("x".repeat(2_000));
+        },
+      }
+    );
+
+    expect(() =>
+      agent.addVariable({
+        key: "email",
+        value: "person@example.com",
+        description: "Email",
+      })
+    ).toThrow(/\[truncated/);
+  });
+
   it("returns null action cache for invalid cache identifiers", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
@@ -1232,6 +1257,24 @@ describe("HyperAgent constructor and task controls", () => {
     );
   });
 
+  it("truncates oversized getPages context diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => {
+        throw new Error("x".repeat(2_000));
+      },
+    };
+
+    await expect(agent.getPages()).rejects.toThrow(/\[truncated/);
+  });
+
   it("surfaces readable errors when newPage creation fails", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
@@ -1276,6 +1319,32 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(agent.initBrowser()).rejects.toThrow(
       "Failed to start browser provider: start trap"
     );
+    expect(internalAgent.browser).toBeNull();
+    expect(internalAgent.context).toBeNull();
+  });
+
+  it("initBrowser truncates oversized browser-provider start diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browserProvider: {
+        start: () => Promise<unknown>;
+        close: () => Promise<void>;
+        getSession: () => unknown;
+      };
+      browser: unknown;
+      context: unknown;
+    };
+    internalAgent.browserProvider = {
+      start: async () => {
+        throw new Error("x".repeat(2_000));
+      },
+      close: async () => undefined,
+      getSession: () => null,
+    };
+
+    await expect(agent.initBrowser()).rejects.toThrow(/\[truncated/);
     expect(internalAgent.browser).toBeNull();
     expect(internalAgent.context).toBeNull();
   });

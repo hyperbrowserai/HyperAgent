@@ -312,7 +312,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       ).call(this.browserProvider);
     } catch (error) {
       throw new HyperagentError(
-        `Failed to start browser provider: ${formatUnknownError(error)}`,
+        `Failed to start browser provider: ${this.formatLifecycleDiagnostic(error)}`,
         500
       );
     }
@@ -337,7 +337,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       );
     } catch (error) {
       throw new HyperagentError(
-        `Failed to list browser contexts: ${formatUnknownError(error)}`,
+        `Failed to list browser contexts: ${this.formatLifecycleDiagnostic(error)}`,
         500
       );
     }
@@ -363,7 +363,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       });
     } catch (error) {
       throw new HyperagentError(
-        `Failed to create browser context: ${formatUnknownError(error)}`,
+        `Failed to create browser context: ${this.formatLifecycleDiagnostic(error)}`,
         500
       );
     }
@@ -403,7 +403,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       );
     } catch (error) {
       throw new HyperagentError(
-        `Failed to close browser provider: ${formatUnknownError(error)}`,
+        `Failed to close browser provider: ${this.formatLifecycleDiagnostic(error)}`,
         500
       );
     }
@@ -706,7 +706,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.tasks[taskId] = taskState;
     } catch (error) {
       throw new HyperagentError(
-        `Failed to register task state ${taskId}: ${formatUnknownError(error)}`,
+        `Failed to register task state ${taskId}: ${this.formatLifecycleDiagnostic(error)}`,
         500
       );
     }
@@ -900,7 +900,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         typeof pageOrGetter === "function" ? pageOrGetter() : pageOrGetter;
     } catch (error) {
       throw new HyperagentError(
-        `Failed to resolve action page: ${formatUnknownError(error)}`,
+        `Failed to resolve action page: ${this.formatHelperDiagnostic(error)}`,
         400
       );
     }
@@ -1122,7 +1122,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this._variables[key] = variable;
     } catch (error) {
       throw new HyperagentError(
-        `Failed to set variable "${key}": ${formatUnknownError(error)}`,
+        `Failed to set variable "${key}": ${this.formatHelperDiagnostic(error)}`,
         500
       );
     }
@@ -1226,7 +1226,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       pages = Array.from(this.context.pages());
     } catch (error) {
       throw new HyperagentError(
-        `Failed to list pages from context: ${formatUnknownError(error)}`,
+        `Failed to list pages from context: ${this.formatLifecycleDiagnostic(error)}`,
         500
       );
     }
@@ -1249,7 +1249,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       page = await this.context.newPage();
     } catch (error) {
       throw new HyperagentError(
-        `Failed to create new page: ${formatUnknownError(error)}`,
+        `Failed to create new page: ${this.formatLifecycleDiagnostic(error)}`,
         500
       );
     }
@@ -1366,7 +1366,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         this._currentPage = await this.context.newPage();
       } catch (error) {
         throw new HyperagentError(
-          `Failed to create current page: ${formatUnknownError(error)}`,
+          `Failed to create current page: ${this.formatLifecycleDiagnostic(error)}`,
           500
         );
       }
