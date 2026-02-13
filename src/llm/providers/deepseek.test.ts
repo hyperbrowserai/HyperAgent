@@ -73,6 +73,23 @@ describe("DeepSeekClient", () => {
     ]);
   });
 
+  it("formats object content payloads instead of returning [object Object]", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: { state: "object-content" },
+          },
+        },
+      ],
+    });
+
+    const client = new DeepSeekClient({ model: "deepseek-test" });
+    const result = await client.invoke([{ role: "user", content: "hello" }]);
+
+    expect(result.content).toBe('{"state":"object-content"}');
+  });
+
   it("throws readable errors for unknown tool call payloads", async () => {
     createCompletionMock.mockResolvedValue({
       choices: [

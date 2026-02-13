@@ -68,6 +68,23 @@ describe("OpenAIClient", () => {
     expect(firstPart?.text).toContain('"self":"[Circular]"');
   });
 
+  it("formats object content payloads instead of returning [object Object]", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: { state: "object-content" },
+          },
+        },
+      ],
+    });
+
+    const client = new OpenAIClient({ model: "gpt-test" });
+    const result = await client.invoke([{ role: "user", content: "hello" }]);
+
+    expect(result.content).toBe('{"state":"object-content"}');
+  });
+
   it("preserves malformed tool call arguments as raw strings", async () => {
     createCompletionMock.mockResolvedValue({
       choices: [

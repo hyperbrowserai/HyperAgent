@@ -3,14 +3,14 @@ import { z } from "zod";
 import {
   HyperAgentLLM,
   HyperAgentMessage,
+  HyperAgentContentPart,
   HyperAgentStructuredResult,
   HyperAgentCapabilities,
   StructuredOutputRequest,
-  HyperAgentContentPart,
 } from "../types";
 import { convertToOpenAIMessages } from "../utils/message-converter";
 import { convertToOpenAIJsonSchema } from "../utils/schema-converter";
-import { parseJsonMaybe } from "../utils/safe-json";
+import { normalizeOpenAICompatibleContent } from "../utils/openai-content";
 import { normalizeOpenAIToolCalls } from "../utils/openai-tool-calls";
 import { parseStructuredResponse } from "../utils/structured-response";
 import { getDebugOptions } from "@/debug/options";
@@ -42,42 +42,6 @@ export interface OpenAIClientConfig {
   temperature?: number;
   maxTokens?: number;
   baseURL?: string;
-}
-
-/**
- * Convert OpenAI's content format back to HyperAgentContentPart format
- */
-function convertFromOpenAIContent(
-  content: any
-): string | HyperAgentContentPart[] {
-  if (typeof content === "string") {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    return content.map((part: any) => {
-      if (part.type === "text") {
-        return { type: "text", text: part.text };
-      } else if (part.type === "image_url") {
-        return {
-          type: "image",
-          url: part.image_url.url,
-          mimeType: "image/png", // Default, could be extracted from URL if needed
-        };
-      } else if (part.type === "tool_call") {
-        return {
-          type: "tool_call",
-          toolName: part.function?.name ?? "unknown-tool",
-          arguments: parseJsonMaybe(part.function?.arguments),
-        };
-      }
-      // Fallback for unknown types
-      return { type: "text", text: formatUnknownError(part) };
-    });
-  }
-
-  // Fallback for unexpected content types
-  return String(content);
 }
 
 export class OpenAIClient implements HyperAgentLLM {
@@ -134,7 +98,7 @@ export class OpenAIClient implements HyperAgentLLM {
 
     return {
       role: "assistant",
-      content: convertFromOpenAIContent(message.content),
+      content: normalizeOpenAICompatibleContent(message.content),
       toolCalls,
       usage: {
         inputTokens: response.usage?.prompt_tokens,
