@@ -56,10 +56,12 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent integration panel lists paged cached request IDs/signature prefixes plus per-entry operation/result counts with prefix + age filtering, newer/older pagination, and inspect/replay/rerun/copy/copy-ops/single-entry remove controls
 - Cache entries pager shows scoped totals and global totals when filters narrow results
 - Prefix suggestion row shows scoped/global prefix totals and active prefix scope echo when filters narrow suggestions
+- Prefix suggestion row supports optional minimum-match filtering (`min prefix count`) for high-signal cache triage
 - Prefix suggestion row now shows an explicit empty-scope hint when active prefix/age filters yield zero suggestions
 - Cache age-filter control validates positive integer seconds inline
 - Prefix preview/remove actions are blocked while age-filter input is invalid
 - Cache entries/prefix suggestion queries pause while age-filter input is invalid
+- Prefix suggestion queries also pause while min-prefix-count input is invalid
 - Cache entries list and prefix suggestions are hidden while age-filter input is invalid
 - Stale preview/remove actions are blocked while stale-age input is invalid
 - Prefix/stale sample-limit inputs now enforce positive integer validation before preview/remove actions

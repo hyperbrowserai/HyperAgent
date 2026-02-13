@@ -572,6 +572,7 @@ impl AppState {
     workbook_id: Uuid,
     request_id_prefix: Option<&str>,
     cutoff_timestamp: Option<DateTime<Utc>>,
+    min_entry_count: usize,
     limit: usize,
   ) -> Result<(usize, usize, Vec<(String, usize, String, Option<DateTime<Utc>>)>), ApiError> {
     let guard = self.workbooks.read().await;
@@ -622,7 +623,6 @@ impl AppState {
       );
     }
 
-    let total_prefixes = prefix_counts.len();
     let unscoped_total_prefixes = unscoped_prefix_counts.len();
     let mut prefixes = prefix_counts
       .into_iter()
@@ -638,6 +638,8 @@ impl AppState {
         (prefix, entry_count, newest_request_id, newest_cached_at)
       })
       .collect::<Vec<_>>();
+    prefixes.retain(|(_, entry_count, _, _)| *entry_count >= min_entry_count);
+    let total_prefixes = prefixes.len();
     prefixes.sort_by(|left, right| {
       right
         .1
@@ -1097,7 +1099,7 @@ mod tests {
     }
 
     let (total_prefixes, unscoped_total_prefixes, prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, 5)
       .await
       .expect("prefix suggestions should load");
     assert_eq!(total_prefixes, 2);
@@ -1114,7 +1116,7 @@ mod tests {
 
     let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
     let (filtered_total_prefixes, filtered_unscoped_total_prefixes, filtered_prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, Some(cutoff_timestamp), 5)
+      .agent_ops_cache_prefixes(workbook.id, None, Some(cutoff_timestamp), 1, 5)
       .await
       .expect("age-filtered prefixes should load");
     assert_eq!(filtered_total_prefixes, 0);
@@ -1122,7 +1124,7 @@ mod tests {
     assert!(filtered_prefixes.is_empty());
 
     let (prefix_scoped_total_prefixes, prefix_scoped_unscoped_total_prefixes, prefix_scoped_prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, Some("scenario-"), None, 5)
+      .agent_ops_cache_prefixes(workbook.id, Some("scenario-"), None, 1, 5)
       .await
       .expect("prefix-scoped suggestions should load");
     assert_eq!(prefix_scoped_total_prefixes, 1);
@@ -1132,6 +1134,20 @@ mod tests {
     assert_eq!(prefix_scoped_prefixes[0].1, 2);
     assert_eq!(prefix_scoped_prefixes[0].2, "scenario-b");
     assert!(prefix_scoped_prefixes[0].3.is_some());
+
+    let (
+      min_filtered_total_prefixes,
+      min_filtered_unscoped_total_prefixes,
+      min_filtered_prefixes,
+    ) = state
+      .agent_ops_cache_prefixes(workbook.id, None, None, 3, 5)
+      .await
+      .expect("min-entry-count filtered suggestions should load");
+    assert_eq!(min_filtered_total_prefixes, 1);
+    assert_eq!(min_filtered_unscoped_total_prefixes, 2);
+    assert_eq!(min_filtered_prefixes.len(), 1);
+    assert_eq!(min_filtered_prefixes[0].0, "preset-");
+    assert_eq!(min_filtered_prefixes[0].1, 3);
   }
 
   #[tokio::test]

@@ -1055,7 +1055,7 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
-    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&limit=8&max_age_seconds=3600",
+    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&limit=8&max_age_seconds=3600",
     "agent_ops_cache_stats_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter stats to entries older than or equal to this age)"
@@ -1068,6 +1068,7 @@ async fn get_agent_schema(
     },
     "agent_ops_cache_prefixes_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
+      "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
       "limit": "optional number, default 8, max 100"
     },
@@ -1120,6 +1121,7 @@ async fn get_agent_schema(
       "unscoped_total_prefixes": "total distinct prefixes without prefix/age filters",
       "returned_prefixes": "number of prefixes returned",
       "request_id_prefix": "echoed filter prefix when provided",
+      "min_entry_count": "applied minimum entry count filter (default 1)",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "limit": "applied limit (default 8, max 100)",
@@ -1225,6 +1227,7 @@ async fn get_agent_schema(
       "INVALID_REQUEST_ID",
       "INVALID_NEW_REQUEST_ID",
       "INVALID_MAX_AGE_SECONDS",
+      "INVALID_MIN_ENTRY_COUNT",
       "INVALID_REQUEST_ID_PREFIX",
       "CACHE_ENTRY_NOT_FOUND"
     ],
@@ -1527,6 +1530,7 @@ struct AgentOpsCacheEntriesQuery {
 #[derive(Debug, Clone, serde::Deserialize)]
 struct AgentOpsCachePrefixesQuery {
   request_id_prefix: Option<String>,
+  min_entry_count: Option<usize>,
   max_age_seconds: Option<i64>,
   limit: Option<usize>,
 }
@@ -1687,6 +1691,13 @@ async fn agent_ops_cache_prefixes(
     ));
   }
   let cutoff_timestamp = max_age_cutoff_timestamp(query.max_age_seconds)?;
+  let min_entry_count = query.min_entry_count.unwrap_or(1);
+  if min_entry_count == 0 {
+    return Err(ApiError::bad_request_with_code(
+      "INVALID_MIN_ENTRY_COUNT",
+      "min_entry_count must be greater than zero when provided.",
+    ));
+  }
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
@@ -1696,6 +1707,7 @@ async fn agent_ops_cache_prefixes(
       workbook_id,
       normalized_prefix.as_deref(),
       cutoff_timestamp,
+      min_entry_count,
       limit,
     )
     .await?;
@@ -1715,6 +1727,7 @@ async fn agent_ops_cache_prefixes(
     unscoped_total_prefixes,
     returned_prefixes: mapped_prefixes.len(),
     request_id_prefix: normalized_prefix,
+    min_entry_count,
     max_age_seconds: query.max_age_seconds,
     cutoff_timestamp,
     limit,
@@ -2852,6 +2865,7 @@ mod tests {
       Path(workbook.id),
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: Some("   ".to_string()),
+        min_entry_count: None,
         max_age_seconds: None,
         limit: Some(10),
       }),
@@ -2897,6 +2911,7 @@ mod tests {
       Path(workbook.id),
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: None,
+        min_entry_count: None,
         max_age_seconds: None,
         limit: Some(10),
       }),
@@ -2909,6 +2924,7 @@ mod tests {
     assert_eq!(prefixes.unscoped_total_prefixes, 2);
     assert_eq!(prefixes.returned_prefixes, 2);
     assert_eq!(prefixes.request_id_prefix, None);
+    assert_eq!(prefixes.min_entry_count, 1);
     assert_eq!(prefixes.max_age_seconds, None);
     assert!(prefixes.cutoff_timestamp.is_none());
     assert_eq!(prefixes.prefixes[0].prefix, "scenario-");
@@ -2925,6 +2941,7 @@ mod tests {
       Path(workbook.id),
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: None,
+        min_entry_count: None,
         max_age_seconds: Some(86_400),
         limit: Some(10),
       }),
@@ -2933,6 +2950,7 @@ mod tests {
     .expect("age-filtered prefixes should load")
     .0;
     assert_eq!(age_filtered.max_age_seconds, Some(86_400));
+    assert_eq!(age_filtered.min_entry_count, 1);
     assert!(age_filtered.cutoff_timestamp.is_some());
     assert_eq!(age_filtered.total_prefixes, 0);
     assert_eq!(age_filtered.unscoped_total_prefixes, 2);
@@ -2944,6 +2962,7 @@ mod tests {
       Path(workbook.id),
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: Some("scenario-".to_string()),
+        min_entry_count: None,
         max_age_seconds: None,
         limit: Some(10),
       }),
@@ -2957,17 +2976,39 @@ mod tests {
       prefix_filtered.request_id_prefix.as_deref(),
       Some("scenario-"),
     );
+    assert_eq!(prefix_filtered.min_entry_count, 1);
     assert_eq!(prefix_filtered.prefixes.len(), 1);
     assert_eq!(prefix_filtered.prefixes[0].prefix, "scenario-");
     assert_eq!(prefix_filtered.prefixes[0].entry_count, 2);
     assert_eq!(prefix_filtered.prefixes[0].newest_request_id, "scenario-b");
     assert!(prefix_filtered.prefixes[0].newest_cached_at.is_some());
 
-    let invalid_error = agent_ops_cache_prefixes(
-      State(state),
+    let min_filtered = agent_ops_cache_prefixes(
+      State(state.clone()),
       Path(workbook.id),
       Query(AgentOpsCachePrefixesQuery {
         request_id_prefix: None,
+        min_entry_count: Some(2),
+        max_age_seconds: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect("min-entry-count filtered prefixes should load")
+    .0;
+    assert_eq!(min_filtered.min_entry_count, 2);
+    assert_eq!(min_filtered.total_prefixes, 1);
+    assert_eq!(min_filtered.unscoped_total_prefixes, 2);
+    assert_eq!(min_filtered.returned_prefixes, 1);
+    assert_eq!(min_filtered.prefixes[0].prefix, "scenario-");
+    assert_eq!(min_filtered.prefixes[0].entry_count, 2);
+
+    let invalid_error = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
         max_age_seconds: Some(0),
         limit: Some(10),
       }),
@@ -2979,6 +3020,25 @@ mod tests {
         assert_eq!(code, "INVALID_MAX_AGE_SECONDS");
       }
       _ => panic!("expected invalid max age to use custom error code"),
+    }
+
+    let invalid_min_error = agent_ops_cache_prefixes(
+      State(state),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: Some(0),
+        max_age_seconds: None,
+        limit: Some(10),
+      }),
+    )
+    .await
+    .expect_err("non-positive min entry count should fail");
+    match invalid_min_error {
+      crate::error::ApiError::BadRequestWithCode { code, .. } => {
+        assert_eq!(code, "INVALID_MIN_ENTRY_COUNT");
+      }
+      _ => panic!("expected invalid min entry count to use custom error code"),
     }
   }
 
@@ -3847,8 +3907,15 @@ mod tests {
         .get("agent_ops_cache_prefixes_endpoint")
         .and_then(serde_json::Value::as_str),
       Some(
-        "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&limit=8&max_age_seconds=3600",
+        "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&limit=8&max_age_seconds=3600",
       ),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_query_shape")
+        .and_then(|value| value.get("min_entry_count"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional number > 0 (filter out prefixes with fewer matches, default 1)"),
     );
     assert_eq!(
       schema
@@ -3904,6 +3971,13 @@ mod tests {
         .and_then(|value| value.get("request_id_prefix"))
         .and_then(serde_json::Value::as_str),
       Some("echoed filter prefix when provided"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("min_entry_count"))
+        .and_then(serde_json::Value::as_str),
+      Some("applied minimum entry count filter (default 1)"),
     );
     assert_eq!(
       schema
@@ -4008,6 +4082,10 @@ mod tests {
     assert!(
       cache_validation_error_codes.contains(&"INVALID_MAX_AGE_SECONDS"),
       "schema should advertise invalid max-age-seconds error code",
+    );
+    assert!(
+      cache_validation_error_codes.contains(&"INVALID_MIN_ENTRY_COUNT"),
+      "schema should advertise invalid min-entry-count error code",
     );
   }
 }

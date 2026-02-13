@@ -278,6 +278,7 @@ export async function getAgentOpsCachePrefixes(
   limit: number = 8,
   requestIdPrefix?: string,
   maxAgeSeconds?: number,
+  minEntryCount?: number,
 ): Promise<AgentOpsCachePrefixesResponse> {
   const safeLimit = Math.max(1, Math.min(limit, 100));
   const params = new URLSearchParams({
@@ -290,6 +291,10 @@ export async function getAgentOpsCachePrefixes(
   const normalizedMaxAgeSeconds = normalizePositiveInteger(maxAgeSeconds);
   if (typeof normalizedMaxAgeSeconds === "number") {
     params.set("max_age_seconds", String(normalizedMaxAgeSeconds));
+  }
+  const normalizedMinEntryCount = normalizePositiveInteger(minEntryCount);
+  if (typeof normalizedMinEntryCount === "number") {
+    params.set("min_entry_count", String(normalizedMinEntryCount));
   }
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/ops/cache/prefixes?${params.toString()}`,

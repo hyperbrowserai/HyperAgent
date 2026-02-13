@@ -145,6 +145,7 @@ export function SpreadsheetApp() {
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
+  const [cachePrefixMinEntryCount, setCachePrefixMinEntryCount] = useState("");
   const [cacheRemovePreviewSampleLimit, setCacheRemovePreviewSampleLimit] = useState("10");
   const [cacheStalePreviewSampleLimit, setCacheStalePreviewSampleLimit] = useState("10");
   const [cacheStaleMaxAgeSeconds, setCacheStaleMaxAgeSeconds] = useState("3600");
@@ -184,6 +185,12 @@ export function SpreadsheetApp() {
   const hasInvalidCacheEntriesMaxAgeInput =
     cacheEntriesMaxAgeSeconds.trim().length > 0
     && typeof normalizedCacheEntriesMaxAgeSeconds !== "number";
+  const normalizedCachePrefixMinEntryCount = parsePositiveIntegerInput(
+    cachePrefixMinEntryCount,
+  );
+  const hasInvalidCachePrefixMinEntryCountInput =
+    cachePrefixMinEntryCount.trim().length > 0
+    && typeof normalizedCachePrefixMinEntryCount !== "number";
   const normalizedCacheRemovePreviewSampleLimit = parsePositiveIntegerInput(
     cacheRemovePreviewSampleLimit,
   );
@@ -331,14 +338,18 @@ export function SpreadsheetApp() {
       workbook?.id,
       cacheRequestIdPrefix,
       normalizedCacheEntriesMaxAgeSeconds,
+      normalizedCachePrefixMinEntryCount,
     ],
-    enabled: Boolean(workbook?.id) && !hasInvalidCacheEntriesMaxAgeInput,
+    enabled: Boolean(workbook?.id)
+      && !hasInvalidCacheEntriesMaxAgeInput
+      && !hasInvalidCachePrefixMinEntryCountInput,
     queryFn: () =>
       getAgentOpsCachePrefixes(
         workbook!.id,
         12,
         cacheRequestIdPrefix,
         normalizedCacheEntriesMaxAgeSeconds,
+        normalizedCachePrefixMinEntryCount,
       ),
   });
 
@@ -532,12 +543,15 @@ export function SpreadsheetApp() {
   const cacheEntriesData = hasInvalidCacheEntriesMaxAgeInput
     ? null
     : agentOpsCacheEntriesQuery.data;
-  const cachePrefixSuggestions = hasInvalidCacheEntriesMaxAgeInput
+  const cachePrefixSuggestions =
+    hasInvalidCacheEntriesMaxAgeInput || hasInvalidCachePrefixMinEntryCountInput
     ? []
     : (agentOpsCachePrefixesQuery.data?.prefixes ?? []);
   const hasActiveCacheScopeFilters =
     cacheRequestIdPrefix.trim().length > 0
-    || typeof normalizedCacheEntriesMaxAgeSeconds === "number";
+    || typeof normalizedCacheEntriesMaxAgeSeconds === "number"
+    || (typeof normalizedCachePrefixMinEntryCount === "number"
+      && normalizedCachePrefixMinEntryCount > 1);
   const scenarioSignatureStatus =
     lastScenario === wizardScenario &&
     lastOperationsSignature &&
@@ -2763,6 +2777,29 @@ export function SpreadsheetApp() {
                     >
                       Clear age
                     </button>
+                    <label className="text-[10px] text-slate-500">
+                      min prefix count
+                    </label>
+                    <input
+                      value={cachePrefixMinEntryCount}
+                      onChange={(event) =>
+                        setCachePrefixMinEntryCount(event.target.value)
+                      }
+                      placeholder="optional"
+                      inputMode="numeric"
+                      className={`h-6 w-20 rounded bg-slate-950 px-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-500 ${
+                        hasInvalidCachePrefixMinEntryCountInput
+                          ? "border border-rose-500/80 focus:border-rose-400"
+                          : "border border-slate-700 focus:border-indigo-500"
+                      }`}
+                    />
+                    <button
+                      onClick={() => setCachePrefixMinEntryCount("")}
+                      disabled={!cachePrefixMinEntryCount}
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Clear min
+                    </button>
                     <button
                       onClick={handlePreviewRemoveCacheEntriesByPrefix}
                       disabled={
@@ -2880,6 +2917,12 @@ export function SpreadsheetApp() {
                     <p className="mb-2 text-[10px] text-rose-300">
                       older-than filter must be a positive integer (seconds). Cache
                       entries/prefix queries are paused until corrected.
+                    </p>
+                  ) : null}
+                  {hasInvalidCachePrefixMinEntryCountInput ? (
+                    <p className="mb-2 text-[10px] text-rose-300">
+                      min prefix count must be a positive integer. Prefix queries are
+                      paused until corrected.
                     </p>
                   ) : null}
                   {hasInvalidCacheRemovePreviewSampleLimitInput ? (
@@ -3043,6 +3086,12 @@ export function SpreadsheetApp() {
                           (prefix {agentOpsCachePrefixesQuery.data.request_id_prefix})
                         </span>
                       ) : null}
+                      {agentOpsCachePrefixesQuery.data
+                        && agentOpsCachePrefixesQuery.data.min_entry_count > 1 ? (
+                          <span className="text-[10px] text-slate-500">
+                            (min count {agentOpsCachePrefixesQuery.data.min_entry_count})
+                          </span>
+                        ) : null}
                       {typeof agentOpsCachePrefixesQuery.data?.max_age_seconds === "number" ? (
                         <span className="text-[10px] text-slate-500">
                           (older than {agentOpsCachePrefixesQuery.data.max_age_seconds}s)
@@ -3097,6 +3146,10 @@ export function SpreadsheetApp() {
                       ) : null}
                       {typeof normalizedCacheEntriesMaxAgeSeconds === "number" ? (
                         <> (older than {normalizedCacheEntriesMaxAgeSeconds}s)</>
+                      ) : null}
+                      {typeof normalizedCachePrefixMinEntryCount === "number"
+                      && normalizedCachePrefixMinEntryCount > 1 ? (
+                        <> (min count {normalizedCachePrefixMinEntryCount})</>
                       ) : null}
                       .
                     </div>
