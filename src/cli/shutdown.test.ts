@@ -41,4 +41,23 @@ describe("closeAgentSafely", () => {
     expect(second).toEqual({ success: true });
     expect(closeAgent).toHaveBeenCalledTimes(1);
   });
+
+  it("allows retrying shutdown after prior attempt settles", async () => {
+    const closeAgent = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("first failed"))
+      .mockResolvedValueOnce(undefined);
+    const agent = { closeAgent };
+
+    const first = await closeAgentSafely(
+      agent as unknown as Parameters<typeof closeAgentSafely>[0]
+    );
+    const second = await closeAgentSafely(
+      agent as unknown as Parameters<typeof closeAgentSafely>[0]
+    );
+
+    expect(first).toEqual({ success: false, message: "first failed" });
+    expect(second).toEqual({ success: true });
+    expect(closeAgent).toHaveBeenCalledTimes(2);
+  });
 });

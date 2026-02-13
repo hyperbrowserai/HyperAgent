@@ -27,7 +27,9 @@ export async function closeAgentSafely(
         message: formatCliError(error),
       };
     }
-  })();
+  })().finally(() => {
+    shutdownPromises.delete(agent);
+  });
 
   shutdownPromises.set(agent, shutdownPromise);
   return shutdownPromise;
