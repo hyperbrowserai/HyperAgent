@@ -81,6 +81,7 @@ export function SpreadsheetApp() {
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastScenario, setLastScenario] = useState<string | null>(null);
+  const [lastOperationsSignature, setLastOperationsSignature] = useState<string | null>(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
   const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
     sheetsImported: number;
@@ -281,8 +282,12 @@ export function SpreadsheetApp() {
     }
     return eventLog.filter((event) => event.event_type === eventFilter);
   }, [eventFilter, eventLog]);
-  const wizardScenarioOps = wizardScenarioOpsQuery.data ?? [];
-  const wizardPresetOps = wizardPresetOpsQuery.data ?? [];
+  const wizardScenarioOps = wizardScenarioOpsQuery.data?.operations ?? [];
+  const wizardScenarioOpsSignature =
+    wizardScenarioOpsQuery.data?.operations_signature ?? null;
+  const wizardPresetOps = wizardPresetOpsQuery.data?.operations ?? [];
+  const wizardPresetOpsSignature =
+    wizardPresetOpsQuery.data?.operations_signature ?? null;
   const wizardPreviewSource = workbook ? "workbook-scoped" : "global";
 
   const statusText =
@@ -341,6 +346,7 @@ export function SpreadsheetApp() {
       setLastAgentOps(response.results);
       setLastPreset(null);
       setLastScenario(null);
+      setLastOperationsSignature(null);
       setLastWizardImportSummary(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
@@ -437,6 +443,7 @@ export function SpreadsheetApp() {
       });
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
+      setLastOperationsSignature(null);
       setLastWizardImportSummary(null);
       await queryClient.invalidateQueries({
         queryKey: ["cells", workbook.id, activeSheet],
@@ -462,9 +469,12 @@ export function SpreadsheetApp() {
         actor: "ui-preset",
         stop_on_error: true,
         include_file_base64: preset === "export_snapshot" ? false : undefined,
+        expected_operations_signature:
+          preset === wizardPresetPreview ? wizardPresetOpsSignature ?? undefined : undefined,
       });
       setLastPreset(response.preset);
       setLastScenario(null);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -492,9 +502,12 @@ export function SpreadsheetApp() {
         actor: "ui-scenario",
         stop_on_error: true,
         include_file_base64: false,
+        expected_operations_signature:
+          scenario === wizardScenario ? wizardScenarioOpsSignature ?? undefined : undefined,
       });
       setLastScenario(response.scenario);
       setLastPreset(null);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -524,9 +537,11 @@ export function SpreadsheetApp() {
         actor: "ui-scenario-selected",
         stop_on_error: true,
         include_file_base64: wizardIncludeFileBase64,
+        expected_operations_signature: wizardScenarioOpsSignature ?? undefined,
       });
       setLastScenario(response.scenario);
       setLastPreset(null);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -559,6 +574,7 @@ export function SpreadsheetApp() {
       });
       setLastScenario(wizardScenario);
       setLastPreset(null);
+      setLastOperationsSignature(wizardScenarioOpsSignature);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -588,9 +604,11 @@ export function SpreadsheetApp() {
         actor: "ui-preset-selected",
         stop_on_error: true,
         include_file_base64: wizardIncludeFileBase64,
+        expected_operations_signature: wizardPresetOpsSignature ?? undefined,
       });
       setLastPreset(response.preset);
       setLastScenario(null);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -623,6 +641,7 @@ export function SpreadsheetApp() {
       });
       setLastPreset(wizardPresetPreview);
       setLastScenario(null);
+      setLastOperationsSignature(wizardPresetOpsSignature);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(null);
@@ -685,6 +704,7 @@ export function SpreadsheetApp() {
         actor: "ui-wizard",
         stop_on_error: true,
         include_file_base64: wizardIncludeFileBase64,
+        expected_operations_signature: wizardScenarioOpsSignature ?? undefined,
         workbook_name: wizardWorkbookName,
         file: wizardFile,
       });
@@ -692,6 +712,7 @@ export function SpreadsheetApp() {
       setActiveSheet(response.workbook.sheets[0] ?? "Sheet1");
       setLastScenario(response.scenario);
       setLastPreset(null);
+      setLastOperationsSignature(response.operations_signature ?? null);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(
@@ -1038,6 +1059,14 @@ export function SpreadsheetApp() {
                     {isCopyingPresetOps ? "Copying..." : "Copy JSON"}
                   </button>
                 </div>
+                {wizardPresetOpsSignature ? (
+                  <p className="mb-1 text-[11px] text-slate-500">
+                    signature:{" "}
+                    <span className="font-mono text-slate-300">
+                      {wizardPresetOpsSignature}
+                    </span>
+                  </p>
+                ) : null}
                 {wizardPresetOpsQuery.isFetching ? (
                   <p className="text-[11px] text-slate-500">Loading preset operations…</p>
                 ) : wizardPresetOps.length > 0 ? (
@@ -1109,6 +1138,14 @@ export function SpreadsheetApp() {
                     {isCopyingPreviewOps ? "Copying..." : "Copy JSON"}
                   </button>
                 </div>
+                {wizardScenarioOpsSignature ? (
+                  <p className="mb-1 text-[11px] text-slate-500">
+                    signature:{" "}
+                    <span className="font-mono text-slate-300">
+                      {wizardScenarioOpsSignature}
+                    </span>
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap gap-1">
                   {wizardScenarioOps.map((operation, index) => (
                     <span
@@ -1256,6 +1293,14 @@ export function SpreadsheetApp() {
               <p className="mb-2 text-xs text-slate-400">
                 request_id:{" "}
                 <span className="font-mono text-slate-200">{lastAgentRequestId}</span>
+              </p>
+            )}
+            {lastOperationsSignature && (
+              <p className="mb-2 text-xs text-slate-400">
+                operations_signature:{" "}
+                <span className="font-mono text-slate-200">
+                  {lastOperationsSignature}
+                </span>
               </p>
             )}
             {lastAgentOps.length ? (

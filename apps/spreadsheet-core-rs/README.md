@@ -82,6 +82,8 @@ Supported `preset` values:
 
 Preview helper:
 - `GET /v1/workbooks/{id}/agent/presets/{preset}/operations` (optional query: `include_file_base64=true|false`)
+- Preview responses include `operations_signature` (sha256) for optimistic signature checks.
+- Run payload supports `expected_operations_signature` to guard against stale preview execution.
 
 ### AI Agent scenario endpoint
 
@@ -93,6 +95,8 @@ Supported `scenario` values:
 
 Preview helper:
 - `GET /v1/workbooks/{id}/agent/scenarios/{scenario}/operations` (optional query: `include_file_base64=true|false`)
+- Preview responses include `operations_signature` (sha256) for optimistic signature checks.
+- Run payload supports `expected_operations_signature` to guard against stale preview execution.
 
 ### AI Agent wizard endpoint
 
@@ -114,6 +118,7 @@ Multipart fields:
 - `actor` (optional)
 - `stop_on_error` (optional boolean)
 - `include_file_base64` (optional boolean)
+- `expected_operations_signature` (optional string from scenario preview endpoint)
 
 ### Example: run an agent operation batch
 

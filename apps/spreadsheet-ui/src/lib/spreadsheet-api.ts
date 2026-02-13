@@ -1,5 +1,6 @@
 import {
   AgentOpsResponse,
+  AgentOperationPlanPreview,
   AgentOperationPreview,
   AgentSchemaInfo,
   AgentPresetInfo,
@@ -156,6 +157,7 @@ interface AgentPresetRequest {
   actor?: string;
   stop_on_error?: boolean;
   include_file_base64?: boolean;
+  expected_operations_signature?: string;
 }
 
 export async function runAgentPreset(
@@ -209,17 +211,20 @@ export async function getAgentScenarioOperations(
   workbookId: string,
   scenario: string,
   includeFileBase64: boolean,
-): Promise<AgentOperationPreview[]> {
+): Promise<AgentOperationPlanPreview> {
   const query = new URLSearchParams({
     include_file_base64: String(includeFileBase64),
   });
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/scenarios/${scenario}/operations?${query.toString()}`,
   );
-  const data = await parseJsonResponse<{ operations: AgentOperationPreview[] }>(
+  const data = await parseJsonResponse<{
+    operations_signature: string;
+    operations: AgentOperationPreview[];
+  }>(
     response,
   );
-  return data.operations;
+  return data;
 }
 
 export async function getWizardScenarios(): Promise<AgentScenarioInfo[]> {
@@ -241,34 +246,40 @@ export async function getWizardPresets(): Promise<AgentPresetInfo[]> {
 export async function getWizardPresetOperations(
   preset: string,
   includeFileBase64: boolean,
-): Promise<AgentOperationPreview[]> {
+): Promise<AgentOperationPlanPreview> {
   const query = new URLSearchParams({
     include_file_base64: String(includeFileBase64),
   });
   const response = await fetch(
     `${API_BASE_URL}/v1/agent/wizard/presets/${preset}/operations?${query.toString()}`,
   );
-  const data = await parseJsonResponse<{ operations: AgentOperationPreview[] }>(
+  const data = await parseJsonResponse<{
+    operations_signature: string;
+    operations: AgentOperationPreview[];
+  }>(
     response,
   );
-  return data.operations;
+  return data;
 }
 
 export async function getAgentPresetOperations(
   workbookId: string,
   preset: string,
   includeFileBase64: boolean,
-): Promise<AgentOperationPreview[]> {
+): Promise<AgentOperationPlanPreview> {
   const query = new URLSearchParams({
     include_file_base64: String(includeFileBase64),
   });
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/agent/presets/${preset}/operations?${query.toString()}`,
   );
-  const data = await parseJsonResponse<{ operations: AgentOperationPreview[] }>(
+  const data = await parseJsonResponse<{
+    operations_signature: string;
+    operations: AgentOperationPreview[];
+  }>(
     response,
   );
-  return data.operations;
+  return data;
 }
 
 export async function getWizardSchema(): Promise<AgentWizardSchemaInfo> {
@@ -279,17 +290,20 @@ export async function getWizardSchema(): Promise<AgentWizardSchemaInfo> {
 export async function getWizardScenarioOperations(
   scenario: string,
   includeFileBase64: boolean,
-): Promise<AgentOperationPreview[]> {
+): Promise<AgentOperationPlanPreview> {
   const query = new URLSearchParams({
     include_file_base64: String(includeFileBase64),
   });
   const response = await fetch(
     `${API_BASE_URL}/v1/agent/wizard/scenarios/${scenario}/operations?${query.toString()}`,
   );
-  const data = await parseJsonResponse<{ operations: AgentOperationPreview[] }>(
+  const data = await parseJsonResponse<{
+    operations_signature: string;
+    operations: AgentOperationPreview[];
+  }>(
     response,
   );
-  return data.operations;
+  return data;
 }
 
 interface AgentScenarioRequest {
@@ -297,6 +311,7 @@ interface AgentScenarioRequest {
   actor?: string;
   stop_on_error?: boolean;
   include_file_base64?: boolean;
+  expected_operations_signature?: string;
 }
 
 export async function runAgentScenario(
@@ -321,6 +336,7 @@ interface AgentWizardRequest {
   actor?: string;
   stop_on_error?: boolean;
   include_file_base64?: boolean;
+  expected_operations_signature?: string;
   workbook_name?: string;
   file?: File | null;
 }
@@ -338,6 +354,7 @@ export async function runAgentWizard(
         actor: payload.actor,
         stop_on_error: payload.stop_on_error,
         include_file_base64: payload.include_file_base64,
+        expected_operations_signature: payload.expected_operations_signature,
         workbook_name: payload.workbook_name,
       }),
     });
@@ -360,6 +377,12 @@ export async function runAgentWizard(
   }
   if (typeof payload.include_file_base64 === "boolean") {
     formData.append("include_file_base64", String(payload.include_file_base64));
+  }
+  if (payload.expected_operations_signature) {
+    formData.append(
+      "expected_operations_signature",
+      payload.expected_operations_signature,
+    );
   }
   formData.append("file", payload.file);
 

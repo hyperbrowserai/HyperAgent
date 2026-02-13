@@ -16,6 +16,7 @@ regex = "1.11.1"
 rust_xlsxwriter = "=0.80.0"
 serde = { version = "=1.0.217", features = ["derive"] }
 serde_json = "=1.0.138"
+sha2 = "0.10.8"
 tempfile = "=3.15.0"
 tokio = { version = "=1.43.0", features = ["full"] }
 tokio-stream = { version = "=0.1.17", features = ["sync"] }

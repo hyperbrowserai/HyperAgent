@@ -48,6 +48,7 @@ export interface AgentOpsResponse {
 
 export interface AgentPresetResponse {
   preset: string;
+  operations_signature?: string;
   request_id?: string;
   results: AgentOperationResult[];
 }
@@ -72,6 +73,7 @@ export interface AgentScenarioInfo {
 
 export interface AgentScenarioResponse {
   scenario: string;
+  operations_signature?: string;
   request_id?: string;
   results: AgentOperationResult[];
 }
@@ -85,6 +87,7 @@ export interface AgentWizardImportResult {
 export interface AgentWizardRunResponse {
   workbook: WorkbookSummary;
   scenario: string;
+  operations_signature: string;
   request_id?: string;
   results: AgentOperationResult[];
   import: AgentWizardImportResult | null;
@@ -94,9 +97,12 @@ export interface AgentWizardSchemaInfo {
   endpoint: string;
   json_endpoint?: string;
   presets_endpoint?: string;
+  preset_operations_endpoint?: string;
   scenarios_endpoint?: string;
+  scenario_operations_endpoint?: string;
   request_multipart_fields?: string[];
   request_json_fields?: Record<string, string>;
+  operations_preview_response_shape?: Record<string, string>;
   presets: AgentPresetInfo[];
   scenarios: AgentScenarioInfo[];
 }
@@ -104,4 +110,9 @@ export interface AgentWizardSchemaInfo {
 export interface AgentOperationPreview {
   op_type: string;
   [key: string]: unknown;
+}
+
+export interface AgentOperationPlanPreview {
+  operations_signature: string;
+  operations: AgentOperationPreview[];
 }

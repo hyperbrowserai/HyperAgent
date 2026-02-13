@@ -26,6 +26,7 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use futures_util::StreamExt;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tokio_stream::wrappers::BroadcastStream;
 use uuid::Uuid;
 
@@ -128,6 +129,33 @@ fn parse_optional_bool(
   }
 }
 
+fn operations_signature(
+  operations: &[AgentOperation],
+) -> Result<String, ApiError> {
+  let bytes = serde_json::to_vec(operations).map_err(ApiError::internal)?;
+  let mut hasher = Sha256::new();
+  hasher.update(bytes);
+  Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn validate_expected_operations_signature(
+  expected_signature: Option<&str>,
+  actual_signature: &str,
+) -> Result<(), ApiError> {
+  let Some(expected) = expected_signature.map(str::trim) else {
+    return Ok(());
+  };
+  if expected.is_empty() {
+    return Ok(());
+  }
+  if expected == actual_signature {
+    return Ok(());
+  }
+  Err(ApiError::BadRequest(format!(
+    "Operation signature mismatch. expected={expected} actual={actual_signature}",
+  )))
+}
+
 async fn import_bytes_into_workbook(
   state: &AppState,
   workbook_id: Uuid,
@@ -205,6 +233,7 @@ async fn run_agent_wizard(
   let mut actor: Option<String> = None;
   let mut stop_on_error_raw: Option<String> = None;
   let mut include_file_base64_raw: Option<String> = None;
+  let mut expected_operations_signature: Option<String> = None;
   let mut workbook_name: Option<String> = None;
   let mut maybe_file_name: Option<String> = None;
   let mut maybe_file_bytes: Option<Vec<u8>> = None;
@@ -234,6 +263,10 @@ async fn run_agent_wizard(
       }
       "include_file_base64" => {
         include_file_base64_raw = Some(field.text().await.map_err(ApiError::internal)?);
+      }
+      "expected_operations_signature" => {
+        expected_operations_signature =
+          Some(field.text().await.map_err(ApiError::internal)?);
       }
       "workbook_name" => {
         workbook_name = Some(field.text().await.map_err(ApiError::internal)?);
@@ -269,6 +302,11 @@ async fn run_agent_wizard(
     scenario.as_str(),
     Some(include_file_base64),
   )?;
+  let operation_signature = operations_signature(&operations)?;
+  validate_expected_operations_signature(
+    expected_operations_signature.as_deref(),
+    operation_signature.as_str(),
+  )?;
 
   let results = execute_agent_operations(
     &state,
@@ -283,6 +321,7 @@ async fn run_agent_wizard(
   Ok(Json(AgentWizardRunResponse {
     workbook: refreshed,
     scenario,
+    operations_signature: operation_signature,
     request_id,
     results,
     import: import_result,
@@ -329,6 +368,11 @@ async fn run_agent_wizard_json(
     scenario,
     Some(include_file_base64),
   )?;
+  let operation_signature = operations_signature(&operations)?;
+  validate_expected_operations_signature(
+    payload.expected_operations_signature.as_deref(),
+    operation_signature.as_str(),
+  )?;
 
   let results = execute_agent_operations(
     &state,
@@ -343,6 +387,7 @@ async fn run_agent_wizard_json(
   Ok(Json(AgentWizardRunResponse {
     workbook: refreshed,
     scenario: scenario.to_string(),
+    operations_signature: operation_signature,
     request_id: payload.request_id,
     results,
     import: import_result,
@@ -363,7 +408,8 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "request_id (optional)",
       "actor (optional)",
       "stop_on_error (optional boolean)",
-      "include_file_base64 (optional boolean)"
+      "include_file_base64 (optional boolean)",
+      "expected_operations_signature (optional string from scenario preview endpoint)"
     ],
     "request_json_fields": {
       "scenario": "required string",
@@ -371,9 +417,14 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "actor": "optional string",
       "stop_on_error": "optional boolean",
       "include_file_base64": "optional boolean",
+      "expected_operations_signature": "optional string from scenario preview endpoint",
       "workbook_name": "optional string",
       "file_name": "optional string",
       "file_base64": "optional base64-encoded xlsx payload"
+    },
+    "operations_preview_response_shape": {
+      "operations_signature": "sha256 signature over generated operations",
+      "operations": "array of operation objects"
     },
     "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
     "scenarios": scenario_catalog(),
@@ -395,8 +446,10 @@ async fn get_wizard_preset_operations(
     preset.as_str(),
     query.include_file_base64,
   )?;
+  let operation_signature = operations_signature(&operations)?;
   Ok(Json(json!({
     "preset": preset,
+    "operations_signature": operation_signature,
     "operations": operations
   })))
 }
@@ -420,8 +473,10 @@ async fn get_wizard_scenario_operations(
     scenario.as_str(),
     query.include_file_base64,
   )?;
+  let operation_signature = operations_signature(&operations)?;
   Ok(Json(json!({
     "scenario": scenario,
+    "operations_signature": operation_signature,
     "operations": operations
   })))
 }
@@ -436,9 +491,11 @@ async fn get_agent_scenario_operations(
     scenario.as_str(),
     query.include_file_base64,
   )?;
+  let operation_signature = operations_signature(&operations)?;
   Ok(Json(json!({
     "workbook_id": workbook_id,
     "scenario": scenario,
+    "operations_signature": operation_signature,
     "operations": operations
   })))
 }
@@ -453,9 +510,11 @@ async fn get_agent_preset_operations(
     preset.as_str(),
     query.include_file_base64,
   )?;
+  let operation_signature = operations_signature(&operations)?;
   Ok(Json(json!({
     "workbook_id": workbook_id,
     "preset": preset,
+    "operations_signature": operation_signature,
     "operations": operations
   })))
 }
@@ -885,10 +944,28 @@ async fn get_agent_schema(
       }
     },
     "preset_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}",
+    "preset_run_request_shape": {
+      "request_id": "optional string",
+      "actor": "optional string",
+      "stop_on_error": "optional boolean (default true)",
+      "include_file_base64": "optional boolean",
+      "expected_operations_signature": "optional string from preset preview endpoint"
+    },
     "preset_operations_endpoint": "/v1/workbooks/{id}/agent/presets/{preset}/operations?include_file_base64=false",
     "presets": preset_catalog(),
     "scenario_endpoint": "/v1/workbooks/{id}/agent/scenarios/{scenario}",
+    "scenario_run_request_shape": {
+      "request_id": "optional string",
+      "actor": "optional string",
+      "stop_on_error": "optional boolean (default true)",
+      "include_file_base64": "optional boolean",
+      "expected_operations_signature": "optional string from scenario preview endpoint"
+    },
     "scenario_operations_endpoint": "/v1/workbooks/{id}/agent/scenarios/{scenario}/operations?include_file_base64=false",
+    "operations_preview_response_shape": {
+      "operations_signature": "sha256 signature over generated operations",
+      "operations": "array of operation objects"
+    },
     "scenarios": scenario_catalog(),
     "wizard_endpoint": "/v1/agent/wizard/run",
     "wizard_json_endpoint": "/v1/agent/wizard/run-json",
@@ -899,7 +976,8 @@ async fn get_agent_schema(
       "request_id (optional)",
       "actor (optional)",
       "stop_on_error (optional boolean)",
-      "include_file_base64 (optional boolean)"
+      "include_file_base64 (optional boolean)",
+      "expected_operations_signature (optional string from scenario preview endpoint)"
     ]
   })))
 }
@@ -1098,6 +1176,11 @@ async fn run_agent_preset(
   state.get_workbook(workbook_id).await?;
   let operations =
     build_preset_operations(preset.as_str(), payload.include_file_base64)?;
+  let operation_signature = operations_signature(&operations)?;
+  validate_expected_operations_signature(
+    payload.expected_operations_signature.as_deref(),
+    operation_signature.as_str(),
+  )?;
   let request_id = payload.request_id.clone();
   let actor = payload
     .actor
@@ -1115,6 +1198,7 @@ async fn run_agent_preset(
 
   Ok(Json(json!({
     "preset": preset,
+    "operations_signature": operation_signature,
     "request_id": request_id,
     "results": results
   })))
@@ -1128,6 +1212,11 @@ async fn run_agent_scenario(
   state.get_workbook(workbook_id).await?;
   let operations =
     build_scenario_operations(scenario.as_str(), payload.include_file_base64)?;
+  let operation_signature = operations_signature(&operations)?;
+  validate_expected_operations_signature(
+    payload.expected_operations_signature.as_deref(),
+    operation_signature.as_str(),
+  )?;
   let request_id = payload.request_id.clone();
   let actor = payload
     .actor
@@ -1145,6 +1234,7 @@ async fn run_agent_scenario(
 
   Ok(Json(json!({
     "scenario": scenario,
+    "operations_signature": operation_signature,
     "request_id": request_id,
     "results": results
   })))
@@ -1263,7 +1353,8 @@ async fn openapi() -> Json<serde_json::Value> {
 mod tests {
   use super::{
     build_preset_operations, build_scenario_operations, normalize_sheet_name,
-    parse_optional_bool,
+    operations_signature, parse_optional_bool,
+    validate_expected_operations_signature,
   };
 
   #[test]
@@ -1354,6 +1445,36 @@ mod tests {
     assert!(
       parse_optional_bool(Some("not-a-bool".to_string()), "flag").is_err(),
       "invalid bool-like value should fail",
+    );
+  }
+
+  #[test]
+  fn should_generate_stable_operation_signatures() {
+    let operations = build_scenario_operations("refresh_and_export", Some(false))
+      .expect("scenario operations should build");
+    let signature_a =
+      operations_signature(&operations).expect("signature should build");
+    let signature_b =
+      operations_signature(&operations).expect("signature should be stable");
+    assert_eq!(signature_a, signature_b);
+    assert!(!signature_a.is_empty());
+  }
+
+  #[test]
+  fn should_validate_expected_operation_signatures() {
+    let operations = build_preset_operations("export_snapshot", Some(false))
+      .expect("preset operations should build");
+    let signature =
+      operations_signature(&operations).expect("signature should build");
+    assert!(
+      validate_expected_operations_signature(Some(signature.as_str()), signature.as_str())
+        .is_ok(),
+      "matching signature should validate",
+    );
+    assert!(
+      validate_expected_operations_signature(Some("mismatch"), signature.as_str())
+        .is_err(),
+      "mismatching signature should fail",
     );
   }
 }

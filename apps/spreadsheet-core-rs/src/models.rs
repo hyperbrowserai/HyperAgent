@@ -137,6 +137,7 @@ pub struct AgentPresetRunRequest {
   pub actor: Option<String>,
   pub stop_on_error: Option<bool>,
   pub include_file_base64: Option<bool>,
+  pub expected_operations_signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,6 +146,7 @@ pub struct AgentScenarioRunRequest {
   pub actor: Option<String>,
   pub stop_on_error: Option<bool>,
   pub include_file_base64: Option<bool>,
+  pub expected_operations_signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,6 +160,7 @@ pub struct AgentWizardImportResult {
 pub struct AgentWizardRunResponse {
   pub workbook: WorkbookSummary,
   pub scenario: String,
+  pub operations_signature: String,
   pub request_id: Option<String>,
   pub results: Vec<AgentOperationResult>,
   pub import: Option<AgentWizardImportResult>,
@@ -170,6 +173,7 @@ pub struct AgentWizardRunJsonRequest {
   pub actor: Option<String>,
   pub stop_on_error: Option<bool>,
   pub include_file_base64: Option<bool>,
+  pub expected_operations_signature: Option<String>,
   pub workbook_name: Option<String>,
   pub file_name: Option<String>,
   pub file_base64: Option<String>,
