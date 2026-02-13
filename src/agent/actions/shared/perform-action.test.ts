@@ -86,4 +86,50 @@ describe("performAction variable interpolation", () => {
       expect.objectContaining({ clickTimeout: 3500 })
     );
   });
+
+  it("formats non-Error failures from Playwright execution", async () => {
+    executePlaywrightMethod.mockRejectedValue({ reason: "playwright failed" });
+
+    const context: ActionContext = {
+      page: {} as Page,
+      domState: {
+        elements: new Map([
+          [
+            "0-1",
+            {
+              role: "textbox",
+            },
+          ],
+        ]),
+        domState: "",
+        xpathMap: { "0-1": "//input[1]" },
+        backendNodeMap: {},
+      },
+      llm: {
+        invoke: async () => ({ role: "assistant", content: "ok" }),
+        invokeStructured: async () => ({ rawText: "{}", parsed: null }),
+        getProviderId: () => "mock",
+        getModelId: () => "mock-model",
+        getCapabilities: () => ({
+          multimodal: false,
+          toolCalling: true,
+          jsonMode: true,
+        }),
+      },
+      tokenLimit: 10000,
+      variables: [],
+      cdpActions: false,
+      invalidateDomCache: jest.fn(),
+    };
+
+    const result = await performAction(context, {
+      elementId: "0-1",
+      method: "fill",
+      arguments: ["value"],
+      instruction: "Fill input",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('{"reason":"playwright failed"}');
+  });
 });

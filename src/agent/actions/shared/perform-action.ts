@@ -15,6 +15,23 @@ export interface PerformActionParams {
 
 const VARIABLE_TOKEN_PATTERN = /<<([^>]+)>>/g;
 
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
 function interpolateVariables(value: string, ctx: ActionContext): string {
   return value.replace(VARIABLE_TOKEN_PATTERN, (match, key) => {
     const variable = ctx.variables.find((entry) => entry.key === key);
@@ -116,8 +133,7 @@ export async function performAction(
         debug: debugInfo,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = formatUnknownError(error);
       return {
         success: false,
         message: `Failed to execute "${resolvedInstruction}": ${errorMessage}`,
@@ -156,8 +172,7 @@ export async function performAction(
       debug: debugInfo,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = formatUnknownError(error);
     return {
       success: false,
       message: `Failed to execute "${resolvedInstruction}": ${errorMessage}`,
