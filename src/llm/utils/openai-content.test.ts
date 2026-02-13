@@ -189,6 +189,15 @@ describe("normalizeOpenAICompatibleContent", () => {
     );
   });
 
+  it("normalizes single-part object payloads into content arrays", () => {
+    expect(
+      normalizeOpenAICompatibleContent({
+        type: "text",
+        text: "inline-object-part",
+      })
+    ).toEqual([{ type: "text", text: "inline-object-part" }]);
+  });
+
   it("truncates oversized unknown object diagnostics", () => {
     const hugeObject = { payload: "x".repeat(5_000) };
     const result = normalizeOpenAICompatibleContent(hugeObject);

@@ -117,6 +117,17 @@ function normalizeOpenAICompatibleContentPart(
   };
 }
 
+function isSingleContentPartShape(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  return (
+    value.type === "text" ||
+    value.type === "image_url" ||
+    value.type === "tool_call"
+  );
+}
+
 export function normalizeOpenAICompatibleContent(
   content: unknown
 ): string | HyperAgentContentPart[] {
@@ -130,6 +141,10 @@ export function normalizeOpenAICompatibleContent(
 
   if (content == null) {
     return "";
+  }
+
+  if (isSingleContentPartShape(content)) {
+    return [normalizeOpenAICompatibleContentPart(content)];
   }
 
   if (typeof content === "object") {
