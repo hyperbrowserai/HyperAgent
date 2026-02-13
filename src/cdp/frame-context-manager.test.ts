@@ -5,6 +5,7 @@ class FakeSession implements CDPSession {
   public id = "session-1";
   public raw = undefined;
   public offEvents: string[] = [];
+  public onEvents: string[] = [];
   private handlers = new Map<string, Set<(...payload: unknown[]) => void>>();
 
   async send<T = unknown>(method: string): Promise<T> {
@@ -36,6 +37,7 @@ class FakeSession implements CDPSession {
     event: string,
     handler: (...payload: TPayload) => void
   ): void {
+    this.onEvents.push(event);
     const eventHandlers = this.handlers.get(event) ?? new Set();
     eventHandlers.add(handler as (...payload: unknown[]) => void);
     this.handlers.set(event, eventHandlers);
@@ -149,5 +151,24 @@ describe("FrameContextManager listener bookkeeping", () => {
         }
       ).playwrightOopifCache.size
     ).toBe(0);
+  });
+
+  it("can reinitialize listeners after clear", async () => {
+    const session = new FakeSession();
+    const manager = new FrameContextManager(createFakeClient(session));
+
+    await manager.ensureInitialized();
+    const firstAttachedRegistrations = session.onEvents.filter(
+      (event) => event === "Page.frameAttached"
+    ).length;
+    expect(firstAttachedRegistrations).toBe(1);
+
+    manager.clear();
+    await manager.ensureInitialized();
+
+    const secondAttachedRegistrations = session.onEvents.filter(
+      (event) => event === "Page.frameAttached"
+    ).length;
+    expect(secondAttachedRegistrations).toBe(2);
   });
 });

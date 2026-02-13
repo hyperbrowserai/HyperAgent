@@ -44,13 +44,13 @@ export class FrameContextManager {
     string,
     Set<{ resolve: (value?: number) => void; timeoutId?: NodeJS.Timeout }>
   >();
-  private readonly runtimeTrackedSessions = new WeakSet<CDPSession>();
+  private runtimeTrackedSessions = new WeakSet<CDPSession>();
   private readonly sessionListeners = new Map<
     CDPSession,
     Array<{ event: string; handler: (...args: unknown[]) => void }>
   >();
   private readonly oopifFrameIds = new Set<string>();
-  private readonly pageTrackedSessions = new WeakSet<CDPSession>();
+  private pageTrackedSessions = new WeakSet<CDPSession>();
   private readonly playwrightOopifCache = new Map<
     PlaywrightFrameHandle,
     PlaywrightOOPIFRecord
@@ -285,6 +285,10 @@ export class FrameContextManager {
     this.sessionListeners.clear();
 
     this.oopifFrameIds.clear();
+    this.runtimeTrackedSessions = new WeakSet<CDPSession>();
+    this.pageTrackedSessions = new WeakSet<CDPSession>();
+    this.initialized = false;
+    this.initializingPromise = null;
   }
 
   async ensureInitialized(): Promise<void> {
