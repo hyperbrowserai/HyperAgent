@@ -36,6 +36,35 @@ describe("normalizeOpenAICompatibleContent", () => {
     ]);
   });
 
+  it("normalizes and trims string image URLs", () => {
+    expect(
+      normalizeOpenAICompatibleContent([
+        {
+          type: "image_url",
+          image_url: { url: "  https://example.com/path\n  " },
+        },
+      ])
+    ).toEqual([
+      {
+        type: "image",
+        url: "https://example.com/path",
+        mimeType: "image/png",
+      },
+    ]);
+  });
+
+  it("truncates oversized image URL diagnostics", () => {
+    const huge = { url: "x".repeat(10_000) };
+    const result = normalizeOpenAICompatibleContent([
+      {
+        type: "image_url",
+        image_url: { url: huge },
+      },
+    ]) as Array<{ url: string }>;
+
+    expect(result[0]?.url.length).toBeLessThanOrEqual(4_000);
+  });
+
   it("sanitizes unsafe keys in tool-call content arguments", () => {
     expect(
       normalizeOpenAICompatibleContent([

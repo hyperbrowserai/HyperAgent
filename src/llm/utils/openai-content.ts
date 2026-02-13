@@ -8,6 +8,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const MAX_TOOL_NAME_CHARS = 256;
+const MAX_IMAGE_URL_CHARS = 4_000;
 
 function normalizeOptionalString(
   value: unknown,
@@ -38,6 +39,27 @@ function sanitizeToolArguments(value: unknown): unknown {
     : sanitized.arguments;
 }
 
+function truncateImageUrl(value: string): string {
+  if (value.length <= MAX_IMAGE_URL_CHARS) {
+    return value;
+  }
+  return value.slice(0, MAX_IMAGE_URL_CHARS);
+}
+
+function normalizeImageUrl(value: unknown): string {
+  if (typeof value === "string") {
+    const normalized = value
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+    return truncateImageUrl(normalized);
+  }
+  if (typeof value === "undefined") {
+    return "";
+  }
+  return truncateImageUrl(formatUnknownError(value));
+}
+
 function normalizeOpenAICompatibleContentPart(
   part: unknown
 ): HyperAgentContentPart {
@@ -60,15 +82,9 @@ function normalizeOpenAICompatibleContentPart(
 
   if (part.type === "image_url") {
     const imageUrl = isRecord(part.image_url) ? part.image_url : {};
-    const normalizedUrl =
-      typeof imageUrl.url === "string"
-        ? imageUrl.url
-        : typeof imageUrl.url === "undefined"
-          ? ""
-          : formatUnknownError(imageUrl.url);
     return {
       type: "image",
-      url: normalizedUrl,
+      url: normalizeImageUrl(imageUrl.url),
       mimeType: "image/png",
     };
   }
