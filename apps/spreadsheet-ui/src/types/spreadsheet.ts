@@ -79,6 +79,8 @@ export interface AgentOpsCachePrefix {
   entry_count: number;
   newest_request_id: string;
   newest_cached_at: string | null;
+  oldest_request_id: string;
+  oldest_cached_at: string | null;
 }
 
 export interface AgentOpsCachePrefixesResponse {

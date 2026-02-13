@@ -300,6 +300,8 @@ pub struct AgentOpsCachePrefix {
   pub entry_count: usize,
   pub newest_request_id: String,
   pub newest_cached_at: Option<DateTime<Utc>>,
+  pub oldest_request_id: String,
+  pub oldest_cached_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

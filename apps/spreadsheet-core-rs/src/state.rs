@@ -576,7 +576,7 @@ impl AppState {
     sort_by: &str,
     offset: usize,
     limit: usize,
-  ) -> Result<(usize, usize, usize, usize, Vec<(String, usize, String, Option<DateTime<Utc>>)>), ApiError> {
+  ) -> Result<(usize, usize, usize, usize, Vec<(String, usize, String, Option<DateTime<Utc>>, String, Option<DateTime<Utc>>)>), ApiError> {
     let guard = self.workbooks.read().await;
     let record = guard
       .get(&workbook_id)
@@ -585,6 +585,8 @@ impl AppState {
     let mut prefix_counts: HashMap<String, usize> = HashMap::new();
     let mut newest_request_ids: HashMap<String, String> = HashMap::new();
     let mut newest_cached_ats: HashMap<String, Option<DateTime<Utc>>> = HashMap::new();
+    let mut oldest_request_ids: HashMap<String, String> = HashMap::new();
+    let mut oldest_cached_ats: HashMap<String, Option<DateTime<Utc>>> = HashMap::new();
     let mut unscoped_prefix_counts: HashMap<String, usize> = HashMap::new();
     let normalized_prefix = request_id_prefix
       .map(str::trim)
@@ -618,6 +620,12 @@ impl AppState {
       }
       let entry = prefix_counts.entry(prefix.clone()).or_insert(0);
       *entry += 1;
+      oldest_request_ids
+        .entry(prefix.clone())
+        .or_insert_with(|| request_id.clone());
+      oldest_cached_ats
+        .entry(prefix.clone())
+        .or_insert_with(|| record.agent_ops_cache_timestamps.get(request_id).cloned());
       newest_request_ids.insert(prefix.clone(), request_id.clone());
       newest_cached_ats.insert(
         prefix.clone(),
@@ -638,12 +646,30 @@ impl AppState {
           .get(&prefix)
           .cloned()
           .unwrap_or(None);
-        (prefix, entry_count, newest_request_id, newest_cached_at)
+        let oldest_request_id = oldest_request_ids
+          .get(&prefix)
+          .cloned()
+          .unwrap_or_default();
+        let oldest_cached_at = oldest_cached_ats
+          .get(&prefix)
+          .cloned()
+          .unwrap_or(None);
+        (
+          prefix,
+          entry_count,
+          newest_request_id,
+          newest_cached_at,
+          oldest_request_id,
+          oldest_cached_at,
+        )
       })
       .collect::<Vec<_>>();
-    prefixes.retain(|(_, entry_count, _, _)| *entry_count >= min_entry_count);
+    prefixes.retain(|(_, entry_count, _, _, _, _)| *entry_count >= min_entry_count);
     let total_prefixes = prefixes.len();
-    let scoped_total_entries = prefixes.iter().map(|(_, entry_count, _, _)| *entry_count).sum();
+    let scoped_total_entries = prefixes
+      .iter()
+      .map(|(_, entry_count, _, _, _, _)| *entry_count)
+      .sum();
     match sort_by {
       "recent" => prefixes.sort_by(|left, right| {
         right
@@ -1149,10 +1175,14 @@ mod tests {
     assert_eq!(prefixes[0].1, 3);
     assert_eq!(prefixes[0].2, "preset-c");
     assert!(prefixes[0].3.is_some());
+    assert_eq!(prefixes[0].4, "preset-a");
+    assert!(prefixes[0].5.is_some());
     assert_eq!(prefixes[1].0, "scenario-");
     assert_eq!(prefixes[1].1, 2);
     assert_eq!(prefixes[1].2, "scenario-b");
     assert!(prefixes[1].3.is_some());
+    assert_eq!(prefixes[1].4, "scenario-a");
+    assert!(prefixes[1].5.is_some());
 
     let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
     let (
@@ -1190,6 +1220,8 @@ mod tests {
     assert_eq!(prefix_scoped_prefixes[0].1, 2);
     assert_eq!(prefix_scoped_prefixes[0].2, "scenario-b");
     assert!(prefix_scoped_prefixes[0].3.is_some());
+    assert_eq!(prefix_scoped_prefixes[0].4, "scenario-a");
+    assert!(prefix_scoped_prefixes[0].5.is_some());
 
     let (
       min_filtered_total_prefixes,

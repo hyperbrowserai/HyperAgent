@@ -3292,6 +3292,10 @@ export function SpreadsheetApp() {
                             suggestion.newest_cached_at
                               ? ` @ ${formatIsoTimestamp(suggestion.newest_cached_at)} (${formatRelativeAge(suggestion.newest_cached_at)})`
                               : ""
+                          } · oldest: ${suggestion.oldest_request_id}${
+                            suggestion.oldest_cached_at
+                              ? ` @ ${formatIsoTimestamp(suggestion.oldest_cached_at)} (${formatRelativeAge(suggestion.oldest_cached_at)})`
+                              : ""
                           } (Shift+click inspect, Alt+click preview remove)`}
                           className={`rounded border px-1.5 py-0.5 text-[10px] ${
                             cacheRequestIdPrefix.trim() === suggestion.prefix

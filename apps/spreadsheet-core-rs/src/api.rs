@@ -1137,7 +1137,9 @@ async fn get_agent_schema(
         "prefix": "string",
         "entry_count": "number of matching cache entries",
         "newest_request_id": "newest request_id observed for this prefix within active scope",
-        "newest_cached_at": "optional iso timestamp for newest request_id within active scope"
+        "newest_cached_at": "optional iso timestamp for newest request_id within active scope",
+        "oldest_request_id": "oldest request_id observed for this prefix within active scope",
+        "oldest_cached_at": "optional iso timestamp for oldest request_id within active scope"
       }]
     },
     "agent_ops_cache_entry_detail_response_shape": {
@@ -1737,11 +1739,20 @@ async fn agent_ops_cache_prefixes(
   let mapped_prefixes = prefixes
     .into_iter()
     .map(
-      |(prefix, entry_count, newest_request_id, newest_cached_at)| AgentOpsCachePrefix {
+      |(
         prefix,
         entry_count,
         newest_request_id,
         newest_cached_at,
+        oldest_request_id,
+        oldest_cached_at,
+      )| AgentOpsCachePrefix {
+        prefix,
+        entry_count,
+        newest_request_id,
+        newest_cached_at,
+        oldest_request_id,
+        oldest_cached_at,
       },
     )
     .collect::<Vec<_>>();
@@ -3011,10 +3022,14 @@ mod tests {
     assert_eq!(prefixes.prefixes[0].entry_count, 2);
     assert_eq!(prefixes.prefixes[0].newest_request_id, "scenario-b");
     assert!(prefixes.prefixes[0].newest_cached_at.is_some());
+    assert_eq!(prefixes.prefixes[0].oldest_request_id, "scenario-a");
+    assert!(prefixes.prefixes[0].oldest_cached_at.is_some());
     assert_eq!(prefixes.prefixes[1].prefix, "preset-");
     assert_eq!(prefixes.prefixes[1].entry_count, 1);
     assert_eq!(prefixes.prefixes[1].newest_request_id, "preset-a");
     assert!(prefixes.prefixes[1].newest_cached_at.is_some());
+    assert_eq!(prefixes.prefixes[1].oldest_request_id, "preset-a");
+    assert!(prefixes.prefixes[1].oldest_cached_at.is_some());
 
     let paged_prefixes = agent_ops_cache_prefixes(
       State(state.clone()),
@@ -3119,6 +3134,8 @@ mod tests {
     assert_eq!(prefix_filtered.prefixes[0].entry_count, 2);
     assert_eq!(prefix_filtered.prefixes[0].newest_request_id, "scenario-b");
     assert!(prefix_filtered.prefixes[0].newest_cached_at.is_some());
+    assert_eq!(prefix_filtered.prefixes[0].oldest_request_id, "scenario-a");
+    assert!(prefix_filtered.prefixes[0].oldest_cached_at.is_some());
 
     let min_filtered = agent_ops_cache_prefixes(
       State(state.clone()),
@@ -4271,6 +4288,28 @@ mod tests {
     assert_eq!(
       newest_prefix_cached_at_shape,
       Some("optional iso timestamp for newest request_id within active scope"),
+    );
+    let oldest_prefix_request_id_shape = schema
+      .get("agent_ops_cache_prefixes_response_shape")
+      .and_then(|value| value.get("prefixes"))
+      .and_then(serde_json::Value::as_array)
+      .and_then(|items| items.first())
+      .and_then(|item| item.get("oldest_request_id"))
+      .and_then(serde_json::Value::as_str);
+    assert_eq!(
+      oldest_prefix_request_id_shape,
+      Some("oldest request_id observed for this prefix within active scope"),
+    );
+    let oldest_prefix_cached_at_shape = schema
+      .get("agent_ops_cache_prefixes_response_shape")
+      .and_then(|value| value.get("prefixes"))
+      .and_then(serde_json::Value::as_array)
+      .and_then(|items| items.first())
+      .and_then(|item| item.get("oldest_cached_at"))
+      .and_then(serde_json::Value::as_str);
+    assert_eq!(
+      oldest_prefix_cached_at_shape,
+      Some("optional iso timestamp for oldest request_id within active scope"),
     );
     assert_eq!(
       schema
