@@ -276,13 +276,16 @@ export async function getAgentOpsCacheEntryDetail(
 export async function getAgentOpsCachePrefixes(
   workbookId: string,
   limit: number = 8,
+  offset: number = 0,
   requestIdPrefix?: string,
   maxAgeSeconds?: number,
   minEntryCount?: number,
   sortBy: "count" | "recent" = "count",
 ): Promise<AgentOpsCachePrefixesResponse> {
   const safeLimit = Math.max(1, Math.min(limit, 100));
+  const safeOffset = Math.max(0, offset);
   const params = new URLSearchParams({
+    offset: String(safeOffset),
     limit: String(safeLimit),
   });
   const normalizedPrefix = requestIdPrefix?.trim();

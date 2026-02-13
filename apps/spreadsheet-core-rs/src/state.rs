@@ -574,6 +574,7 @@ impl AppState {
     cutoff_timestamp: Option<DateTime<Utc>>,
     min_entry_count: usize,
     sort_by_recent: bool,
+    offset: usize,
     limit: usize,
   ) -> Result<(usize, usize, Vec<(String, usize, String, Option<DateTime<Utc>>)>), ApiError> {
     let guard = self.workbooks.read().await;
@@ -658,8 +659,12 @@ impl AppState {
           .then_with(|| left.0.cmp(&right.0))
       });
     }
-    prefixes.truncate(limit);
-    Ok((total_prefixes, unscoped_total_prefixes, prefixes))
+    let paged_prefixes = prefixes
+      .into_iter()
+      .skip(offset)
+      .take(limit)
+      .collect::<Vec<_>>();
+    Ok((total_prefixes, unscoped_total_prefixes, paged_prefixes))
   }
 
   pub async fn remove_agent_ops_cache_entry(
@@ -1112,7 +1117,7 @@ mod tests {
     }
 
     let (total_prefixes, unscoped_total_prefixes, prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 0, 5)
       .await
       .expect("prefix suggestions should load");
     assert_eq!(total_prefixes, 2);
@@ -1129,7 +1134,7 @@ mod tests {
 
     let cutoff_timestamp = Utc::now() - ChronoDuration::hours(1);
     let (filtered_total_prefixes, filtered_unscoped_total_prefixes, filtered_prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, Some(cutoff_timestamp), 1, false, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, Some(cutoff_timestamp), 1, false, 0, 5)
       .await
       .expect("age-filtered prefixes should load");
     assert_eq!(filtered_total_prefixes, 0);
@@ -1137,7 +1142,7 @@ mod tests {
     assert!(filtered_prefixes.is_empty());
 
     let (prefix_scoped_total_prefixes, prefix_scoped_unscoped_total_prefixes, prefix_scoped_prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, Some("scenario-"), None, 1, false, 5)
+      .agent_ops_cache_prefixes(workbook.id, Some("scenario-"), None, 1, false, 0, 5)
       .await
       .expect("prefix-scoped suggestions should load");
     assert_eq!(prefix_scoped_total_prefixes, 1);
@@ -1153,7 +1158,7 @@ mod tests {
       min_filtered_unscoped_total_prefixes,
       min_filtered_prefixes,
     ) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 3, false, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 3, false, 0, 5)
       .await
       .expect("min-entry-count filtered suggestions should load");
     assert_eq!(min_filtered_total_prefixes, 1);
@@ -1192,7 +1197,7 @@ mod tests {
     }
 
     let (_, _, prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 0, 5)
       .await
       .expect("prefix suggestions should load");
     assert_eq!(prefixes.len(), 2);
@@ -1229,18 +1234,63 @@ mod tests {
     }
 
     let (_, _, count_sorted_prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, false, 0, 5)
       .await
       .expect("count-sorted prefixes should load");
     assert_eq!(count_sorted_prefixes[0].0, "many-");
     assert_eq!(count_sorted_prefixes[1].0, "few-");
 
     let (_, _, recent_sorted_prefixes) = state
-      .agent_ops_cache_prefixes(workbook.id, None, None, 1, true, 5)
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, true, 0, 5)
       .await
       .expect("recent-sorted prefixes should load");
     assert_eq!(recent_sorted_prefixes[0].0, "few-");
     assert_eq!(recent_sorted_prefixes[1].0, "many-");
+  }
+
+  #[tokio::test]
+  async fn should_page_prefix_suggestions_with_offset() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("cache-prefix-offset".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    for request_id in ["alpha-1", "beta-1", "gamma-1"] {
+      state
+        .cache_agent_ops_response(
+          workbook.id,
+          request_id.to_string(),
+          vec![AgentOperation::Recalculate],
+          AgentOpsResponse {
+            request_id: Some(request_id.to_string()),
+            operations_signature: Some(format!("sig-{request_id}")),
+            served_from_cache: false,
+            results: Vec::new(),
+          },
+        )
+        .await
+        .expect("cache update should succeed");
+      tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+
+    let (total_prefixes, _, first_page) = state
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, true, 0, 2)
+      .await
+      .expect("first page should load");
+    assert_eq!(total_prefixes, 3);
+    assert_eq!(first_page.len(), 2);
+    assert_eq!(first_page[0].0, "gamma-");
+    assert_eq!(first_page[1].0, "beta-");
+
+    let (_, _, second_page) = state
+      .agent_ops_cache_prefixes(workbook.id, None, None, 1, true, 2, 2)
+      .await
+      .expect("second page should load");
+    assert_eq!(second_page.len(), 1);
+    assert_eq!(second_page[0].0, "alpha-");
   }
 
   #[tokio::test]

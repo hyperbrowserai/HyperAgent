@@ -143,6 +143,7 @@ export function SpreadsheetApp() {
   const [isRemovingCacheByPrefix, setIsRemovingCacheByPrefix] = useState(false);
   const [removingCacheRequestId, setRemovingCacheRequestId] = useState<string | null>(null);
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
+  const [cachePrefixSuggestionsOffset, setCachePrefixSuggestionsOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
   const [cachePrefixSuggestionLimit, setCachePrefixSuggestionLimit] = useState("12");
@@ -351,6 +352,7 @@ export function SpreadsheetApp() {
       normalizedCachePrefixSuggestionLimit,
       normalizedCachePrefixMinEntryCount,
       cachePrefixSortBy,
+      cachePrefixSuggestionsOffset,
     ],
     enabled: Boolean(workbook?.id)
       && !hasInvalidCacheEntriesMaxAgeInput
@@ -360,6 +362,7 @@ export function SpreadsheetApp() {
       getAgentOpsCachePrefixes(
         workbook!.id,
         normalizedCachePrefixSuggestionLimit ?? 12,
+        cachePrefixSuggestionsOffset,
         cacheRequestIdPrefix,
         normalizedCacheEntriesMaxAgeSeconds,
         normalizedCachePrefixMinEntryCount,
@@ -413,9 +416,13 @@ export function SpreadsheetApp() {
 
   useEffect(() => {
     setCacheEntriesOffset(0);
+    setCachePrefixSuggestionsOffset(0);
     setSelectedCacheEntryDetail(null);
     setCacheRerunRequestId("");
     setCacheEntriesMaxAgeSeconds("");
+    setCachePrefixSuggestionLimit("12");
+    setCachePrefixMinEntryCount("");
+    setCachePrefixSortBy("count");
     setCachePrefixRemovalPreview(null);
     setCacheRemovePreviewSampleLimit("10");
     setCacheStalePreviewSampleLimit("10");
@@ -425,9 +432,16 @@ export function SpreadsheetApp() {
 
   useEffect(() => {
     setCacheEntriesOffset(0);
+    setCachePrefixSuggestionsOffset(0);
     setCachePrefixRemovalPreview(null);
     setCacheStaleRemovalPreview(null);
-  }, [cacheRequestIdPrefix, cacheEntriesMaxAgeSeconds]);
+  }, [
+    cacheRequestIdPrefix,
+    cacheEntriesMaxAgeSeconds,
+    cachePrefixMinEntryCount,
+    cachePrefixSortBy,
+    cachePrefixSuggestionLimit,
+  ]);
 
   useEffect(() => {
     setCacheStaleRemovalPreview(null);
@@ -457,6 +471,28 @@ export function SpreadsheetApp() {
     agentOpsCacheEntriesQuery.data,
     cacheEntriesOffset,
     hasInvalidCacheEntriesMaxAgeInput,
+  ]);
+
+  useEffect(() => {
+    if (
+      !hasInvalidCacheEntriesMaxAgeInput
+      && !hasInvalidCachePrefixMinEntryCountInput
+      && !hasInvalidCachePrefixSuggestionLimitInput
+      && cachePrefixSuggestionsOffset > 0
+      && agentOpsCachePrefixesQuery.data
+      && agentOpsCachePrefixesQuery.data.prefixes.length === 0
+    ) {
+      const fallbackStep = agentOpsCachePrefixesQuery.data.limit || 1;
+      setCachePrefixSuggestionsOffset((previousOffset) =>
+        Math.max(0, previousOffset - fallbackStep),
+      );
+    }
+  }, [
+    agentOpsCachePrefixesQuery.data,
+    cachePrefixSuggestionsOffset,
+    hasInvalidCacheEntriesMaxAgeInput,
+    hasInvalidCachePrefixMinEntryCountInput,
+    hasInvalidCachePrefixSuggestionLimitInput,
   ]);
 
   useEffect(() => {
@@ -557,6 +593,12 @@ export function SpreadsheetApp() {
   const cacheEntriesData = hasInvalidCacheEntriesMaxAgeInput
     ? null
     : agentOpsCacheEntriesQuery.data;
+  const cachePrefixSuggestionsData =
+    hasInvalidCacheEntriesMaxAgeInput
+    || hasInvalidCachePrefixMinEntryCountInput
+    || hasInvalidCachePrefixSuggestionLimitInput
+      ? null
+      : agentOpsCachePrefixesQuery.data;
   const cachePrefixSuggestions =
     hasInvalidCacheEntriesMaxAgeInput
     || hasInvalidCachePrefixMinEntryCountInput
@@ -3129,47 +3171,47 @@ export function SpreadsheetApp() {
                   {cachePrefixSuggestions.length > 0 ? (
                     <div className="mb-2 flex flex-wrap items-center gap-1">
                       <span className="text-[10px] text-slate-500">suggestions:</span>
-                      {agentOpsCachePrefixesQuery.data
-                        && agentOpsCachePrefixesQuery.data.total_prefixes
-                          !== agentOpsCachePrefixesQuery.data.unscoped_total_prefixes ? (
+                      {cachePrefixSuggestionsData
+                        && cachePrefixSuggestionsData.total_prefixes
+                          !== cachePrefixSuggestionsData.unscoped_total_prefixes ? (
                           <span className="text-[10px] text-slate-500">
                             (
-                            {agentOpsCachePrefixesQuery.data.total_prefixes}/
-                            {agentOpsCachePrefixesQuery.data.unscoped_total_prefixes}
+                            {cachePrefixSuggestionsData.total_prefixes}/
+                            {cachePrefixSuggestionsData.unscoped_total_prefixes}
                             {" "}scoped/global)
                           </span>
                         ) : null}
-                      {agentOpsCachePrefixesQuery.data?.request_id_prefix ? (
+                      {cachePrefixSuggestionsData?.request_id_prefix ? (
                         <span className="text-[10px] text-slate-500">
-                          (prefix {agentOpsCachePrefixesQuery.data.request_id_prefix})
+                          (prefix {cachePrefixSuggestionsData.request_id_prefix})
                         </span>
                       ) : null}
-                      {agentOpsCachePrefixesQuery.data
-                        && agentOpsCachePrefixesQuery.data.min_entry_count > 1 ? (
+                      {cachePrefixSuggestionsData
+                        && cachePrefixSuggestionsData.min_entry_count > 1 ? (
                           <span className="text-[10px] text-slate-500">
-                            (min count {agentOpsCachePrefixesQuery.data.min_entry_count})
+                            (min count {cachePrefixSuggestionsData.min_entry_count})
                           </span>
                         ) : null}
-                      {agentOpsCachePrefixesQuery.data ? (
+                      {cachePrefixSuggestionsData ? (
                         <span className="text-[10px] text-slate-500">
-                          (sort {agentOpsCachePrefixesQuery.data.sort_by})
+                          (sort {cachePrefixSuggestionsData.sort_by})
                         </span>
                       ) : null}
-                      {agentOpsCachePrefixesQuery.data ? (
+                      {cachePrefixSuggestionsData ? (
                         <span className="text-[10px] text-slate-500">
-                          (limit {agentOpsCachePrefixesQuery.data.limit})
+                          (limit {cachePrefixSuggestionsData.limit})
                         </span>
                       ) : null}
-                      {typeof agentOpsCachePrefixesQuery.data?.max_age_seconds === "number" ? (
+                      {typeof cachePrefixSuggestionsData?.max_age_seconds === "number" ? (
                         <span className="text-[10px] text-slate-500">
-                          (older than {agentOpsCachePrefixesQuery.data.max_age_seconds}s)
+                          (older than {cachePrefixSuggestionsData.max_age_seconds}s)
                         </span>
                       ) : null}
-                      {agentOpsCachePrefixesQuery.data?.cutoff_timestamp ? (
+                      {cachePrefixSuggestionsData?.cutoff_timestamp ? (
                         <span className="text-[10px] text-slate-500">
                           cutoff{" "}
-                          {formatIsoTimestamp(agentOpsCachePrefixesQuery.data.cutoff_timestamp)} (
-                          {formatRelativeAge(agentOpsCachePrefixesQuery.data.cutoff_timestamp)})
+                          {formatIsoTimestamp(cachePrefixSuggestionsData.cutoff_timestamp)} (
+                          {formatRelativeAge(cachePrefixSuggestionsData.cutoff_timestamp)})
                         </span>
                       ) : null}
                       {cachePrefixSuggestions.map((suggestion) => (
@@ -3206,7 +3248,7 @@ export function SpreadsheetApp() {
                         </button>
                       ))}
                     </div>
-                  ) : agentOpsCachePrefixesQuery.data && hasActiveCacheScopeFilters ? (
+                  ) : cachePrefixSuggestionsData && hasActiveCacheScopeFilters ? (
                     <div className="mb-2 text-[10px] text-slate-500">
                       No prefix suggestions match the current scope
                       {cacheRequestIdPrefix.trim() ? (
@@ -3224,6 +3266,52 @@ export function SpreadsheetApp() {
                         <> (limit {normalizedCachePrefixSuggestionLimit})</>
                       ) : null}
                       .
+                    </div>
+                  ) : null}
+                  {cachePrefixSuggestionsData ? (
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] text-slate-500">
+                        showing{" "}
+                        <span className="font-mono text-slate-300">
+                          {cachePrefixSuggestionsData.returned_prefixes === 0
+                            ? 0
+                            : cachePrefixSuggestionsData.offset + 1}
+                        </span>
+                        –
+                        <span className="font-mono text-slate-300">
+                          {cachePrefixSuggestionsData.offset
+                            + cachePrefixSuggestionsData.returned_prefixes}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-mono text-slate-300">
+                          {cachePrefixSuggestionsData.total_prefixes}
+                        </span>{" "}
+                        scoped prefixes
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() =>
+                            setCachePrefixSuggestionsOffset((previousOffset) =>
+                              Math.max(0, previousOffset - cachePrefixSuggestionsData.limit),
+                            )
+                          }
+                          disabled={cachePrefixSuggestionsData.offset === 0}
+                          className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                        >
+                          Newer
+                        </button>
+                        <button
+                          onClick={() =>
+                            setCachePrefixSuggestionsOffset(
+                              cachePrefixSuggestionsOffset + cachePrefixSuggestionsData.limit,
+                            )
+                          }
+                          disabled={!cachePrefixSuggestionsData.has_more}
+                          className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                        >
+                          Older
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                   <div className="flex flex-wrap items-center justify-between gap-2">

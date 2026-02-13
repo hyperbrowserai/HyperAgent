@@ -90,7 +90,9 @@ export interface AgentOpsCachePrefixesResponse {
   sort_by: string;
   max_age_seconds: number | null;
   cutoff_timestamp: string | null;
+  offset: number;
   limit: number;
+  has_more: boolean;
   prefixes: AgentOpsCachePrefix[];
 }
 

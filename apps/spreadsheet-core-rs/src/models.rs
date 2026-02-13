@@ -312,7 +312,9 @@ pub struct AgentOpsCachePrefixesResponse {
   pub sort_by: String,
   pub max_age_seconds: Option<i64>,
   pub cutoff_timestamp: Option<DateTime<Utc>>,
+  pub offset: usize,
   pub limit: usize,
+  pub has_more: bool,
   pub prefixes: Vec<AgentOpsCachePrefix>,
 }
 

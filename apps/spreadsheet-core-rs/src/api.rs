@@ -1055,7 +1055,7 @@ async fn get_agent_schema(
     "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
     "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
     "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
-    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&sort_by=recent&limit=8&max_age_seconds=3600",
+    "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&sort_by=recent&offset=0&limit=8&max_age_seconds=3600",
     "agent_ops_cache_stats_query_shape": {
       "request_id_prefix": "optional non-blank string filter (prefix match)",
       "max_age_seconds": "optional number > 0 (filter stats to entries older than or equal to this age)"
@@ -1071,6 +1071,7 @@ async fn get_agent_schema(
       "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
       "sort_by": "optional string enum: count|recent (default count)",
       "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
+      "offset": "optional number, default 0",
       "limit": "optional number, default 8, min 1, max 100"
     },
     "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
@@ -1107,7 +1108,7 @@ async fn get_agent_schema(
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
       "offset": "start index in newest-first order",
-      "limit": "applied limit (default 20, max 200)",
+      "limit": "applied limit (default 20, min 1, max 200)",
       "has_more": "true when another page exists after this response",
       "entries": [{
         "request_id": "string",
@@ -1126,7 +1127,9 @@ async fn get_agent_schema(
       "sort_by": "applied sort mode: count|recent",
       "max_age_seconds": "echoed age filter when provided",
       "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
-      "limit": "applied limit (default 8, max 100)",
+      "offset": "start index in sorted prefix list",
+      "limit": "applied limit (default 8, min 1, max 100)",
+      "has_more": "true when another page exists after this response",
       "prefixes": [{
         "prefix": "string",
         "entry_count": "number of matching cache entries",
@@ -1536,6 +1539,7 @@ struct AgentOpsCachePrefixesQuery {
   min_entry_count: Option<usize>,
   sort_by: Option<String>,
   max_age_seconds: Option<i64>,
+  offset: Option<usize>,
   limit: Option<usize>,
 }
 
@@ -1704,6 +1708,7 @@ async fn agent_ops_cache_prefixes(
     ));
   }
   let sort_by = normalize_prefix_sort_by(query.sort_by.as_deref())?;
+  let offset = query.offset.unwrap_or(0);
   let limit = query
     .limit
     .unwrap_or(DEFAULT_AGENT_OPS_CACHE_PREFIXES_LIMIT)
@@ -1716,6 +1721,7 @@ async fn agent_ops_cache_prefixes(
       cutoff_timestamp,
       min_entry_count,
       sort_by == "recent",
+      offset,
       limit,
     )
     .await?;
@@ -1730,6 +1736,7 @@ async fn agent_ops_cache_prefixes(
       },
     )
     .collect::<Vec<_>>();
+  let has_more = offset + mapped_prefixes.len() < total_prefixes;
   Ok(Json(AgentOpsCachePrefixesResponse {
     total_prefixes,
     unscoped_total_prefixes,
@@ -1739,7 +1746,9 @@ async fn agent_ops_cache_prefixes(
     sort_by,
     max_age_seconds: query.max_age_seconds,
     cutoff_timestamp,
+    offset,
     limit,
+    has_more,
     prefixes: mapped_prefixes,
   }))
 }
@@ -2910,6 +2919,7 @@ mod tests {
         min_entry_count: None,
         sort_by: None,
         max_age_seconds: None,
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -2957,6 +2967,7 @@ mod tests {
         min_entry_count: None,
         sort_by: None,
         max_age_seconds: None,
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -2972,6 +2983,8 @@ mod tests {
     assert_eq!(prefixes.sort_by, "count");
     assert_eq!(prefixes.max_age_seconds, None);
     assert!(prefixes.cutoff_timestamp.is_none());
+    assert_eq!(prefixes.offset, 0);
+    assert!(!prefixes.has_more);
     assert_eq!(prefixes.prefixes[0].prefix, "scenario-");
     assert_eq!(prefixes.prefixes[0].entry_count, 2);
     assert_eq!(prefixes.prefixes[0].newest_request_id, "scenario-b");
@@ -2981,6 +2994,27 @@ mod tests {
     assert_eq!(prefixes.prefixes[1].newest_request_id, "preset-a");
     assert!(prefixes.prefixes[1].newest_cached_at.is_some());
 
+    let paged_prefixes = agent_ops_cache_prefixes(
+      State(state.clone()),
+      Path(workbook.id),
+      Query(AgentOpsCachePrefixesQuery {
+        request_id_prefix: None,
+        min_entry_count: None,
+        sort_by: Some("count".to_string()),
+        max_age_seconds: None,
+        offset: Some(1),
+        limit: Some(1),
+      }),
+    )
+    .await
+    .expect("paged prefixes should load")
+    .0;
+    assert_eq!(paged_prefixes.offset, 1);
+    assert_eq!(paged_prefixes.limit, 1);
+    assert!(!paged_prefixes.has_more);
+    assert_eq!(paged_prefixes.returned_prefixes, 1);
+    assert_eq!(paged_prefixes.prefixes[0].prefix, "preset-");
+
     let min_clamped_prefixes = agent_ops_cache_prefixes(
       State(state.clone()),
       Path(workbook.id),
@@ -2989,6 +3023,7 @@ mod tests {
         min_entry_count: None,
         sort_by: None,
         max_age_seconds: None,
+        offset: None,
         limit: Some(0),
       }),
     )
@@ -3007,6 +3042,7 @@ mod tests {
         min_entry_count: None,
         sort_by: None,
         max_age_seconds: Some(86_400),
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -3020,6 +3056,8 @@ mod tests {
     assert_eq!(age_filtered.total_prefixes, 0);
     assert_eq!(age_filtered.unscoped_total_prefixes, 2);
     assert_eq!(age_filtered.request_id_prefix, None);
+    assert_eq!(age_filtered.offset, 0);
+    assert!(!age_filtered.has_more);
     assert!(age_filtered.prefixes.is_empty());
 
     let prefix_filtered = agent_ops_cache_prefixes(
@@ -3030,6 +3068,7 @@ mod tests {
         min_entry_count: None,
         sort_by: None,
         max_age_seconds: None,
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -3044,6 +3083,8 @@ mod tests {
     );
     assert_eq!(prefix_filtered.min_entry_count, 1);
     assert_eq!(prefix_filtered.sort_by, "count");
+    assert_eq!(prefix_filtered.offset, 0);
+    assert!(!prefix_filtered.has_more);
     assert_eq!(prefix_filtered.prefixes.len(), 1);
     assert_eq!(prefix_filtered.prefixes[0].prefix, "scenario-");
     assert_eq!(prefix_filtered.prefixes[0].entry_count, 2);
@@ -3058,6 +3099,7 @@ mod tests {
         min_entry_count: Some(2),
         sort_by: None,
         max_age_seconds: None,
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -3069,6 +3111,8 @@ mod tests {
     assert_eq!(min_filtered.total_prefixes, 1);
     assert_eq!(min_filtered.unscoped_total_prefixes, 2);
     assert_eq!(min_filtered.returned_prefixes, 1);
+    assert_eq!(min_filtered.offset, 0);
+    assert!(!min_filtered.has_more);
     assert_eq!(min_filtered.prefixes[0].prefix, "scenario-");
     assert_eq!(min_filtered.prefixes[0].entry_count, 2);
 
@@ -3080,6 +3124,7 @@ mod tests {
         min_entry_count: None,
         sort_by: None,
         max_age_seconds: Some(0),
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -3100,6 +3145,7 @@ mod tests {
         min_entry_count: Some(0),
         sort_by: None,
         max_age_seconds: None,
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -3120,6 +3166,7 @@ mod tests {
         min_entry_count: None,
         sort_by: Some("recent".to_string()),
         max_age_seconds: None,
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -3138,6 +3185,7 @@ mod tests {
         min_entry_count: None,
         sort_by: Some("mystery".to_string()),
         max_age_seconds: None,
+        offset: None,
         limit: Some(10),
       }),
     )
@@ -4016,8 +4064,15 @@ mod tests {
         .get("agent_ops_cache_prefixes_endpoint")
         .and_then(serde_json::Value::as_str),
       Some(
-        "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&sort_by=recent&limit=8&max_age_seconds=3600",
+        "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&sort_by=recent&offset=0&limit=8&max_age_seconds=3600",
       ),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_query_shape")
+        .and_then(|value| value.get("offset"))
+        .and_then(serde_json::Value::as_str),
+      Some("optional number, default 0"),
     );
     assert_eq!(
       schema
@@ -4101,6 +4156,20 @@ mod tests {
         .and_then(|value| value.get("sort_by"))
         .and_then(serde_json::Value::as_str),
       Some("applied sort mode: count|recent"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("offset"))
+        .and_then(serde_json::Value::as_str),
+      Some("start index in sorted prefix list"),
+    );
+    assert_eq!(
+      schema
+        .get("agent_ops_cache_prefixes_response_shape")
+        .and_then(|value| value.get("has_more"))
+        .and_then(serde_json::Value::as_str),
+      Some("true when another page exists after this response"),
     );
     assert_eq!(
       schema
