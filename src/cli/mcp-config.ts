@@ -8,6 +8,33 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
+function normalizeOptionalStringArray(
+  field: "includeTools" | "excludeTools",
+  value: unknown,
+  index: number
+): string[] | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
+    );
+  }
+  const normalized = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  if (normalized.length !== value.length) {
+    throw new Error(
+      `MCP server entry at index ${index} must provide "${field}" as an array of non-empty strings.`
+    );
+  }
+
+  return Array.from(new Set(normalized));
+}
+
 function normalizeServersPayload(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
@@ -39,6 +66,22 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
       throw new Error(`MCP server entry at index ${i} must be an object.`);
     }
     const normalizedEntry = { ...entry } as Record<string, unknown>;
+    const includeTools = normalizeOptionalStringArray(
+      "includeTools",
+      entry.includeTools,
+      i
+    );
+    const excludeTools = normalizeOptionalStringArray(
+      "excludeTools",
+      entry.excludeTools,
+      i
+    );
+    if (includeTools) {
+      normalizedEntry.includeTools = includeTools;
+    }
+    if (excludeTools) {
+      normalizedEntry.excludeTools = excludeTools;
+    }
 
     const normalizedId = isNonEmptyString(entry.id) ? entry.id.trim() : "";
     if (normalizedId.length > 0) {
