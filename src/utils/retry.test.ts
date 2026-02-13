@@ -134,4 +134,28 @@ describe("retry", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("continues retrying when sleep throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    sleep.mockRejectedValueOnce({ reason: "sleep failed" }).mockResolvedValue(undefined);
+    const func = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("first"))
+      .mockResolvedValue("ok");
+
+    try {
+      const result = await retry({
+        func,
+        params: { retryCount: 2 },
+      });
+
+      expect(result).toBe("ok");
+      expect(func).toHaveBeenCalledTimes(2);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[retry] sleep failed: {"reason":"sleep failed"}'
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

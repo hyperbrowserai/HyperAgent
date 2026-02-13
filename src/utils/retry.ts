@@ -41,7 +41,13 @@ export async function retry<T>({
       lastError = error;
       if (attempt < retryCount - 1) {
         const delayMs = Math.min(Math.pow(2, attempt) * 1000, MAX_RETRY_DELAY_MS);
-        await sleep(delayMs);
+        try {
+          await sleep(delayMs);
+        } catch (sleepError) {
+          console.warn(
+            `[retry] sleep failed: ${formatUnknownError(sleepError)}`
+          );
+        }
       }
     }
   }
