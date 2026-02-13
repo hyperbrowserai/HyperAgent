@@ -1855,17 +1855,29 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         HyperAgent.MAX_REPLAY_OUTPUT_CHARS
       )}... [truncated ${omitted} chars]`;
     };
+    const sanitizeReplayOutput = (value: string): string => {
+      if (value.length === 0) {
+        return value;
+      }
+      const withoutControlChars = Array.from(value, (char) => {
+        const code = char.charCodeAt(0);
+        return (code >= 0 && code < 32) || code === 127 ? " " : char;
+      }).join("");
+      return withoutControlChars
+        .replace(/\s+/g, " ")
+        .trim();
+    };
     const normalizeReplayOutput = (
       output: unknown,
       isSuccess: boolean
     ): string => {
       if (typeof output === "string") {
-        return truncateReplayOutput(output);
+        return truncateReplayOutput(sanitizeReplayOutput(output));
       }
       if (typeof output === "undefined") {
         return isSuccess ? "Completed" : "Failed to execute cached action";
       }
-      return truncateReplayOutput(formatUnknownError(output));
+      return truncateReplayOutput(sanitizeReplayOutput(formatUnknownError(output)));
     };
     const readReplayResultStatus = (result: TaskOutput): TaskStatus => {
       const rawStatus = this.safeReadField(result, "status");

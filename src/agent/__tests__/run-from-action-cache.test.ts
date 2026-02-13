@@ -770,6 +770,51 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toBe("");
   });
 
+  it("sanitizes replay output control characters", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      taskId: "perform-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "line-1\nline-2\u0007",
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "sanitize output",
+          elementId: null,
+          method: null,
+          arguments: [],
+          frameIndex: null,
+          xpath: null,
+          actionType: "unknown-action",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.COMPLETED);
+    expect(replay.steps[0]?.message).toBe("line-1 line-2");
+  });
+
   it("formats non-string replay outputs into readable diagnostics", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
