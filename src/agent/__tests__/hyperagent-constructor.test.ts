@@ -178,6 +178,65 @@ describe("HyperAgent constructor and task controls", () => {
     expect(Object.keys(internalAgent.taskResults)).toHaveLength(0);
   });
 
+  it("executeTaskAsync cleans up listener when task-state registration throws", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const on = jest.fn();
+    const off = jest.fn();
+    const internalAgent = agent as unknown as {
+      context: {
+        on: typeof on;
+        off: typeof off;
+      } | null;
+      tasks: Record<string, unknown>;
+    };
+    internalAgent.context = { on, off };
+    internalAgent.tasks = new Proxy(
+      {},
+      {
+        set: () => {
+          throw new Error("task register trap");
+        },
+      }
+    );
+
+    const fakePage = {} as unknown as Page;
+    await expect(agent.executeTaskAsync("test task", undefined, fakePage)).rejects
+      .toThrow("Failed to register task state");
+    expect(off).toHaveBeenCalledWith("page", expect.any(Function));
+  });
+
+  it("executeTask cleans up listener when task-state registration throws", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const on = jest.fn();
+    const off = jest.fn();
+    const internalAgent = agent as unknown as {
+      context: {
+        on: typeof on;
+        off: typeof off;
+      } | null;
+      tasks: Record<string, unknown>;
+    };
+    internalAgent.context = { on, off };
+    internalAgent.tasks = new Proxy(
+      {},
+      {
+        set: () => {
+          throw new Error("task register trap");
+        },
+      }
+    );
+
+    const fakePage = {} as unknown as Page;
+    await expect(agent.executeTask("test task", undefined, fakePage)).rejects.toThrow(
+      "Failed to register task state"
+    );
+    expect(off).toHaveBeenCalledWith("page", expect.any(Function));
+  });
+
   it("executeTaskAsync tolerates task-result promise assignment traps", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({

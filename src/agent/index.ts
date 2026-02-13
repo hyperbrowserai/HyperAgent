@@ -552,6 +552,17 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private registerTaskState(taskId: string, taskState: TaskState): void {
+    try {
+      this.tasks[taskId] = taskState;
+    } catch (error) {
+      throw new HyperagentError(
+        `Failed to register task state ${taskId}: ${formatUnknownError(error)}`,
+        500
+      );
+    }
+  }
+
   private isTaskLifecycleGenerationActive(generation: number): boolean {
     return generation === this.lifecycleGeneration;
   }
@@ -1247,7 +1258,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       startingPage: activeTaskPage,
       steps: [],
     };
-    this.tasks[taskId] = taskState;
+    try {
+      this.registerTaskState(taskId, taskState);
+    } catch (error) {
+      cleanup();
+      throw error;
+    }
     const mergedParams = params ?? {};
     let taskResult: Promise<AgentTaskOutput>;
     try {
@@ -1372,7 +1388,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       startingPage: activeTaskPage,
       steps: [],
     };
-    this.tasks[taskId] = taskState;
+    try {
+      this.registerTaskState(taskId, taskState);
+    } catch (error) {
+      cleanup();
+      throw error;
+    }
     try {
       const mergedParams = params ?? {};
       let result = await runAgentTask(
