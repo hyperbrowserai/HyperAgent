@@ -1,9 +1,20 @@
 import { HyperAgentContentPart } from "@/llm/types";
 import { parseJsonMaybe } from "@/llm/utils/safe-json";
+import { sanitizeProviderOptions } from "@/llm/utils/provider-options";
 import { formatUnknownError } from "@/utils";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const NO_RESERVED_PROVIDER_OPTION_KEYS: ReadonlySet<string> = new Set();
+
+function sanitizeToolArguments(value: unknown): unknown {
+  const sanitized = sanitizeProviderOptions(
+    { arguments: value },
+    NO_RESERVED_PROVIDER_OPTION_KEYS
+  );
+  return sanitized?.arguments;
 }
 
 function normalizeOpenAICompatibleContentPart(
@@ -40,7 +51,7 @@ function normalizeOpenAICompatibleContentPart(
     return {
       type: "tool_call",
       toolName: typeof fn.name === "string" ? fn.name : "unknown-tool",
-      arguments: parseJsonMaybe(fn.arguments),
+      arguments: sanitizeToolArguments(parseJsonMaybe(fn.arguments)),
     };
   }
 

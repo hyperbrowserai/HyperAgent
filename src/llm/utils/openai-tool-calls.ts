@@ -1,4 +1,5 @@
 import { parseJsonMaybe } from "@/llm/utils/safe-json";
+import { sanitizeProviderOptions } from "@/llm/utils/provider-options";
 import { formatUnknownError } from "@/utils";
 
 export interface NormalizedOpenAIToolCall {
@@ -6,6 +7,8 @@ export interface NormalizedOpenAIToolCall {
   name: string;
   arguments: unknown;
 }
+
+const NO_RESERVED_PROVIDER_OPTION_KEYS: ReadonlySet<string> = new Set();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -17,6 +20,14 @@ function normalizeOptionalString(value: unknown): string | undefined {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function sanitizeToolArguments(value: unknown): unknown {
+  const sanitized = sanitizeProviderOptions(
+    { arguments: value },
+    NO_RESERVED_PROVIDER_OPTION_KEYS
+  );
+  return sanitized?.arguments;
 }
 
 export function normalizeOpenAIToolCalls(
@@ -39,7 +50,7 @@ export function normalizeOpenAIToolCalls(
       return {
         id: normalizeOptionalString(toolCall.id),
         name: normalizeOptionalString(fn.name) ?? "unknown-tool",
-        arguments: parseJsonMaybe(fn.arguments),
+        arguments: sanitizeToolArguments(parseJsonMaybe(fn.arguments)),
       };
     }
 
@@ -48,7 +59,7 @@ export function normalizeOpenAIToolCalls(
       return {
         id: normalizeOptionalString(toolCall.id),
         name: normalizeOptionalString(custom.name) ?? "unknown-tool",
-        arguments: parseJsonMaybe(custom.input),
+        arguments: sanitizeToolArguments(parseJsonMaybe(custom.input)),
       };
     }
 

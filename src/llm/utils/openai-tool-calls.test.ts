@@ -94,4 +94,58 @@ describe("normalizeOpenAIToolCalls", () => {
       },
     ]);
   });
+
+  it("sanitizes unsafe keys from parsed tool-call arguments", () => {
+    expect(
+      normalizeOpenAIToolCalls([
+        {
+          id: "fn-1",
+          type: "function",
+          function: {
+            name: "lookup",
+            arguments:
+              '{"safe":1,"__proto__":{"polluted":true},"nested":{"constructor":"bad","ok":true}}',
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        id: "fn-1",
+        name: "lookup",
+        arguments: {
+          safe: 1,
+          nested: {
+            ok: true,
+          },
+        },
+      },
+    ]);
+  });
+
+  it("sanitizes circular direct-object arguments safely", () => {
+    const circular: Record<string, unknown> = { id: "node" };
+    circular.self = circular;
+
+    expect(
+      normalizeOpenAIToolCalls([
+        {
+          id: "custom-1",
+          type: "custom",
+          custom: {
+            name: "lookup",
+            input: circular,
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        id: "custom-1",
+        name: "lookup",
+        arguments: {
+          id: "node",
+          self: "[Circular]",
+        },
+      },
+    ]);
+  });
 });

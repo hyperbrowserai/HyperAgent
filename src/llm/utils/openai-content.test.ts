@@ -19,6 +19,32 @@ describe("normalizeOpenAICompatibleContent", () => {
     ]);
   });
 
+  it("sanitizes unsafe keys in tool-call content arguments", () => {
+    expect(
+      normalizeOpenAICompatibleContent([
+        {
+          type: "tool_call",
+          function: {
+            name: "lookup",
+            arguments:
+              '{"safe":1,"__proto__":{"polluted":true},"nested":{"constructor":"bad","ok":true}}',
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        type: "tool_call",
+        toolName: "lookup",
+        arguments: {
+          safe: 1,
+          nested: {
+            ok: true,
+          },
+        },
+      },
+    ]);
+  });
+
   it("formats non-string text-part payloads safely", () => {
     expect(
       normalizeOpenAICompatibleContent([
