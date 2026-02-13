@@ -45,6 +45,19 @@ describe("retry", () => {
     expect(func).toHaveBeenCalledTimes(3);
   });
 
+  it("caps retry count to prevent unbounded retry loops", async () => {
+    const func = jest.fn().mockRejectedValue(new Error("always fails"));
+
+    await expect(
+      retry({
+        func,
+        params: { retryCount: 1000 },
+      })
+    ).rejects.toThrow("always fails");
+
+    expect(func).toHaveBeenCalledTimes(10);
+  });
+
   it("does not sleep after the final failed attempt", async () => {
     const func = jest.fn().mockRejectedValue(new Error("always fails"));
 
