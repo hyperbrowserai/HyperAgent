@@ -976,6 +976,43 @@ describe("runAgentTask completion behavior", () => {
     }
   });
 
+  it("truncates oversized debug IO diagnostics", async () => {
+    const page = createMockPage();
+    const hugeError = `mkdir\n${"x".repeat(10_000)}`;
+    const mkdirSpy = jest.spyOn(fs, "mkdirSync").mockImplementation(() => {
+      throw new Error(hugeError);
+    });
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      return undefined;
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.debug = true;
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page), {
+        debugDir: "debug/test",
+      });
+
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      const debugIoError = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes('[DebugIO] Failed to create directory'));
+      expect(debugIoError).toBeDefined();
+      expect(debugIoError).toContain("[truncated");
+      expect(debugIoError).not.toContain("\n");
+      expect(debugIoError).not.toContain("x".repeat(6_000));
+      expect(debugIoError?.length ?? 0).toBeLessThan(4_300);
+      expect(writeSpy).not.toHaveBeenCalled();
+    } finally {
+      mkdirSpy.mockRestore();
+      writeSpy.mockRestore();
+      errorSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
   it("skips step artifact writes when step debug directory creation fails", async () => {
     const page = createMockPage();
     const mkdirSpy = jest

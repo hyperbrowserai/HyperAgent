@@ -65,18 +65,35 @@ function truncateDiagnosticText(value: string, maxChars: number): string {
   return `${value.slice(0, maxChars)}... [truncated ${omittedChars} chars]`;
 }
 
-function formatDiagnosticIdentifier(value: unknown, fallback: string): string {
+function sanitizeDiagnosticText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function formatDiagnosticText(
+  value: unknown,
+  maxChars: number,
+  fallback: string
+): string {
   const raw = typeof value === "string" ? value : formatUnknownError(value);
-  const normalized = raw
-    .replace(/[\u0000-\u001F\u007F]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const normalized = sanitizeDiagnosticText(raw);
   if (normalized.length === 0) {
     return fallback;
   }
-  return truncateDiagnosticText(
-    normalized,
-    MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS
+  return truncateDiagnosticText(normalized, maxChars);
+}
+
+function formatDiagnosticIdentifier(value: unknown, fallback: string): string {
+  return formatDiagnosticText(
+    value,
+    MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS,
+    fallback
   );
 }
 
@@ -92,21 +109,19 @@ function safeReadRecordField(value: unknown, key: string): unknown {
 }
 
 function normalizeRuntimeActionType(value: unknown): string {
-  const raw = typeof value === "string" ? value : formatUnknownError(value);
-  const normalized = raw.replace(/\s+/g, " ").trim();
-  if (normalized.length === 0) {
-    return "unknown";
-  }
-  return truncateDiagnosticText(normalized, MAX_RUNTIME_ACTION_TYPE_CHARS);
+  return formatDiagnosticText(
+    value,
+    MAX_RUNTIME_ACTION_TYPE_CHARS,
+    "unknown"
+  );
 }
 
 function normalizeRuntimeActionMessage(value: unknown): string {
-  const raw = typeof value === "string" ? value : formatUnknownError(value);
-  const normalized = raw.replace(/\s+/g, " ").trim();
-  if (normalized.length === 0) {
-    return "Action failed without an error message.";
-  }
-  return truncateDiagnosticText(normalized, MAX_RUNTIME_ACTION_MESSAGE_CHARS);
+  return formatDiagnosticText(
+    value,
+    MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+    "Action failed without an error message."
+  );
 }
 
 function normalizeTaskOutputText(value: unknown, fallback: string): string {
@@ -266,7 +281,11 @@ function safeJsonStringify(value: unknown, spacing: number = 2): string {
 
   return JSON.stringify(
     {
-      __nonSerializable: formatUnknownError(value),
+      __nonSerializable: formatDiagnosticText(
+        value,
+        MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+        "non-serializable value"
+      ),
     },
     null,
     spacing
@@ -287,7 +306,11 @@ const writeFrameGraphSnapshot = async (
   } catch (error) {
     if (debug) {
       console.warn(
-        `[FrameContext] Failed to write frame graph: ${formatUnknownError(error)}`
+        `[FrameContext] Failed to write frame graph: ${formatDiagnosticText(
+          error,
+          MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+          "unknown error"
+        )}`
       );
     }
   }
@@ -300,7 +323,11 @@ const ensureDirectorySafe = (dir: string, debug?: boolean): boolean => {
   } catch (error) {
     if (debug) {
       console.error(
-        `[DebugIO] Failed to create directory "${dir}": ${formatUnknownError(error)}`
+        `[DebugIO] Failed to create directory "${dir}": ${formatDiagnosticText(
+          error,
+          MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+          "unknown error"
+        )}`
       );
     }
     return false;
@@ -317,7 +344,11 @@ const writeDebugFileSafe = (
   } catch (error) {
     if (debug) {
       console.error(
-        `[DebugIO] Failed to write file "${filePath}": ${formatUnknownError(error)}`
+        `[DebugIO] Failed to write file "${filePath}": ${formatDiagnosticText(
+          error,
+          MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+          "unknown error"
+        )}`
       );
     }
   }
@@ -746,7 +777,11 @@ export const runAgentTask = async (
             if (ctx.debug) {
               console.warn(
                 "[Screenshot] Failed to compose overlay screenshot; continuing without visual image:",
-                formatUnknownError(error)
+                formatDiagnosticText(
+                  error,
+                  MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+                  "unknown error"
+                )
               );
             }
             trimmedScreenshot = undefined;
@@ -841,13 +876,15 @@ export const runAgentTask = async (
               })(),
             onError: (...args: Array<unknown>) => {
               const [attemptLabel, failure] = args;
-              const safeAttemptLabel = truncateDiagnosticText(
-                formatUnknownError(attemptLabel),
-                MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS
+              const safeAttemptLabel = formatDiagnosticText(
+                attemptLabel,
+                MAX_STRUCTURED_DIAGNOSTIC_IDENTIFIER_CHARS,
+                "retry"
               );
-              const safeFailure = truncateDiagnosticText(
-                formatUnknownError(failure),
-                MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS
+              const safeFailure = formatDiagnosticText(
+                failure,
+                MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS,
+                "unknown error"
               );
               console.error(
                 `[LLM][StructuredOutput] Retry error ${safeAttemptLabel}: ${safeFailure}`
@@ -895,7 +932,11 @@ export const runAgentTask = async (
               ) {
                 validationError = zodError.message;
               } else {
-                validationError = formatUnknownError(zodError);
+                validationError = formatDiagnosticText(
+                  zodError,
+                  MAX_STRUCTURED_DIAGNOSTIC_ERROR_CHARS,
+                  "unknown error"
+                );
               }
             }
           }
