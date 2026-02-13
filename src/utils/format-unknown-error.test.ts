@@ -16,6 +16,10 @@ describe("formatUnknownError", () => {
   it("falls back to string conversion when JSON serialization fails", () => {
     const circular: { self?: unknown } = {};
     circular.self = circular;
-    expect(formatUnknownError(circular)).toBe("[object Object]");
+    expect(formatUnknownError(circular)).toBe('{"self":"[Circular]"}');
+  });
+
+  it("serializes bigint values to readable strings", () => {
+    expect(formatUnknownError({ value: 42n })).toBe('{"value":"42n"}');
   });
 });
