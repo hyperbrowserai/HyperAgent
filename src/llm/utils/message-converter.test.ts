@@ -153,6 +153,26 @@ describe("convertToOpenAIMessages", () => {
     );
   });
 
+  it("falls back assistant tool_call ids to normalized tool names", () => {
+    const result = convertToOpenAIMessages([
+      {
+        role: "assistant",
+        content: "done",
+        toolCalls: [
+          {
+            id: "   ",
+            name: "  weird name !@# ",
+            arguments: {},
+          },
+        ],
+      },
+    ]);
+
+    const toolCall = (result[0] as { tool_calls?: Array<{ id: string; function: { name: string } }> }).tool_calls?.[0];
+    expect(toolCall?.id).toBe("weird_name");
+    expect(toolCall?.function.name).toBe("weird_name");
+  });
+
   it("sanitizes OpenAI tool names to supported charset and length", () => {
     const longName = "tool " + "x".repeat(80) + " !@#$";
     const result = convertToOpenAIMessages([

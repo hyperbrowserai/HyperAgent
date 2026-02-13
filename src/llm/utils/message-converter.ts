@@ -153,7 +153,7 @@ export function convertToOpenAIMessages(messages: HyperAgentMessage[]) {
     if (msg.role === "assistant" && msg.toolCalls) {
       openAIMessage.tool_calls = msg.toolCalls.map(
         (tc: { id?: string; name: string; arguments: unknown }) => ({
-          id: tc.id || "",
+          id: normalizeToolCallId(tc.id, tc.name),
           type: "function",
           function: {
             name: normalizeOpenAIToolName(tc.name),
