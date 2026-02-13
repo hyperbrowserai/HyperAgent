@@ -171,6 +171,11 @@ describe("parseMCPServersConfig", () => {
     ).toThrow(
       'MCP server entry at index 0 must include a non-empty "command" for stdio connections.'
     );
+    expect(() =>
+      parseMCPServersConfig('[{"command":"np\\nx"}]')
+    ).toThrow(
+      'MCP server entry at index 0 must include a non-empty "command" for stdio connections.'
+    );
 
     expect(() =>
       parseMCPServersConfig(`[{"id":"${"x".repeat(129)}","command":"npx"}]`)
@@ -328,6 +333,11 @@ describe("parseMCPServersConfig", () => {
     );
     expect(() =>
       parseMCPServersConfig('[{"command":"npx","args":["ok\\u0007bad"]}]')
+    ).toThrow(
+      'MCP server entry at index 0 must provide "args" as an array of non-empty strings.'
+    );
+    expect(() =>
+      parseMCPServersConfig('[{"command":"npx","args":["ok\\nbad"]}]')
     ).toThrow(
       'MCP server entry at index 0 must provide "args" as an array of non-empty strings.'
     );

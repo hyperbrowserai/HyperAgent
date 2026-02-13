@@ -26,6 +26,13 @@ function hasUnsupportedControlChars(value: string): boolean {
   });
 }
 
+function hasAnyControlChars(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127;
+  });
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -57,7 +64,7 @@ function normalizeOptionalArgs(value: unknown, index: number): string[] | undefi
       (entry) =>
         entry.length === 0 ||
         entry.length > MAX_MCP_ARG_CHARS ||
-        hasUnsupportedControlChars(entry)
+        hasAnyControlChars(entry)
     )
   ) {
     throw new Error(
@@ -422,7 +429,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
         `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`
       );
     }
-    if (hasUnsupportedControlChars(command)) {
+    if (hasAnyControlChars(command)) {
       throw new Error(
         `MCP server entry at index ${i} must include a non-empty "command" for stdio connections.`
       );
