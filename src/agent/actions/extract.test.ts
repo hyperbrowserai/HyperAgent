@@ -149,15 +149,21 @@ describe("ExtractActionDefinition.run", () => {
   });
 
   it("returns formatted root error messages", async () => {
-    parseMarkdown.mockRejectedValue(new Error("markdown parse failed"));
-    const ctx = createContext();
+    const pageContent = jest
+      .fn()
+      .mockRejectedValue(new Error("page content unavailable"));
+    const ctx = createContext(undefined, {
+      page: {
+        content: pageContent,
+      } as unknown as ActionContext["page"],
+    });
 
     const result = await ExtractActionDefinition.run(ctx, {
       objective: "Extract content",
     });
 
     expect(result.success).toBe(false);
-    expect(result.message).toContain("markdown parse failed");
+    expect(result.message).toContain("page content unavailable");
   });
 
   it("applies markdown token budget based on overall token limit", async () => {
@@ -180,5 +186,31 @@ describe("ExtractActionDefinition.run", () => {
     const promptText = messages[0]?.content?.[0]?.text ?? "";
     expect(promptText).toContain("[Content truncated due to token limit]");
     expect(estimateTextTokenCount(promptText)).toBeLessThanOrEqual(120);
+  });
+
+  it("falls back to plain text extraction when markdown conversion fails", async () => {
+    parseMarkdown.mockRejectedValue(new Error("markdown parse failed"));
+    const invoke = jest.fn().mockResolvedValue({
+      role: "assistant",
+      content: "fallback markdown extraction",
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const ctx = createContext(createMockLLM(invoke), { debug: true });
+
+    try {
+      const result = await ExtractActionDefinition.run(ctx, {
+        objective: "Extract content",
+      });
+
+      expect(result.success).toBe(true);
+      expect(warnSpy).toHaveBeenCalled();
+      const messages = invoke.mock.calls[0]?.[0] as Array<{
+        content: Array<{ type: string; text?: string }>;
+      }>;
+      const promptText = messages[0]?.content?.[0]?.text ?? "";
+      expect(promptText).toContain("demo");
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

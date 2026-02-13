@@ -80,6 +80,15 @@ function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function fallbackMarkdownFromHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function computeMarkdownTokenBudget(params: {
   tokenLimit: number;
   objective: string;
@@ -103,8 +112,19 @@ export const ExtractActionDefinition: AgentActionDefinition = {
   ): Promise<ActionOutput> => {
     try {
       const content = await ctx.page.content();
-      const markdown = await parseMarkdown(content);
       const objective = action.objective;
+      let markdown: string;
+      try {
+        markdown = await parseMarkdown(content);
+      } catch (error) {
+        if (ctx.debug) {
+          console.warn(
+            "[extract] Markdown conversion failed, falling back to HTML text extraction:",
+            formatErrorMessage(error)
+          );
+        }
+        markdown = fallbackMarkdownFromHtml(content);
+      }
 
       // Try to take a screenshot of the page; continue with text-only extraction if unavailable
       let screenshotData: string | null = null;
