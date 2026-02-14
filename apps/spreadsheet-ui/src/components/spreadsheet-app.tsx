@@ -195,6 +195,42 @@ function normalizeEndpointPathsByKey(value: unknown): Record<string, string> {
   }, {});
 }
 
+function normalizeEndpointOperationsByKey(
+  value: unknown,
+): Record<string, { path?: string; methods?: string[]; summary?: string }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value as Record<string, unknown>).reduce<
+    Record<string, { path?: string; methods?: string[]; summary?: string }>
+  >((accumulator, [key, operation]) => {
+    if (!operation || typeof operation !== "object" || Array.isArray(operation)) {
+      return accumulator;
+    }
+    const operationValue = operation as {
+      path?: unknown;
+      methods?: unknown;
+      summary?: unknown;
+    };
+    const normalizedPath = typeof operationValue.path === "string"
+      ? operationValue.path.trim()
+      : "";
+    const normalizedMethods = normalizeEndpointMethodList(operationValue.methods);
+    const normalizedSummary = typeof operationValue.summary === "string"
+      ? operationValue.summary.trim()
+      : "";
+    if (!normalizedPath && normalizedMethods.length === 0 && !normalizedSummary) {
+      return accumulator;
+    }
+    accumulator[key] = {
+      path: normalizedPath || undefined,
+      methods: normalizedMethods.length > 0 ? normalizedMethods : undefined,
+      summary: normalizedSummary || undefined,
+    };
+    return accumulator;
+  }, {});
+}
+
 function normalizeEndpointSummariesByKey(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -1294,6 +1330,10 @@ export function SpreadsheetApp() {
     () => normalizeEndpointMethodsByKey(wizardSchemaQuery.data?.endpoint_http_methods),
     [wizardSchemaQuery.data?.endpoint_http_methods],
   );
+  const wizardEndpointOperationsByKey = useMemo(
+    () => normalizeEndpointOperationsByKey(wizardSchemaQuery.data?.endpoint_openapi_operations),
+    [wizardSchemaQuery.data?.endpoint_openapi_operations],
+  );
   const wizardEndpointOpenApiPathsByKey = useMemo(
     () => normalizeEndpointPathsByKey(wizardSchemaQuery.data?.endpoint_openapi_paths),
     [wizardSchemaQuery.data?.endpoint_openapi_paths],
@@ -1318,25 +1358,41 @@ export function SpreadsheetApp() {
     () =>
       wizardSchemaEndpoints.map((entry) => {
         const derivedOpenApiPath = entry.endpoint.split("?").shift() ?? entry.endpoint;
-        const schemaOpenApiPath = wizardEndpointOpenApiPathsByKey[entry.key] ?? null;
-        const schemaMethods = wizardEndpointMethodsByKey[entry.key] ?? [];
+        const schemaOperation = wizardEndpointOperationsByKey[entry.key];
+        const schemaOpenApiPath =
+          schemaOperation?.path ?? wizardEndpointOpenApiPathsByKey[entry.key] ?? null;
+        const schemaMethods =
+          schemaOperation?.methods ?? wizardEndpointMethodsByKey[entry.key] ?? [];
         const openApiMethods = openApiMethodsByPath[entry.openApiPath] ?? [];
-        const schemaSummary = wizardEndpointSummariesByKey[entry.key] ?? null;
+        const schemaSummary =
+          schemaOperation?.summary ?? wizardEndpointSummariesByKey[entry.key] ?? null;
         const openApiSummary = openApiSummariesByPath[entry.openApiPath] ?? null;
         return {
           ...entry,
           openApiPath: schemaOpenApiPath ?? derivedOpenApiPath,
-          openApiPathSource: schemaOpenApiPath ? "schema" : "derived",
+          openApiPathSource: schemaOperation?.path
+            ? "operation"
+            : schemaOpenApiPath
+              ? "schema"
+              : "derived",
           hasPathMismatch:
             Boolean(schemaOpenApiPath) && schemaOpenApiPath !== derivedOpenApiPath,
           methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
           schemaMethods,
           openApiMethods,
           summary: schemaSummary ?? openApiSummary,
-          summarySource: schemaSummary ? "schema" : openApiSummary ? "openapi" : "missing",
+          summarySource: schemaOperation?.summary
+            ? "operation"
+            : schemaSummary
+              ? "schema"
+              : openApiSummary
+                ? "openapi"
+                : "missing",
           methodSource:
             schemaMethods.length > 0
-              ? "schema"
+              ? schemaOperation?.methods
+                ? "operation"
+                : "schema"
               : openApiMethods.length > 0
                 ? "openapi"
                 : "missing",
@@ -1353,6 +1409,7 @@ export function SpreadsheetApp() {
     [
       openApiMethodsByPath,
       openApiSummariesByPath,
+      wizardEndpointOperationsByKey,
       wizardEndpointOpenApiPathsByKey,
       wizardEndpointMethodsByKey,
       wizardEndpointSummariesByKey,
@@ -1586,6 +1643,10 @@ export function SpreadsheetApp() {
     () => normalizeEndpointMethodsByKey(agentSchemaQuery.data?.endpoint_http_methods),
     [agentSchemaQuery.data?.endpoint_http_methods],
   );
+  const agentEndpointOperationsByKey = useMemo(
+    () => normalizeEndpointOperationsByKey(agentSchemaQuery.data?.endpoint_openapi_operations),
+    [agentSchemaQuery.data?.endpoint_openapi_operations],
+  );
   const agentEndpointOpenApiPathsByKey = useMemo(
     () => normalizeEndpointPathsByKey(agentSchemaQuery.data?.endpoint_openapi_paths),
     [agentSchemaQuery.data?.endpoint_openapi_paths],
@@ -1602,25 +1663,41 @@ export function SpreadsheetApp() {
     () =>
       agentSchemaEndpoints.map((entry) => {
         const derivedOpenApiPath = entry.endpoint.split("?").shift() ?? entry.endpoint;
-        const schemaOpenApiPath = agentEndpointOpenApiPathsByKey[entry.key] ?? null;
-        const schemaMethods = agentEndpointMethodsByKey[entry.key] ?? [];
+        const schemaOperation = agentEndpointOperationsByKey[entry.key];
+        const schemaOpenApiPath =
+          schemaOperation?.path ?? agentEndpointOpenApiPathsByKey[entry.key] ?? null;
+        const schemaMethods =
+          schemaOperation?.methods ?? agentEndpointMethodsByKey[entry.key] ?? [];
         const openApiMethods = openApiMethodsByPath[entry.openApiPath] ?? [];
-        const schemaSummary = agentEndpointSummariesByKey[entry.key] ?? null;
+        const schemaSummary =
+          schemaOperation?.summary ?? agentEndpointSummariesByKey[entry.key] ?? null;
         const openApiSummary = openApiSummariesByPath[entry.openApiPath] ?? null;
         return {
           ...entry,
           openApiPath: schemaOpenApiPath ?? derivedOpenApiPath,
-          openApiPathSource: schemaOpenApiPath ? "schema" : "derived",
+          openApiPathSource: schemaOperation?.path
+            ? "operation"
+            : schemaOpenApiPath
+              ? "schema"
+              : "derived",
           hasPathMismatch:
             Boolean(schemaOpenApiPath) && schemaOpenApiPath !== derivedOpenApiPath,
           methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
           schemaMethods,
           openApiMethods,
           summary: schemaSummary ?? openApiSummary,
-          summarySource: schemaSummary ? "schema" : openApiSummary ? "openapi" : "missing",
+          summarySource: schemaOperation?.summary
+            ? "operation"
+            : schemaSummary
+              ? "schema"
+              : openApiSummary
+                ? "openapi"
+                : "missing",
           methodSource:
             schemaMethods.length > 0
-              ? "schema"
+              ? schemaOperation?.methods
+                ? "operation"
+                : "schema"
               : openApiMethods.length > 0
                 ? "openapi"
                 : "missing",
@@ -1636,6 +1713,7 @@ export function SpreadsheetApp() {
       }),
     [
       agentEndpointMethodsByKey,
+      agentEndpointOperationsByKey,
       agentEndpointOpenApiPathsByKey,
       agentEndpointSummariesByKey,
       agentSchemaEndpoints,
