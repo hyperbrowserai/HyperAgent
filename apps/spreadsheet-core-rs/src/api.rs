@@ -976,7 +976,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       },
       "agent_ops_cache_reexecute_request_shape": {
         "request_id": "string (required source cache entry id)",
-        "new_request_id": "optional string for target execution request id",
+        "new_request_id": "optional string for target execution request id (trimmed; must remain non-empty)",
         "actor": "optional string",
         "stop_on_error": "optional boolean (default true)",
         "expected_operations_signature": "optional string guard for cached operations payload"
@@ -1805,7 +1805,7 @@ async fn get_agent_schema(
       },
       "agent_ops_cache_reexecute_request_shape": {
         "request_id": "string (required source cache entry id)",
-        "new_request_id": "optional string for target execution request id",
+        "new_request_id": "optional string for target execution request id (trimmed; must remain non-empty)",
         "actor": "optional string",
         "stop_on_error": "optional boolean (default true)",
         "expected_operations_signature": "optional string guard for cached operations payload"
@@ -8544,7 +8544,7 @@ mod tests {
                 .get("agent_ops_cache_reexecute_request_shape")
                 .and_then(|value| value.get("new_request_id"))
                 .and_then(serde_json::Value::as_str),
-            Some("optional string for target execution request id"),
+            Some("optional string for target execution request id (trimmed; must remain non-empty)"),
         );
         assert_eq!(
             schema
@@ -9035,7 +9035,7 @@ mod tests {
                 .get("agent_ops_cache_reexecute_request_shape")
                 .and_then(|value| value.get("new_request_id"))
                 .and_then(serde_json::Value::as_str),
-            Some("optional string for target execution request id"),
+            Some("optional string for target execution request id (trimmed; must remain non-empty)"),
         );
         assert_eq!(
             schema
