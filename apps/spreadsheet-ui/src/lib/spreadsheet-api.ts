@@ -27,6 +27,7 @@ import {
   ImportWorkbookResponse,
   CellSnapshot,
   ChartSpec,
+  OpenApiSpec,
   WorkbookEvent,
   WorkbookSummary,
 } from "@/types/spreadsheet";
@@ -616,6 +617,11 @@ export async function getAgentPresetOperations(
 export async function getWizardSchema(): Promise<AgentWizardSchemaInfo> {
   const response = await fetch(`${API_BASE_URL}/v1/agent/wizard/schema`);
   return parseJsonResponse<AgentWizardSchemaInfo>(response);
+}
+
+export async function getOpenApiSpec(): Promise<OpenApiSpec> {
+  const response = await fetch(`${API_BASE_URL}/v1/openapi`);
+  return parseJsonResponse<OpenApiSpec>(response);
 }
 
 export async function getWizardScenarioOperations(

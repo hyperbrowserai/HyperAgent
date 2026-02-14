@@ -21,6 +21,7 @@ import {
   getAgentPresets,
   getAgentScenarioOperations,
   getAgentScenarios,
+  getOpenApiSpec,
   getWizardPresets,
   getWizardPresetOperations,
   getWizardScenarioOperations,
@@ -124,7 +125,7 @@ function parseCommaSeparatedList(value: unknown): string[] {
 
 function collectSchemaEndpointMetadata(
   schema: unknown,
-): Array<{ key: string; endpoint: string }> {
+): Array<{ key: string; endpoint: string; openApiPath: string }> {
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
     return [];
   }
@@ -140,9 +141,37 @@ function collectSchemaEndpointMetadata(
       if (!endpoint) {
         return [];
       }
-      return [{ key, endpoint }];
+      const openApiPath = endpoint.split("?").shift() ?? endpoint;
+      return [{ key, endpoint, openApiPath }];
     })
     .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function collectOpenApiMethodsByPath(
+  spec: unknown,
+): Record<string, string[]> {
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+    return {};
+  }
+  const paths = (spec as { paths?: unknown }).paths;
+  if (!paths || typeof paths !== "object" || Array.isArray(paths)) {
+    return {};
+  }
+  return Object.entries(paths as Record<string, unknown>).reduce<
+    Record<string, string[]>
+  >((accumulator, [path, methods]) => {
+    if (!methods || typeof methods !== "object" || Array.isArray(methods)) {
+      return accumulator;
+    }
+    const methodNames = Object.keys(methods)
+      .map((method) => method.trim().toUpperCase())
+      .filter((method) => method.length > 0)
+      .sort();
+    if (methodNames.length > 0) {
+      accumulator[path] = methodNames;
+    }
+    return accumulator;
+  }, {});
 }
 
 function flattenSchemaShapeEntries(
@@ -610,6 +639,10 @@ export function SpreadsheetApp() {
   const wizardSchemaQuery = useQuery({
     queryKey: ["wizard-schema"],
     queryFn: getWizardSchema,
+  });
+  const openApiSpecQuery = useQuery({
+    queryKey: ["openapi-spec"],
+    queryFn: getOpenApiSpec,
   });
 
   const agentOpsCacheQuery = useQuery({
@@ -1143,6 +1176,18 @@ export function SpreadsheetApp() {
     () => collectSchemaEndpointMetadata(wizardSchemaQuery.data),
     [wizardSchemaQuery.data],
   );
+  const openApiMethodsByPath = useMemo(
+    () => collectOpenApiMethodsByPath(openApiSpecQuery.data),
+    [openApiSpecQuery.data],
+  );
+  const wizardSchemaEndpointsWithMethods = useMemo(
+    () =>
+      wizardSchemaEndpoints.map((entry) => ({
+        ...entry,
+        methods: openApiMethodsByPath[entry.openApiPath] ?? [],
+      })),
+    [openApiMethodsByPath, wizardSchemaEndpoints],
+  );
   const agentWorkbookImportResponseFields = useMemo(
     () =>
       flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
@@ -1341,6 +1386,14 @@ export function SpreadsheetApp() {
   const agentSchemaEndpoints = useMemo(
     () => collectSchemaEndpointMetadata(agentSchemaQuery.data),
     [agentSchemaQuery.data],
+  );
+  const agentSchemaEndpointsWithMethods = useMemo(
+    () =>
+      agentSchemaEndpoints.map((entry) => ({
+        ...entry,
+        methods: openApiMethodsByPath[entry.openApiPath] ?? [],
+      })),
+    [agentSchemaEndpoints, openApiMethodsByPath],
   );
   const agentWorkbookImportEventFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
@@ -3344,17 +3397,22 @@ export function SpreadsheetApp() {
                 </button>
               </p>
             ) : null}
-            {wizardSchemaEndpoints.length > 0 ? (
+            {wizardSchemaEndpointsWithMethods.length > 0 ? (
               <details className="mb-2 rounded border border-slate-800 bg-slate-950/60 p-2">
                 <summary className="cursor-pointer text-[11px] text-slate-400">
-                  discovered endpoint catalog ({wizardSchemaEndpoints.length})
+                  discovered endpoint catalog ({wizardSchemaEndpointsWithMethods.length})
                 </summary>
                 <div className="mt-2 space-y-1">
-                  {wizardSchemaEndpoints.map((entry) => (
+                  {wizardSchemaEndpointsWithMethods.map((entry) => (
                     <p
                       key={`wizard-endpoint-catalog-${entry.key}`}
                       className="text-[11px] text-slate-500"
                     >
+                      {entry.methods.length > 0 ? (
+                        <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                          {entry.methods.join("|")}
+                        </span>
+                      ) : null}
                       {entry.key}:{" "}
                       <span className="font-mono text-slate-300">{entry.endpoint}</span>
                       <button
@@ -4244,17 +4302,22 @@ export function SpreadsheetApp() {
                 </button>
               </p>
             ) : null}
-            {agentSchemaEndpoints.length > 0 ? (
+            {agentSchemaEndpointsWithMethods.length > 0 ? (
               <details className="mb-2 rounded border border-slate-800 bg-slate-950/60 p-2">
                 <summary className="cursor-pointer text-xs text-slate-400">
-                  discovered endpoint catalog ({agentSchemaEndpoints.length})
+                  discovered endpoint catalog ({agentSchemaEndpointsWithMethods.length})
                 </summary>
                 <div className="mt-2 space-y-1">
-                  {agentSchemaEndpoints.map((entry) => (
+                  {agentSchemaEndpointsWithMethods.map((entry) => (
                     <p
                       key={`agent-endpoint-catalog-${entry.key}`}
                       className="text-xs text-slate-400"
                     >
+                      {entry.methods.length > 0 ? (
+                        <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                          {entry.methods.join("|")}
+                        </span>
+                      ) : null}
                       {entry.key}:{" "}
                       <span className="font-mono text-slate-200">{entry.endpoint}</span>
                       <button

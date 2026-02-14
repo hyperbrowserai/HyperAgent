@@ -327,6 +327,11 @@ export interface DuckdbQueryResponse {
   truncated: boolean;
 }
 
+export interface OpenApiSpec {
+  paths?: Record<string, Record<string, { summary?: string }>>;
+  [key: string]: unknown;
+}
+
 export interface AgentWizardSchemaInfo {
   endpoint: string;
   health_endpoint?: string;
