@@ -220,6 +220,9 @@ fn normalize_imported_formula(formula: &str) -> Option<String> {
 }
 
 fn strip_known_formula_prefixes(formula_body: &str) -> String {
+  const XLFN_PREFIX: [char; 6] = ['_', 'x', 'l', 'f', 'n', '.'];
+  const XLWS_PREFIX: [char; 6] = ['_', 'x', 'l', 'w', 's', '.'];
+
   let mut normalized = String::with_capacity(formula_body.len());
   let chars = formula_body.chars().collect::<Vec<_>>();
   let mut index = 0usize;
@@ -241,16 +244,11 @@ fn strip_known_formula_prefixes(formula_body: &str) -> String {
     }
 
     if !in_string {
-      if index + 6 <= chars.len() {
-        let maybe_prefix = chars[index..index + 6]
-          .iter()
-          .collect::<String>();
-        if maybe_prefix.eq_ignore_ascii_case("_xlfn.")
-          || maybe_prefix.eq_ignore_ascii_case("_xlws.")
-        {
-          index += 6;
-          continue;
-        }
+      if has_case_insensitive_prefix(&chars, index, &XLFN_PREFIX)
+        || has_case_insensitive_prefix(&chars, index, &XLWS_PREFIX)
+      {
+        index += 6;
+        continue;
       }
     }
 
@@ -259,6 +257,20 @@ fn strip_known_formula_prefixes(formula_body: &str) -> String {
   }
 
   normalized
+}
+
+fn has_case_insensitive_prefix(
+  chars: &[char],
+  start_index: usize,
+  prefix: &[char; 6],
+) -> bool {
+  if start_index + prefix.len() > chars.len() {
+    return false;
+  }
+  chars[start_index..start_index + prefix.len()]
+    .iter()
+    .zip(prefix.iter())
+    .all(|(left, right)| left.to_ascii_lowercase() == *right)
 }
 
 fn strip_implicit_intersection_operators(formula_body: &str) -> String {
