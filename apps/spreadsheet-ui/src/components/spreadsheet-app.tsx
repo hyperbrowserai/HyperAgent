@@ -4678,6 +4678,20 @@ export function SpreadsheetApp() {
                           </span>
                         </td>
                         <td className="px-2 py-2 text-slate-400">
+                          {!result.ok ? (
+                            <div className="mb-1 flex flex-wrap items-center gap-1">
+                              {typeof result.data.error_code === "string" ? (
+                                <span className="rounded border border-rose-400/40 bg-rose-500/20 px-1.5 py-0.5 font-mono text-[10px] text-rose-100">
+                                  {result.data.error_code}
+                                </span>
+                              ) : null}
+                              {typeof result.data.error_message === "string" ? (
+                                <span className="text-[11px] text-rose-200">
+                                  {result.data.error_message}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
                           <pre className="whitespace-pre-wrap break-all">
                             {JSON.stringify(result.data)}
                           </pre>
