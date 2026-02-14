@@ -8238,6 +8238,14 @@ mod tests {
             signature_error_codes.contains(&"OPERATION_SIGNATURE_MISMATCH"),
             "schema should advertise mismatch error code",
         );
+        assert!(
+            signature_error_codes.contains(&"INVALID_SIGNATURE_FORMAT"),
+            "schema should advertise invalid-signature-format error code",
+        );
+        assert!(
+            signature_error_codes.contains(&"EMPTY_OPERATION_LIST"),
+            "schema should advertise empty-operation-list error code",
+        );
 
         let cache_validation_error_codes = schema
             .get("cache_validation_error_codes")
