@@ -398,4 +398,75 @@ describe("playwright adapter error formatting", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("surfaces sanitized diagnostics when session.on listener registration throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const trappedSession = {
+      send: jest.fn().mockResolvedValue({}),
+      on: () => {
+        throw new Error(`on-call\u0000\n${"x".repeat(2_000)}`);
+      },
+      off: jest.fn(),
+      detach: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PlaywrightSession;
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(trappedSession),
+      }),
+      once: jest.fn(),
+    } as unknown as Page;
+
+    const client = await getCDPClientForPage(page);
+    const pooled = await client.acquireSession("lifecycle");
+    const pooledWithOn = pooled as typeof pooled & {
+      on: NonNullable<typeof pooled.on>;
+    };
+
+    try {
+      expect(() => pooledWithOn.on("Detached", () => undefined)).toThrow(
+        "[CDP][PlaywrightAdapter] Failed to register listener (Detached)"
+      );
+      expect(() => pooledWithOn.on("Detached", () => undefined)).toThrow(
+        "[truncated"
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("surfaces sanitized diagnostics when session.off listener removal throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const trappedSession = {
+      send: jest.fn().mockResolvedValue({}),
+      on: jest.fn(),
+      off: () => {
+        throw new Error(`off-call\u0000\n${"x".repeat(2_000)}`);
+      },
+      detach: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PlaywrightSession;
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(trappedSession),
+      }),
+      once: jest.fn(),
+    } as unknown as Page;
+
+    const client = await getCDPClientForPage(page);
+    const pooled = await client.acquireSession("lifecycle");
+    const pooledWithOff = pooled as typeof pooled & {
+      off: NonNullable<typeof pooled.off>;
+    };
+
+    try {
+      expect(() => pooledWithOff.off("Detached", () => undefined)).toThrow(
+        "[CDP][PlaywrightAdapter] Failed to remove listener (Detached)"
+      );
+      expect(() => pooledWithOff.off("Detached", () => undefined)).toThrow(
+        "[truncated"
+      );
+      await disposeCDPClientForPage(page);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
