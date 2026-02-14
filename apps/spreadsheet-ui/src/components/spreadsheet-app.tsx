@@ -154,6 +154,18 @@ interface EndpointCatalogDiagnosticsDrift {
   openApiSyncAvailable: boolean;
 }
 
+const ENDPOINT_ISSUE_REASONS = [
+  "unmapped_methods",
+  "method_mismatch",
+  "summary_mismatch",
+  "path_mismatch",
+  "method_fallback",
+  "summary_fallback",
+  "path_fallback",
+] as const;
+
+type EndpointIssueReason = (typeof ENDPOINT_ISSUE_REASONS)[number];
+
 interface LatestImportSummary {
   sheetsImported: number;
   cellsImported: number;
@@ -697,7 +709,7 @@ function buildEndpointIssueReportEntries<
   openapi_path: string;
   methods: string[];
   summary: string | null;
-  reasons: string[];
+  reasons: EndpointIssueReason[];
 }> {
   return entries
     .map((entry) => {
@@ -709,7 +721,7 @@ function buildEndpointIssueReportEntries<
         entry.methodSource !== "operation" ? "method_fallback" : null,
         entry.summarySource !== "operation" ? "summary_fallback" : null,
         entry.openApiPathSource !== "operation" ? "path_fallback" : null,
-      ].filter((value): value is string => Boolean(value));
+      ].filter((value): value is EndpointIssueReason => Boolean(value));
       if (reasons.length === 0) {
         return null;
       }
@@ -723,6 +735,42 @@ function buildEndpointIssueReportEntries<
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+}
+
+function buildEndpointIssueReasonCounts<
+  T extends {
+    reasons: EndpointIssueReason[];
+  },
+>(entries: T[]): Record<EndpointIssueReason, number> {
+  return entries.reduce<Record<EndpointIssueReason, number>>(
+    (counts, entry) => {
+      entry.reasons.forEach((reason) => {
+        counts[reason] += 1;
+      });
+      return counts;
+    },
+    {
+      unmapped_methods: 0,
+      method_mismatch: 0,
+      summary_mismatch: 0,
+      path_mismatch: 0,
+      method_fallback: 0,
+      summary_fallback: 0,
+      path_fallback: 0,
+    },
+  );
+}
+
+function formatEndpointIssueReasonCounts(
+  counts: Record<EndpointIssueReason, number>,
+): string {
+  return ENDPOINT_ISSUE_REASONS
+    .map((reason) => {
+      const count = counts[reason];
+      return count > 0 ? `${reason}:${count}` : null;
+    })
+    .filter((value): value is string => Boolean(value))
+    .join(", ");
 }
 
 function normalizeSchemaEndpointCatalogCoverage(
@@ -2475,48 +2523,64 @@ export function SpreadsheetApp() {
     [wizardEndpointCatalogPayload, wizardVisibleSchemaEndpointsWithMethods],
   );
   const wizardEndpointIssueReportPayload = useMemo(
-    () => ({
-      endpoint_count_total: wizardSchemaEndpointsWithMethods.length,
-      endpoint_count_with_issues: wizardEndpointCatalogOverallStats.visibleIssueEntries,
-      issue_entries: buildEndpointIssueReportEntries(wizardSchemaEndpointsWithMethods),
-      view_mode: wizardEndpointCatalogViewMode,
-      filter: wizardEndpointCatalogFilter.trim() || null,
-      sort: wizardEndpointCatalogSort,
-      visible_issue_count: wizardEndpointCatalogViewStats.visibleIssueEntries,
-      visible_issue_entries: buildEndpointIssueReportEntries(
+    () => {
+      const issueEntries = buildEndpointIssueReportEntries(wizardSchemaEndpointsWithMethods);
+      const visibleIssueEntries = buildEndpointIssueReportEntries(
         wizardVisibleSchemaEndpointsWithMethods,
-      ),
-    }),
+      );
+      return {
+        endpoint_count_total: wizardSchemaEndpointsWithMethods.length,
+        endpoint_count_with_issues: issueEntries.length,
+        issue_reason_counts: buildEndpointIssueReasonCounts(issueEntries),
+        issue_entries: issueEntries,
+        view_mode: wizardEndpointCatalogViewMode,
+        filter: wizardEndpointCatalogFilter.trim() || null,
+        sort: wizardEndpointCatalogSort,
+        visible_issue_count: visibleIssueEntries.length,
+        visible_issue_reason_counts: buildEndpointIssueReasonCounts(visibleIssueEntries),
+        visible_issue_entries: visibleIssueEntries,
+      };
+    },
     [
       wizardEndpointCatalogFilter,
-      wizardEndpointCatalogOverallStats.visibleIssueEntries,
       wizardEndpointCatalogSort,
       wizardEndpointCatalogViewMode,
-      wizardEndpointCatalogViewStats.visibleIssueEntries,
       wizardSchemaEndpointsWithMethods,
       wizardVisibleSchemaEndpointsWithMethods,
     ],
   );
   const wizardVisibleEndpointIssueReportPayload = useMemo(
-    () => ({
-      endpoint_count_visible: wizardVisibleSchemaEndpointsWithMethods.length,
-      issue_count_visible: wizardEndpointCatalogViewStats.visibleIssueEntries,
-      view_mode: wizardEndpointCatalogViewMode,
-      filter: wizardEndpointCatalogFilter.trim() || null,
-      sort: wizardEndpointCatalogSort,
-      issue_entries: buildEndpointIssueReportEntries(wizardVisibleSchemaEndpointsWithMethods),
-    }),
+    () => {
+      const issueEntries = buildEndpointIssueReportEntries(
+        wizardVisibleSchemaEndpointsWithMethods,
+      );
+      return {
+        endpoint_count_visible: wizardVisibleSchemaEndpointsWithMethods.length,
+        issue_count_visible: issueEntries.length,
+        issue_reason_counts_visible: buildEndpointIssueReasonCounts(issueEntries),
+        view_mode: wizardEndpointCatalogViewMode,
+        filter: wizardEndpointCatalogFilter.trim() || null,
+        sort: wizardEndpointCatalogSort,
+        issue_entries: issueEntries,
+      };
+    },
     [
       wizardEndpointCatalogFilter,
       wizardEndpointCatalogSort,
       wizardEndpointCatalogViewMode,
-      wizardEndpointCatalogViewStats.visibleIssueEntries,
       wizardVisibleSchemaEndpointsWithMethods,
     ],
   );
   const wizardVisibleIssueKeys = useMemo(
     () =>
       wizardVisibleEndpointIssueReportPayload.issue_entries.map((entry) => entry.key),
+    [wizardVisibleEndpointIssueReportPayload],
+  );
+  const wizardVisibleIssueReasonSummary = useMemo(
+    () =>
+      formatEndpointIssueReasonCounts(
+        wizardVisibleEndpointIssueReportPayload.issue_reason_counts_visible,
+      ),
     [wizardVisibleEndpointIssueReportPayload],
   );
   const wizardVisibleEndpointKeys = useMemo(
@@ -3085,48 +3149,64 @@ export function SpreadsheetApp() {
     [agentEndpointCatalogPayload, agentVisibleSchemaEndpointsWithMethods],
   );
   const agentEndpointIssueReportPayload = useMemo(
-    () => ({
-      endpoint_count_total: agentSchemaEndpointsWithMethods.length,
-      endpoint_count_with_issues: agentEndpointCatalogOverallStats.visibleIssueEntries,
-      issue_entries: buildEndpointIssueReportEntries(agentSchemaEndpointsWithMethods),
-      view_mode: agentEndpointCatalogViewMode,
-      filter: agentEndpointCatalogFilter.trim() || null,
-      sort: agentEndpointCatalogSort,
-      visible_issue_count: agentEndpointCatalogViewStats.visibleIssueEntries,
-      visible_issue_entries: buildEndpointIssueReportEntries(
+    () => {
+      const issueEntries = buildEndpointIssueReportEntries(agentSchemaEndpointsWithMethods);
+      const visibleIssueEntries = buildEndpointIssueReportEntries(
         agentVisibleSchemaEndpointsWithMethods,
-      ),
-    }),
+      );
+      return {
+        endpoint_count_total: agentSchemaEndpointsWithMethods.length,
+        endpoint_count_with_issues: issueEntries.length,
+        issue_reason_counts: buildEndpointIssueReasonCounts(issueEntries),
+        issue_entries: issueEntries,
+        view_mode: agentEndpointCatalogViewMode,
+        filter: agentEndpointCatalogFilter.trim() || null,
+        sort: agentEndpointCatalogSort,
+        visible_issue_count: visibleIssueEntries.length,
+        visible_issue_reason_counts: buildEndpointIssueReasonCounts(visibleIssueEntries),
+        visible_issue_entries: visibleIssueEntries,
+      };
+    },
     [
       agentEndpointCatalogFilter,
-      agentEndpointCatalogOverallStats.visibleIssueEntries,
       agentEndpointCatalogSort,
       agentEndpointCatalogViewMode,
-      agentEndpointCatalogViewStats.visibleIssueEntries,
       agentSchemaEndpointsWithMethods,
       agentVisibleSchemaEndpointsWithMethods,
     ],
   );
   const agentVisibleEndpointIssueReportPayload = useMemo(
-    () => ({
-      endpoint_count_visible: agentVisibleSchemaEndpointsWithMethods.length,
-      issue_count_visible: agentEndpointCatalogViewStats.visibleIssueEntries,
-      view_mode: agentEndpointCatalogViewMode,
-      filter: agentEndpointCatalogFilter.trim() || null,
-      sort: agentEndpointCatalogSort,
-      issue_entries: buildEndpointIssueReportEntries(agentVisibleSchemaEndpointsWithMethods),
-    }),
+    () => {
+      const issueEntries = buildEndpointIssueReportEntries(
+        agentVisibleSchemaEndpointsWithMethods,
+      );
+      return {
+        endpoint_count_visible: agentVisibleSchemaEndpointsWithMethods.length,
+        issue_count_visible: issueEntries.length,
+        issue_reason_counts_visible: buildEndpointIssueReasonCounts(issueEntries),
+        view_mode: agentEndpointCatalogViewMode,
+        filter: agentEndpointCatalogFilter.trim() || null,
+        sort: agentEndpointCatalogSort,
+        issue_entries: issueEntries,
+      };
+    },
     [
       agentEndpointCatalogFilter,
       agentEndpointCatalogSort,
       agentEndpointCatalogViewMode,
-      agentEndpointCatalogViewStats.visibleIssueEntries,
       agentVisibleSchemaEndpointsWithMethods,
     ],
   );
   const agentVisibleIssueKeys = useMemo(
     () =>
       agentVisibleEndpointIssueReportPayload.issue_entries.map((entry) => entry.key),
+    [agentVisibleEndpointIssueReportPayload],
+  );
+  const agentVisibleIssueReasonSummary = useMemo(
+    () =>
+      formatEndpointIssueReasonCounts(
+        agentVisibleEndpointIssueReportPayload.issue_reason_counts_visible,
+      ),
     [agentVisibleEndpointIssueReportPayload],
   );
   const agentVisibleEndpointKeys = useMemo(
@@ -5994,6 +6074,14 @@ export function SpreadsheetApp() {
                     {wizardEndpointCatalogViewStats.visibleUnmappedEntries}
                   </span>
                 </p>
+                {wizardVisibleIssueReasonSummary.length > 0 ? (
+                  <p className="mt-1 text-[11px] text-amber-300/80">
+                    visible issue reasons:{" "}
+                    <span className="font-mono text-amber-100">
+                      {wizardVisibleIssueReasonSummary}
+                    </span>
+                  </p>
+                ) : null}
                 <p className="mt-2 text-[11px] text-slate-400">
                   coverage: operation methods{" "}
                   <span className="font-mono text-slate-300">
@@ -7633,6 +7721,14 @@ export function SpreadsheetApp() {
                     {agentEndpointCatalogViewStats.visibleUnmappedEntries}
                   </span>
                 </p>
+                {agentVisibleIssueReasonSummary.length > 0 ? (
+                  <p className="mt-1 text-xs text-amber-300/80">
+                    visible issue reasons:{" "}
+                    <span className="font-mono text-amber-100">
+                      {agentVisibleIssueReasonSummary}
+                    </span>
+                  </p>
+                ) : null}
                 <p className="mt-2 text-xs text-slate-400">
                   coverage: operation methods{" "}
                   <span className="font-mono text-slate-300">
