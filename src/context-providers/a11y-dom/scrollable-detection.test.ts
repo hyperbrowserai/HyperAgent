@@ -25,6 +25,26 @@ describe("scrollable detection error formatting", () => {
     }
   });
 
+  it("sanitizes and truncates oversized xpath read diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const pageOrFrame = {
+      evaluate: jest.fn().mockRejectedValue(new Error(`eval\u0000\n${"x".repeat(10_000)}`)),
+    };
+
+    try {
+      const xpaths = await getScrollableElementXpaths(
+        pageOrFrame as unknown as Parameters<typeof getScrollableElementXpaths>[0]
+      );
+      expect(xpaths).toEqual([]);
+      const warning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("returns sanitized xpath list when browser result includes invalid entries", async () => {
     const pageOrFrame = {
       evaluate: jest
@@ -84,6 +104,40 @@ describe("scrollable detection error formatting", () => {
     }
   });
 
+  it("sanitizes and truncates oversized xpath resolution diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const pageOrFrame = {
+      evaluate: jest.fn().mockResolvedValue(["/html/body/div[1]"]),
+    };
+    const client: CDPSession = {
+      id: "cdp-session",
+      raw: undefined,
+      send: async <T = unknown>(method: string): Promise<T> => {
+        if (method === "Runtime.evaluate") {
+          throw new Error(`runtime\u0000\n${"x".repeat(10_000)}`);
+        }
+        return {} as T;
+      },
+      on: jest.fn(),
+      off: jest.fn(),
+      detach: jest.fn(async () => undefined),
+    };
+
+    try {
+      const ids = await findScrollableElementIds(
+        pageOrFrame as unknown as Parameters<typeof findScrollableElementIds>[0],
+        client
+      );
+      expect(ids.size).toBe(0);
+      const warning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("resolves backend IDs only for sanitized xpath candidates", async () => {
     const pageOrFrame = {
       evaluate: jest
@@ -122,6 +176,7 @@ describe("scrollable detection error formatting", () => {
     expect(runtimeEvaluateCalls[0]).toContain("/html/body/div[1]");
     expect(runtimeEvaluateCalls[1]).toContain("/html/body/div[2]");
   });
+
 });
 
 describe("decorateRoleIfScrollable", () => {

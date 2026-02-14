@@ -7,6 +7,27 @@ import type { Page, Frame } from 'playwright-core';
 import type { CDPSession } from '@/cdp';
 import { formatUnknownError } from '@/utils';
 
+const MAX_SCROLLABLE_DIAGNOSTIC_CHARS = 400;
+
+function formatScrollableDiagnostic(error: unknown): string {
+  const normalized = Array.from(formatUnknownError(error), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_SCROLLABLE_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_SCROLLABLE_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_SCROLLABLE_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
+
 /**
  * Browser-side functions to detect scrollable elements
  * These will be injected into the page context
@@ -194,7 +215,7 @@ export async function getScrollableElementXpaths(
       .filter((value) => value.length > 0);
   } catch (error) {
     console.warn(
-      `Error getting scrollable element xpaths: ${formatUnknownError(error)}`
+      `Error getting scrollable element xpaths: ${formatScrollableDiagnostic(error)}`
     );
     return [];
   }
@@ -249,7 +270,7 @@ export async function findScrollableElementIds(
       } catch (error) {
         // Silently ignore errors for individual elements
         console.warn(
-          `Error resolving XPath ${xpath}: ${formatUnknownError(error)}`
+          `Error resolving XPath ${xpath}: ${formatScrollableDiagnostic(error)}`
         );
       }
     }
@@ -257,7 +278,7 @@ export async function findScrollableElementIds(
     return backendIds;
   } catch (error) {
     console.error(
-      `Error finding scrollable element IDs: ${formatUnknownError(error)}`
+      `Error finding scrollable element IDs: ${formatScrollableDiagnostic(error)}`
     );
     return new Set();
   }
