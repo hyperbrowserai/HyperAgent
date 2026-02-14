@@ -3882,6 +3882,54 @@ describe("HyperAgent constructor and task controls", () => {
     );
   });
 
+  it("getCurrentPage surfaces readable errors when context.newPage getter traps", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: unknown;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = new Proxy(
+      {
+        pages: () => [],
+      },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "newPage") {
+            throw new Error("new current page getter trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+
+    await expect(agent.getCurrentPage()).rejects.toThrow(
+      "Failed to create current page: failed to read context.newPage: new current page getter trap"
+    );
+  });
+
+  it("getCurrentPage surfaces explicit error when context.newPage is unavailable", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: {
+        pages: () => Page[];
+      } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [],
+    };
+
+    await expect(agent.getCurrentPage()).rejects.toThrow(
+      "Failed to create current page: context.newPage is unavailable"
+    );
+  });
+
   it("task controls return safe status when task state traps throw", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     let resolveTaskResult!: (value: AgentTaskOutput) => void;
