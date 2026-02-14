@@ -420,6 +420,30 @@ pub fn parse_combin_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_permut_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "PERMUT" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_permutationa_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "PERMUTATIONA" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_multinomial_formula(formula: &str) -> Option<Vec<String>> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "MULTINOMIAL" && !args.is_empty() {
+    return Some(args);
+  }
+  None
+}
+
 pub fn parse_gcd_formula(formula: &str) -> Option<Vec<String>> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "GCD" && !args.is_empty() {
@@ -1552,6 +1576,7 @@ mod tests {
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
     parse_lcm_formula,
+    parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula,
     parse_sinh_formula, parse_cosh_formula, parse_tanh_formula, parse_asin_formula,
     parse_acos_formula, parse_atan_formula, parse_atan2_formula, parse_degrees_formula,
@@ -1767,6 +1792,17 @@ mod tests {
       parse_combin_formula("=COMBIN(A1,B1)").expect("combin should parse");
     assert_eq!(combin_args.0, "A1");
     assert_eq!(combin_args.1, "B1");
+    let permut_args =
+      parse_permut_formula("=PERMUT(A1,B1)").expect("permut should parse");
+    assert_eq!(permut_args.0, "A1");
+    assert_eq!(permut_args.1, "B1");
+    let permutationa_args = parse_permutationa_formula("=PERMUTATIONA(A1,B1)")
+      .expect("permutationa should parse");
+    assert_eq!(permutationa_args.0, "A1");
+    assert_eq!(permutationa_args.1, "B1");
+    let multinomial_args = parse_multinomial_formula("=MULTINOMIAL(A1,B1,C1)")
+      .expect("multinomial should parse");
+    assert_eq!(multinomial_args, vec!["A1", "B1", "C1"]);
     let gcd_args = parse_gcd_formula("=GCD(A1,B1,C1)").expect("gcd should parse");
     assert_eq!(gcd_args, vec!["A1", "B1", "C1"]);
     let lcm_args = parse_lcm_formula("=LCM(A1,B1,C1)").expect("lcm should parse");

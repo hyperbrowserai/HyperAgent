@@ -24,6 +24,7 @@ use crate::{
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
     parse_lcm_formula, parse_pi_formula,
+    parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_sinh_formula,
     parse_cosh_formula, parse_tanh_formula, parse_asin_formula, parse_acos_formula,
     parse_atan_formula, parse_atan2_formula,
@@ -1549,6 +1550,62 @@ fn evaluate_formula(
       result /= f64::from(step);
       step += 1;
     }
+    return Ok(Some(result.round().to_string()));
+  }
+
+  if let Some((number_arg, chosen_arg)) = parse_permut_formula(formula) {
+    let number = parse_required_integer(connection, sheet, &number_arg)?;
+    let chosen = parse_required_integer(connection, sheet, &chosen_arg)?;
+    if number < 0 || chosen < 0 || chosen > number || number > 170 {
+      return Ok(None);
+    }
+    let mut result = 1f64;
+    let mut step = 0i32;
+    while step < chosen {
+      result *= f64::from(number - step);
+      step += 1;
+    }
+    return Ok(Some(result.round().to_string()));
+  }
+
+  if let Some((number_arg, chosen_arg)) = parse_permutationa_formula(formula) {
+    let number = parse_required_integer(connection, sheet, &number_arg)?;
+    let chosen = parse_required_integer(connection, sheet, &chosen_arg)?;
+    if number < 0 || chosen < 0 {
+      return Ok(None);
+    }
+    let result = f64::from(number).powi(chosen);
+    return Ok(Some(result.to_string()));
+  }
+
+  if let Some(arguments) = parse_multinomial_formula(formula) {
+    let mut terms = Vec::new();
+    let mut total = 0i32;
+    for argument in arguments {
+      let value = parse_required_integer(connection, sheet, &argument)?;
+      if value < 0 {
+        return Ok(None);
+      }
+      terms.push(value);
+      total += value;
+    }
+    if total > 170 {
+      return Ok(None);
+    }
+    let mut numerator = 1f64;
+    for index in 1..=total {
+      numerator *= f64::from(index);
+    }
+    let mut denominator = 1f64;
+    for term in terms {
+      for index in 1..=term {
+        denominator *= f64::from(index);
+      }
+    }
+    if denominator <= 0.0 {
+      return Ok(None);
+    }
+    let result = numerator / denominator;
     return Ok(Some(result.round().to_string()));
   }
 
@@ -4840,12 +4897,30 @@ mod tests {
         value: None,
         formula: Some("=FISHERINV(0.5)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 187,
+        value: None,
+        formula: Some("=PERMUT(5,2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 188,
+        value: None,
+        formula: Some("=PERMUTATIONA(5,2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 189,
+        value: None,
+        formula: Some("=MULTINOMIAL(2,3,1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 184);
+    assert_eq!(updated_cells, 187);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4859,7 +4934,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 186,
+        end_col: 189,
       },
     )
     .expect("cells should be fetched");
@@ -5492,6 +5567,9 @@ mod tests {
       (fisherinv - 0.462_117_157_260_009_74).abs() < 1e-9,
       "fisherinv should be 0.462117..., got {fisherinv}",
     );
+    assert_eq!(by_position(1, 187).evaluated_value.as_deref(), Some("20"));
+    assert_eq!(by_position(1, 188).evaluated_value.as_deref(), Some("25"));
+    assert_eq!(by_position(1, 189).evaluated_value.as_deref(), Some("60"));
   }
 
   #[test]
@@ -5731,6 +5809,43 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=FACT(-1)".to_string(), "=COMBIN(5,7)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_permut_family_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=PERMUT(5,7)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=PERMUTATIONA(-1,2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=MULTINOMIAL(2,-1,3)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=PERMUT(5,7)".to_string(),
+        "=PERMUTATIONA(-1,2)".to_string(),
+        "=MULTINOMIAL(2,-1,3)".to_string(),
+      ],
     );
   }
 
