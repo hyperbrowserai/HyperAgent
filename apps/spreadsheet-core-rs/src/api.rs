@@ -850,6 +850,10 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       ],
       "agent_ops_cache_replay_endpoint": "/v1/workbooks/{id}/agent/ops/cache/replay",
       "agent_ops_cache_reexecute_endpoint": "/v1/workbooks/{id}/agent/ops/cache/reexecute",
+      "agent_ops_cache_remove_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove",
+      "agent_ops_cache_remove_by_prefix_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix",
+      "agent_ops_cache_remove_by_prefix_preview_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview",
+      "agent_ops_cache_remove_stale_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-stale",
       "agent_ops_cache_replay_request_shape": {
         "request_id": "string (required)"
       },
@@ -878,9 +882,68 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "operations": "reexecuted operations array",
         "response": "agent ops response from reexecution"
       },
+      "agent_ops_cache_remove_request_shape": {
+        "request_id": "string (required)"
+      },
+      "agent_ops_cache_remove_response_shape": {
+        "request_id": "string",
+        "removed": "boolean",
+        "remaining_entries": "entries left in cache after removal"
+      },
+      "agent_ops_cache_remove_by_prefix_request_shape": {
+        "request_id_prefix": "string (required)",
+        "max_age_seconds": "optional number > 0 (remove only entries older than or equal to this age)"
+      },
+      "agent_ops_cache_remove_by_prefix_response_shape": {
+        "request_id_prefix": "string",
+        "max_age_seconds": "echoed age filter when provided",
+        "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
+        "unscoped_matched_entries": "number of age-scoped cache entries before prefix filtering",
+        "removed_entries": "number of removed cache entries matching prefix",
+        "remaining_entries": "entries left in cache after removal"
+      },
+      "agent_ops_cache_remove_by_prefix_preview_request_shape": {
+        "request_id_prefix": "string (required)",
+        "max_age_seconds": "optional number > 0 (preview only entries older than or equal to this age)",
+        "sample_limit": "optional number (default 20, min 1, max 100)"
+      },
+      "agent_ops_cache_remove_by_prefix_preview_response_shape": {
+        "request_id_prefix": "string",
+        "max_age_seconds": "echoed age filter when provided",
+        "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
+        "matched_entries": "number of cache entries matching prefix",
+        "unscoped_matched_entries": "number of age-scoped cache entries before prefix filtering",
+        "sample_limit": "max sample request ids returned",
+        "sample_request_ids": "newest-first sample matching request ids"
+      },
+      "agent_ops_cache_remove_stale_request_shape": {
+        "request_id_prefix": "optional string filter (prefix match)",
+        "max_age_seconds": "number > 0 (required)",
+        "dry_run": "optional boolean (default false)",
+        "sample_limit": "optional number (default 20, min 1, max 100)"
+      },
+      "agent_ops_cache_remove_stale_response_shape": {
+        "request_id_prefix": "echoed filter prefix when provided",
+        "max_age_seconds": "requested max age threshold",
+        "dry_run": "boolean",
+        "cutoff_timestamp": "iso timestamp used for stale matching",
+        "matched_entries": "number of stale cache entries matching cutoff",
+        "unscoped_matched_entries": "number of stale cache entries matching cutoff without prefix filter",
+        "removed_entries": "number of entries removed (0 for dry_run)",
+        "remaining_entries": "entries left in cache after operation",
+        "sample_limit": "applied sample size",
+        "sample_request_ids": "newest-first sample stale request ids"
+      },
       "cache_validation_error_codes": [
         "INVALID_REQUEST_ID",
         "INVALID_NEW_REQUEST_ID",
+        "INVALID_MAX_AGE_SECONDS",
+        "INVALID_MIN_ENTRY_COUNT",
+        "INVALID_MIN_SPAN_SECONDS",
+        "INVALID_MAX_SPAN_SECONDS",
+        "INVALID_SPAN_RANGE",
+        "INVALID_PREFIX_SORT_BY",
+        "INVALID_REQUEST_ID_PREFIX",
         "CACHE_ENTRY_NOT_FOUND"
       ],
       "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
@@ -8681,6 +8744,12 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("agent_ops_cache_remove_stale_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/remove-stale"),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_cache_replay_request_shape")
                 .and_then(|value| value.get("request_id"))
                 .and_then(serde_json::Value::as_str),
@@ -8714,6 +8783,20 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("true if server generated request id"),
         );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_remove_stale_request_shape")
+                .and_then(|value| value.get("sample_limit"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional number (default 20, min 1, max 100)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_remove_by_prefix_preview_response_shape")
+                .and_then(|value| value.get("sample_limit"))
+                .and_then(serde_json::Value::as_str),
+            Some("max sample request ids returned"),
+        );
         let cache_validation_error_codes = schema
             .get("cache_validation_error_codes")
             .and_then(serde_json::Value::as_array)
@@ -8728,6 +8811,14 @@ mod tests {
         assert!(
             cache_validation_error_codes.contains(&"INVALID_NEW_REQUEST_ID"),
             "wizard schema should advertise invalid new request-id cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_MAX_AGE_SECONDS"),
+            "wizard schema should advertise invalid max-age cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_REQUEST_ID_PREFIX"),
+            "wizard schema should advertise invalid request-id-prefix cache validation code",
         );
         assert!(
             cache_validation_error_codes.contains(&"CACHE_ENTRY_NOT_FOUND"),
