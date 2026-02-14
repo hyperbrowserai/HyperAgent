@@ -22,7 +22,7 @@ use crate::{
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
     parse_days_formula, parse_day_formula,
-    parse_if_formula, parse_iferror_formula,
+    parse_if_formula, parse_ifs_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
@@ -1246,6 +1246,15 @@ fn evaluate_formula(
       false_value
     };
     return resolve_scalar_operand(connection, sheet, &chosen_value).map(Some);
+  }
+
+  if let Some(conditions) = parse_ifs_formula(formula) {
+    for (condition, value_expression) in conditions {
+      if evaluate_if_condition(connection, sheet, &condition)? {
+        return resolve_scalar_operand(connection, sheet, &value_expression).map(Some);
+      }
+    }
+    return Ok(None);
   }
 
   if let Some((value_expression, fallback_expression)) = parse_iferror_formula(formula) {
@@ -5477,12 +5486,18 @@ mod tests {
         value: None,
         formula: Some(r#"=DAYS("2024-02-29","2024-01-31")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 216,
+        value: None,
+        formula: Some(r#"=IFS(A1>=100,"bonus",A1>=80,"standard",TRUE,"low")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 213);
+    assert_eq!(updated_cells, 214);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5496,7 +5511,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 215,
+        end_col: 216,
       },
     )
     .expect("cells should be fetched");
@@ -6283,6 +6298,11 @@ mod tests {
       by_position(1, 215).evaluated_value.as_deref(),
       Some("29"),
       "days should return signed day delta",
+    );
+    assert_eq!(
+      by_position(1, 216).evaluated_value.as_deref(),
+      Some("bonus"),
+      "ifs should return the first matching branch value",
     );
   }
 
@@ -7756,6 +7776,25 @@ mod tests {
         "=ROMAN(10,1)".to_string(),
         r#"=ARABIC("IC")"#.to_string(),
       ],
+    );
+  }
+
+  #[test]
+  fn should_leave_ifs_without_matching_condition_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=IFS(FALSE,"no",0>1,"still-no")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=IFS(FALSE,"no",0>1,"still-no")"#.to_string()],
     );
   }
 

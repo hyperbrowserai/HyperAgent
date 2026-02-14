@@ -118,6 +118,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "direct references",
   "arithmetic expressions",
   "IF",
+  "IFS",
   "IFERROR",
   "CHOOSE",
   "TRUE",

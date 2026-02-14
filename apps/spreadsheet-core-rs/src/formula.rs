@@ -131,6 +131,20 @@ pub fn parse_if_formula(formula: &str) -> Option<(String, String, String)> {
   Some((args[0].clone(), args[1].clone(), args[2].clone()))
 }
 
+pub fn parse_ifs_formula(formula: &str) -> Option<Vec<(String, String)>> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "IFS" || args.len() < 2 || args.len() % 2 != 0 {
+    return None;
+  }
+
+  Some(
+    args
+      .chunks(2)
+      .map(|chunk| (chunk[0].clone(), chunk[1].clone()))
+      .collect::<Vec<(String, String)>>(),
+  )
+}
+
 pub fn parse_iferror_formula(formula: &str) -> Option<(String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "IFERROR" || args.len() != 2 {
@@ -1820,7 +1834,7 @@ mod tests {
     parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
-    parse_if_formula, parse_iferror_formula, parse_choose_formula,
+    parse_if_formula, parse_ifs_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_rand_formula,
     parse_randbetween_formula, parse_true_formula,
     parse_false_formula, parse_pi_formula, parse_vlookup_formula,
@@ -1877,6 +1891,18 @@ mod tests {
     assert_eq!(if_formula.0, "B2>=100");
     assert_eq!(if_formula.1, r#""bonus""#);
     assert_eq!(if_formula.2, r#""standard""#);
+    let ifs_formula = parse_ifs_formula(
+      r#"=IFS(B2>=100,"bonus",B2>=80,"standard",TRUE,"low")"#,
+    )
+    .expect("ifs formula should parse");
+    assert_eq!(
+      ifs_formula,
+      vec![
+        ("B2>=100".to_string(), r#""bonus""#.to_string()),
+        ("B2>=80".to_string(), r#""standard""#.to_string()),
+        ("TRUE".to_string(), r#""low""#.to_string()),
+      ],
+    );
 
     let concat = parse_concat_formula(r#"=CONCAT("sales-", A2, "-", B2)"#)
       .expect("concat formula should parse");
