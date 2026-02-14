@@ -181,7 +181,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     ).rejects.toThrow(/\[truncated/);
   });
 
-  it("formats non-Error failure payloads written to aiAction debug artifacts", async () => {
+  it("formats non-Error failure payloads written to perform debug artifacts", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
       debug: true,
@@ -210,14 +210,15 @@ describe("HyperAgent.executeSingleAction retry options", () => {
           error: expect.objectContaining({
             message: '{"reason":"perform crashed"}',
           }),
-        })
+        }),
+        "debug/perform"
       );
     } finally {
       logSpy.mockRestore();
     }
   });
 
-  it("truncates oversized failure payloads written to aiAction debug artifacts", async () => {
+  it("truncates oversized failure payloads written to perform debug artifacts", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
       debug: true,
@@ -244,7 +245,8 @@ describe("HyperAgent.executeSingleAction retry options", () => {
           error: expect.objectContaining({
             message: expect.stringContaining("[truncated"),
           }),
-        })
+        }),
+        "debug/perform"
       );
     } finally {
       logSpy.mockRestore();
@@ -347,7 +349,8 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       expect(writeAiActionDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           url: "about:blank",
-        })
+        }),
+        "debug/perform"
       );
     } finally {
       logSpy.mockRestore();
@@ -380,7 +383,8 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       expect(writeAiActionDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
-        })
+        }),
+        "debug/perform"
       );
     } finally {
       logSpy.mockRestore();
@@ -425,7 +429,8 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       expect(writeAiActionDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           url: "about:blank",
-        })
+        }),
+        "debug/perform"
       );
     } finally {
       errorSpy.mockRestore();
@@ -461,7 +466,8 @@ describe("HyperAgent.executeSingleAction retry options", () => {
         expect.objectContaining({
           success: false,
           screenshot: undefined,
-        })
+        }),
+        "debug/perform"
       );
     } finally {
       errorSpy.mockRestore();

@@ -96,6 +96,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     new Date(0).toISOString();
   private static readonly AIACTION_DEPRECATION_MESSAGE =
     "[HyperPage] page.aiAction() is deprecated; use page.perform() instead.";
+  private static readonly PERFORM_DEBUG_DIR = "debug/perform";
 
   private llm: HyperAgentLLM;
   private tasks: Record<string, TaskState> = {};
@@ -2563,7 +2564,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           llmResponse: params.llmResponse,
           success: true,
           frameDebugInfo: params.domState.frameDebugInfo,
-        });
+        }, HyperAgent.PERFORM_DEBUG_DIR);
       } else {
         // Error case - write available elements
         const availableElements = this.collectInteractiveElements(
@@ -2587,7 +2588,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           },
           success: false,
           frameDebugInfo: params.domState.frameDebugInfo,
-        });
+        }, HyperAgent.PERFORM_DEBUG_DIR);
       }
     } catch (debugError) {
       console.error(
