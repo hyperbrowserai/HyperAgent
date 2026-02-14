@@ -100,10 +100,30 @@ fn verify_fixture_corpus(fixtures_dir: &Path) -> Result<Vec<String>, Box<dyn Err
     .into_iter()
     .map(|(file_name, bytes)| (file_name.to_string(), bytes))
     .collect::<BTreeMap<_, _>>();
-  let expected_names = fixture_corpus::fixture_corpus_file_names()
+  let declared_names = fixture_corpus::fixture_corpus_file_names();
+  let expected_names = declared_names
     .iter()
     .map(|file_name| file_name.to_string())
     .collect::<BTreeSet<_>>();
+  if expected_names.len() != declared_names.len() {
+    return Err(
+      format!(
+        "declared fixture corpus names contain duplicates: {:?}",
+        declared_names
+      )
+      .into(),
+    );
+  }
+  if let Some(invalid_name) = declared_names.iter().find(|file_name| {
+    file_name.trim().is_empty() || !file_name.ends_with(".xlsx")
+  }) {
+    return Err(
+      format!(
+        "declared fixture corpus name '{invalid_name}' must be non-blank and end with .xlsx",
+      )
+      .into(),
+    );
+  }
   let generated_names = expected_map
     .keys()
     .cloned()
@@ -230,6 +250,49 @@ mod tests {
       GeneratorMode::VerifyCommitted {
         fixtures_dir: default_fixture_dir()
       },
+    );
+  }
+
+  #[test]
+  fn should_keep_declared_fixture_file_names_unique_and_xlsx() {
+    let declared_names = fixture_corpus::fixture_corpus_file_names();
+    let declared_set = declared_names
+      .iter()
+      .copied()
+      .collect::<HashSet<_>>();
+    assert_eq!(
+      declared_set.len(),
+      declared_names.len(),
+      "declared fixture corpus names should be unique",
+    );
+    for file_name in declared_names {
+      assert!(
+        !file_name.trim().is_empty(),
+        "declared fixture file names should be non-blank",
+      );
+      assert_eq!(
+        file_name.trim(),
+        *file_name,
+        "declared fixture file names should be trimmed",
+      );
+      assert!(
+        file_name.ends_with(".xlsx"),
+        "declared fixture file names should end with .xlsx",
+      );
+    }
+  }
+
+  #[test]
+  fn should_keep_declared_fixture_name_order_in_sync_with_generator() {
+    let generated_names = fixture_corpus::generate_fixture_corpus()
+      .expect("fixture corpus generation should succeed")
+      .into_iter()
+      .map(|(file_name, _bytes)| file_name)
+      .collect::<Vec<_>>();
+    assert_eq!(
+      generated_names,
+      fixture_corpus::fixture_corpus_file_names().to_vec(),
+      "declared fixture corpus file-name order should match generator output order",
     );
   }
 
