@@ -922,6 +922,47 @@ describe("buildAgentStepMessages", () => {
     expect(joined).not.toContain("d".repeat(3000));
   });
 
+  it("falls back to readable task goal text when task input is trap-prone", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const trappedTask = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "toString") {
+            throw new Error("task toString trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      trappedTask as unknown as string,
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("=== Final Goal ===");
+    expect(joined).toContain("{}");
+  });
+
   it("handles variables with throwing getters without crashing", async () => {
     const page = createFakePage("https://example.com/current", [
       "https://example.com/current",

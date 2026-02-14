@@ -300,6 +300,17 @@ function normalizeStepText(value: unknown, fallback: string): string {
   return truncatePromptText(formatUnknownError(value));
 }
 
+function normalizeTaskGoal(value: unknown): string {
+  if (typeof value === "string") {
+    return truncatePromptText(value);
+  }
+  const fallback = "Task goal unavailable";
+  if (typeof value === "undefined") {
+    return fallback;
+  }
+  return truncatePromptText(formatUnknownError(value)) || fallback;
+}
+
 function buildVariablesContent(variables: HyperVariable[]): string {
   const { visibleVariables, omittedCount } = getBoundedVariables(variables);
   if (visibleVariables.length === 0) {
@@ -463,7 +474,7 @@ export const buildAgentStepMessages = async (
   // Add the final goal section
   messages.push({
     role: "user",
-    content: `=== Final Goal ===\n${truncatePromptText(task)}\n`,
+    content: `=== Final Goal ===\n${normalizeTaskGoal(task)}\n`,
   });
 
   // Add current URL section
