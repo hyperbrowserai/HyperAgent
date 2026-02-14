@@ -130,6 +130,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "NOT",
   "CONCAT",
   "CONCATENATE",
+  "TEXTJOIN",
   "LEN",
   "PI",
   "ABS",

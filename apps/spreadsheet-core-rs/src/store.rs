@@ -3,7 +3,7 @@ use crate::{
   formula::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula, parse_cell_address,
-    parse_concat_formula, parse_countif_formula, parse_countifs_formula,
+    parse_concat_formula, parse_textjoin_formula, parse_countif_formula, parse_countifs_formula,
     parse_counta_formula, parse_countblank_formula, parse_sumproduct_formula,
     parse_row_formula, parse_column_formula, parse_rows_formula,
     parse_columns_formula,
@@ -1298,6 +1298,27 @@ fn evaluate_formula(
       output.push_str(&resolve_scalar_operand(connection, sheet, &argument)?);
     }
     return Ok(Some(output));
+  }
+
+  if let Some((delimiter_operand, ignore_empty_operand, text_operands)) =
+    parse_textjoin_formula(formula)
+  {
+    let delimiter = resolve_scalar_operand(connection, sheet, &delimiter_operand)?;
+    let ignore_empty_value =
+      resolve_scalar_operand(connection, sheet, &ignore_empty_operand)?;
+    let ignore_empty = resolve_truthy_operand(&ignore_empty_value);
+    let mut values = Vec::new();
+    for operand in text_operands {
+      let resolved_values =
+        resolve_textjoin_argument_values(connection, sheet, &operand)?;
+      for value in resolved_values {
+        if ignore_empty && value.is_empty() {
+          continue;
+        }
+        values.push(value);
+      }
+    }
+    return Ok(Some(values.join(&delimiter)));
   }
 
   if parse_today_formula(formula).is_some() {
@@ -3406,6 +3427,37 @@ fn resolve_scalar_operand(
   }
 
   Ok(trimmed.to_string())
+}
+
+fn resolve_textjoin_argument_values(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<Vec<String>, ApiError> {
+  if let Some((start, end)) = parse_operand_range_bounds(operand) {
+    let bounds = normalized_range_bounds(start, end);
+    let mut values = Vec::new();
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        values.push(load_cell_scalar(
+          connection,
+          sheet,
+          bounds.start_row + row_offset,
+          bounds.start_col + col_offset,
+        )?);
+      }
+    }
+    return Ok(values);
+  }
+  Ok(vec![resolve_scalar_operand(connection, sheet, operand)?])
+}
+
+fn parse_operand_range_bounds(operand: &str) -> Option<((u32, u32), (u32, u32))> {
+  let normalized = operand.trim().replace('$', "");
+  let (start, end) = normalized.split_once(':')?;
+  let start_ref = parse_cell_address(start.trim())?;
+  let end_ref = parse_cell_address(end.trim())?;
+  Some((start_ref, end_ref))
 }
 
 fn load_cell_scalar(
@@ -5596,12 +5648,24 @@ mod tests {
         value: None,
         formula: Some(r#"=TIMEVALUE("13:45:30")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 220,
+        value: None,
+        formula: Some(r#"=TEXTJOIN(":",TRUE,A1:A3)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 221,
+        value: None,
+        formula: Some(r#"=TEXTJOIN(":",FALSE,A1:A3)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 217);
+    assert_eq!(updated_cells, 219);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5615,7 +5679,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 219,
+        end_col: 221,
       },
     )
     .expect("cells should be fetched");
@@ -6427,6 +6491,16 @@ mod tests {
     assert!(
       (timevalue - 0.573_263_888_888_888_9).abs() < 1e-12,
       "timevalue should return day fraction, got {timevalue}",
+    );
+    assert_eq!(
+      by_position(1, 220).evaluated_value.as_deref(),
+      Some("120:80"),
+      "textjoin should flatten ranges and ignore blanks",
+    );
+    assert_eq!(
+      by_position(1, 221).evaluated_value.as_deref(),
+      Some("120:80:"),
+      "textjoin should keep blanks when ignore_empty is false",
     );
   }
 

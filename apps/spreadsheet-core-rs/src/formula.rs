@@ -198,6 +198,14 @@ pub fn parse_concat_formula(formula: &str) -> Option<Vec<String>> {
   Some(args)
 }
 
+pub fn parse_textjoin_formula(formula: &str) -> Option<(String, String, Vec<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "TEXTJOIN" || args.len() < 3 {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args[2..].to_vec()))
+}
+
 pub fn parse_today_formula(formula: &str) -> Option<()> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "TODAY" && args.is_empty() {
@@ -1819,7 +1827,8 @@ mod tests {
   use super::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
-    parse_abs_formula, parse_concat_formula, parse_date_formula, parse_edate_formula,
+    parse_abs_formula, parse_concat_formula, parse_textjoin_formula,
+    parse_date_formula, parse_edate_formula,
     parse_eomonth_formula, parse_days_formula, parse_datevalue_formula,
     parse_timevalue_formula, parse_day_formula,
     parse_ceiling_formula, parse_ceiling_math_formula, parse_floor_formula,
@@ -1953,6 +1962,11 @@ mod tests {
     let concat = parse_concat_formula(r#"=CONCAT("sales-", A2, "-", B2)"#)
       .expect("concat formula should parse");
     assert_eq!(concat, vec![r#""sales-""#, "A2", r#""-""#, "B2"]);
+    let textjoin = parse_textjoin_formula(r#"=TEXTJOIN("-",TRUE,A1,A2,"done")"#)
+      .expect("textjoin should parse");
+    assert_eq!(textjoin.0, r#""-""#);
+    assert_eq!(textjoin.1, "TRUE");
+    assert_eq!(textjoin.2, vec!["A1", "A2", r#""done""#]);
 
     let iferror =
       parse_iferror_formula(r#"=IFERROR(VLOOKUP(A1,D1:E5,2,TRUE),"fallback")"#)
