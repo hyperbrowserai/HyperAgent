@@ -33,7 +33,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - `executeSingleAction` in `src/agent/index.ts`
   - Uses `findElementWithInstruction` (a11y analyze + retry)
   - Executes through shared `performAction`
-  - Supports dedicated perform retry controls (`maxElementRetries`, `retryDelayMs`, `maxContextSwitchRetries`)
+  - Supports dedicated perform retry controls (`maxElementRetries`, `retryDelayMs`, `maxContextSwitchRetries`, `contextSwitchRetryDelayMs`)
+  - Emits a one-time deprecation warning when compatibility alias `page.aiAction()` is used
+  - Writes debug artifacts to `debug/perform/...` via canonical `writePerformDebug`
 
 ## DOM context pipeline
 
@@ -89,6 +91,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Fixed debug options initialization ordering.
 - Made action registration fail-fast and synchronous.
 - Added dedicated perform option typing and handling.
+- Added configurable context-switch retry delay for `page.perform`.
 - Aligned prompt text with actual registered action names.
 - Fixed frame listener bookkeeping to avoid session listener overwrite drift.
 - Added compact omitted-history summaries in prompt building to preserve context while respecting prompt budgets.
@@ -96,3 +99,4 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Reduced first-party frame false positives in ad/tracking filtering with same-site weak-signal safeguards.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
+- Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.
