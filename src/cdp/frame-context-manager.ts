@@ -6,6 +6,7 @@ import { isAdOrTrackingFrame } from "./frame-filters";
 import { formatUnknownError, normalizePageUrl } from "@/utils";
 
 const MAX_FRAME_CONTEXT_DIAGNOSTIC_CHARS = 400;
+const MAX_FRAME_NAME_CHARS = 200;
 
 interface FrameTreeNode {
   frame: Protocol.Page.Frame;
@@ -86,6 +87,26 @@ function safeReadFrameName(frame: PlaywrightFrameHandle): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function normalizeFrameRecordUrl(value: unknown): string {
+  return normalizePageUrl(value, {
+    fallback: "about:blank",
+  });
+}
+
+function normalizeFrameRecordName(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = sanitizeFrameContextDiagnostic(value);
+  if (normalized.length === 0) {
+    return undefined;
+  }
+  if (normalized.length <= MAX_FRAME_NAME_CHARS) {
+    return normalized;
+  }
+  return normalized.slice(0, MAX_FRAME_NAME_CHARS);
 }
 
 function safeReadParentFrameUrl(
@@ -399,8 +420,8 @@ export class FrameContextManager {
         frameId,
         parentFrameId,
         loaderId: node.frame.loaderId,
-        name: node.frame.name,
-        url: node.frame.url,
+        name: normalizeFrameRecordName(node.frame.name),
+        url: normalizeFrameRecordUrl(node.frame.url),
       });
 
       this.setFrameSession(frameId, session);
@@ -444,10 +465,11 @@ export class FrameContextManager {
   }
 
   private getFrameIdByUrl(url: string): string | null {
-    if (!url || url === "about:blank") return null;
+    const normalizedUrl = normalizeFrameRecordUrl(url);
+    if (!normalizedUrl || normalizedUrl === "about:blank") return null;
 
     for (const frame of this.graph.getAllFrames()) {
-      if (frame.url === url) return frame.frameId;
+      if (frame.url === normalizedUrl) return frame.frameId;
     }
     return null;
   }
@@ -734,11 +756,12 @@ export class FrameContextManager {
       frameId,
       parentFrameId: event.frame.parentId ?? null,
       loaderId: event.frame.loaderId,
-      url: event.frame.url,
-      name: event.frame.name,
+      url: normalizeFrameRecordUrl(event.frame.url),
+      name: normalizeFrameRecordName(event.frame.name),
     });
+    const normalizedUrl = normalizeFrameRecordUrl(event.frame.url);
     this.log(
-      `[FrameContext] Page.frameNavigated: frameId=${frameId}, url=${event.frame.url}`
+      `[FrameContext] Page.frameNavigated: frameId=${frameId}, url=${normalizedUrl}`
     );
   }
 

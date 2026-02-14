@@ -52,6 +52,16 @@ class FakeSession implements CDPSession {
     eventHandlers?.delete(handler as (...payload: unknown[]) => void);
   }
 
+  emit(event: string, ...payload: unknown[]): void {
+    const eventHandlers = this.handlers.get(event);
+    if (!eventHandlers) {
+      return;
+    }
+    for (const handler of eventHandlers) {
+      handler(...payload);
+    }
+  }
+
   async detach(): Promise<void> {
     return;
   }
@@ -78,6 +88,26 @@ class OversizedFailingEnableSession extends FakeSession {
       throw new Error(`runtime\u0000\n${"y".repeat(10_000)}`);
     }
     return super.send<T>(method);
+  }
+}
+
+class NoisyFrameTreeSession extends FakeSession {
+  async send<T = unknown>(method: string): Promise<T> {
+    if (method === "Page.getFrameTree") {
+      return {
+        frameTree: {
+          frame: {
+            id: "root-frame",
+            parentId: undefined,
+            loaderId: "loader-1",
+            name: "root\u0000\nframe",
+            url: "https://example.com/\u0000root\nframe",
+          },
+          childFrames: [],
+        },
+      } as T;
+    }
+    return super.send(method);
   }
 }
 
@@ -223,6 +253,38 @@ describe("FrameContextManager listener bookkeeping", () => {
       (event) => event === "Page.frameAttached"
     ).length;
     expect(secondAttachedRegistrations).toBe(2);
+  });
+
+  it("sanitizes control characters in captured frame tree metadata", async () => {
+    const session = new NoisyFrameTreeSession();
+    const manager = new FrameContextManager(createFakeClient(session));
+
+    await manager.ensureInitialized();
+
+    const rootFrame = manager.getFrame("root-frame");
+    expect(rootFrame?.url).toBe("https://example.com/ root frame");
+    expect(rootFrame?.name).toBe("root frame");
+  });
+
+  it("sanitizes control characters in frameNavigated metadata updates", async () => {
+    const session = new FakeSession();
+    const manager = new FrameContextManager(createFakeClient(session));
+
+    await manager.ensureInitialized();
+
+    session.emit("Page.frameNavigated", {
+      frame: {
+        id: "root-frame",
+        parentId: undefined,
+        loaderId: "loader-2",
+        name: "updated\u0000\nname",
+        url: "https://example.com/\u0000updated\nframe",
+      },
+    });
+
+    const rootFrame = manager.getFrame("root-frame");
+    expect(rootFrame?.url).toBe("https://example.com/ updated frame");
+    expect(rootFrame?.name).toBe("updated name");
   });
 
   it("captureOOPIFs tolerates trap-prone frame metadata on same-origin frames", async () => {
