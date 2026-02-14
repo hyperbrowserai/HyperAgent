@@ -1090,9 +1090,13 @@ export function SpreadsheetApp() {
     useState(false);
   const [isCopyingVisibleWizardEndpointCatalog, setIsCopyingVisibleWizardEndpointCatalog] =
     useState(false);
+  const [isCopyingVisibleWizardEndpointKeys, setIsCopyingVisibleWizardEndpointKeys] =
+    useState(false);
   const [isCopyingAgentEndpointCatalog, setIsCopyingAgentEndpointCatalog] =
     useState(false);
   const [isCopyingVisibleAgentEndpointCatalog, setIsCopyingVisibleAgentEndpointCatalog] =
+    useState(false);
+  const [isCopyingVisibleAgentEndpointKeys, setIsCopyingVisibleAgentEndpointKeys] =
     useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
@@ -2390,6 +2394,10 @@ export function SpreadsheetApp() {
     },
     [wizardEndpointCatalogPayload, wizardVisibleSchemaEndpointsWithMethods],
   );
+  const wizardVisibleEndpointKeys = useMemo(
+    () => wizardVisibleSchemaEndpointsWithMethods.map((entry) => entry.key),
+    [wizardVisibleSchemaEndpointsWithMethods],
+  );
   const agentWorkbookImportResponseFields = useMemo(
     () =>
       flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
@@ -2950,6 +2958,10 @@ export function SpreadsheetApp() {
       };
     },
     [agentEndpointCatalogPayload, agentVisibleSchemaEndpointsWithMethods],
+  );
+  const agentVisibleEndpointKeys = useMemo(
+    () => agentVisibleSchemaEndpointsWithMethods.map((entry) => entry.key),
+    [agentVisibleSchemaEndpointsWithMethods],
   );
   const agentWorkbookImportEventFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
@@ -3940,6 +3952,36 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyVisibleWizardEndpointKeys() {
+    if (wizardVisibleEndpointKeys.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleWizardEndpointKeys(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            schema: "wizard",
+            scope: "visible-endpoint-keys",
+            view_mode: wizardEndpointCatalogViewMode,
+            filter: wizardEndpointCatalogFilter.trim() || null,
+            keys: wizardVisibleEndpointKeys,
+          },
+          null,
+          2,
+        ),
+      );
+      clearUiError();
+      setNotice(
+        `Copied visible wizard endpoint keys (${wizardVisibleEndpointKeys.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible wizard endpoint keys.");
+    } finally {
+      setIsCopyingVisibleWizardEndpointKeys(false);
+    }
+  }
+
   async function handleCopyAgentEndpointCatalog() {
     if (agentEndpointCatalogPayload.endpoints.length === 0) {
       return;
@@ -3994,6 +4036,36 @@ export function SpreadsheetApp() {
       applyUiError(error, "Failed to copy visible agent endpoint catalog metadata.");
     } finally {
       setIsCopyingVisibleAgentEndpointCatalog(false);
+    }
+  }
+
+  async function handleCopyVisibleAgentEndpointKeys() {
+    if (agentVisibleEndpointKeys.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleAgentEndpointKeys(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            schema: "agent",
+            scope: "visible-endpoint-keys",
+            view_mode: agentEndpointCatalogViewMode,
+            filter: agentEndpointCatalogFilter.trim() || null,
+            keys: agentVisibleEndpointKeys,
+          },
+          null,
+          2,
+        ),
+      );
+      clearUiError();
+      setNotice(
+        `Copied visible agent endpoint keys (${agentVisibleEndpointKeys.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible agent endpoint keys.");
+    } finally {
+      setIsCopyingVisibleAgentEndpointKeys(false);
     }
   }
 
@@ -5238,6 +5310,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleWizardEndpointCatalog
                         ? "Copying..."
                         : "Copy visible JSON"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleWizardEndpointKeys}
+                      disabled={isCopyingVisibleWizardEndpointKeys}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleWizardEndpointKeys
+                        ? "Copying..."
+                        : "Copy visible keys"}
                     </button>
                     <button
                       onClick={handleCopyWizardEndpointCatalog}
@@ -6787,6 +6868,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleAgentEndpointCatalog
                         ? "Copying..."
                         : "Copy visible JSON"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleAgentEndpointKeys}
+                      disabled={isCopyingVisibleAgentEndpointKeys}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleAgentEndpointKeys
+                        ? "Copying..."
+                        : "Copy visible keys"}
                     </button>
                     <button
                       onClick={handleCopyAgentEndpointCatalog}
