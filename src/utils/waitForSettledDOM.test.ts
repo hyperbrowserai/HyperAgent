@@ -7,10 +7,7 @@ jest.mock("@/cdp", () => ({
 }));
 
 jest.mock("@/debug/options", () => ({
-  getDebugOptions: jest.fn(() => ({
-    enabled: true,
-    traceWait: true,
-  })),
+  getDebugOptions: jest.fn(),
 }));
 
 const { getCDPClient, getOrCreateFrameContextManager } = jest.requireMock(
@@ -18,6 +15,9 @@ const { getCDPClient, getOrCreateFrameContextManager } = jest.requireMock(
 ) as {
   getCDPClient: jest.Mock;
   getOrCreateFrameContextManager: jest.Mock;
+};
+const { getDebugOptions } = jest.requireMock("@/debug/options") as {
+  getDebugOptions: jest.Mock;
 };
 
 type EventHandler = (...args: unknown[]) => void;
@@ -64,6 +64,10 @@ describe("waitForSettledDOM diagnostics", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    getDebugOptions.mockReturnValue({
+      enabled: true,
+      traceWait: true,
+    });
   });
 
   afterEach(() => {
@@ -103,16 +107,60 @@ describe("waitForSettledDOM diagnostics", () => {
       });
 
       await jest.advanceTimersByTimeAsync(3_100);
-      await waitPromise;
+      const stats = await waitPromise;
 
       const warning = String(warnSpy.mock.calls[0]?.[0] ?? "");
       expect(warning).toContain("[truncated");
       expect(warning).not.toContain("\u0000");
       expect(warning).not.toContain("\n");
       expect(warning.length).toBeLessThan(900);
+      expect(stats.forcedDrops).toBe(1);
+      expect(stats.requestsSeen).toBe(1);
+      expect(stats.peakInflight).toBe(1);
+      expect(stats.resolvedByTimeout).toBe(false);
     } finally {
       warnSpy.mockRestore();
       logSpy.mockRestore();
     }
+  });
+
+  it("reports timeout-driven completion when requests remain inflight", async () => {
+    const { session, emit } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    const waitPromise = waitForSettledDOM(page, 600);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit("Network.requestWillBeSent", {
+      requestId: "req-1",
+      type: "Document",
+      request: { url: "https://example.com/slow" },
+    });
+
+    await jest.advanceTimersByTimeAsync(700);
+    const stats = await waitPromise;
+
+    expect(stats.resolvedByTimeout).toBe(true);
+    expect(stats.forcedDrops).toBe(0);
+    expect(stats.requestsSeen).toBe(1);
+    expect(stats.peakInflight).toBe(1);
   });
 });
