@@ -142,6 +142,41 @@ describe("runCachedStep", () => {
     expect(result.replayStepMeta?.retries).toBe(1);
   });
 
+  it("skips CDP XPath resolution when cdpActionsEnabled is false", async () => {
+    executeReplaySpecialAction.mockResolvedValue(null);
+    const page = createMockPage();
+
+    const result = await runCachedStep({
+      page,
+      instruction: "click login",
+      cachedAction: {
+        actionType: "actElement",
+        method: "click",
+        xpath: "//button[1]",
+        frameIndex: 0,
+      },
+      cdpActionsEnabled: false,
+      tokenLimit: 8000,
+      llm: createMockLLM(),
+      mcpClient: undefined,
+      variables: [],
+    });
+
+    expect(result.status).toBe(TaskStatus.COMPLETED);
+    expect(initializeRuntimeContext).not.toHaveBeenCalled();
+    expect(resolveXPathWithCDP).not.toHaveBeenCalled();
+    expect(performAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cdpActions: false,
+        cdp: undefined,
+      }),
+      expect.objectContaining({
+        elementId: "0-0",
+        method: "click",
+      })
+    );
+  });
+
   it("sanitizes oversized special action outputs before returning", async () => {
     executeReplaySpecialAction.mockResolvedValue({
       taskId: "task-uuid",

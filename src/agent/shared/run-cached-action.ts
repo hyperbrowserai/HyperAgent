@@ -8,6 +8,8 @@ import { markDomSnapshotDirty } from "@/context-providers/a11y-dom/dom-cache";
 import { initializeRuntimeContext } from "@/agent/shared/runtime-context";
 import { resolveXPathWithCDP } from "@/agent/shared/xpath-cdp-resolver";
 import { resolveElement, dispatchCDPAction } from "@/cdp";
+import type { CDPClient } from "@/cdp/types";
+import type { FrameContextManager } from "@/cdp/frame-context-manager";
 import { TaskOutput, TaskStatus } from "@/types/agent/types";
 import { executeReplaySpecialAction } from "@/agent/shared/replay-special-actions";
 
@@ -547,14 +549,20 @@ async function runCachedAttempt(args: {
     cdpActionsEnabled,
     filterAdTrackingFrames,
   } = args;
-
-  const { cdpClient, frameContextManager } = await initializeRuntimeContext(
-    page,
-    debug,
-    {
-      filterAdTrackingFrames,
-    }
-  );
+  const useCdpActions = cdpActionsEnabled !== false;
+  let cdpClient: CDPClient | null = null;
+  let frameContextManager: FrameContextManager | null = null;
+  if (useCdpActions) {
+    const runtimeContext = await initializeRuntimeContext(
+      page,
+      debug,
+      {
+        filterAdTrackingFrames,
+      }
+    );
+    cdpClient = runtimeContext.cdpClient;
+    frameContextManager = runtimeContext.frameContextManager;
+  }
 
   await waitForSettledDOM(page, undefined, {
     filterAdTrackingFrames,
@@ -565,13 +573,17 @@ async function runCachedAttempt(args: {
     enableVisualMode: false,
     filterAdTrackingFrames,
   });
-  const resolved = await resolveXPathWithCDP({
-    xpath: cachedAction.xpath!,
-    frameIndex: cachedAction.frameIndex ?? 0,
-    cdpClient,
-    frameContextManager,
-    debug,
-  });
+  let backendNodeId = 0;
+  if (useCdpActions && cdpClient && frameContextManager) {
+    const resolved = await resolveXPathWithCDP({
+      xpath: cachedAction.xpath!,
+      frameIndex: cachedAction.frameIndex ?? 0,
+      cdpClient,
+      frameContextManager,
+      debug,
+    });
+    backendNodeId = resolved.backendNodeId;
+  }
 
   const actionContext: ActionContext = {
     domState,
@@ -579,26 +591,29 @@ async function runCachedAttempt(args: {
     tokenLimit,
     llm,
     debug,
-    cdpActions: cdpActionsEnabled !== false,
+    cdpActions: useCdpActions,
     filterAdTrackingFrames,
-    cdp: {
-      client: cdpClient,
-      frameContextManager,
-      resolveElement,
-      dispatchCDPAction,
-      preferScriptBoundingBox: preferScriptBoundingBox ?? debug,
-      debug,
-    },
+    cdp:
+      useCdpActions && cdpClient && frameContextManager
+        ? {
+            client: cdpClient,
+            frameContextManager,
+            resolveElement,
+            dispatchCDPAction,
+            preferScriptBoundingBox: preferScriptBoundingBox ?? debug,
+            debug,
+          }
+        : undefined,
     debugDir: undefined,
     mcpClient,
     variables,
     invalidateDomCache: () => markDomSnapshotDirty(page),
   };
 
-  const encodedId = `${cachedAction.frameIndex ?? 0}-${resolved.backendNodeId}`;
+  const encodedId = `${cachedAction.frameIndex ?? 0}-${backendNodeId}`;
   domState.backendNodeMap = {
     ...(domState.backendNodeMap || {}),
-    [encodedId]: resolved.backendNodeId,
+    [encodedId]: backendNodeId,
   };
   domState.xpathMap = {
     ...(domState.xpathMap || {}),
