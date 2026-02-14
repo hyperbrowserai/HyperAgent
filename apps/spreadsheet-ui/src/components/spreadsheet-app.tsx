@@ -325,6 +325,14 @@ function collectOpenApiMethodsByPath(
   }, {});
 }
 
+type EndpointCatalogSortOption =
+  | "key_asc"
+  | "key_desc"
+  | "endpoint_asc"
+  | "endpoint_desc"
+  | "mismatch_first"
+  | "fallback_first";
+
 function filterEndpointCatalogEntries<
   T extends { key: string; endpoint: string; openApiPath: string; summary: string | null },
 >(
@@ -343,6 +351,63 @@ function filterEndpointCatalogEntries<
       entry.summary ?? "",
     ].some((value) => value.toLowerCase().includes(normalizedFilterValue))
   );
+}
+
+function sortEndpointCatalogEntries<
+  T extends {
+    key: string;
+    endpoint: string;
+    hasMethodMismatch: boolean;
+    hasSummaryMismatch: boolean;
+    hasPathMismatch: boolean;
+    methodSource: string;
+    summarySource: string;
+    openApiPathSource: string;
+  },
+>(
+  entries: T[],
+  sortOption: EndpointCatalogSortOption,
+): T[] {
+  const entriesToSort = [...entries];
+  const compareByKey = (left: T, right: T): number => left.key.localeCompare(right.key);
+  entriesToSort.sort((left, right) => {
+    switch (sortOption) {
+      case "key_desc":
+        return right.key.localeCompare(left.key);
+      case "endpoint_asc":
+        return left.endpoint.localeCompare(right.endpoint);
+      case "endpoint_desc":
+        return right.endpoint.localeCompare(left.endpoint);
+      case "mismatch_first": {
+        const leftHasMismatch = left.hasMethodMismatch
+          || left.hasSummaryMismatch
+          || left.hasPathMismatch;
+        const rightHasMismatch = right.hasMethodMismatch
+          || right.hasSummaryMismatch
+          || right.hasPathMismatch;
+        if (leftHasMismatch !== rightHasMismatch) {
+          return leftHasMismatch ? -1 : 1;
+        }
+        return compareByKey(left, right);
+      }
+      case "fallback_first": {
+        const leftHasFallback = left.methodSource !== "operation"
+          || left.summarySource !== "operation"
+          || left.openApiPathSource !== "operation";
+        const rightHasFallback = right.methodSource !== "operation"
+          || right.summarySource !== "operation"
+          || right.openApiPathSource !== "operation";
+        if (leftHasFallback !== rightHasFallback) {
+          return leftHasFallback ? -1 : 1;
+        }
+        return compareByKey(left, right);
+      }
+      case "key_asc":
+      default:
+        return compareByKey(left, right);
+    }
+  });
+  return entriesToSort;
 }
 
 function flattenSchemaShapeEntries(
@@ -615,6 +680,8 @@ export function SpreadsheetApp() {
   const [wizardIncludeFileBase64, setWizardIncludeFileBase64] = useState(false);
   const [wizardWorkbookName, setWizardWorkbookName] = useState("Wizard Workbook");
   const [wizardEndpointCatalogFilter, setWizardEndpointCatalogFilter] = useState("");
+  const [wizardEndpointCatalogSort, setWizardEndpointCatalogSort] =
+    useState<EndpointCatalogSortOption>("key_asc");
   const [wizardFile, setWizardFile] = useState<File | null>(null);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [uiError, setUiError] = useState<string | null>(null);
@@ -660,6 +727,8 @@ export function SpreadsheetApp() {
   const [cachePrefixSuggestionsOffset, setCachePrefixSuggestionsOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
   const [agentEndpointCatalogFilter, setAgentEndpointCatalogFilter] = useState("");
+  const [agentEndpointCatalogSort, setAgentEndpointCatalogSort] =
+    useState<EndpointCatalogSortOption>("key_asc");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
   const [cachePrefixSuggestionLimit, setCachePrefixSuggestionLimit] = useState(
     CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT,
@@ -1542,12 +1611,18 @@ export function SpreadsheetApp() {
     [wizardSchemaEndpointsWithMethods],
   );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
-    () =>
+    () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
         wizardSchemaEndpointsWithMethods,
         wizardEndpointCatalogFilter,
       ),
-    [wizardEndpointCatalogFilter, wizardSchemaEndpointsWithMethods],
+      wizardEndpointCatalogSort,
+    ),
+    [
+      wizardEndpointCatalogFilter,
+      wizardEndpointCatalogSort,
+      wizardSchemaEndpointsWithMethods,
+    ],
   );
   const isWizardEndpointCatalogFilterActive = wizardEndpointCatalogFilter.trim().length > 0;
   const wizardEndpointCatalogPayload = useMemo(
@@ -1908,12 +1983,18 @@ export function SpreadsheetApp() {
     [agentSchemaEndpointsWithMethods],
   );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
-    () =>
+    () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
         agentSchemaEndpointsWithMethods,
         agentEndpointCatalogFilter,
       ),
-    [agentEndpointCatalogFilter, agentSchemaEndpointsWithMethods],
+      agentEndpointCatalogSort,
+    ),
+    [
+      agentEndpointCatalogFilter,
+      agentEndpointCatalogSort,
+      agentSchemaEndpointsWithMethods,
+    ],
   );
   const isAgentEndpointCatalogFilterActive = agentEndpointCatalogFilter.trim().length > 0;
   const agentEndpointCatalogPayload = useMemo(
@@ -4019,18 +4100,39 @@ export function SpreadsheetApp() {
                   )
                 </summary>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="flex items-center gap-2 text-[11px] text-slate-400">
-                    filter:
-                    <input
-                      type="text"
-                      value={wizardEndpointCatalogFilter}
-                      onChange={(event) => {
-                        setWizardEndpointCatalogFilter(event.target.value);
-                      }}
-                      placeholder="key, endpoint, path, summary"
-                      className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-500 sm:w-72"
-                    />
-                  </label>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                      filter:
+                      <input
+                        type="text"
+                        value={wizardEndpointCatalogFilter}
+                        onChange={(event) => {
+                          setWizardEndpointCatalogFilter(event.target.value);
+                        }}
+                        placeholder="key, endpoint, path, summary"
+                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-500 sm:w-72"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                      sort:
+                      <select
+                        value={wizardEndpointCatalogSort}
+                        onChange={(event) => {
+                          setWizardEndpointCatalogSort(
+                            event.target.value as EndpointCatalogSortOption,
+                          );
+                        }}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                      >
+                        <option value="key_asc">key (a→z)</option>
+                        <option value="key_desc">key (z→a)</option>
+                        <option value="endpoint_asc">endpoint (a→z)</option>
+                        <option value="endpoint_desc">endpoint (z→a)</option>
+                        <option value="mismatch_first">mismatch first</option>
+                        <option value="fallback_first">fallback first</option>
+                      </select>
+                    </label>
+                  </div>
                   <div className="flex items-center gap-2 self-end sm:self-auto">
                     <span className="text-[10px] text-slate-500">
                       showing {wizardVisibleSchemaEndpointsWithMethods.length}
@@ -5112,18 +5214,39 @@ export function SpreadsheetApp() {
                   )
                 </summary>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
-                    filter:
-                    <input
-                      type="text"
-                      value={agentEndpointCatalogFilter}
-                      onChange={(event) => {
-                        setAgentEndpointCatalogFilter(event.target.value);
-                      }}
-                      placeholder="key, endpoint, path, summary"
-                      className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-500 sm:w-72"
-                    />
-                  </label>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      filter:
+                      <input
+                        type="text"
+                        value={agentEndpointCatalogFilter}
+                        onChange={(event) => {
+                          setAgentEndpointCatalogFilter(event.target.value);
+                        }}
+                        placeholder="key, endpoint, path, summary"
+                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-500 sm:w-72"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      sort:
+                      <select
+                        value={agentEndpointCatalogSort}
+                        onChange={(event) => {
+                          setAgentEndpointCatalogSort(
+                            event.target.value as EndpointCatalogSortOption,
+                          );
+                        }}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                      >
+                        <option value="key_asc">key (a→z)</option>
+                        <option value="key_desc">key (z→a)</option>
+                        <option value="endpoint_asc">endpoint (a→z)</option>
+                        <option value="endpoint_desc">endpoint (z→a)</option>
+                        <option value="mismatch_first">mismatch first</option>
+                        <option value="fallback_first">fallback first</option>
+                      </select>
+                    </label>
+                  </div>
                   <div className="flex items-center gap-2 self-end sm:self-auto">
                     <span className="text-[10px] text-slate-500">
                       showing {agentVisibleSchemaEndpointsWithMethods.length}
