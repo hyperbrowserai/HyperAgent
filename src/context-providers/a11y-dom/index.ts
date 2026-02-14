@@ -192,6 +192,45 @@ async function collectExecutionContexts(
     }
   };
 
+  const enableRuntimeDomain = async (): Promise<void> => {
+    let sendMethod: unknown;
+    try {
+      sendMethod = (session as CDPSession & { send?: unknown }).send;
+    } catch (error) {
+      if (debug) {
+        console.warn(
+          `[A11y] Failed to read Runtime.enable sender: ${formatA11yDiagnostic(
+            error
+          )}`
+        );
+      }
+      return;
+    }
+    if (typeof sendMethod !== "function") {
+      if (debug) {
+        console.warn(
+          "[A11y] Runtime.enable sender unavailable during context collection"
+        );
+      }
+      return;
+    }
+    try {
+      await (
+        sendMethod as (
+          this: CDPSession,
+          method: "Runtime.enable"
+        ) => Promise<unknown>
+      ).call(session, "Runtime.enable");
+    } catch (error) {
+      if (debug) {
+        console.warn(
+          "[A11y] Failed to enable Runtime domain for context collection. " +
+            `Execution contexts may be missing for iframe elements. ${formatA11yDiagnostic(error)}`
+        );
+      }
+    }
+  };
+
   const onMethod = readSessionMethod("on");
   if (onMethod) {
     try {
@@ -207,14 +246,7 @@ async function collectExecutionContexts(
     }
   }
   try {
-    await session.send("Runtime.enable").catch((error) => {
-      if (debug) {
-        console.warn(
-          "[A11y] Failed to enable Runtime domain for context collection. " +
-            `Execution contexts may be missing for iframe elements. ${formatA11yDiagnostic(error)}`
-        );
-      }
-    });
+    await enableRuntimeDomain();
     await waitPromise;
   } finally {
     const offMethod = readSessionMethod("off");

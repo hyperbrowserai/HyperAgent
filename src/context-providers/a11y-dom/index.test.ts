@@ -329,4 +329,75 @@ describe("getA11yDOM error formatting", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("continues when runtime sender getter traps during context collection", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = {
+      evaluate: jest.fn().mockResolvedValue(undefined),
+      url: jest.fn(() => "https://example.com"),
+    } as unknown as Page;
+    let sendGetterReadCount = 0;
+    const session = {
+      id: "session-1",
+      get send() {
+        sendGetterReadCount += 1;
+        if (sendGetterReadCount === 2) {
+          throw new Error(`runtime-send\u0000\n${"x".repeat(2_000)}`);
+        }
+        return async (method: string) => {
+          if (method === "Accessibility.getFullAXTree") {
+            throw new Error("stop after context collection");
+          }
+          return {};
+        };
+      },
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    getCDPClientMock.mockResolvedValue({
+      acquireSession: jest.fn().mockResolvedValue(session),
+    });
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest.fn(),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+      captureOOPIFs: jest.fn().mockResolvedValue(undefined),
+      setFrameFilteringEnabled: jest.fn(),
+    });
+    buildBackendIdMapsMock.mockResolvedValue({
+      frameMap: new Map([
+        [
+          1,
+          {
+            frameIndex: 1,
+            siblingPosition: 0,
+            src: "https://example.com/frame",
+            xpath: "//iframe[1]",
+            parentFrameIndex: 0,
+            frameId: "frame-1",
+          },
+        ],
+      ]),
+      backendNodeMap: {},
+      xpathMap: {},
+      frameMetadataMap: new Map(),
+      frameTree: new Map(),
+    });
+
+    try {
+      const result = await getA11yDOM(page, true);
+      expect(result.domState).toBe("Error: Could not extract accessibility tree");
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read Runtime.enable sender")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
 });
