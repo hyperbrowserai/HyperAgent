@@ -6501,6 +6501,51 @@ mod tests {
   }
 
   #[test]
+  #[ignore = "manual performance baseline; run explicitly with --ignored"]
+  fn benchmark_medium_range_set_cells_updates() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let row_count = 500u32;
+    let mut cells = Vec::with_capacity(row_count as usize);
+    for row in 1..=row_count {
+      cells.push(CellMutation {
+        row,
+        col: 1,
+        value: Some(json!(row)),
+        formula: None,
+      });
+    }
+
+    let started = Instant::now();
+    set_cells(&db_path, "PerfUpdates", &cells)
+      .expect("benchmark update should succeed");
+    let elapsed = started.elapsed();
+
+    let snapshots = get_cells(
+      &db_path,
+      "PerfUpdates",
+      &CellRange {
+        start_row: 1,
+        end_row: row_count,
+        start_col: 1,
+        end_col: 1,
+      },
+    )
+    .expect("benchmark update range should be readable");
+    assert_eq!(
+      snapshots.len(),
+      row_count as usize,
+      "benchmark update should persist all inserted rows",
+    );
+
+    println!(
+      "medium_range_set_cells_benchmark: {{\"rows\":{},\"elapsed_ms\":{},\"persisted_cells\":{}}}",
+      row_count,
+      elapsed.as_millis(),
+      snapshots.len(),
+    );
+  }
+
+  #[test]
   fn should_recalculate_large_range_aggregates_consistently() {
     let (_temp_dir, db_path) = create_initialized_db_path();
     let row_count = 500u32;

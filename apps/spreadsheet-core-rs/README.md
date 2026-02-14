@@ -319,15 +319,21 @@ Use `cargo test xlsx::tests::should_keep_committed_file_fixture_corpus_in_sync_w
 Performance baseline probe (manual, ignored by default):
 
 ```bash
+cargo test store::tests::benchmark_medium_range_set_cells_updates -- --ignored --nocapture
 cargo test store::tests::benchmark_large_range_recalculation -- --ignored --nocapture
 ```
 
 This emits a `large_range_recalc_benchmark` JSON line with row count plus `upsert_ms`, `recalc_ms`, `total_ms`, and `updated_cells`.
+It also emits a `medium_range_set_cells_benchmark` JSON line with `rows`, `elapsed_ms`, and `persisted_cells`.
 Automated regression guards:
 - `store::tests::should_set_medium_range_cells_within_update_budget` validates 250-row batch updates stay under a 5-second update budget.
 - `store::tests::should_recalculate_large_range_aggregates_consistently` validates a 500-row aggregate recalc stays under a 2-second recalc budget.
 
 Sample baseline captured in this repository (Linux CI-sized VM, debug test profile):
+
+| benchmark | rows | elapsed_ms | persisted_cells |
+| --- | ---: | ---: | ---: |
+| medium_range_set_cells_benchmark | 500 | 4815 | 500 |
 
 | rows | upsert_ms | recalc_ms | total_ms | updated_cells |
 | ---: | ---: | ---: | ---: | ---: |
