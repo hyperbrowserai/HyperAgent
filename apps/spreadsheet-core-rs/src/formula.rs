@@ -1042,6 +1042,14 @@ pub fn parse_eomonth_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_days_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DAYS" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_year_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "YEAR" && args.len() == 1 {
@@ -1755,7 +1763,7 @@ mod tests {
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
     parse_abs_formula, parse_concat_formula, parse_date_formula, parse_edate_formula,
-    parse_eomonth_formula, parse_day_formula,
+    parse_eomonth_formula, parse_days_formula, parse_day_formula,
     parse_ceiling_formula, parse_ceiling_math_formula, parse_floor_formula,
     parse_floor_math_formula,
     parse_exact_formula,
@@ -2208,6 +2216,8 @@ mod tests {
     let eomonth_args =
       parse_eomonth_formula("=EOMONTH(A1,-1)").expect("eomonth should parse");
     assert_eq!(eomonth_args, ("A1".to_string(), "-1".to_string()));
+    let days_args = parse_days_formula("=DAYS(B1,A1)").expect("days should parse");
+    assert_eq!(days_args, ("B1".to_string(), "A1".to_string()));
 
     assert_eq!(
       parse_year_formula("=YEAR(A1)").as_deref(),

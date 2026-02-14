@@ -221,6 +221,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "DATE",
   "EDATE",
   "EOMONTH",
+  "DAYS",
   "YEAR",
   "MONTH",
   "DAY",

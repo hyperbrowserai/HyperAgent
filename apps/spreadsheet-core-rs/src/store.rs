@@ -20,7 +20,8 @@ use crate::{
     parse_sumx_formula, parse_skew_formula, parse_skew_p_formula, parse_kurt_formula,
     parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
-    parse_date_formula, parse_edate_formula, parse_eomonth_formula, parse_day_formula,
+    parse_date_formula, parse_edate_formula, parse_eomonth_formula,
+    parse_days_formula, parse_day_formula,
     parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_factdouble_formula,
@@ -2312,6 +2313,16 @@ fn evaluate_formula(
     };
     let end_of_month = next_month_start - Duration::days(1);
     return Ok(Some(end_of_month.to_string()));
+  }
+
+  if let Some((end_date_arg, start_date_arg)) = parse_days_formula(formula) {
+    let end_date = parse_date_operand(connection, sheet, &end_date_arg)?;
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let (Some(end_value), Some(start_value)) = (end_date, start_date) else {
+      return Ok(Some(String::new()));
+    };
+    let delta_days = end_value.signed_duration_since(start_value).num_days();
+    return Ok(Some(delta_days.to_string()));
   }
 
   if let Some(year_arg) = parse_year_formula(formula) {
@@ -5460,12 +5471,18 @@ mod tests {
         value: None,
         formula: Some(r#"=EOMONTH("2024-01-15",1)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 215,
+        value: None,
+        formula: Some(r#"=DAYS("2024-02-29","2024-01-31")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 212);
+    assert_eq!(updated_cells, 213);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5479,7 +5496,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 214,
+        end_col: 215,
       },
     )
     .expect("cells should be fetched");
@@ -6261,6 +6278,11 @@ mod tests {
       by_position(1, 214).evaluated_value.as_deref(),
       Some("2024-02-29"),
       "eomonth should resolve end-of-month for shifted month",
+    );
+    assert_eq!(
+      by_position(1, 215).evaluated_value.as_deref(),
+      Some("29"),
+      "days should return signed day delta",
     );
   }
 
