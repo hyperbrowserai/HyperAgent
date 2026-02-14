@@ -85,6 +85,61 @@ describe("examineDom", () => {
     });
   });
 
+  it("returns empty elements when parsed element iteration traps", async () => {
+    const trappedElements = new Proxy([], {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.iterator) {
+          throw new Error("iterator trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const invokeStructured = jest.fn().mockResolvedValue({
+      rawText: "raw",
+      parsed: {
+        elements: trappedElements,
+      },
+    });
+
+    const result = await examineDom(
+      "find element",
+      createContext(),
+      createLLM(invokeStructured)
+    );
+
+    expect(result.elements).toEqual([]);
+    expect(result.llmResponse.rawText).toBe("raw");
+  });
+
+  it("normalizes malformed parsed element entries safely", async () => {
+    const invokeStructured = jest.fn().mockResolvedValue({
+      rawText: "raw",
+      parsed: {
+        elements: [
+          { elementId: " 0-2 ", confidence: "high", reason: 1 },
+          { elementId: "", confidence: 1 },
+          { confidence: 0.8 },
+        ],
+      },
+    });
+
+    const result = await examineDom(
+      "find element",
+      createContext(),
+      createLLM(invokeStructured)
+    );
+
+    expect(result.elements).toEqual([
+      {
+        elementId: "0-2",
+        description: "",
+        confidence: 0,
+        method: "click",
+        arguments: [],
+      },
+    ]);
+  });
+
   it("formats non-Error thrown values from invokeStructured", async () => {
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
     try {

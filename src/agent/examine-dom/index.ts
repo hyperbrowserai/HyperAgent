@@ -12,6 +12,10 @@ import {
   buildExamineDomUserPrompt,
 } from "./prompts";
 import { ExamineDomResultsSchema, ExamineDomResultsType } from "./schema";
+import {
+  AGENT_ELEMENT_ACTIONS,
+  type AgentElementAction,
+} from "../shared/action-restrictions";
 import { formatUnknownError } from "@/utils";
 
 const MAX_EXAMINE_DOM_DIAGNOSTIC_CHARS = 400;
@@ -53,6 +57,74 @@ function formatExamineDomIdentifier(value: unknown): string {
     return "unknown";
   }
   return truncateExamineDomText(normalized, MAX_EXAMINE_DOM_IDENTIFIER_CHARS);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function safeReadRecordField(source: unknown, key: string): unknown {
+  if (!isRecord(source)) {
+    return undefined;
+  }
+  try {
+    return source[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeParsedElements(parsed: unknown): ExamineDomResult[] {
+  const rawElements = safeReadRecordField(parsed, "elements");
+  if (!Array.isArray(rawElements)) {
+    return [];
+  }
+  let entries: unknown[];
+  try {
+    entries = Array.from(rawElements);
+  } catch {
+    return [];
+  }
+
+  const normalized: ExamineDomResult[] = [];
+  const supportedMethods = new Set<string>(AGENT_ELEMENT_ACTIONS);
+  for (const entry of entries) {
+    const elementIdValue = safeReadRecordField(entry, "elementId");
+    if (typeof elementIdValue !== "string") {
+      continue;
+    }
+    const elementId = elementIdValue.trim();
+    if (elementId.length === 0) {
+      continue;
+    }
+    const confidenceValue = safeReadRecordField(entry, "confidence");
+    const confidence =
+      typeof confidenceValue === "number" && Number.isFinite(confidenceValue)
+        ? confidenceValue
+        : 0;
+    const descriptionValue = safeReadRecordField(entry, "description");
+    const description =
+      typeof descriptionValue === "string" ? descriptionValue : "";
+    const methodValue = safeReadRecordField(entry, "method");
+    let method: AgentElementAction = "click";
+    if (typeof methodValue === "string" && supportedMethods.has(methodValue)) {
+      method = methodValue as AgentElementAction;
+    }
+    const argumentsValue = safeReadRecordField(entry, "arguments");
+    const argumentsList = Array.isArray(argumentsValue)
+      ? argumentsValue
+          .map((argument) => (typeof argument === "string" ? argument : ""))
+          .filter((argument) => argument.length > 0)
+      : [];
+    normalized.push({
+      elementId,
+      confidence,
+      description,
+      method,
+      arguments: argumentsList,
+    });
+  }
+  return normalized;
 }
 
 /**
@@ -111,13 +183,14 @@ export async function examineDom(
       parsed: response.parsed,
     };
 
-    if (!response.parsed || !response.parsed.elements) {
+    const parsedElements = normalizeParsedElements(response.parsed);
+    if (parsedElements.length === 0) {
       // No elements found or parsing failed
       return { elements: [], llmResponse };
     }
 
     // Sort by confidence descending (highest confidence first)
-    const results = response.parsed.elements.sort(
+    const results = parsedElements.sort(
       (a: ExamineDomResult, b: ExamineDomResult) => b.confidence - a.confidence
     );
 
