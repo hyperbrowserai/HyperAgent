@@ -104,6 +104,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "SUMXMY2",
   "SUMX2MY2",
   "SUMX2PY2",
+  "SERIESSUM",
   "SKEW",
   "SKEW.P",
   "KURT",

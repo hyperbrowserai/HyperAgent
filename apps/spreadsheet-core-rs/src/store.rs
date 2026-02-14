@@ -44,6 +44,7 @@ use crate::{
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
+    parse_seriessum_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula,
     parse_cot_formula, parse_sec_formula, parse_csc_formula,
     parse_sinh_formula,
@@ -2715,6 +2716,25 @@ fn evaluate_formula(
     }
     let result = numerator / denominator;
     return Ok(Some(result.round().to_string()));
+  }
+
+  if let Some((x_arg, n_arg, m_arg, coefficients_arg)) = parse_seriessum_formula(formula) {
+    let x = parse_required_float(connection, sheet, &x_arg)?;
+    let n = parse_required_float(connection, sheet, &n_arg)?;
+    let m = parse_required_float(connection, sheet, &m_arg)?;
+    let coefficients = resolve_numeric_values_for_operand(connection, sheet, &coefficients_arg)?;
+    if coefficients.is_empty() {
+      return Ok(None);
+    }
+    let mut result = 0.0f64;
+    for (index, coefficient) in coefficients.iter().enumerate() {
+      let exponent = n + (m * index as f64);
+      result += coefficient * x.powf(exponent);
+    }
+    if !result.is_finite() {
+      return Ok(None);
+    }
+    return Ok(Some(result.to_string()));
   }
 
   if let Some(gcd_args) = parse_gcd_formula(formula) {
@@ -8260,12 +8280,36 @@ mod tests {
         value: None,
         formula: Some("=BITRSHIFT(12,2)".to_string()),
       },
+      CellMutation {
+        row: 23,
+        col: 1,
+        value: Some(json!(1)),
+        formula: None,
+      },
+      CellMutation {
+        row: 23,
+        col: 2,
+        value: Some(json!(2)),
+        formula: None,
+      },
+      CellMutation {
+        row: 23,
+        col: 3,
+        value: Some(json!(3)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 293,
+        value: None,
+        formula: Some("=SERIESSUM(2,1,2,A23:C23)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 290);
+    assert_eq!(updated_cells, 291);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -8277,9 +8321,9 @@ mod tests {
       "Sheet1",
       &CellRange {
         start_row: 1,
-        end_row: 22,
+        end_row: 23,
         start_col: 1,
-        end_col: 292,
+        end_col: 293,
       },
     )
     .expect("cells should be fetched");
@@ -9567,6 +9611,11 @@ mod tests {
       Some("3"),
       "bitrshift should right-shift bits",
     );
+    assert_eq!(
+      by_position(1, 293).evaluated_value.as_deref(),
+      Some("114"),
+      "seriessum should evaluate finite power series from coefficient range",
+    );
   }
 
   #[test]
@@ -10334,6 +10383,25 @@ mod tests {
         "=BITLSHIFT(1,-1)".to_string(),
         "=BITRSHIFT(1,64)".to_string(),
       ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_seriessum_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=SERIESSUM(2,1,2,"text")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=SERIESSUM(2,1,2,"text")"#.to_string()],
     );
   }
 

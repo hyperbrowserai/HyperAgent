@@ -856,6 +856,19 @@ pub fn parse_multinomial_formula(formula: &str) -> Option<Vec<String>> {
   None
 }
 
+pub fn parse_seriessum_formula(formula: &str) -> Option<(String, String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SERIESSUM" || args.len() != 4 {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+  ))
+}
+
 pub fn parse_gcd_formula(formula: &str) -> Option<Vec<String>> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "GCD" && !args.is_empty() {
@@ -2450,6 +2463,7 @@ mod tests {
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
+    parse_seriessum_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula,
     parse_cot_formula, parse_sec_formula, parse_csc_formula,
     parse_sinh_formula, parse_cosh_formula, parse_tanh_formula,
@@ -2882,6 +2896,13 @@ mod tests {
     let multinomial_args = parse_multinomial_formula("=MULTINOMIAL(A1,B1,C1)")
       .expect("multinomial should parse");
     assert_eq!(multinomial_args, vec!["A1", "B1", "C1"]);
+    let seriessum_args =
+      parse_seriessum_formula("=SERIESSUM(A1,B1,C1,D1:D3)")
+        .expect("seriessum should parse");
+    assert_eq!(seriessum_args.0, "A1");
+    assert_eq!(seriessum_args.1, "B1");
+    assert_eq!(seriessum_args.2, "C1");
+    assert_eq!(seriessum_args.3, "D1:D3");
     let gcd_args = parse_gcd_formula("=GCD(A1,B1,C1)").expect("gcd should parse");
     assert_eq!(gcd_args, vec!["A1", "B1", "C1"]);
     let lcm_args = parse_lcm_formula("=LCM(A1,B1,C1)").expect("lcm should parse");
