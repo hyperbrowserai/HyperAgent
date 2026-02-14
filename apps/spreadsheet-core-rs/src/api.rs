@@ -7388,7 +7388,7 @@ mod tests {
         .expect("source request should succeed");
 
         let reexecute = reexecute_agent_ops_cache_entry(
-            State(state),
+            State(state.clone()),
             Path(workbook.id),
             Json(ReexecuteAgentOpsCacheEntryRequest {
                 request_id: "source-trimmed-request-id-1".to_string(),
@@ -7407,6 +7407,27 @@ mod tests {
             Some("reexecute-trimmed-request-id"),
         );
         assert!(!reexecute.generated_request_id);
+
+        let replayed = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-trimmed-request-id-1".to_string(),
+                new_request_id: Some("\treexecute-trimmed-request-id\n".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+            }),
+        )
+        .await
+        .expect("same trimmed request id should replay from cache")
+        .0;
+
+        assert!(replayed.response.served_from_cache);
+        assert_eq!(
+            replayed.response.request_id.as_deref(),
+            Some("reexecute-trimmed-request-id"),
+        );
     }
 
     #[tokio::test]
