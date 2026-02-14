@@ -203,6 +203,8 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened Playwright session listener wrappers:
   - `PlaywrightSessionAdapter.on()` and `.off()` now guard trap-prone listener method reads and wrap listener registration/removal failures with sanitized diagnostics.
   - Added adapter regressions for trap-prone `session.on`/`session.off` getter diagnostics to lock the listener-wrapper hardening behavior.
+- Added initBrowser regression coverage for trap-prone browser-context listener getters:
+  - debug mode now asserts deterministic "context.on is unavailable" diagnostics when context listener methods cannot be read during browser initialization.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

@@ -1922,6 +1922,49 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("initBrowser logs unavailable context page-listener methods in debug mode", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const context = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "on") {
+            throw new Error("context.on getter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as unknown as { on: () => void };
+    const browser = {
+      newContext: async () => context,
+    };
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const internalAgent = agent as unknown as {
+      browserProvider: {
+        start: () => Promise<unknown>;
+        close: () => Promise<void>;
+        getSession: () => unknown;
+      };
+    };
+    internalAgent.browserProvider = {
+      start: async () => browser,
+      close: async () => undefined,
+      getSession: () => ({ id: "session-1" }),
+    };
+
+    try {
+      await expect(agent.initBrowser()).resolves.toBe(browser);
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[HyperAgent] Failed to attach browser page listener: context.on is unavailable"
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("initBrowser aborts stale provider starts after closeAgent generation changes", async () => {
     const close = jest.fn(async () => undefined);
     let resolveStart!: (browser: unknown) => void;
