@@ -9078,6 +9078,10 @@ mod tests {
         let wizard_schema = get_agent_wizard_schema().await.0;
 
         let parity_keys = [
+            "agent_ops_result_error_shape",
+            "duckdb_query_endpoint",
+            "duckdb_query_request_shape",
+            "duckdb_query_response_shape",
             "agent_ops_cache_stats_endpoint",
             "agent_ops_cache_entries_endpoint",
             "agent_ops_cache_entry_detail_endpoint",
@@ -9137,6 +9141,50 @@ mod tests {
         assert_eq!(
             agent_cache_codes, wizard_cache_codes,
             "wizard schema cache validation codes should stay in lockstep with agent schema",
+        );
+
+        let agent_signature_codes = agent_schema
+            .get("signature_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("agent schema signature_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        let wizard_signature_codes = wizard_schema
+            .get("signature_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("wizard schema signature_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            agent_signature_codes, wizard_signature_codes,
+            "wizard schema signature error codes should stay in lockstep with agent schema",
+        );
+
+        let agent_duckdb_validation_codes = agent_schema
+            .get("duckdb_query_validation_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("agent schema duckdb_query_validation_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        let wizard_duckdb_validation_codes = wizard_schema
+            .get("duckdb_query_validation_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("wizard schema duckdb_query_validation_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            agent_duckdb_validation_codes, wizard_duckdb_validation_codes,
+            "wizard schema duckdb validation codes should stay in lockstep with agent schema",
+        );
+
+        assert_eq!(
+            agent_schema.get("formula_capabilities"),
+            wizard_schema.get("formula_capabilities"),
+            "wizard schema formula capabilities should stay in lockstep with agent schema",
         );
     }
 }
