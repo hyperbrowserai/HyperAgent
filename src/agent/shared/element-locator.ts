@@ -1,6 +1,6 @@
 /**
  * Shared utility for getting Playwright locators from encoded element IDs
- * Extracted from HyperAgent for reusability across aiAction and agent actions
+ * Extracted from HyperAgent for reusability across page.perform and agent actions
  */
 
 import type { Page } from "playwright-core";

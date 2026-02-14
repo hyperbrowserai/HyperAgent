@@ -73,8 +73,8 @@ import {
 } from "./shared/replay-special-actions";
 
 export class HyperAgent<T extends BrowserProviders = "Local"> {
-  // aiAction configuration constants
-  private static readonly AIACTION_CONFIG = {
+  // page.perform (single-action) configuration constants
+  private static readonly PERFORM_CONFIG = {
     MAX_RETRIES: 10,
     RETRY_DELAY_MS: 1000,
     CLICK_TIMEOUT: 3500,
@@ -2581,7 +2581,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         // Error case - write available elements
         const availableElements = this.collectInteractiveElements(
           params.elementMap,
-          HyperAgent.AIACTION_CONFIG.MAX_DEBUG_ELEMENTS_TO_STORE
+          HyperAgent.PERFORM_CONFIG.MAX_DEBUG_ELEMENTS_TO_STORE
         );
 
         await writePerformDebug({
@@ -2722,11 +2722,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const maxRetries = this.normalizeRetryCount(
       params?.maxElementRetries ?? params?.maxSteps,
-      HyperAgent.AIACTION_CONFIG.MAX_RETRIES
+      HyperAgent.PERFORM_CONFIG.MAX_RETRIES
     );
     const retryDelayMs = this.normalizeRetryDelayMs(
       params?.retryDelayMs,
-      HyperAgent.AIACTION_CONFIG.RETRY_DELAY_MS
+      HyperAgent.PERFORM_CONFIG.RETRY_DELAY_MS
     );
 
     try {

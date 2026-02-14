@@ -6,6 +6,7 @@ import type { CDPActionMethod } from "@/cdp";
  */
 
 export type AiActionAllowedAction = (typeof AIACTION_ALLOWED_ACTIONS)[number];
+export type PerformAllowedAction = (typeof PERFORM_ALLOWED_ACTIONS)[number];
 
 /**
  * Actions allowed for agent-driven element interactions (actElement)
@@ -14,7 +15,7 @@ export type AiActionAllowedAction = (typeof AIACTION_ALLOWED_ACTIONS)[number];
  * Agent actions use fewer retries (3) because the agent loop itself
  * provides higher-level retry and error recovery logic.
  *
- * Currently uses the same action set as aiAction.
+ * Currently uses the same action set as page.perform.
  */
 export const AGENT_ELEMENT_ACTIONS = [
   // Click actions
@@ -43,10 +44,15 @@ export const AGENT_ELEMENT_ACTIONS = [
 ] as const satisfies readonly CDPActionMethod[];
 
 /**
- * Actions allowed for aiAction (executeSingleAction)
+ * Actions allowed for page.perform (executeSingleAction)
  * Mirrors AGENT_ELEMENT_ACTIONS because both flows support the same action set.
  */
-export const AIACTION_ALLOWED_ACTIONS = AGENT_ELEMENT_ACTIONS;
+export const PERFORM_ALLOWED_ACTIONS = AGENT_ELEMENT_ACTIONS;
+
+/**
+ * @deprecated Use PERFORM_ALLOWED_ACTIONS instead.
+ */
+export const AIACTION_ALLOWED_ACTIONS = PERFORM_ALLOWED_ACTIONS;
 
 export type AgentElementAction = (typeof AGENT_ELEMENT_ACTIONS)[number];
 
