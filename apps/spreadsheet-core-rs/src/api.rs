@@ -319,6 +319,21 @@ fn formula_unsupported_behaviors_summary() -> String {
     FORMULA_UNSUPPORTED_BEHAVIOR_LIST.join(" ")
 }
 
+fn agent_ops_request_shape_schema() -> serde_json::Value {
+    json!({
+      "request_id": "optional string (if repeated, returns cached response for idempotency)",
+      "actor": "optional string",
+      "stop_on_error": "optional boolean (default false)",
+      "expected_operations_signature": "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
+      "operations (non-empty array)": [
+        {
+          "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
+          "payload": "operation-specific object"
+        }
+      ]
+    })
+}
+
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -765,6 +780,7 @@ async fn run_agent_wizard_json(
 }
 
 async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
+    let agent_ops_request_shape = agent_ops_request_shape_schema();
     Json(json!({
       "endpoint": "/v1/agent/wizard/run",
       "json_endpoint": "/v1/agent/wizard/run-json",
@@ -797,18 +813,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "operations": "array of operation objects"
       },
       "agent_ops_endpoint": "/v1/workbooks/{id}/agent/ops",
-      "agent_ops_request_shape": {
-        "request_id": "optional string (if repeated, returns cached response for idempotency)",
-        "actor": "optional string",
-        "stop_on_error": "optional boolean (default false)",
-        "expected_operations_signature": "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
-        "operations (non-empty array)": [
-          {
-            "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
-            "payload": "operation-specific object"
-          }
-        ]
-      },
+      "agent_ops_request_shape": agent_ops_request_shape,
       "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
       "agent_ops_preview_request_shape": {
         "operations": "non-empty array of operation objects"
@@ -1535,20 +1540,10 @@ async fn get_agent_schema(
     Path(workbook_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state.get_workbook(workbook_id).await?;
+    let agent_ops_request_shape = agent_ops_request_shape_schema();
     Ok(Json(json!({
       "endpoint": "/v1/workbooks/{id}/agent/ops",
-      "request_shape": {
-        "request_id": "optional string (if repeated, returns cached response for idempotency)",
-        "actor": "optional string",
-        "stop_on_error": "optional boolean (default false)",
-        "expected_operations_signature": "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
-        "operations (non-empty array)": [
-          {
-          "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
-            "payload": "operation-specific object"
-          }
-        ]
-      },
+      "request_shape": agent_ops_request_shape.clone(),
       "operation_payloads": {
         "create_sheet": { "sheet": "string" },
         "set_cells": {
@@ -1697,18 +1692,7 @@ async fn get_agent_schema(
         }
       },
       "agent_ops_endpoint": "/v1/workbooks/{id}/agent/ops",
-      "agent_ops_request_shape": {
-        "request_id": "optional string (if repeated, returns cached response for idempotency)",
-        "actor": "optional string",
-        "stop_on_error": "optional boolean (default false)",
-        "expected_operations_signature": "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
-        "operations (non-empty array)": [
-          {
-            "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
-            "payload": "operation-specific object"
-          }
-        ]
-      },
+      "agent_ops_request_shape": agent_ops_request_shape,
       "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
       "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
       "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
@@ -8036,6 +8020,11 @@ mod tests {
             Some(
                 "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
             ),
+        );
+        assert_eq!(
+            schema.get("request_shape"),
+            schema.get("agent_ops_request_shape"),
+            "agent_ops_request_shape should remain in sync with request_shape",
         );
         assert_eq!(
             schema
