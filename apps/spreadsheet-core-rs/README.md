@@ -313,6 +313,7 @@ cargo run --bin generate_xlsx_fixtures
 ```
 
 The fixture generator is deterministic (fixed workbook document metadata) and covered by `cargo test --bin generate_xlsx_fixtures`.
+Use `cargo run --bin generate_xlsx_fixtures -- --output-dir /tmp/fixtures` to write fixture files to a custom directory.
 
 Performance baseline probe (manual, ignored by default):
 
