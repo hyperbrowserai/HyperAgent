@@ -3349,6 +3349,36 @@ mod tests {
     );
   }
 
+  #[tokio::test]
+  async fn should_allow_semicolons_inside_duckdb_query_literals() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("duckdb-query-literal-semicolon".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let query_response = duckdb_query(
+      State(state),
+      Path(workbook.id),
+      Json(QueryRequest {
+        sql: "SELECT 'left;right' AS literal_value".to_string(),
+        row_limit: Some(5),
+      }),
+    )
+    .await
+    .expect("query should accept semicolons inside string literals")
+    .0;
+
+    assert_eq!(query_response.columns, vec!["literal_value".to_string()]);
+    assert_eq!(query_response.row_count, 1);
+    assert_eq!(
+      query_response.rows[0],
+      vec![Some("left;right".to_string())],
+    );
+  }
+
     #[tokio::test]
     async fn should_reject_non_positive_duckdb_query_row_limit() {
         let temp_dir = tempdir().expect("temp dir should be created");
@@ -3436,6 +3466,39 @@ mod tests {
             vec![Some("1".to_string()), Some("a".to_string())],
         );
     }
+
+  #[tokio::test]
+  async fn should_reject_multi_statement_duckdb_query_sql() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("duckdb-query-multi-statement".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let error = duckdb_query(
+      State(state),
+      Path(workbook.id),
+      Json(QueryRequest {
+        sql: "SELECT 1; SELECT 2".to_string(),
+        row_limit: Some(5),
+      }),
+    )
+    .await
+    .expect_err("multi-statement sql should be rejected");
+
+    match error {
+      ApiError::BadRequestWithCode { code, message } => {
+        assert_eq!(code, "INVALID_QUERY_SQL");
+        assert!(
+          message.contains("single statement"),
+          "error message should reference single-statement guardrail",
+        );
+      }
+      other => panic!("expected invalid query sql code, got {other:?}"),
+    }
+  }
 
     #[tokio::test]
     async fn should_import_fixture_bytes_into_existing_workbook() {
