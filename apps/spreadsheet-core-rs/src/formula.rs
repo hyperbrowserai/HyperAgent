@@ -413,6 +413,22 @@ pub fn parse_trim_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_proper_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "PROPER" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_clean_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "CLEAN" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_abs_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ABS" && args.len() == 1 {
@@ -1972,7 +1988,7 @@ mod tests {
     parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
     parse_year_formula,
     parse_weekday_formula, parse_weeknum_formula, parse_isoweeknum_formula,
-    parse_upper_formula, parse_trim_formula,
+    parse_upper_formula, parse_trim_formula, parse_proper_formula, parse_clean_formula,
   };
 
   #[test]
@@ -2158,6 +2174,12 @@ mod tests {
     let trim_arg =
       parse_trim_formula(r#"=TRIM("  spaced text   ")"#).expect("trim should parse");
     assert_eq!(trim_arg, r#""  spaced text   ""#);
+    let proper_arg =
+      parse_proper_formula(r#"=PROPER("hELLo woRLD")"#).expect("proper should parse");
+    assert_eq!(proper_arg, r#""hELLo woRLD""#);
+    let clean_arg =
+      parse_clean_formula(r#"=CLEAN("A B")"#).expect("clean should parse");
+    assert_eq!(clean_arg, r#""A B""#);
     assert_eq!(
       parse_abs_formula("=ABS(-12.5)").as_deref(),
       Some("-12.5"),

@@ -212,6 +212,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "UPPER",
   "LOWER",
   "TRIM",
+  "PROPER",
+  "CLEAN",
   "ISBLANK",
   "ISNUMBER",
   "ISTEXT",

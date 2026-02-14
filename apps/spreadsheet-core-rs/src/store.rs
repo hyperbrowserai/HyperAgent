@@ -69,7 +69,8 @@ use crate::{
     parse_trunc_formula,
     parse_sqrt_formula, parse_hour_formula, parse_minute_formula,
     parse_second_formula,
-    parse_trim_formula, parse_sumif_formula, parse_sumifs_formula,
+    parse_trim_formula, parse_proper_formula, parse_clean_formula,
+    parse_sumif_formula, parse_sumifs_formula,
     parse_today_formula, parse_now_formula, parse_rand_formula,
     parse_randbetween_formula, parse_true_formula,
     parse_false_formula, parse_upper_formula,
@@ -1435,6 +1436,39 @@ fn evaluate_formula(
     let text = resolve_scalar_operand(connection, sheet, &trim_arg)?;
     let trimmed = text.split_whitespace().collect::<Vec<&str>>().join(" ");
     return Ok(Some(trimmed));
+  }
+
+  if let Some(proper_arg) = parse_proper_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &proper_arg)?;
+    let mut output = String::new();
+    let mut is_word_start = true;
+    for ch in text.chars() {
+      if ch.is_alphabetic() {
+        if is_word_start {
+          for upper in ch.to_uppercase() {
+            output.push(upper);
+          }
+        } else {
+          for lower in ch.to_lowercase() {
+            output.push(lower);
+          }
+        }
+        is_word_start = false;
+      } else {
+        output.push(ch);
+        is_word_start = !ch.is_alphanumeric();
+      }
+    }
+    return Ok(Some(output));
+  }
+
+  if let Some(clean_arg) = parse_clean_formula(formula) {
+    let text = resolve_scalar_operand(connection, sheet, &clean_arg)?;
+    let cleaned = text
+      .chars()
+      .filter(|ch| (*ch as u32) >= 32)
+      .collect::<String>();
+    return Ok(Some(cleaned));
   }
 
   if let Some(is_blank_arg) = parse_isblank_formula(formula) {
@@ -4562,6 +4596,12 @@ mod tests {
         formula: None,
       },
       CellMutation {
+        row: 3,
+        col: 1,
+        value: Some(json!("\u{0007}ok")),
+        formula: None,
+      },
+      CellMutation {
         row: 4,
         col: 1,
         value: Some(json!(120)),
@@ -6001,13 +6041,13 @@ mod tests {
         row: 1,
         col: 220,
         value: None,
-        formula: Some(r#"=TEXTJOIN(":",TRUE,A1:A3)"#.to_string()),
+        formula: Some(r#"=TEXTJOIN(":",TRUE,A1:A2,"")"#.to_string()),
       },
       CellMutation {
         row: 1,
         col: 221,
         value: None,
-        formula: Some(r#"=TEXTJOIN(":",FALSE,A1:A3)"#.to_string()),
+        formula: Some(r#"=TEXTJOIN(":",FALSE,A1:A2,"")"#.to_string()),
       },
       CellMutation {
         row: 1,
@@ -6127,12 +6167,24 @@ mod tests {
         value: None,
         formula: Some("=WEEKNUM(L1,21)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 241,
+        value: None,
+        formula: Some(r#"=PROPER("hELLo woRLD")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 242,
+        value: None,
+        formula: Some("=CLEAN(A3)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 238);
+    assert_eq!(updated_cells, 240);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6146,7 +6198,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 240,
+        end_col: 242,
       },
     )
     .expect("cells should be fetched");
@@ -6317,8 +6369,8 @@ mod tests {
     assert_eq!(by_position(1, 112).evaluated_value.as_deref(), Some("10"));
     assert_eq!(by_position(1, 113).evaluated_value.as_deref(), Some("12"));
     assert_eq!(by_position(1, 114).evaluated_value.as_deref(), Some("36"));
-    assert_eq!(by_position(1, 115).evaluated_value.as_deref(), Some("2"));
-    assert_eq!(by_position(1, 116).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 115).evaluated_value.as_deref(), Some("3"));
+    assert_eq!(by_position(1, 116).evaluated_value.as_deref(), Some("0"));
     assert_eq!(by_position(1, 117).evaluated_value.as_deref(), Some("-2"));
     assert_eq!(by_position(1, 118).evaluated_value.as_deref(), Some("3"));
     assert_eq!(by_position(1, 119).evaluated_value.as_deref(), Some("2"));
@@ -7068,6 +7120,16 @@ mod tests {
       by_position(1, 240).evaluated_value.as_deref(),
       Some("7"),
       "weeknum return type 21 should use ISO week numbers",
+    );
+    assert_eq!(
+      by_position(1, 241).evaluated_value.as_deref(),
+      Some("Hello World"),
+      "proper should title-case words",
+    );
+    assert_eq!(
+      by_position(1, 242).evaluated_value.as_deref(),
+      Some("ok"),
+      "clean should remove non-printable characters",
     );
   }
 
