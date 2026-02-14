@@ -7,6 +7,7 @@ import { formatUnknownError, normalizePageUrl } from "@/utils";
 
 const MAX_FRAME_CONTEXT_DIAGNOSTIC_CHARS = 400;
 const MAX_FRAME_NAME_CHARS = 200;
+const MAX_FRAME_URL_CHARS = 1_000;
 
 interface FrameTreeNode {
   frame: Protocol.Page.Frame;
@@ -92,6 +93,7 @@ function safeReadFrameName(frame: PlaywrightFrameHandle): string | undefined {
 function normalizeFrameRecordUrl(value: unknown): string {
   return normalizePageUrl(value, {
     fallback: "about:blank",
+    maxChars: MAX_FRAME_URL_CHARS,
   });
 }
 

@@ -100,8 +100,8 @@ class NoisyFrameTreeSession extends FakeSession {
             id: "root-frame",
             parentId: undefined,
             loaderId: "loader-1",
-            name: "root\u0000\nframe",
-            url: "https://example.com/\u0000root\nframe",
+            name: `root\u0000\nframe-${"n".repeat(400)}`,
+            url: `https://example.com/\u0000root\nframe-${"u".repeat(2_000)}`,
           },
           childFrames: [],
         },
@@ -262,8 +262,12 @@ describe("FrameContextManager listener bookkeeping", () => {
     await manager.ensureInitialized();
 
     const rootFrame = manager.getFrame("root-frame");
-    expect(rootFrame?.url).toBe("https://example.com/ root frame");
-    expect(rootFrame?.name).toBe("root frame");
+    expect(rootFrame?.url).toContain("https://example.com/ root frame-");
+    expect(rootFrame?.url).toContain("[truncated");
+    expect(rootFrame?.url).not.toContain("\u0000");
+    expect(rootFrame?.url).not.toContain("\n");
+    expect((rootFrame?.name ?? "").startsWith("root frame-")).toBe(true);
+    expect((rootFrame?.name ?? "").length).toBeLessThanOrEqual(200);
   });
 
   it("sanitizes control characters in frameNavigated metadata updates", async () => {
