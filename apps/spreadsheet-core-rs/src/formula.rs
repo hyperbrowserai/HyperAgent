@@ -486,6 +486,22 @@ pub fn parse_log_formula(formula: &str) -> Option<(String, Option<String>)> {
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_effect_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "EFFECT" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_nominal_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "NOMINAL" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -1970,7 +1986,8 @@ mod tests {
     parse_iseven_formula, parse_isodd_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
-    parse_log_formula, parse_fact_formula, parse_factdouble_formula,
+    parse_log_formula, parse_effect_formula, parse_nominal_formula,
+    parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula,
@@ -2235,6 +2252,14 @@ mod tests {
     let log_args = parse_log_formula("=LOG(A1,10)").expect("log should parse");
     assert_eq!(log_args.0, "A1");
     assert_eq!(log_args.1.as_deref(), Some("10"));
+    let effect_args =
+      parse_effect_formula("=EFFECT(A1,B1)").expect("effect should parse");
+    assert_eq!(effect_args.0, "A1");
+    assert_eq!(effect_args.1, "B1");
+    let nominal_args =
+      parse_nominal_formula("=NOMINAL(A1,B1)").expect("nominal should parse");
+    assert_eq!(nominal_args.0, "A1");
+    assert_eq!(nominal_args.1, "B1");
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),

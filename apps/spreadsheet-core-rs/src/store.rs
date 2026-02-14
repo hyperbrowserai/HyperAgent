@@ -29,7 +29,8 @@ use crate::{
     parse_if_formula, parse_ifs_formula, parse_iferror_formula, parse_ifna_formula,
     parse_na_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
-    parse_log_formula, parse_fact_formula, parse_factdouble_formula,
+    parse_log_formula, parse_effect_formula, parse_nominal_formula,
+    parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -1653,6 +1654,26 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(value.log(base).to_string()));
+  }
+
+  if let Some((nominal_rate_arg, periods_arg)) = parse_effect_formula(formula) {
+    let nominal_rate = parse_required_float(connection, sheet, &nominal_rate_arg)?;
+    let periods = parse_required_float(connection, sheet, &periods_arg)?;
+    if periods <= 0.0 {
+      return Ok(None);
+    }
+    let effective_rate = (1.0 + (nominal_rate / periods)).powf(periods) - 1.0;
+    return Ok(Some(effective_rate.to_string()));
+  }
+
+  if let Some((effective_rate_arg, periods_arg)) = parse_nominal_formula(formula) {
+    let effective_rate = parse_required_float(connection, sheet, &effective_rate_arg)?;
+    let periods = parse_required_float(connection, sheet, &periods_arg)?;
+    if periods <= 0.0 || effective_rate <= -1.0 {
+      return Ok(None);
+    }
+    let nominal_rate = periods * ((1.0 + effective_rate).powf(1.0 / periods) - 1.0);
+    return Ok(Some(nominal_rate.to_string()));
   }
 
   if let Some(fact_arg) = parse_fact_formula(formula) {
@@ -6336,12 +6357,24 @@ mod tests {
         value: None,
         formula: Some(r#"=YEARFRAC("2024-01-31","2024-03-31")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 248,
+        value: None,
+        formula: Some("=EFFECT(0.12,12)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 249,
+        value: None,
+        formula: Some("=NOMINAL(0.12682503013196977,12)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 245);
+    assert_eq!(updated_cells, 247);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6355,7 +6388,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 247,
+        end_col: 249,
       },
     )
     .expect("cells should be fetched");
@@ -7323,6 +7356,26 @@ mod tests {
       (yearfrac_30_360 - 0.166_666_666_666_666_66).abs() < 1e-12,
       "yearfrac default basis should use US 30/360, got {yearfrac_30_360}",
     );
+    let effect_rate = by_position(1, 248)
+      .evaluated_value
+      .as_deref()
+      .expect("effect should evaluate")
+      .parse::<f64>()
+      .expect("effect should be numeric");
+    assert!(
+      (effect_rate - 0.126_825_030_131_969_77).abs() < 1e-12,
+      "effect should convert nominal to effective annual rate, got {effect_rate}",
+    );
+    let nominal_rate = by_position(1, 249)
+      .evaluated_value
+      .as_deref()
+      .expect("nominal should evaluate")
+      .parse::<f64>()
+      .expect("nominal should be numeric");
+    assert!(
+      (nominal_rate - 0.12).abs() < 1e-12,
+      "nominal should invert effective annual rate, got {nominal_rate}",
+    );
   }
 
   #[test]
@@ -7502,6 +7555,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=LOG(100,1)".to_string(), "=LOG(100,0)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_effect_and_nominal_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=EFFECT(0.1,0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=NOMINAL(-1,12)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=EFFECT(0.1,0)".to_string(), "=NOMINAL(-1,12)".to_string()],
     );
   }
 
