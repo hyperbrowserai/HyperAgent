@@ -22,7 +22,12 @@ const { getDebugOptions } = jest.requireMock("@/debug/options") as {
 
 type EventHandler = (...args: unknown[]) => void;
 
-function createSessionWithEvents(): {
+function createSessionWithEvents(options?: {
+  throwOnOnEvent?: string;
+  throwOnOffEvent?: string;
+  onErrorMessage?: string;
+  offErrorMessage?: string;
+}): {
   session: CDPSession;
   emit: (event: string, payload: unknown) => void;
 } {
@@ -33,6 +38,11 @@ function createSessionWithEvents(): {
       event: string,
       handler: (...payload: TPayload) => void
     ) => {
+      if (options?.throwOnOnEvent === event) {
+        throw new Error(
+          options.onErrorMessage ?? "listener registration failed"
+        );
+      }
       const eventHandler = handler as EventHandler;
       const existing = handlers.get(event);
       if (existing) {
@@ -45,6 +55,9 @@ function createSessionWithEvents(): {
       event: string,
       handler: (...payload: TPayload) => void
     ) => {
+      if (options?.throwOnOffEvent === event) {
+        throw new Error(options.offErrorMessage ?? "listener detach failed");
+      }
       handlers.get(event)?.delete(handler as EventHandler);
     },
     detach: async () => undefined,
@@ -162,5 +175,95 @@ describe("waitForSettledDOM diagnostics", () => {
     expect(stats.forcedDrops).toBe(0);
     expect(stats.requestsSeen).toBe(1);
     expect(stats.peakInflight).toBe(1);
+  });
+
+  it("falls back to timeout when network listener registration fails", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session } = createSessionWithEvents({
+      throwOnOnEvent: "Network.requestWillBeSent",
+      onErrorMessage: `attach\u0000\n${"x".repeat(10_000)}`,
+    });
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 700);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(800);
+      const stats = await waitPromise;
+
+      const attachWarning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      const fallbackWarning = String(warnSpy.mock.calls[1]?.[0] ?? "");
+      expect(attachWarning).toContain("[truncated");
+      expect(attachWarning).not.toContain("\u0000");
+      expect(attachWarning).not.toContain("\n");
+      expect(fallbackWarning).toContain("falling back to timeout-based settle");
+      expect(stats.resolvedByTimeout).toBe(true);
+      expect(stats.requestsSeen).toBe(0);
+      expect(stats.peakInflight).toBe(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("sanitizes and truncates listener detach diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session } = createSessionWithEvents({
+      throwOnOffEvent: "Network.loadingFinished",
+      offErrorMessage: `detach\u0000\n${"x".repeat(10_000)}`,
+    });
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 2000);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(600);
+      const stats = await waitPromise;
+
+      const detachWarning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(detachWarning).toContain("Failed to detach listener");
+      expect(detachWarning).toContain("[truncated");
+      expect(detachWarning).not.toContain("\u0000");
+      expect(detachWarning).not.toContain("\n");
+      expect(stats.resolvedByTimeout).toBe(false);
+      expect(stats.requestsSeen).toBe(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

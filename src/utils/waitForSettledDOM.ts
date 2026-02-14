@@ -71,6 +71,53 @@ function formatWaitUrl(value: unknown): string {
   return truncateWaitDiagnostic(normalized, MAX_WAIT_DIAGNOSTIC_CHARS);
 }
 
+function formatWaitDiagnostic(value: unknown): string {
+  if (typeof value === "string") {
+    return formatWaitUrl(value);
+  }
+  if (value instanceof Error) {
+    return formatWaitUrl(value.message);
+  }
+  return formatWaitUrl(String(value));
+}
+
+function attachSessionListener<TPayload extends unknown[]>(
+  session: CDPSession,
+  event: string,
+  handler: (...payload: TPayload) => void
+): boolean {
+  try {
+    session.on(event, handler);
+    return true;
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to attach listener ${formatWaitIdentifier(
+        event
+      )}: ${formatWaitDiagnostic(error)}`
+    );
+    return false;
+  }
+}
+
+function detachSessionListener<TPayload extends unknown[]>(
+  session: CDPSession,
+  event: string,
+  handler: (...payload: TPayload) => void
+): void {
+  if (!session.off) {
+    return;
+  }
+  try {
+    session.off(event, handler);
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to detach listener ${formatWaitIdentifier(
+        event
+      )}: ${formatWaitDiagnostic(error)}`
+    );
+  }
+}
+
 export interface LifecycleOptions {
   waitUntil?: Array<"domcontentloaded" | "load" | "networkidle">;
   timeoutMs?: number;
@@ -178,8 +225,12 @@ async function waitForNetworkIdle(
   await new Promise<void>((resolve) => {
     const requestMeta = new Map<string, { url?: string; start: number }>();
     let stalledSweepTimer: NodeJS.Timeout | null = null;
+    let listenerSetupFailed = false;
 
     const maybeResolve = () => {
+      if (listenerSetupFailed) {
+        return;
+      }
       if (inflight.size === 0 && !quietTimer) {
         quietTimer = setTimeout(
           () => resolveDone(false),
@@ -197,11 +248,9 @@ async function waitForNetworkIdle(
     };
 
     const cleanup = () => {
-      if (session.off) {
-        session.off("Network.requestWillBeSent", onRequestWillBeSent);
-        session.off("Network.loadingFinished", onLoadingFinished);
-        session.off("Network.loadingFailed", onLoadingFailed);
-      }
+      detachSessionListener(session, "Network.requestWillBeSent", onRequestWillBeSent);
+      detachSessionListener(session, "Network.loadingFinished", onLoadingFinished);
+      detachSessionListener(session, "Network.loadingFailed", onLoadingFailed);
       if (stalledSweepTimer) {
         clearInterval(stalledSweepTimer);
         stalledSweepTimer = null;
@@ -241,9 +290,30 @@ async function waitForNetworkIdle(
       finishRequest(event.requestId);
     };
 
-    session.on("Network.requestWillBeSent", onRequestWillBeSent);
-    session.on("Network.loadingFinished", onLoadingFinished);
-    session.on("Network.loadingFailed", onLoadingFailed);
+    const requestListenerAttached = attachSessionListener(
+      session,
+      "Network.requestWillBeSent",
+      onRequestWillBeSent
+    );
+    const loadingFinishedListenerAttached = attachSessionListener(
+      session,
+      "Network.loadingFinished",
+      onLoadingFinished
+    );
+    const loadingFailedListenerAttached = attachSessionListener(
+      session,
+      "Network.loadingFailed",
+      onLoadingFailed
+    );
+    listenerSetupFailed =
+      !requestListenerAttached ||
+      !loadingFinishedListenerAttached ||
+      !loadingFailedListenerAttached;
+    if (listenerSetupFailed) {
+      console.warn(
+        "[waitForSettledDOM] Network listeners could not be fully attached; falling back to timeout-based settle."
+      );
+    }
 
     stalledSweepTimer = setInterval(() => {
       if (!requestMeta.size) return;
