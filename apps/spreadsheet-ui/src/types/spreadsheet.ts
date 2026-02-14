@@ -210,6 +210,7 @@ export interface FormulaCapabilitiesSchema {
 
 export interface AgentSchemaInfo {
   endpoint: string;
+  health_endpoint?: string;
   openapi_endpoint?: string;
   request_shape?: Record<string, unknown>;
   agent_ops_request_shape?: Record<string, unknown>;
@@ -328,6 +329,7 @@ export interface DuckdbQueryResponse {
 
 export interface AgentWizardSchemaInfo {
   endpoint: string;
+  health_endpoint?: string;
   openapi_endpoint?: string;
   json_endpoint?: string;
   presets_endpoint?: string;

@@ -3275,6 +3275,25 @@ export function SpreadsheetApp() {
                 </span>
               </div>
             ) : null}
+            {wizardSchemaQuery.data?.health_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                health endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.health_endpoint}
+                </span>
+                <button
+                  onClick={() => {
+                    void handleCopyEndpoint(
+                      wizardSchemaQuery.data?.health_endpoint ?? "",
+                      "wizard health",
+                    );
+                  }}
+                  className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                >
+                  copy
+                </button>
+              </p>
+            ) : null}
             {wizardSchemaQuery.data?.openapi_endpoint ? (
               <p className="mb-2 text-[11px] text-slate-500">
                 openapi endpoint:{" "}
@@ -4128,6 +4147,25 @@ export function SpreadsheetApp() {
                 <span className="font-mono text-slate-200">
                   {Object.keys(agentSchemaQuery.data.operation_payloads).join(", ")}
                 </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.health_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                health endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.health_endpoint}
+                </span>
+                <button
+                  onClick={() => {
+                    void handleCopyEndpoint(
+                      agentSchemaQuery.data?.health_endpoint ?? "",
+                      "agent health",
+                    );
+                  }}
+                  className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                >
+                  copy
+                </button>
               </p>
             ) : null}
             {agentSchemaQuery.data?.openapi_endpoint ? (
