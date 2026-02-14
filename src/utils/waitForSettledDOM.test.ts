@@ -254,6 +254,7 @@ describe("waitForSettledDOM diagnostics", () => {
 
   it("enables network trace diagnostics when context is recording video", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     const { session, emit } = createSessionWithEvents();
     const cdpClient: CDPClient = {
       rootSession: session,
@@ -302,6 +303,7 @@ describe("waitForSettledDOM diagnostics", () => {
       ).toBe(true);
     } finally {
       warnSpy.mockRestore();
+      logSpy.mockRestore();
     }
   });
 
