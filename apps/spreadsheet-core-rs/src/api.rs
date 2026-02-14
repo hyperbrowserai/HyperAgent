@@ -155,6 +155,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "PV",
   "FV",
   "PMT",
+  "IRR",
   "SIN",
   "COS",
   "TAN",

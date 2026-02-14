@@ -31,6 +31,7 @@ use crate::{
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
+    parse_irr_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1769,6 +1770,26 @@ fn evaluate_formula(
       -(rate * (future_value + (growth * present_value))) / denominator
     };
     return Ok(Some(payment.to_string()));
+  }
+
+  if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
+    let mut cash_flows: Vec<f64> = Vec::new();
+    for value_arg in value_args {
+      let values = resolve_numeric_values_for_operand(connection, sheet, &value_arg)?;
+      cash_flows.extend(values);
+    }
+    if cash_flows.len() < 2
+      || !cash_flows.iter().any(|value| *value < 0.0)
+      || !cash_flows.iter().any(|value| *value > 0.0)
+    {
+      return Ok(None);
+    }
+    let guess = match guess_arg {
+      Some(raw_guess) => parse_required_float(connection, sheet, &raw_guess)?,
+      None => 0.1,
+    };
+    let irr = calculate_irr(&cash_flows, guess);
+    return Ok(irr.map(|value| value.to_string()));
   }
 
   if let Some(fact_arg) = parse_fact_formula(formula) {
@@ -3841,6 +3862,106 @@ fn resolve_numeric_values_for_operand(
     .parse::<f64>()
     .map(|parsed| vec![parsed])
     .unwrap_or_default())
+}
+
+fn calculate_irr(cash_flows: &[f64], guess: f64) -> Option<f64> {
+  let mut rate = guess.max(-0.999_999_999);
+  let tolerance = 1e-10;
+
+  for _ in 0..100 {
+    let (npv, derivative) = irr_npv_and_derivative(cash_flows, rate)?;
+    if npv.abs() < tolerance {
+      return Some(rate);
+    }
+    if derivative.abs() < tolerance {
+      break;
+    }
+    let next_rate = rate - (npv / derivative);
+    if !next_rate.is_finite() || next_rate <= -0.999_999_999 {
+      break;
+    }
+    if (next_rate - rate).abs() < tolerance {
+      return Some(next_rate);
+    }
+    rate = next_rate;
+  }
+
+  let bracket_candidates = [-0.9, -0.5, -0.1, 0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0];
+  for index in 0..(bracket_candidates.len() - 1) {
+    let low = bracket_candidates[index];
+    let high = bracket_candidates[index + 1];
+    let low_npv = irr_npv(cash_flows, low)?;
+    let high_npv = irr_npv(cash_flows, high)?;
+    if low_npv.abs() < tolerance {
+      return Some(low);
+    }
+    if high_npv.abs() < tolerance {
+      return Some(high);
+    }
+    if low_npv.signum() == high_npv.signum() {
+      continue;
+    }
+    return bisection_irr(cash_flows, low, high);
+  }
+
+  None
+}
+
+fn irr_npv(cash_flows: &[f64], rate: f64) -> Option<f64> {
+  if rate <= -1.0 || !rate.is_finite() {
+    return None;
+  }
+  let mut npv = 0.0f64;
+  for (period, cash_flow) in cash_flows.iter().enumerate() {
+    let period_i32 = i32::try_from(period).ok()?;
+    npv += cash_flow / (1.0 + rate).powi(period_i32);
+  }
+  Some(npv)
+}
+
+fn irr_npv_and_derivative(cash_flows: &[f64], rate: f64) -> Option<(f64, f64)> {
+  if rate <= -1.0 || !rate.is_finite() {
+    return None;
+  }
+  let mut npv = 0.0f64;
+  let mut derivative = 0.0f64;
+  for (period, cash_flow) in cash_flows.iter().enumerate() {
+    let period_i32 = i32::try_from(period).ok()?;
+    let base = (1.0 + rate).powi(period_i32);
+    npv += cash_flow / base;
+    if period > 0 {
+      let period_f64 = period as f64;
+      derivative -= period_f64 * cash_flow / ((1.0 + rate) * base);
+    }
+  }
+  Some((npv, derivative))
+}
+
+fn bisection_irr(cash_flows: &[f64], mut low: f64, mut high: f64) -> Option<f64> {
+  let mut low_npv = irr_npv(cash_flows, low)?;
+  let mut high_npv = irr_npv(cash_flows, high)?;
+  if low_npv.signum() == high_npv.signum() {
+    return None;
+  }
+  for _ in 0..100 {
+    let mid = (low + high) / 2.0;
+    let mid_npv = irr_npv(cash_flows, mid)?;
+    if mid_npv.abs() < 1e-10 || (high - low).abs() < 1e-10 {
+      return Some(mid);
+    }
+    if low_npv.signum() == mid_npv.signum() {
+      low = mid;
+      low_npv = mid_npv;
+    } else {
+      high = mid;
+      high_npv = mid_npv;
+    }
+  }
+  if low_npv.abs() <= high_npv.abs() {
+    Some(low)
+  } else {
+    Some(high)
+  }
 }
 
 fn parse_operand_range_bounds(operand: &str) -> Option<((u32, u32), (u32, u32))> {
@@ -6549,12 +6670,18 @@ mod tests {
         value: None,
         formula: Some("=PMT(0,12,1000)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 254,
+        value: None,
+        formula: Some("=IRR(-100,110)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 251);
+    assert_eq!(updated_cells, 252);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6568,7 +6695,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 253,
+        end_col: 254,
       },
     )
     .expect("cells should be fetched");
@@ -7586,6 +7713,16 @@ mod tests {
       (pmt_value + 83.333_333_333_333_33).abs() < 1e-12,
       "pmt should compute periodic payment, got {pmt_value}",
     );
+    let irr_value = by_position(1, 254)
+      .evaluated_value
+      .as_deref()
+      .expect("irr should evaluate")
+      .parse::<f64>()
+      .expect("irr should be numeric");
+    assert!(
+      (irr_value - 0.1).abs() < 1e-9,
+      "irr should solve discounted cash flow rate, got {irr_value}",
+    );
   }
 
   #[test]
@@ -7825,6 +7962,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=PMT(0,0,1000)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_irr_cashflows_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=IRR(10,20,30)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=IRR(10,20,30)".to_string()]);
   }
 
   #[test]

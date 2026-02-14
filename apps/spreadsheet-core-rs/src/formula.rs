@@ -558,6 +558,17 @@ pub fn parse_pmt_formula(
   ))
 }
 
+pub fn parse_irr_formula(formula: &str) -> Option<(Vec<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "IRR" || args.is_empty() {
+    return None;
+  }
+  if args.len() >= 2 && args[0].contains(':') {
+    return Some((vec![args[0].clone()], Some(args[1].clone())));
+  }
+  Some((args, None))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2044,6 +2055,7 @@ mod tests {
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
+    parse_irr_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2338,6 +2350,12 @@ mod tests {
     assert_eq!(pmt_args.2, "C1");
     assert_eq!(pmt_args.3, None);
     assert_eq!(pmt_args.4, None);
+    let irr_range_args = parse_irr_formula("=IRR(A1:A5,0.2)").expect("irr should parse");
+    assert_eq!(irr_range_args.0, vec!["A1:A5"]);
+    assert_eq!(irr_range_args.1.as_deref(), Some("0.2"));
+    let irr_scalar_args = parse_irr_formula("=IRR(-100,60,70)").expect("irr should parse");
+    assert_eq!(irr_scalar_args.0, vec!["-100", "60", "70"]);
+    assert_eq!(irr_scalar_args.1, None);
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),
