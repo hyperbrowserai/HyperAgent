@@ -1430,6 +1430,17 @@ export function SpreadsheetApp() {
         .map((entry) => entry.key),
     [wizardSchemaEndpointsWithMethods],
   );
+  const wizardOperationMetadataFallbackKeys = useMemo(
+    () =>
+      wizardSchemaEndpointsWithMethods
+        .filter((entry) =>
+          entry.methodSource !== "operation"
+          || entry.summarySource !== "operation"
+          || entry.openApiPathSource !== "operation"
+        )
+        .map((entry) => entry.key),
+    [wizardSchemaEndpointsWithMethods],
+  );
   const wizardPathMismatchEndpointKeys = useMemo(
     () =>
       wizardSchemaEndpointsWithMethods
@@ -1732,6 +1743,17 @@ export function SpreadsheetApp() {
     () =>
       agentSchemaEndpointsWithMethods
         .filter((entry) => entry.hasMethodMismatch)
+        .map((entry) => entry.key),
+    [agentSchemaEndpointsWithMethods],
+  );
+  const agentOperationMetadataFallbackKeys = useMemo(
+    () =>
+      agentSchemaEndpointsWithMethods
+        .filter((entry) =>
+          entry.methodSource !== "operation"
+          || entry.summarySource !== "operation"
+          || entry.openApiPathSource !== "operation"
+        )
         .map((entry) => entry.key),
     [agentSchemaEndpointsWithMethods],
   );
@@ -3781,6 +3803,18 @@ export function SpreadsheetApp() {
                     </span>
                   </p>
                 ) : null}
+                {wizardOperationMetadataFallbackKeys.length > 0 ? (
+                  <p className="mt-1 text-[11px] text-amber-300">
+                    operation metadata fallback used for:{" "}
+                    <span className="font-mono">
+                      {wizardOperationMetadataFallbackKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-emerald-300">
+                    operation metadata available for all discovered endpoints.
+                  </p>
+                )}
                 {wizardPathMismatchEndpointKeys.length > 0 ? (
                   <p className="mt-1 text-[11px] text-rose-300">
                     schema/derived openapi path mismatch for:{" "}
@@ -4761,6 +4795,18 @@ export function SpreadsheetApp() {
                     </span>
                   </p>
                 ) : null}
+                {agentOperationMetadataFallbackKeys.length > 0 ? (
+                  <p className="mt-1 text-xs text-amber-300">
+                    operation metadata fallback used for:{" "}
+                    <span className="font-mono">
+                      {agentOperationMetadataFallbackKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-emerald-300">
+                    operation metadata available for all discovered endpoints.
+                  </p>
+                )}
                 {agentPathMismatchEndpointKeys.length > 0 ? (
                   <p className="mt-1 text-xs text-rose-300">
                     schema/derived openapi path mismatch for:{" "}
