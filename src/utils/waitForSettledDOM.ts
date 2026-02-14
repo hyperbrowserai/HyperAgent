@@ -187,6 +187,26 @@ export interface WaitForSettledOptions {
   filterAdTrackingFrames?: boolean;
 }
 
+function readWaitDebugOptions(): { enabled: boolean; traceWait: boolean } {
+  try {
+    const value = getDebugOptions();
+    return {
+      enabled: value.enabled === true,
+      traceWait: value.traceWait === true,
+    };
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to read debug options: ${formatWaitDiagnostic(
+        error
+      )}`
+    );
+    return {
+      enabled: false,
+      traceWait: false,
+    };
+  }
+}
+
 function safeReadWaitOptionField(
   options: unknown,
   field: keyof WaitForSettledOptions
@@ -218,7 +238,7 @@ export async function waitForSettledDOM(
   const ctx = page.context() as BrowserContext & {
     _options?: { recordVideo?: unknown };
   };
-  const debugOptions = getDebugOptions();
+  const debugOptions = readWaitDebugOptions();
   const traceWaitFlag =
     (debugOptions.enabled && debugOptions.traceWait) || ENV_TRACE_WAIT;
   const traceWait = traceWaitFlag || !!ctx._options?.recordVideo;

@@ -218,6 +218,48 @@ describe("waitForSettledDOM diagnostics", () => {
     expect(stats.forcedDrops).toBe(0);
   });
 
+  it("continues when debug-options lookup throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockImplementationOnce(() => {
+      throw new Error(`debug options\u0000\n${"x".repeat(2_000)}`);
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 600);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(700);
+      const stats = await waitPromise;
+
+      expect(stats.resolvedByTimeout).toBe(false);
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read debug options")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("applies frame filtering option when provided", async () => {
     const { session } = createSessionWithEvents();
     const cdpClient: CDPClient = {
