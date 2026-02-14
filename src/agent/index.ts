@@ -295,8 +295,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return () => undefined;
     }
 
+    const contextOn = this.safeReadField(context, "on");
+    if (typeof contextOn !== "function") {
+      return () => undefined;
+    }
     try {
-      context.on("page", onPage);
+      (
+        contextOn as (
+          this: BrowserContext,
+          event: "page",
+          listener: (newPage: Page) => void | Promise<void>
+        ) => void
+      ).call(context, "page", onPage);
     } catch (error) {
       if (this.debug) {
         console.warn(
@@ -309,8 +319,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     return () => {
+      const contextOff = this.safeReadField(context, "off");
+      if (typeof contextOff !== "function") {
+        return;
+      }
       try {
-        context.off("page", onPage);
+        (
+          contextOff as (
+            this: BrowserContext,
+            event: "page",
+            listener: (newPage: Page) => void | Promise<void>
+          ) => void
+        ).call(context, "page", onPage);
       } catch (error) {
         if (this.debug) {
           console.warn(
