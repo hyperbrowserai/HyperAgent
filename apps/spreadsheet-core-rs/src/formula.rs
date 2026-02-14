@@ -510,6 +510,54 @@ pub fn parse_npv_formula(formula: &str) -> Option<(String, Vec<String>)> {
   Some((args[0].clone(), args[1..].to_vec()))
 }
 
+pub fn parse_pv_formula(
+  formula: &str,
+) -> Option<(String, String, String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "PV" || !(args.len() == 3 || args.len() == 4 || args.len() == 5) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args.get(3).cloned(),
+    args.get(4).cloned(),
+  ))
+}
+
+pub fn parse_fv_formula(
+  formula: &str,
+) -> Option<(String, String, String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "FV" || !(args.len() == 3 || args.len() == 4 || args.len() == 5) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args.get(3).cloned(),
+    args.get(4).cloned(),
+  ))
+}
+
+pub fn parse_pmt_formula(
+  formula: &str,
+) -> Option<(String, String, String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "PMT" || !(args.len() == 3 || args.len() == 4 || args.len() == 5) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args.get(3).cloned(),
+    args.get(4).cloned(),
+  ))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -1995,7 +2043,7 @@ mod tests {
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
-    parse_npv_formula,
+    parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2272,6 +2320,24 @@ mod tests {
     let npv_args = parse_npv_formula("=NPV(A1,B1,C1:C2)").expect("npv should parse");
     assert_eq!(npv_args.0, "A1");
     assert_eq!(npv_args.1, vec!["B1", "C1:C2"]);
+    let pv_args = parse_pv_formula("=PV(A1,B1,C1,D1,1)").expect("pv should parse");
+    assert_eq!(pv_args.0, "A1");
+    assert_eq!(pv_args.1, "B1");
+    assert_eq!(pv_args.2, "C1");
+    assert_eq!(pv_args.3.as_deref(), Some("D1"));
+    assert_eq!(pv_args.4.as_deref(), Some("1"));
+    let fv_args = parse_fv_formula("=FV(A1,B1,C1,D1,0)").expect("fv should parse");
+    assert_eq!(fv_args.0, "A1");
+    assert_eq!(fv_args.1, "B1");
+    assert_eq!(fv_args.2, "C1");
+    assert_eq!(fv_args.3.as_deref(), Some("D1"));
+    assert_eq!(fv_args.4.as_deref(), Some("0"));
+    let pmt_args = parse_pmt_formula("=PMT(A1,B1,C1)").expect("pmt should parse");
+    assert_eq!(pmt_args.0, "A1");
+    assert_eq!(pmt_args.1, "B1");
+    assert_eq!(pmt_args.2, "C1");
+    assert_eq!(pmt_args.3, None);
+    assert_eq!(pmt_args.4, None);
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),

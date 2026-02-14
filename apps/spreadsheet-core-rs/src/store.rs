@@ -30,7 +30,7 @@ use crate::{
     parse_na_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
-    parse_npv_formula,
+    parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1692,6 +1692,83 @@ fn evaluate_formula(
       }
     }
     return Ok(Some(npv.to_string()));
+  }
+
+  if let Some((rate_arg, nper_arg, pmt_arg, fv_arg, type_arg)) = parse_pv_formula(formula) {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    let payment = parse_required_float(connection, sheet, &pmt_arg)?;
+    let future_value = match fv_arg {
+      Some(raw_fv) => parse_required_float(connection, sheet, &raw_fv)?,
+      None => 0.0,
+    };
+    let payment_type = match parse_payment_type(connection, sheet, type_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let present_value = if rate.abs() < f64::EPSILON {
+      -(future_value + (payment * periods))
+    } else {
+      let growth = (1.0 + rate).powf(periods);
+      if growth.abs() < f64::EPSILON {
+        return Ok(None);
+      }
+      let annuity_factor = (growth - 1.0) / rate;
+      -(future_value + (payment * (1.0 + (rate * payment_type)) * annuity_factor)) / growth
+    };
+    return Ok(Some(present_value.to_string()));
+  }
+
+  if let Some((rate_arg, nper_arg, pmt_arg, pv_arg, type_arg)) = parse_fv_formula(formula) {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    let payment = parse_required_float(connection, sheet, &pmt_arg)?;
+    let present_value = match pv_arg {
+      Some(raw_pv) => parse_required_float(connection, sheet, &raw_pv)?,
+      None => 0.0,
+    };
+    let payment_type = match parse_payment_type(connection, sheet, type_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let future_value = if rate.abs() < f64::EPSILON {
+      -(present_value + (payment * periods))
+    } else {
+      let growth = (1.0 + rate).powf(periods);
+      -(
+        (present_value * growth)
+          + (payment * (1.0 + (rate * payment_type)) * ((growth - 1.0) / rate))
+      )
+    };
+    return Ok(Some(future_value.to_string()));
+  }
+
+  if let Some((rate_arg, nper_arg, pv_arg, fv_arg, type_arg)) = parse_pmt_formula(formula) {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    if periods.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    let present_value = parse_required_float(connection, sheet, &pv_arg)?;
+    let future_value = match fv_arg {
+      Some(raw_fv) => parse_required_float(connection, sheet, &raw_fv)?,
+      None => 0.0,
+    };
+    let payment_type = match parse_payment_type(connection, sheet, type_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let payment = if rate.abs() < f64::EPSILON {
+      -(present_value + future_value) / periods
+    } else {
+      let growth = (1.0 + rate).powf(periods);
+      let denominator = (1.0 + (rate * payment_type)) * (growth - 1.0);
+      if denominator.abs() < f64::EPSILON {
+        return Ok(None);
+      }
+      -(rate * (future_value + (growth * present_value))) / denominator
+    };
+    return Ok(Some(payment.to_string()));
   }
 
   if let Some(fact_arg) = parse_fact_formula(formula) {
@@ -4000,6 +4077,35 @@ fn parse_required_float(
 ) -> Result<f64, ApiError> {
   let resolved = resolve_scalar_operand(connection, sheet, operand)?;
   Ok(resolved.trim().parse::<f64>().unwrap_or_default())
+}
+
+fn parse_payment_type(
+  connection: &Connection,
+  sheet: &str,
+  maybe_operand: Option<String>,
+) -> Result<Option<f64>, ApiError> {
+  let Some(operand) = maybe_operand else {
+    return Ok(Some(0.0));
+  };
+  let resolved = resolve_scalar_operand(connection, sheet, &operand)?;
+  let trimmed = resolved.trim();
+  if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("FALSE") {
+    return Ok(Some(0.0));
+  }
+  if trimmed.eq_ignore_ascii_case("TRUE") {
+    return Ok(Some(1.0));
+  }
+  let numeric = trimmed.parse::<f64>().ok();
+  let Some(value) = numeric else {
+    return Ok(None);
+  };
+  if (value - 0.0).abs() < f64::EPSILON {
+    return Ok(Some(0.0));
+  }
+  if (value - 1.0).abs() < f64::EPSILON {
+    return Ok(Some(1.0));
+  }
+  Ok(None)
 }
 
 fn parse_required_unsigned(
@@ -6425,12 +6531,30 @@ mod tests {
         value: None,
         formula: Some("=NPV(0.1,100,110)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 251,
+        value: None,
+        formula: Some("=PV(0,12,-100,1000)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 252,
+        value: None,
+        formula: Some("=FV(0,12,-100,500)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 253,
+        value: None,
+        formula: Some("=PMT(0,12,1000)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 248);
+    assert_eq!(updated_cells, 251);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6444,7 +6568,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 250,
+        end_col: 253,
       },
     )
     .expect("cells should be fetched");
@@ -7442,6 +7566,26 @@ mod tests {
       (npv_value - 181.818_181_818_181_8).abs() < 1e-12,
       "npv should discount future cash flows, got {npv_value}",
     );
+    assert_eq!(
+      by_position(1, 251).evaluated_value.as_deref(),
+      Some("200"),
+      "pv should compute present value with zero rate shortcut",
+    );
+    assert_eq!(
+      by_position(1, 252).evaluated_value.as_deref(),
+      Some("700"),
+      "fv should compute future value with zero rate shortcut",
+    );
+    let pmt_value = by_position(1, 253)
+      .evaluated_value
+      .as_deref()
+      .expect("pmt should evaluate")
+      .parse::<f64>()
+      .expect("pmt should be numeric");
+    assert!(
+      (pmt_value + 83.333_333_333_333_33).abs() < 1e-12,
+      "pmt should compute periodic payment, got {pmt_value}",
+    );
   }
 
   #[test]
@@ -7665,6 +7809,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=NPV(-1,100,110)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_pmt_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=PMT(0,0,1000)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=PMT(0,0,1000)".to_string()]);
   }
 
   #[test]
