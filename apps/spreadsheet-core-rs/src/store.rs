@@ -31,7 +31,7 @@ use crate::{
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
-    parse_irr_formula, parse_mirr_formula,
+    parse_irr_formula, parse_mirr_formula, parse_nper_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1770,6 +1770,42 @@ fn evaluate_formula(
       -(rate * (future_value + (growth * present_value))) / denominator
     };
     return Ok(Some(payment.to_string()));
+  }
+
+  if let Some((rate_arg, pmt_arg, pv_arg, fv_arg, type_arg)) = parse_nper_formula(formula) {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let payment = parse_required_float(connection, sheet, &pmt_arg)?;
+    let present_value = parse_required_float(connection, sheet, &pv_arg)?;
+    let future_value = match fv_arg {
+      Some(raw_fv) => parse_required_float(connection, sheet, &raw_fv)?,
+      None => 0.0,
+    };
+    let payment_type = match parse_payment_type(connection, sheet, type_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let periods = if rate.abs() < f64::EPSILON {
+      if payment.abs() < f64::EPSILON {
+        return Ok(None);
+      }
+      -(present_value + future_value) / payment
+    } else {
+      let base = 1.0 + rate;
+      if base <= 0.0 {
+        return Ok(None);
+      }
+      let adjusted_payment = payment * (1.0 + (rate * payment_type));
+      let numerator = adjusted_payment - (future_value * rate);
+      let denominator = adjusted_payment + (present_value * rate);
+      if numerator <= 0.0 || denominator <= 0.0 {
+        return Ok(None);
+      }
+      (numerator / denominator).ln() / base.ln()
+    };
+    if !periods.is_finite() {
+      return Ok(None);
+    }
+    return Ok(Some(periods.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -6742,12 +6778,18 @@ mod tests {
         value: None,
         formula: Some("=MIRR(A20:C20,0.1,0.12)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 256,
+        value: None,
+        formula: Some("=NPER(0,-100,1000)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 253);
+    assert_eq!(updated_cells, 254);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6761,7 +6803,7 @@ mod tests {
         start_row: 1,
         end_row: 20,
         start_col: 1,
-        end_col: 255,
+        end_col: 256,
       },
     )
     .expect("cells should be fetched");
@@ -7799,6 +7841,11 @@ mod tests {
       (mirr_value - 0.171_324_037_147_705_38).abs() < 1e-12,
       "mirr should compute modified internal return rate, got {mirr_value}",
     );
+    assert_eq!(
+      by_position(1, 256).evaluated_value.as_deref(),
+      Some("10"),
+      "nper should compute number of payment periods",
+    );
   }
 
   #[test]
@@ -8090,6 +8137,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=MIRR(A1:C1,-1,0.1)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_nper_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=NPER(0,0,1000)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=NPER(0,0,1000)".to_string()]);
   }
 
   #[test]

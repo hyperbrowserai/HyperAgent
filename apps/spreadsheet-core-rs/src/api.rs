@@ -157,6 +157,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "PMT",
   "IRR",
   "MIRR",
+  "NPER",
   "SIN",
   "COS",
   "TAN",
