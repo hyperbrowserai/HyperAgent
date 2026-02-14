@@ -169,6 +169,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "PDURATION",
   "FVSCHEDULE",
   "ISPMT",
+  "CUMIPMT",
+  "CUMPRINC",
   "SIN",
   "COS",
   "TAN",

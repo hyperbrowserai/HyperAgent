@@ -37,6 +37,7 @@ use crate::{
     parse_db_formula, parse_ddb_formula,
     parse_rri_formula, parse_pduration_formula,
     parse_fvschedule_formula, parse_ispmt_formula,
+    parse_cumipmt_formula, parse_cumprinc_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -2008,6 +2009,58 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(interest_payment.to_string()));
+  }
+
+  if let Some((rate_arg, nper_arg, pv_arg, start_period_arg, end_period_arg, type_arg)) =
+    parse_cumipmt_formula(formula)
+  {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    let present_value = parse_required_float(connection, sheet, &pv_arg)?;
+    let start_period = parse_required_integer(connection, sheet, &start_period_arg)?;
+    let end_period = parse_required_integer(connection, sheet, &end_period_arg)?;
+    let payment_type = match parse_payment_type(connection, sheet, Some(type_arg))? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let (interest_total, _principal_total) = match calculate_cumulative_payment_parts(
+      rate,
+      periods,
+      present_value,
+      start_period,
+      end_period,
+      payment_type,
+    ) {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    return Ok(Some(interest_total.to_string()));
+  }
+
+  if let Some((rate_arg, nper_arg, pv_arg, start_period_arg, end_period_arg, type_arg)) =
+    parse_cumprinc_formula(formula)
+  {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    let present_value = parse_required_float(connection, sheet, &pv_arg)?;
+    let start_period = parse_required_integer(connection, sheet, &start_period_arg)?;
+    let end_period = parse_required_integer(connection, sheet, &end_period_arg)?;
+    let payment_type = match parse_payment_type(connection, sheet, Some(type_arg))? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let (_interest_total, principal_total) = match calculate_cumulative_payment_parts(
+      rate,
+      periods,
+      present_value,
+      start_period,
+      end_period,
+      payment_type,
+    ) {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    return Ok(Some(principal_total.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -4368,6 +4421,37 @@ fn calculate_ipmt_ppmt(
   }
 
   None
+}
+
+fn calculate_cumulative_payment_parts(
+  rate: f64,
+  periods: f64,
+  present_value: f64,
+  start_period: i32,
+  end_period: i32,
+  payment_type: f64,
+) -> Option<(f64, f64)> {
+  if rate <= 0.0 || periods <= 0.0 || present_value <= 0.0 {
+    return None;
+  }
+  if start_period < 1 || end_period < start_period || f64::from(end_period) > periods.ceil() {
+    return None;
+  }
+  let mut interest_total = 0.0f64;
+  let mut principal_total = 0.0f64;
+  for period in start_period..=end_period {
+    let (interest_payment, principal_payment) = calculate_ipmt_ppmt(
+      rate,
+      period,
+      periods,
+      present_value,
+      0.0,
+      payment_type,
+    )?;
+    interest_total += interest_payment;
+    principal_total += principal_payment;
+  }
+  Some((interest_total, principal_total))
 }
 
 fn calculate_db_depreciation(
@@ -7342,12 +7426,24 @@ mod tests {
         value: None,
         formula: Some("=ISPMT(0.1,1,3,100)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 268,
+        value: None,
+        formula: Some("=CUMIPMT(0.1,2,100,1,2,0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 269,
+        value: None,
+        formula: Some("=CUMPRINC(0.1,2,100,1,2,0)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 265);
+    assert_eq!(updated_cells, 267);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7361,7 +7457,7 @@ mod tests {
         start_row: 1,
         end_row: 20,
         start_col: 1,
-        end_col: 267,
+        end_col: 269,
       },
     )
     .expect("cells should be fetched");
@@ -8494,6 +8590,26 @@ mod tests {
       (ispmt_value + 6.666_666_666_666_667).abs() < 1e-9,
       "ispmt should compute linear-interest payment amount, got {ispmt_value}",
     );
+    let cumipmt_value = by_position(1, 268)
+      .evaluated_value
+      .as_deref()
+      .expect("cumipmt should evaluate")
+      .parse::<f64>()
+      .expect("cumipmt should be numeric");
+    assert!(
+      (cumipmt_value + 15.238_095_238_095_237).abs() < 1e-9,
+      "cumipmt should sum interest payments across periods, got {cumipmt_value}",
+    );
+    let cumprinc_value = by_position(1, 269)
+      .evaluated_value
+      .as_deref()
+      .expect("cumprinc should evaluate")
+      .parse::<f64>()
+      .expect("cumprinc should be numeric");
+    assert!(
+      (cumprinc_value + 100.0).abs() < 1e-9,
+      "cumprinc should sum principal payments across periods, got {cumprinc_value}",
+    );
   }
 
   #[test]
@@ -8956,6 +9072,36 @@ mod tests {
       vec![
         "=FVSCHEDULE(1e308,1e308)".to_string(),
         "=ISPMT(0.1,4,3,100)".to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_cumipmt_cumprinc_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=CUMIPMT(0.1,2,100,2,1,0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=CUMPRINC(0.1,2,100,1,2,2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=CUMIPMT(0.1,2,100,2,1,0)".to_string(),
+        "=CUMPRINC(0.1,2,100,1,2,2)".to_string(),
       ],
     );
   }

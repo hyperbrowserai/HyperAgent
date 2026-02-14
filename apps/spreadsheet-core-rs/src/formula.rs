@@ -734,6 +734,40 @@ pub fn parse_ispmt_formula(formula: &str) -> Option<(String, String, String, Str
   ))
 }
 
+pub fn parse_cumipmt_formula(
+  formula: &str,
+) -> Option<(String, String, String, String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "CUMIPMT" || args.len() != 6 {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+    args[4].clone(),
+    args[5].clone(),
+  ))
+}
+
+pub fn parse_cumprinc_formula(
+  formula: &str,
+) -> Option<(String, String, String, String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "CUMPRINC" || args.len() != 6 {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+    args[4].clone(),
+    args[5].clone(),
+  ))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2226,6 +2260,7 @@ mod tests {
     parse_db_formula, parse_ddb_formula,
     parse_rri_formula, parse_pduration_formula,
     parse_fvschedule_formula, parse_ispmt_formula,
+    parse_cumipmt_formula, parse_cumprinc_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2596,6 +2631,22 @@ mod tests {
     assert_eq!(ispmt_args.1, "B1");
     assert_eq!(ispmt_args.2, "C1");
     assert_eq!(ispmt_args.3, "D1");
+    let cumipmt_args =
+      parse_cumipmt_formula("=CUMIPMT(A1,B1,C1,D1,E1,F1)").expect("cumipmt should parse");
+    assert_eq!(cumipmt_args.0, "A1");
+    assert_eq!(cumipmt_args.1, "B1");
+    assert_eq!(cumipmt_args.2, "C1");
+    assert_eq!(cumipmt_args.3, "D1");
+    assert_eq!(cumipmt_args.4, "E1");
+    assert_eq!(cumipmt_args.5, "F1");
+    let cumprinc_args =
+      parse_cumprinc_formula("=CUMPRINC(A1,B1,C1,D1,E1,F1)").expect("cumprinc should parse");
+    assert_eq!(cumprinc_args.0, "A1");
+    assert_eq!(cumprinc_args.1, "B1");
+    assert_eq!(cumprinc_args.2, "C1");
+    assert_eq!(cumprinc_args.3, "D1");
+    assert_eq!(cumprinc_args.4, "E1");
+    assert_eq!(cumprinc_args.5, "F1");
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),
