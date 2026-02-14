@@ -37,7 +37,8 @@ export function buildActionInstruction(action: string): string {
   ];
 
   const instruction = `Find the most relevant element to perform an action on given the following action: ${action}.
-Provide an action for this element such as ${supportedActions.join(", ")}, or any other playwright locator method. Remember that to users, buttons and links look the same in most cases.
+Provide an action for this element using ONLY one of these methods: ${supportedActions.join(", ")}. Do not use any other Playwright locator/action method.
+Remember that to users, buttons and links look the same in most cases.
 If the action is completely unrelated to a potential action to be taken on the page, return an empty array.
 ONLY return one action. If multiple actions are relevant, return the most relevant one.
 For scroll actions (scrollToElement, scrollToPercentage, nextChunk, prevChunk), prefer elements marked as "scrollable" in their role. These have been automatically detected as scrollable containers. If no scrollable elements are available, choose the html element as a fallback.
