@@ -60,4 +60,21 @@ describe("isAdOrTrackingFrame", () => {
       })
     ).toBe(true);
   });
+
+  it("does not treat ad-domain tokens in path as known ad host matches", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "https://docs.example.com/reference/doubleclick.net-integration",
+        parentUrl: "https://docs.example.com/guide",
+      })
+    ).toBe(false);
+  });
+
+  it("matches known ad domains by subdomain suffix", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "https://ads.securepubads.g.doubleclick.net/pagead/ads",
+      })
+    ).toBe(true);
+  });
 });

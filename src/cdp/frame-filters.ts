@@ -111,6 +111,24 @@ function isSameSiteFrame(url: string, parentUrl: string | undefined): boolean {
   );
 }
 
+function matchesKnownAdDomain(url: string): boolean {
+  const urlLower = url.toLowerCase();
+  const hostname = safeGetHostname(urlLower);
+  return AD_DOMAINS.some((domainEntry) => {
+    const normalizedDomain = domainEntry.toLowerCase();
+    if (normalizedDomain.includes("/")) {
+      return urlLower.includes(normalizedDomain);
+    }
+    if (!hostname) {
+      return false;
+    }
+    return (
+      hostname === normalizedDomain ||
+      hostname.endsWith(`.${normalizedDomain}`)
+    );
+  });
+}
+
 /**
  * Check if a frame is likely an ad or tracking iframe
  *
@@ -154,7 +172,7 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
       name: "known-ad-domain",
       weight: 2,
       strong: true,
-      matched: AD_DOMAINS.some((domain) => urlLower.includes(domain)),
+      matched: matchesKnownAdDomain(urlLower),
     },
     {
       name: "tracking-query-param",
