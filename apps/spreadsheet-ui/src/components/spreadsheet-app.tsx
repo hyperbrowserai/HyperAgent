@@ -173,6 +173,13 @@ function normalizeEndpointMethodsByKey(value: unknown): Record<string, string[]>
   }, {});
 }
 
+function areMethodListsEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
+}
+
 function collectOpenApiMethodsByPath(
   spec: unknown,
 ): Record<string, string[]> {
@@ -1212,19 +1219,39 @@ export function SpreadsheetApp() {
   );
   const wizardSchemaEndpointsWithMethods = useMemo(
     () =>
-      wizardSchemaEndpoints.map((entry) => ({
-        ...entry,
-        methods:
-          wizardEndpointMethodsByKey[entry.key]
-            ?? openApiMethodsByPath[entry.openApiPath]
-            ?? [],
-      })),
+      wizardSchemaEndpoints.map((entry) => {
+        const schemaMethods = wizardEndpointMethodsByKey[entry.key] ?? [];
+        const openApiMethods = openApiMethodsByPath[entry.openApiPath] ?? [];
+        return {
+          ...entry,
+          methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
+          schemaMethods,
+          openApiMethods,
+          methodSource:
+            schemaMethods.length > 0
+              ? "schema"
+              : openApiMethods.length > 0
+                ? "openapi"
+                : "missing",
+          hasMethodMismatch:
+            schemaMethods.length > 0
+            && openApiMethods.length > 0
+            && !areMethodListsEqual(schemaMethods, openApiMethods),
+        };
+      }),
     [openApiMethodsByPath, wizardEndpointMethodsByKey, wizardSchemaEndpoints],
   );
   const wizardUnmappedSchemaEndpointKeys = useMemo(
     () =>
       wizardSchemaEndpointsWithMethods
         .filter((entry) => entry.methods.length === 0)
+        .map((entry) => entry.key),
+    [wizardSchemaEndpointsWithMethods],
+  );
+  const wizardMethodMismatchEndpointKeys = useMemo(
+    () =>
+      wizardSchemaEndpointsWithMethods
+        .filter((entry) => entry.hasMethodMismatch)
         .map((entry) => entry.key),
     [wizardSchemaEndpointsWithMethods],
   );
@@ -1433,19 +1460,39 @@ export function SpreadsheetApp() {
   );
   const agentSchemaEndpointsWithMethods = useMemo(
     () =>
-      agentSchemaEndpoints.map((entry) => ({
-        ...entry,
-        methods:
-          agentEndpointMethodsByKey[entry.key]
-            ?? openApiMethodsByPath[entry.openApiPath]
-            ?? [],
-      })),
+      agentSchemaEndpoints.map((entry) => {
+        const schemaMethods = agentEndpointMethodsByKey[entry.key] ?? [];
+        const openApiMethods = openApiMethodsByPath[entry.openApiPath] ?? [];
+        return {
+          ...entry,
+          methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
+          schemaMethods,
+          openApiMethods,
+          methodSource:
+            schemaMethods.length > 0
+              ? "schema"
+              : openApiMethods.length > 0
+                ? "openapi"
+                : "missing",
+          hasMethodMismatch:
+            schemaMethods.length > 0
+            && openApiMethods.length > 0
+            && !areMethodListsEqual(schemaMethods, openApiMethods),
+        };
+      }),
     [agentEndpointMethodsByKey, agentSchemaEndpoints, openApiMethodsByPath],
   );
   const agentUnmappedSchemaEndpointKeys = useMemo(
     () =>
       agentSchemaEndpointsWithMethods
         .filter((entry) => entry.methods.length === 0)
+        .map((entry) => entry.key),
+    [agentSchemaEndpointsWithMethods],
+  );
+  const agentMethodMismatchEndpointKeys = useMemo(
+    () =>
+      agentSchemaEndpointsWithMethods
+        .filter((entry) => entry.hasMethodMismatch)
         .map((entry) => entry.key),
     [agentSchemaEndpointsWithMethods],
   );
@@ -3468,6 +3515,14 @@ export function SpreadsheetApp() {
                     openapi method mapping available for all discovered endpoints.
                   </p>
                 )}
+                {wizardMethodMismatchEndpointKeys.length > 0 ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    schema/openapi method mismatch for:{" "}
+                    <span className="font-mono">
+                      {wizardMethodMismatchEndpointKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : null}
                 <div className="mt-2 space-y-1">
                   {wizardSchemaEndpointsWithMethods.map((entry) => (
                     <p
@@ -3481,6 +3536,14 @@ export function SpreadsheetApp() {
                       ) : null}
                       {entry.key}:{" "}
                       <span className="font-mono text-slate-300">{entry.endpoint}</span>
+                      <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                        {entry.methodSource}
+                      </span>
+                      {entry.hasMethodMismatch ? (
+                        <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                          mismatch
+                        </span>
+                      ) : null}
                       <button
                         onClick={() => {
                           void handleCopyEndpoint(entry.endpoint, `wizard ${entry.key}`);
@@ -4385,6 +4448,14 @@ export function SpreadsheetApp() {
                     openapi method mapping available for all discovered endpoints.
                   </p>
                 )}
+                {agentMethodMismatchEndpointKeys.length > 0 ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    schema/openapi method mismatch for:{" "}
+                    <span className="font-mono">
+                      {agentMethodMismatchEndpointKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : null}
                 <div className="mt-2 space-y-1">
                   {agentSchemaEndpointsWithMethods.map((entry) => (
                     <p
@@ -4398,6 +4469,14 @@ export function SpreadsheetApp() {
                       ) : null}
                       {entry.key}:{" "}
                       <span className="font-mono text-slate-200">{entry.endpoint}</span>
+                      <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                        {entry.methodSource}
+                      </span>
+                      {entry.hasMethodMismatch ? (
+                        <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                          mismatch
+                        </span>
+                      ) : null}
                       <button
                         onClick={() => {
                           void handleCopyEndpoint(entry.endpoint, `agent ${entry.key}`);
