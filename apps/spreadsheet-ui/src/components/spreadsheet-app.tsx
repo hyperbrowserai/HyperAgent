@@ -122,6 +122,29 @@ function parseCommaSeparatedList(value: unknown): string[] {
     .filter((entry) => entry.length > 0);
 }
 
+function collectSchemaEndpointMetadata(
+  schema: unknown,
+): Array<{ key: string; endpoint: string }> {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+    return [];
+  }
+  return Object.entries(schema as Record<string, unknown>)
+    .flatMap(([key, value]) => {
+      if (key !== "endpoint" && !key.endsWith("_endpoint")) {
+        return [];
+      }
+      if (typeof value !== "string") {
+        return [];
+      }
+      const endpoint = value.trim();
+      if (!endpoint) {
+        return [];
+      }
+      return [{ key, endpoint }];
+    })
+    .sort((left, right) => left.key.localeCompare(right.key));
+}
+
 function flattenSchemaShapeEntries(
   value: unknown,
   parentKey?: string,
@@ -1116,6 +1139,10 @@ export function SpreadsheetApp() {
     },
     [wizardSchemaQuery.data?.formula_capabilities],
   );
+  const wizardSchemaEndpoints = useMemo(
+    () => collectSchemaEndpointMetadata(wizardSchemaQuery.data),
+    [wizardSchemaQuery.data],
+  );
   const agentWorkbookImportResponseFields = useMemo(
     () =>
       flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
@@ -1310,6 +1337,10 @@ export function SpreadsheetApp() {
       );
     },
     [agentSchemaQuery.data?.formula_capabilities],
+  );
+  const agentSchemaEndpoints = useMemo(
+    () => collectSchemaEndpointMetadata(agentSchemaQuery.data),
+    [agentSchemaQuery.data],
   );
   const agentWorkbookImportEventFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
@@ -3313,6 +3344,32 @@ export function SpreadsheetApp() {
                 </button>
               </p>
             ) : null}
+            {wizardSchemaEndpoints.length > 0 ? (
+              <details className="mb-2 rounded border border-slate-800 bg-slate-950/60 p-2">
+                <summary className="cursor-pointer text-[11px] text-slate-400">
+                  discovered endpoint catalog ({wizardSchemaEndpoints.length})
+                </summary>
+                <div className="mt-2 space-y-1">
+                  {wizardSchemaEndpoints.map((entry) => (
+                    <p
+                      key={`wizard-endpoint-catalog-${entry.key}`}
+                      className="text-[11px] text-slate-500"
+                    >
+                      {entry.key}:{" "}
+                      <span className="font-mono text-slate-300">{entry.endpoint}</span>
+                      <button
+                        onClick={() => {
+                          void handleCopyEndpoint(entry.endpoint, `wizard ${entry.key}`);
+                        }}
+                        className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                      >
+                        copy
+                      </button>
+                    </p>
+                  ))}
+                </div>
+              </details>
+            ) : null}
             {wizardSchemaQuery.data?.signature_error_codes?.length ? (
               <p className="mb-2 text-[11px] text-slate-500">
                 signature codes:{" "}
@@ -4186,6 +4243,32 @@ export function SpreadsheetApp() {
                   copy
                 </button>
               </p>
+            ) : null}
+            {agentSchemaEndpoints.length > 0 ? (
+              <details className="mb-2 rounded border border-slate-800 bg-slate-950/60 p-2">
+                <summary className="cursor-pointer text-xs text-slate-400">
+                  discovered endpoint catalog ({agentSchemaEndpoints.length})
+                </summary>
+                <div className="mt-2 space-y-1">
+                  {agentSchemaEndpoints.map((entry) => (
+                    <p
+                      key={`agent-endpoint-catalog-${entry.key}`}
+                      className="text-xs text-slate-400"
+                    >
+                      {entry.key}:{" "}
+                      <span className="font-mono text-slate-200">{entry.endpoint}</span>
+                      <button
+                        onClick={() => {
+                          void handleCopyEndpoint(entry.endpoint, `agent ${entry.key}`);
+                        }}
+                        className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                      >
+                        copy
+                      </button>
+                    </p>
+                  ))}
+                </div>
+              </details>
             ) : null}
             {agentOpsRequestFields.length > 0 ? (
               <p className="mb-2 text-xs text-slate-400">
