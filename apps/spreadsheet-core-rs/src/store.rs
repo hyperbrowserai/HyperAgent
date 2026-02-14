@@ -23,6 +23,7 @@ use crate::{
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
     parse_days_formula, parse_datevalue_formula, parse_timevalue_formula,
     parse_datedif_formula, parse_networkdays_formula,
+    parse_workday_formula,
     parse_day_formula,
     parse_if_formula, parse_ifs_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -2440,6 +2441,25 @@ fn evaluate_formula(
     return Ok(Some(networkdays.to_string()));
   }
 
+  if let Some((start_date_arg, day_offset_arg, holidays_arg)) =
+    parse_workday_formula(formula)
+  {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let Some(start_value) = start_date else {
+      return Ok(None);
+    };
+    let day_offset = parse_required_integer(connection, sheet, &day_offset_arg)?;
+    let holiday_dates = match holidays_arg {
+      Some(raw_holidays) => match collect_holiday_dates(connection, sheet, &raw_holidays)? {
+        Some(values) => values,
+        None => return Ok(None),
+      },
+      None => HashSet::new(),
+    };
+    let result_date = workday_shift(start_value, day_offset, &holiday_dates);
+    return Ok(Some(result_date.to_string()));
+  }
+
   if let Some(year_arg) = parse_year_formula(formula) {
     let date = parse_date_operand(connection, sheet, &year_arg)?;
     return Ok(Some(date.map(|value| value.year().to_string()).unwrap_or_default()));
@@ -3986,15 +4006,39 @@ fn count_networkdays(
   let mut current = from;
   let mut days = 0i64;
   while current <= to {
-    let weekday = current.weekday().num_days_from_monday();
-    let is_weekday = weekday < 5;
-    if is_weekday && !holidays.contains(&current) {
+    if is_business_day(current, holidays) {
       days += 1;
     }
     current += Duration::days(1);
   }
 
   days * direction
+}
+
+fn is_business_day(date: NaiveDate, holidays: &HashSet<NaiveDate>) -> bool {
+  let weekday = date.weekday().num_days_from_monday();
+  weekday < 5 && !holidays.contains(&date)
+}
+
+fn workday_shift(
+  start: NaiveDate,
+  day_offset: i32,
+  holidays: &HashSet<NaiveDate>,
+) -> NaiveDate {
+  if day_offset == 0 {
+    return start;
+  }
+
+  let mut current = start;
+  let step = if day_offset > 0 { 1 } else { -1 };
+  let mut remaining = day_offset.unsigned_abs();
+  while remaining > 0 {
+    current += Duration::days(step.into());
+    if is_business_day(current, holidays) {
+      remaining -= 1;
+    }
+  }
+  current
 }
 
 fn evaluate_vlookup_formula(
@@ -5866,12 +5910,24 @@ mod tests {
         value: None,
         formula: Some(r#"=NETWORKDAYS("2024-03-10","2024-03-01","2024-03-04")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 230,
+        value: None,
+        formula: Some(r#"=WORKDAY("2024-03-01",5,"2024-03-04")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 231,
+        value: None,
+        formula: Some(r#"=WORKDAY("2024-03-11",-5,"2024-03-04")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 227);
+    assert_eq!(updated_cells, 229);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5885,7 +5941,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 229,
+        end_col: 231,
       },
     )
     .expect("cells should be fetched");
@@ -6747,6 +6803,16 @@ mod tests {
       by_position(1, 229).evaluated_value.as_deref(),
       Some("-5"),
       "networkdays should be signed when start is after end",
+    );
+    assert_eq!(
+      by_position(1, 230).evaluated_value.as_deref(),
+      Some("2024-03-11"),
+      "workday should move forward across weekends and holidays",
+    );
+    assert_eq!(
+      by_position(1, 231).evaluated_value.as_deref(),
+      Some("2024-03-01"),
+      "workday should move backward across weekends and holidays",
     );
   }
 
@@ -8347,6 +8413,36 @@ mod tests {
       vec![
         r#"=NETWORKDAYS("bad","2024-03-10")"#.to_string(),
         r#"=NETWORKDAYS("2024-03-01","2024-03-10","not-a-date")"#.to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_workday_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some(r#"=WORKDAY("bad",5)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(r#"=WORKDAY("2024-03-01",5,"not-a-date")"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        r#"=WORKDAY("bad",5)"#.to_string(),
+        r#"=WORKDAY("2024-03-01",5,"not-a-date")"#.to_string(),
       ],
     );
   }
