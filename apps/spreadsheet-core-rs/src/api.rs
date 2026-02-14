@@ -7170,6 +7170,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_accept_trimmed_signature_when_reexecuting_cache_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-trimmed-signature".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-trimmed-signature-1".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::Recalculate],
+            }),
+        )
+        .await
+        .expect("initial request should succeed");
+
+        let operation_signature = operations_signature(&[AgentOperation::Recalculate])
+            .expect("signature should build");
+
+        let reexecute = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-trimmed-signature-1".to_string(),
+                new_request_id: Some("reexecute-trimmed-signature-1".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: Some(format!(" \n{operation_signature}\t")),
+            }),
+        )
+        .await
+        .expect("trimmed signature should be accepted")
+        .0;
+
+        assert_eq!(
+            reexecute.response.request_id.as_deref(),
+            Some("reexecute-trimmed-signature-1"),
+        );
+        assert!(!reexecute.response.results.is_empty());
+    }
+
+    #[tokio::test]
     async fn should_reexecute_cached_failed_entry_with_structured_errors() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
