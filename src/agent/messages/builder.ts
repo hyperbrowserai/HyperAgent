@@ -13,6 +13,7 @@ const MAX_DOM_STATE_CHARS = 50_000;
 const MAX_OPEN_TAB_ENTRIES = 20;
 const MAX_TAB_URL_CHARS = 500;
 const MAX_VARIABLE_KEY_CHARS = 120;
+const MAX_VARIABLE_ITEMS = 25;
 const MAX_OMITTED_STEP_SUMMARY_STEPS = 5;
 const MAX_OMITTED_STEP_SUMMARY_CHARS = 1_500;
 const MAX_OMITTED_STEP_ACTION_CHARS = 120;
@@ -186,6 +187,59 @@ function safeReadRecordField(source: unknown, field: string): unknown {
   }
 }
 
+function safeArrayLength(value: unknown): number {
+  if (!Array.isArray(value)) {
+    return 0;
+  }
+  try {
+    const length = value.length;
+    if (!Number.isFinite(length) || length < 0) {
+      return 0;
+    }
+    return Math.floor(length);
+  } catch {
+    return 0;
+  }
+}
+
+function safeReadArrayItem<T>(value: unknown, index: number): T | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  try {
+    return value[index] as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function getBoundedVariables(variables: HyperVariable[]): {
+  visibleVariables: HyperVariable[];
+  omittedCount: number;
+} {
+  const total = safeArrayLength(variables);
+  if (total === 0) {
+    return {
+      visibleVariables: [],
+      omittedCount: 0,
+    };
+  }
+
+  const visibleVariables: HyperVariable[] = [];
+  const maxVisible = Math.min(total, MAX_VARIABLE_ITEMS);
+  for (let index = 0; index < maxVisible; index += 1) {
+    const variable = safeReadArrayItem<HyperVariable>(variables, index);
+    if (typeof variable !== "undefined") {
+      visibleVariables.push(variable);
+    }
+  }
+
+  return {
+    visibleVariables,
+    omittedCount: Math.max(0, total - visibleVariables.length),
+  };
+}
+
 function normalizeStepText(value: unknown, fallback: string): string {
   if (typeof value === "string") {
     return truncatePromptText(value);
@@ -197,11 +251,12 @@ function normalizeStepText(value: unknown, fallback: string): string {
 }
 
 function buildVariablesContent(variables: HyperVariable[]): string {
-  if (variables.length === 0) {
+  const { visibleVariables, omittedCount } = getBoundedVariables(variables);
+  if (visibleVariables.length === 0) {
     return "No variables set";
   }
 
-  return variables
+  const variableLines = visibleVariables
     .map((variable, index) => {
       const key = normalizeVariableKey(safeReadVariableField(variable, "key"), index);
       const description = normalizeVariableDescription(
@@ -213,6 +268,12 @@ function buildVariablesContent(variables: HyperVariable[]): string {
       return `<<${key}>> - ${description} | current value: ${currentValue}`;
     })
     .join("\n");
+
+  if (omittedCount <= 0) {
+    return variableLines;
+  }
+  const suffix = omittedCount === 1 ? "" : "s";
+  return `${variableLines}\n... ${omittedCount} more variable${suffix} omitted for context budget`;
 }
 
 function getStepPromptData(step: AgentStep): {

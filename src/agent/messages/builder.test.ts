@@ -710,6 +710,90 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("[variable value unavailable]");
   });
 
+  it("caps variable entries for prompt budget and reports omitted count", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const variables = Array.from({ length: 35 }, (_, index) => ({
+      key: `var_${index}`,
+      value: `value_${index}`,
+      description: `description ${index}`,
+    }));
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      variables
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("<<var_0>>");
+    expect(joined).toContain("<<var_24>>");
+    expect(joined).not.toContain("<<var_25>>");
+    expect(joined).toContain("... 10 more variables omitted for context budget");
+  });
+
+  it("falls back to empty variable section when array length getter traps", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const trappedVariables = new Proxy(
+      [
+        {
+          key: "token",
+          value: "abc",
+          description: "desc",
+        },
+      ],
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "length") {
+            throw new Error("length trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      trappedVariables as unknown as Parameters<typeof buildAgentStepMessages>[6]
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("=== Variables ===");
+    expect(joined).toContain("No variables set");
+  });
+
   it("truncates oversized DOM state payloads", async () => {
     const page = createFakePage("https://example.com/current", [
       "https://example.com/current",

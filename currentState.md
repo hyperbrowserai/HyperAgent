@@ -132,6 +132,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Normalized CLI per-step failure rendering in `cli/index.ts` so action error messages are sanitized/truncated via `formatCliError` before display.
 - Added Anthropic structured-output regression coverage confirming multi-action calls enforce deterministic `tool_choice: { type: "any", disable_parallel_tool_use: true }`.
 - Hardened CDP frame-filter host/path matching to avoid query-text false positives (e.g. unrelated URLs containing `https://yahoo.com/pixel` in query params) while preserving legitimate host-suffix + path rule matching.
+- Hardened prompt token budgeting for variables by capping serialized variable entries per step-message build and emitting omitted-count context instead of unbounded variable dumps.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.
