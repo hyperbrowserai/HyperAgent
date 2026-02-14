@@ -415,6 +415,21 @@ mod tests {
     calc_sheet
       .write_formula(3, 1, Formula::new("=DELTA(5,5)").set_result("1"))
       .expect("delta should write");
+    calc_sheet
+      .write_boolean(4, 0, true)
+      .expect("boolean should write");
+    calc_sheet
+      .write_string(5, 0, "text")
+      .expect("string should write");
+    calc_sheet
+      .write_number(6, 0, -2.0)
+      .expect("number should write");
+    calc_sheet
+      .write_formula(4, 1, Formula::new("=MINA(A5:A7)").set_result("-2"))
+      .expect("mina should write");
+    calc_sheet
+      .write_formula(5, 1, Formula::new("=MAXA(A5:A7)").set_result("1"))
+      .expect("maxa should write");
 
     workbook
       .save_to_buffer()
@@ -841,7 +856,7 @@ mod tests {
     assert_eq!(import_result.sheets_imported, 1);
     assert_eq!(import_result.sheet_names, vec!["Calc".to_string()]);
     assert_eq!(
-      import_result.formula_cells_imported, 4,
+      import_result.formula_cells_imported, 6,
       "formula fixture should import all formula cells",
     );
 
@@ -860,6 +875,8 @@ mod tests {
     let source_b2 = source_map.get("B2").expect("B2 should exist");
     let source_b3 = source_map.get("B3").expect("B3 should exist");
     let source_b4 = source_map.get("B4").expect("B4 should exist");
+    let source_b5 = source_map.get("B5").expect("B5 should exist");
+    let source_b6 = source_map.get("B6").expect("B6 should exist");
     assert_eq!(
       source_b1.evaluated_value.as_deref(),
       Some("2"),
@@ -879,6 +896,16 @@ mod tests {
       source_b4.evaluated_value.as_deref(),
       Some("1"),
       "delta should evaluate in imported fixture",
+    );
+    assert_eq!(
+      source_b5.evaluated_value.as_deref(),
+      Some("-2"),
+      "mina should evaluate in imported fixture",
+    );
+    assert_eq!(
+      source_b6.evaluated_value.as_deref(),
+      Some("1"),
+      "maxa should evaluate in imported fixture",
     );
     let dollarde_value = source_map
       .get("B3")
@@ -946,6 +973,18 @@ mod tests {
     assert_eq!(
       replay_map
         .get("B4")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some("1"),
+    );
+    assert_eq!(
+      replay_map
+        .get("B5")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some("-2"),
+    );
+    assert_eq!(
+      replay_map
+        .get("B6")
         .and_then(|cell| cell.evaluated_value.as_deref()),
       Some("1"),
     );
