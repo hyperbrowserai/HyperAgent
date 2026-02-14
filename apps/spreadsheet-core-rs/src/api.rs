@@ -9129,6 +9129,7 @@ mod tests {
             "agent_ops_preview_endpoint",
             "agent_ops_preview_request_shape",
             "agent_ops_preview_response_shape",
+            "agent_ops_response_shape",
             "agent_ops_result_error_shape",
             "duckdb_query_endpoint",
             "duckdb_query_request_shape",
