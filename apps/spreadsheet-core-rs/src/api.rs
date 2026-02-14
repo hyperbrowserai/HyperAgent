@@ -8181,6 +8181,10 @@ mod tests {
             "schema should advertise missing-cache-entry error code",
         );
         assert!(
+            cache_validation_error_codes.contains(&"INVALID_REQUEST_ID"),
+            "schema should advertise invalid request id error code",
+        );
+        assert!(
             cache_validation_error_codes.contains(&"INVALID_NEW_REQUEST_ID"),
             "schema should advertise invalid new request id error code",
         );
