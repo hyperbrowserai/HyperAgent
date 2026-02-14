@@ -1,7 +1,5 @@
 import TurndownService from "turndown";
 import { formatUnknownError } from "./format-unknown-error";
-// TODO: Add gfm plugin
-// import { gfm } from "joplin-turndown-plugin-gfm";
 
 export const turndownService = new TurndownService();
 
@@ -32,7 +30,6 @@ turndownService.addRule("inlineLink", {
     return "[" + content.trim() + "](" + href + title + ")\n";
   },
 });
-// turndownService.use(gfm);
 
 const MAX_HTML_TO_MARKDOWN_DIAGNOSTIC_CHARS = 400;
 
