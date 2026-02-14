@@ -4,6 +4,23 @@ import { formatUnknownError } from "./format-unknown-error";
 const DEFAULT_RETRY_COUNT = 3;
 const MAX_RETRY_COUNT = 10;
 const MAX_RETRY_DELAY_MS = 10_000;
+const MAX_RETRY_DIAGNOSTIC_CHARS = 300;
+
+function formatRetryDiagnostic(value: unknown): string {
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_RETRY_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omittedChars = fallback.length - MAX_RETRY_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(0, MAX_RETRY_DIAGNOSTIC_CHARS)}... [truncated ${omittedChars} chars]`;
+}
 
 function normalizeRetryCount(value?: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -35,7 +52,7 @@ export async function retry<T>({
         onError?.(`Retry Attempt ${attempt + 1}/${retryCount}`, error);
       } catch (handlerError) {
         console.warn(
-          `[retry] onError handler failed: ${formatUnknownError(handlerError)}`
+          `[retry] onError handler failed: ${formatRetryDiagnostic(handlerError)}`
         );
       }
       lastError = error;
@@ -45,7 +62,7 @@ export async function retry<T>({
           await sleep(delayMs);
         } catch (sleepError) {
           console.warn(
-            `[retry] sleep failed: ${formatUnknownError(sleepError)}`
+            `[retry] sleep failed: ${formatRetryDiagnostic(sleepError)}`
           );
         }
       }

@@ -135,6 +135,34 @@ describe("retry", () => {
     }
   });
 
+  it("sanitizes and truncates oversized onError handler diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const onError = jest.fn(() => {
+      throw new Error(`handler\u0000\n${"x".repeat(10_000)}`);
+    });
+    const func = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("first"))
+      .mockResolvedValue("ok");
+
+    try {
+      const result = await retry({
+        func,
+        params: { retryCount: 2 },
+        onError,
+      });
+
+      expect(result).toBe("ok");
+      const warning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+      expect(warning.length).toBeLessThan(700);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("continues retrying when sleep throws", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     sleep.mockRejectedValueOnce({ reason: "sleep failed" }).mockResolvedValue(undefined);
@@ -154,6 +182,33 @@ describe("retry", () => {
       expect(warnSpy).toHaveBeenCalledWith(
         '[retry] sleep failed: {"reason":"sleep failed"}'
       );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("sanitizes and truncates oversized sleep diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    sleep
+      .mockRejectedValueOnce(new Error(`sleep\u0000\n${"x".repeat(10_000)}`))
+      .mockResolvedValue(undefined);
+    const func = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("first"))
+      .mockResolvedValue("ok");
+
+    try {
+      const result = await retry({
+        func,
+        params: { retryCount: 2 },
+      });
+
+      expect(result).toBe("ok");
+      const warning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+      expect(warning.length).toBeLessThan(700);
     } finally {
       warnSpy.mockRestore();
     }
