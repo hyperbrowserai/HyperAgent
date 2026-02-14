@@ -967,6 +967,67 @@ describe("HyperAgent constructor and task controls", () => {
     expect(internalAgent.errorEmitter.listenerCount("error")).toBe(0);
   });
 
+  it("falls back to removeListener when errorEmitter.off getter traps during task cleanup", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      errorEmitter: {
+        listenerCount: (event: string) => number;
+      };
+      taskErrorForwarders: Map<string, (error: Error) => void>;
+    };
+    const baseEmitter = internalAgent.errorEmitter;
+    internalAgent.errorEmitter = new Proxy(baseEmitter as object, {
+      get: (target, property, receiver) => {
+        if (property === "off") {
+          throw new Error("errorEmitter off getter trap");
+        }
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    }) as unknown as typeof internalAgent.errorEmitter;
+
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync(
+      "listener cleanup fallback",
+      undefined,
+      fakePage
+    );
+    expect(internalAgent.errorEmitter.listenerCount("error")).toBeGreaterThan(0);
+
+    resolveTask({
+      taskId: task.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+    await expect(task.result).resolves.toMatchObject({
+      status: TaskStatus.COMPLETED,
+    });
+    await Promise.resolve();
+    expect(internalAgent.taskErrorForwarders.size).toBe(0);
+    expect(internalAgent.errorEmitter.listenerCount("error")).toBe(0);
+  });
+
   it("avoids task error-listener leaks when forwarder registry set traps throw", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockImplementation(

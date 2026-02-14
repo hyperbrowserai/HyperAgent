@@ -495,7 +495,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   private readErrorEmitterMethodOrThrow(
-    methodName: "on" | "off"
+    methodName: "on" | "off" | "removeListener"
   ): (this: ErrorEmitter, eventName: string, listener: (error: Error) => void) => void {
     let method: unknown;
     try {
@@ -503,6 +503,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         this.errorEmitter as ErrorEmitter & {
           on?: unknown;
           off?: unknown;
+          removeListener?: unknown;
         }
       )[methodName];
     } catch (error) {
@@ -520,6 +521,30 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       eventName: string,
       listener: (error: Error) => void
     ) => void;
+  }
+
+  private detachTaskErrorListener(listener: (error: Error) => void): void {
+    let lastError: unknown;
+    const detachMethodNames: Array<"off" | "removeListener"> = [
+      "off",
+      "removeListener",
+    ];
+    for (const methodName of detachMethodNames) {
+      try {
+        const detachMethod = this.readErrorEmitterMethodOrThrow(methodName);
+        detachMethod.call(this.errorEmitter, "error", listener);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (this.debug && typeof lastError !== "undefined") {
+      console.warn(
+        `[HyperAgent] Failed to detach task-scoped error listener: ${this.formatLifecycleDiagnostic(
+          lastError
+        )}`
+      );
+    }
   }
 
   private async startBrowserProvider(): Promise<Browser> {
@@ -768,12 +793,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     if (!forwarder) {
       return;
     }
-    try {
-      const offMethod = this.readErrorEmitterMethodOrThrow("off");
-      offMethod.call(this.errorEmitter, "error", forwarder);
-    } catch {
-      // no-op
-    }
+    this.detachTaskErrorListener(forwarder);
     try {
       this.taskErrorForwarders.delete(taskId);
     } catch {
@@ -1803,12 +1823,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.taskErrorForwarders.set(taskId, onTaskError);
     } catch (error) {
       if (listenerAttached) {
-        try {
-          const offMethod = this.readErrorEmitterMethodOrThrow("off");
-          offMethod.call(this.errorEmitter, "error", onTaskError);
-        } catch {
-          // no-op
-        }
+        this.detachTaskErrorListener(onTaskError);
       }
       if (this.debug) {
         console.warn(
