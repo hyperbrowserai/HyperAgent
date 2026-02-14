@@ -1143,6 +1143,36 @@ pub fn parse_workday_formula(
   Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
 }
 
+pub fn parse_networkdays_intl_formula(
+  formula: &str,
+) -> Option<(String, String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "NETWORKDAYS.INTL" || !(args.len() == 2 || args.len() == 3 || args.len() == 4) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args.get(2).cloned(),
+    args.get(3).cloned(),
+  ))
+}
+
+pub fn parse_workday_intl_formula(
+  formula: &str,
+) -> Option<(String, String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "WORKDAY.INTL" || !(args.len() == 2 || args.len() == 3 || args.len() == 4) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args.get(2).cloned(),
+    args.get(3).cloned(),
+  ))
+}
+
 pub fn parse_year_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "YEAR" && args.len() == 1 {
@@ -1859,7 +1889,7 @@ mod tests {
     parse_date_formula, parse_edate_formula,
     parse_eomonth_formula, parse_days_formula, parse_datevalue_formula,
     parse_timevalue_formula, parse_datedif_formula, parse_networkdays_formula,
-    parse_workday_formula,
+    parse_workday_formula, parse_networkdays_intl_formula, parse_workday_intl_formula,
     parse_day_formula,
     parse_ceiling_formula, parse_ceiling_math_formula, parse_floor_formula,
     parse_floor_math_formula,
@@ -2371,6 +2401,21 @@ mod tests {
     assert_eq!(workday_args.0, "A1");
     assert_eq!(workday_args.1, "5");
     assert_eq!(workday_args.2.as_deref(), Some("C1:C4"));
+    let networkdays_intl_args = parse_networkdays_intl_formula(
+      r#"=NETWORKDAYS.INTL(A1,B1,11,C1:C4)"#,
+    )
+    .expect("networkdays intl should parse");
+    assert_eq!(networkdays_intl_args.0, "A1");
+    assert_eq!(networkdays_intl_args.1, "B1");
+    assert_eq!(networkdays_intl_args.2.as_deref(), Some("11"));
+    assert_eq!(networkdays_intl_args.3.as_deref(), Some("C1:C4"));
+    let workday_intl_args =
+      parse_workday_intl_formula(r#"=WORKDAY.INTL(A1,5,"0000011",C1:C4)"#)
+        .expect("workday intl should parse");
+    assert_eq!(workday_intl_args.0, "A1");
+    assert_eq!(workday_intl_args.1, "5");
+    assert_eq!(workday_intl_args.2.as_deref(), Some(r#""0000011""#));
+    assert_eq!(workday_intl_args.3.as_deref(), Some("C1:C4"));
 
     assert_eq!(
       parse_year_formula("=YEAR(A1)").as_deref(),

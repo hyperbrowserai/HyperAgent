@@ -23,7 +23,7 @@ use crate::{
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
     parse_days_formula, parse_datevalue_formula, parse_timevalue_formula,
     parse_datedif_formula, parse_networkdays_formula,
-    parse_workday_formula,
+    parse_workday_formula, parse_networkdays_intl_formula, parse_workday_intl_formula,
     parse_day_formula,
     parse_if_formula, parse_ifs_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -2437,7 +2437,8 @@ fn evaluate_formula(
       },
       None => HashSet::new(),
     };
-    let networkdays = count_networkdays(start_value, end_value, &holiday_dates);
+    let weekend_mask = default_weekend_mask();
+    let networkdays = count_networkdays(start_value, end_value, &holiday_dates, &weekend_mask);
     return Ok(Some(networkdays.to_string()));
   }
 
@@ -2456,7 +2457,55 @@ fn evaluate_formula(
       },
       None => HashSet::new(),
     };
-    let result_date = workday_shift(start_value, day_offset, &holiday_dates);
+    let weekend_mask = default_weekend_mask();
+    let result_date = workday_shift(start_value, day_offset, &holiday_dates, &weekend_mask);
+    return Ok(Some(result_date.to_string()));
+  }
+
+  if let Some((start_date_arg, end_date_arg, weekend_arg, holidays_arg)) =
+    parse_networkdays_intl_formula(formula)
+  {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let end_date = parse_date_operand(connection, sheet, &end_date_arg)?;
+    let (Some(start_value), Some(end_value)) = (start_date, end_date) else {
+      return Ok(None);
+    };
+    let weekend_mask = match parse_weekend_mask(connection, sheet, weekend_arg)? {
+      Some(mask) => mask,
+      None => return Ok(None),
+    };
+    let holiday_dates = match holidays_arg {
+      Some(raw_holidays) => match collect_holiday_dates(connection, sheet, &raw_holidays)? {
+        Some(values) => values,
+        None => return Ok(None),
+      },
+      None => HashSet::new(),
+    };
+    let networkdays =
+      count_networkdays(start_value, end_value, &holiday_dates, &weekend_mask);
+    return Ok(Some(networkdays.to_string()));
+  }
+
+  if let Some((start_date_arg, day_offset_arg, weekend_arg, holidays_arg)) =
+    parse_workday_intl_formula(formula)
+  {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let Some(start_value) = start_date else {
+      return Ok(None);
+    };
+    let day_offset = parse_required_integer(connection, sheet, &day_offset_arg)?;
+    let weekend_mask = match parse_weekend_mask(connection, sheet, weekend_arg)? {
+      Some(mask) => mask,
+      None => return Ok(None),
+    };
+    let holiday_dates = match holidays_arg {
+      Some(raw_holidays) => match collect_holiday_dates(connection, sheet, &raw_holidays)? {
+        Some(values) => values,
+        None => return Ok(None),
+      },
+      None => HashSet::new(),
+    };
+    let result_date = workday_shift(start_value, day_offset, &holiday_dates, &weekend_mask);
     return Ok(Some(result_date.to_string()));
   }
 
@@ -3996,6 +4045,7 @@ fn count_networkdays(
   start: NaiveDate,
   end: NaiveDate,
   holidays: &HashSet<NaiveDate>,
+  weekend_mask: &[bool; 7],
 ) -> i64 {
   let (from, to, direction) = if start <= end {
     (start, end, 1i64)
@@ -4006,7 +4056,7 @@ fn count_networkdays(
   let mut current = from;
   let mut days = 0i64;
   while current <= to {
-    if is_business_day(current, holidays) {
+    if is_business_day(current, holidays, weekend_mask) {
       days += 1;
     }
     current += Duration::days(1);
@@ -4015,15 +4065,21 @@ fn count_networkdays(
   days * direction
 }
 
-fn is_business_day(date: NaiveDate, holidays: &HashSet<NaiveDate>) -> bool {
+fn is_business_day(
+  date: NaiveDate,
+  holidays: &HashSet<NaiveDate>,
+  weekend_mask: &[bool; 7],
+) -> bool {
   let weekday = date.weekday().num_days_from_monday();
-  weekday < 5 && !holidays.contains(&date)
+  let is_weekend = weekend_mask[weekday as usize];
+  !is_weekend && !holidays.contains(&date)
 }
 
 fn workday_shift(
   start: NaiveDate,
   day_offset: i32,
   holidays: &HashSet<NaiveDate>,
+  weekend_mask: &[bool; 7],
 ) -> NaiveDate {
   if day_offset == 0 {
     return start;
@@ -4034,11 +4090,64 @@ fn workday_shift(
   let mut remaining = day_offset.unsigned_abs();
   while remaining > 0 {
     current += Duration::days(step.into());
-    if is_business_day(current, holidays) {
+    if is_business_day(current, holidays, weekend_mask) {
       remaining -= 1;
     }
   }
   current
+}
+
+fn default_weekend_mask() -> [bool; 7] {
+  [false, false, false, false, false, true, true]
+}
+
+fn parse_weekend_mask(
+  connection: &Connection,
+  sheet: &str,
+  operand: Option<String>,
+) -> Result<Option<[bool; 7]>, ApiError> {
+  let Some(raw_operand) = operand else {
+    return Ok(Some(default_weekend_mask()));
+  };
+  let resolved = resolve_scalar_operand(connection, sheet, &raw_operand)?;
+  let trimmed = resolved.trim();
+  if trimmed.is_empty() {
+    return Ok(None);
+  }
+
+  if trimmed.len() == 7 && trimmed.chars().all(|ch| ch == '0' || ch == '1') {
+    let mut weekend = [false; 7];
+    for (index, ch) in trimmed.chars().enumerate() {
+      weekend[index] = ch == '1';
+    }
+    if weekend.iter().all(|is_weekend| *is_weekend) {
+      return Ok(None);
+    }
+    return Ok(Some(weekend));
+  }
+
+  let weekend_code = trimmed.parse::<i32>().ok();
+  let Some(code) = weekend_code else {
+    return Ok(None);
+  };
+  let mapped = match code {
+    1 => [false, false, false, false, false, true, true],
+    2 => [true, false, false, false, false, false, true],
+    3 => [true, true, false, false, false, false, false],
+    4 => [false, true, true, false, false, false, false],
+    5 => [false, false, true, true, false, false, false],
+    6 => [false, false, false, true, true, false, false],
+    7 => [false, false, false, false, true, true, false],
+    11 => [false, false, false, false, false, false, true],
+    12 => [true, false, false, false, false, false, false],
+    13 => [false, true, false, false, false, false, false],
+    14 => [false, false, true, false, false, false, false],
+    15 => [false, false, false, true, false, false, false],
+    16 => [false, false, false, false, true, false, false],
+    17 => [false, false, false, false, false, true, false],
+    _ => return Ok(None),
+  };
+  Ok(Some(mapped))
 }
 
 fn evaluate_vlookup_formula(
@@ -5922,12 +6031,40 @@ mod tests {
         value: None,
         formula: Some(r#"=WORKDAY("2024-03-11",-5,"2024-03-04")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 232,
+        value: None,
+        formula: Some(r#"=NETWORKDAYS.INTL("2024-03-01","2024-03-10",11)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 233,
+        value: None,
+        formula: Some(
+          r#"=NETWORKDAYS.INTL("2024-03-01","2024-03-10","0000011","2024-03-04")"#.to_string(),
+        ),
+      },
+      CellMutation {
+        row: 1,
+        col: 234,
+        value: None,
+        formula: Some(r#"=WORKDAY.INTL("2024-03-01",1,11)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 235,
+        value: None,
+        formula: Some(
+          r#"=WORKDAY.INTL("2024-03-04",-1,"0000011","2024-03-01")"#.to_string(),
+        ),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 229);
+    assert_eq!(updated_cells, 233);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5941,7 +6078,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 231,
+        end_col: 235,
       },
     )
     .expect("cells should be fetched");
@@ -6813,6 +6950,26 @@ mod tests {
       by_position(1, 231).evaluated_value.as_deref(),
       Some("2024-03-01"),
       "workday should move backward across weekends and holidays",
+    );
+    assert_eq!(
+      by_position(1, 232).evaluated_value.as_deref(),
+      Some("8"),
+      "networkdays.intl should honor weekend code",
+    );
+    assert_eq!(
+      by_position(1, 233).evaluated_value.as_deref(),
+      Some("5"),
+      "networkdays.intl should honor weekend mask and holidays",
+    );
+    assert_eq!(
+      by_position(1, 234).evaluated_value.as_deref(),
+      Some("2024-03-02"),
+      "workday.intl should use weekend code for forward shifts",
+    );
+    assert_eq!(
+      by_position(1, 235).evaluated_value.as_deref(),
+      Some("2024-02-29"),
+      "workday.intl should use weekend mask and holidays for reverse shifts",
     );
   }
 
@@ -8443,6 +8600,38 @@ mod tests {
       vec![
         r#"=WORKDAY("bad",5)"#.to_string(),
         r#"=WORKDAY("2024-03-01",5,"not-a-date")"#.to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_intl_weekend_patterns_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some(r#"=NETWORKDAYS.INTL("2024-03-01","2024-03-10",99)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(
+          r#"=WORKDAY.INTL("2024-03-01",5,"1111111")"#.to_string(),
+        ),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        r#"=NETWORKDAYS.INTL("2024-03-01","2024-03-10",99)"#.to_string(),
+        r#"=WORKDAY.INTL("2024-03-01",5,"1111111")"#.to_string(),
       ],
     );
   }
