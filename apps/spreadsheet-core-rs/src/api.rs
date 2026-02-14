@@ -2892,6 +2892,37 @@ mod tests {
       .expect("fixture workbook should serialize")
   }
 
+  fn workbook_import_normalized_formula_fixture_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let inputs_sheet = workbook.add_worksheet();
+    inputs_sheet.set_name("Inputs").expect("sheet should be renamed");
+    inputs_sheet
+      .write_string(0, 0, "Region")
+      .expect("header should write");
+    inputs_sheet
+      .write_string(1, 0, "North")
+      .expect("text should write");
+    inputs_sheet
+      .write_string(2, 0, "South")
+      .expect("text should write");
+    inputs_sheet
+      .write_string(0, 1, "Sales")
+      .expect("header should write");
+    inputs_sheet
+      .write_number(1, 1, 120.0)
+      .expect("number should write");
+    inputs_sheet
+      .write_number(2, 1, 80.0)
+      .expect("number should write");
+    inputs_sheet
+      .write_formula(1, 2, Formula::new("=+@_xlfn.SUM(B2:B3)").set_result("200"))
+      .expect("formula should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("normalized fixture workbook should serialize")
+  }
+
   #[test]
   fn should_validate_sheet_name_rules() {
     assert!(normalize_sheet_name("Sheet 1").is_ok());
@@ -3165,6 +3196,53 @@ mod tests {
         .get("formula_cells_normalized")
         .and_then(serde_json::Value::as_u64),
       Some(import_result.formula_cells_normalized as u64),
+    );
+  }
+
+  #[tokio::test]
+  async fn should_report_normalized_formula_metrics_on_import() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("import-normalized-formula-fixture".to_string()))
+      .await
+      .expect("workbook should be created");
+    let mut events = state
+      .subscribe(workbook.id)
+      .await
+      .expect("event subscription should work");
+
+    let import_result = import_bytes_into_workbook(
+      &state,
+      workbook.id,
+      &workbook_import_normalized_formula_fixture_bytes(),
+      "normalized-import",
+    )
+    .await
+    .expect("normalized fixture import should succeed");
+
+    assert_eq!(import_result.formula_cells_imported, 1);
+    assert_eq!(import_result.formula_cells_normalized, 1);
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("1 formula(s) were normalized")),
+      "import warnings should surface normalization telemetry",
+    );
+
+    let emitted_event = timeout(Duration::from_secs(1), events.recv())
+      .await
+      .expect("import event should arrive")
+      .expect("event payload should decode");
+    assert_eq!(emitted_event.event_type, "workbook.imported");
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_normalized")
+        .and_then(serde_json::Value::as_u64),
+      Some(1),
     );
   }
 
