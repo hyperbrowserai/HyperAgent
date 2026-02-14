@@ -72,7 +72,8 @@ use crate::{
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_find_formula,
     parse_value_formula, parse_n_formula, parse_t_formula,
-    parse_base_formula, parse_decimal_formula, parse_char_formula,
+    parse_base_formula, parse_decimal_formula,
+    parse_dec2bin_formula, parse_bin2dec_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_even_formula, parse_odd_formula,
@@ -1605,6 +1606,49 @@ fn evaluate_formula(
       None => (false, trimmed),
     };
     let parsed = u64::from_str_radix(&digits.to_uppercase(), radix as u32).ok();
+    let Some(unsigned_value) = parsed else {
+      return Ok(None);
+    };
+    if is_negative {
+      return Ok(Some((-i128::from(unsigned_value)).to_string()));
+    }
+    return Ok(Some(unsigned_value.to_string()));
+  }
+
+  if let Some((number_arg, places_arg)) = parse_dec2bin_formula(formula) {
+    let number = parse_required_float(connection, sheet, &number_arg)?.trunc();
+    if number < 0.0 {
+      return Ok(None);
+    }
+    let places = match places_arg {
+      Some(raw_places) => parse_required_integer(connection, sheet, &raw_places)?,
+      None => 0,
+    };
+    if places < 0 {
+      return Ok(None);
+    }
+    let converted = format_radix_u64(number as u64, 2);
+    if places > 0 {
+      let width = usize::try_from(places).unwrap_or_default();
+      if converted.len() > width {
+        return Ok(None);
+      }
+      return Ok(Some(format!("{:0>width$}", converted, width = width)));
+    }
+    return Ok(Some(converted));
+  }
+
+  if let Some(number_text_arg) = parse_bin2dec_formula(formula) {
+    let number_text = resolve_scalar_operand(connection, sheet, &number_text_arg)?;
+    let trimmed = number_text.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+    let (is_negative, digits) = match trimmed.strip_prefix('-') {
+      Some(rest) => (true, rest),
+      None => (false, trimmed),
+    };
+    let parsed = u64::from_str_radix(&digits.to_uppercase(), 2).ok();
     let Some(unsigned_value) = parsed else {
       return Ok(None);
     };
@@ -7812,12 +7856,24 @@ mod tests {
         value: None,
         formula: Some(r#"=DECIMAL("FF",16)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 276,
+        value: None,
+        formula: Some("=DEC2BIN(255,8)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 277,
+        value: None,
+        formula: Some(r#"=BIN2DEC("11111111")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 273);
+    assert_eq!(updated_cells, 275);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7831,7 +7887,7 @@ mod tests {
         start_row: 1,
         end_row: 22,
         start_col: 1,
-        end_col: 275,
+        end_col: 277,
       },
     )
     .expect("cells should be fetched");
@@ -9034,6 +9090,16 @@ mod tests {
       Some("255"),
       "decimal should convert arbitrary-radix text to decimal number",
     );
+    assert_eq!(
+      by_position(1, 276).evaluated_value.as_deref(),
+      Some("11111111"),
+      "dec2bin should convert decimal to binary with optional padding",
+    );
+    assert_eq!(
+      by_position(1, 277).evaluated_value.as_deref(),
+      Some("255"),
+      "bin2dec should convert binary text to decimal",
+    );
   }
 
   #[test]
@@ -9665,6 +9731,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=BASE(255,1)".to_string(), r#"=DECIMAL("FF",1)"#.to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_dec2bin_bin2dec_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=DEC2BIN(-1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(r#"=BIN2DEC("102")"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=DEC2BIN(-1)".to_string(), r#"=BIN2DEC("102")"#.to_string()],
     );
   }
 

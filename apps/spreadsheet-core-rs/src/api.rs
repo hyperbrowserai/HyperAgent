@@ -231,6 +231,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "T",
   "BASE",
   "DECIMAL",
+  "DEC2BIN",
+  "BIN2DEC",
   "CHAR",
   "CODE",
   "UNICHAR",
