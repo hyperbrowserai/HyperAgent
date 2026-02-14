@@ -3290,6 +3290,14 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {wizardSchemaQuery.data?.agent_ops_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                agent ops execute endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_endpoint}
+                </span>
+              </p>
+            ) : null}
             {wizardSchemaQuery.data?.agent_ops_preview_endpoint ? (
               <p className="mb-2 text-[11px] text-slate-500">
                 agent ops preview endpoint:{" "}
@@ -4053,6 +4061,14 @@ export function SpreadsheetApp() {
                 signature codes:{" "}
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.signature_error_codes.join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.agent_ops_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                ops execute endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.agent_ops_endpoint}
                 </span>
               </p>
             ) : null}
