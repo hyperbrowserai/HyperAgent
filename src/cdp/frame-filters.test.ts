@@ -67,6 +67,14 @@ describe("isAdOrTrackingFrame", () => {
     ).toBe(true);
   });
 
+  it("filters scheme-less host URLs when tracking query params are present", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "cdn.example.net/widget?prebid=1",
+      })
+    ).toBe(true);
+  });
+
   it("keeps same-site frames when only weak ad signals are present", () => {
     expect(
       isAdOrTrackingFrame({
@@ -122,6 +130,14 @@ describe("isAdOrTrackingFrame", () => {
     expect(
       isAdOrTrackingFrame({
         url: "/redirect/doubleclick.net/pagead/ads",
+      })
+    ).toBe(false);
+  });
+
+  it("does not treat path-only tracking query params as strong frame signal", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "/widget?prebid=1",
       })
     ).toBe(false);
   });

@@ -257,9 +257,8 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
       name: "tracking-query-param",
       weight: 2,
       strong: true,
-      matched: TRACKING_PARAMS.some(
-        (param) =>
-          normalizedQuerySignalText.includes(param) || urlLower.includes(param)
+      matched: TRACKING_PARAMS.some((param) =>
+        normalizedQuerySignalText.includes(param)
       ),
     },
     {
