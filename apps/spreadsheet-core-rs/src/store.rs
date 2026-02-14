@@ -11,7 +11,7 @@ use crate::{
     parse_percentile_inc_formula, parse_quartile_inc_formula,
     parse_percentile_exc_formula, parse_quartile_exc_formula,
     parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
-    parse_trimmean_formula,
+    parse_trimmean_formula, parse_devsq_formula, parse_avedev_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -704,6 +704,34 @@ fn evaluate_formula(
     let mean =
       trimmed_values.iter().sum::<f64>() / trimmed_values.len() as f64;
     return Ok(Some(mean.to_string()));
+  }
+
+  if let Some((start, end)) = parse_devsq_formula(formula) {
+    let values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let total = values
+      .iter()
+      .map(|value| {
+        let delta = *value - mean;
+        delta * delta
+      })
+      .sum::<f64>();
+    return Ok(Some(total.to_string()));
+  }
+
+  if let Some((start, end)) = parse_avedev_formula(formula) {
+    let values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let total_absolute_deviation =
+      values.iter().map(|value| (*value - mean).abs()).sum::<f64>();
+    let avedev = total_absolute_deviation / values.len() as f64;
+    return Ok(Some(avedev.to_string()));
   }
 
   if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
@@ -4001,12 +4029,24 @@ mod tests {
         value: None,
         formula: Some("=TRIMMEAN(A1:A6,0.4)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 154,
+        value: None,
+        formula: Some("=DEVSQ(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 155,
+        value: None,
+        formula: Some("=AVEDEV(A1:A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 151);
+    assert_eq!(updated_cells, 153);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4020,7 +4060,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 153,
+        end_col: 155,
       },
     )
     .expect("cells should be fetched");
@@ -4358,6 +4398,23 @@ mod tests {
     assert!(
       (trimmean - 106.666_666_666_666_67).abs() < 1e-9,
       "trimmean should be 106.666..., got {trimmean}",
+    );
+    let devsq = by_position(1, 154)
+      .evaluated_value
+      .as_deref()
+      .expect("devsq should evaluate")
+      .parse::<f64>()
+      .expect("devsq should be numeric");
+    assert!((devsq - 800.0).abs() < 1e-9, "devsq should be 800.0, got {devsq}");
+    let avedev = by_position(1, 155)
+      .evaluated_value
+      .as_deref()
+      .expect("avedev should evaluate")
+      .parse::<f64>()
+      .expect("avedev should be numeric");
+    assert!(
+      (avedev - 20.0).abs() < 1e-9,
+      "avedev should be 20.0, got {avedev}",
     );
   }
 
@@ -4874,6 +4931,45 @@ mod tests {
         "=TRIMMEAN(A1:A2,1)".to_string(),
         "=TRIMMEAN(A1:A2,-0.1)".to_string(),
       ],
+    );
+  }
+
+  #[test]
+  fn should_leave_devsq_and_avedev_without_numeric_values_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!("north")),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!("south")),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=DEVSQ(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=AVEDEV(A1:A2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=DEVSQ(A1:A2)".to_string(), "=AVEDEV(A1:A2)".to_string()],
     );
   }
 

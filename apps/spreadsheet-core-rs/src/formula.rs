@@ -1087,6 +1087,22 @@ pub fn parse_trimmean_formula(
   Some((start, end, args[1].clone()))
 }
 
+pub fn parse_devsq_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "DEVSQ" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_avedev_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "AVEDEV" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1370,6 +1386,7 @@ mod tests {
     parse_percentile_exc_formula, parse_quartile_exc_formula,
     parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
     parse_trimmean_formula,
+    parse_devsq_formula, parse_avedev_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -1805,6 +1822,14 @@ mod tests {
     assert_eq!(trimmean.0, (1, 1));
     assert_eq!(trimmean.1, (5, 1));
     assert_eq!(trimmean.2, "0.4");
+    let devsq =
+      parse_devsq_formula("=DEVSQ(A1:A5)").expect("devsq should parse");
+    assert_eq!(devsq.0, (1, 1));
+    assert_eq!(devsq.1, (5, 1));
+    let avedev =
+      parse_avedev_formula("=AVEDEV(A1:A5)").expect("avedev should parse");
+    assert_eq!(avedev.0, (1, 1));
+    assert_eq!(avedev.1, (5, 1));
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");
