@@ -227,6 +227,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "DAYS",
   "DATEVALUE",
   "TIMEVALUE",
+  "DATEDIF",
   "YEAR",
   "MONTH",
   "DAY",

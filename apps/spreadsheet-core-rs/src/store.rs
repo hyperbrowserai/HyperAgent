@@ -22,6 +22,7 @@ use crate::{
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
     parse_days_formula, parse_datevalue_formula, parse_timevalue_formula,
+    parse_datedif_formula,
     parse_day_formula,
     parse_if_formula, parse_ifs_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -2389,6 +2390,36 @@ fn evaluate_formula(
     return Ok(Some(fraction.to_string()));
   }
 
+  if let Some((start_date_arg, end_date_arg, unit_arg)) = parse_datedif_formula(formula) {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let end_date = parse_date_operand(connection, sheet, &end_date_arg)?;
+    let (Some(start_value), Some(end_value)) = (start_date, end_date) else {
+      return Ok(None);
+    };
+    if end_value < start_value {
+      return Ok(None);
+    }
+    let unit = resolve_scalar_operand(connection, sheet, &unit_arg)?
+      .trim()
+      .to_uppercase();
+    let value = match unit.as_str() {
+      "D" => end_value.signed_duration_since(start_value).num_days(),
+      "Y" => i64::from(datedif_complete_years(start_value, end_value)),
+      "M" => i64::from(datedif_complete_months(start_value, end_value)),
+      "YM" => i64::from(datedif_complete_months(start_value, end_value) % 12),
+      "YD" => match datedif_year_days(start_value, end_value) {
+        Some(days) => i64::from(days),
+        None => return Ok(None),
+      },
+      "MD" => match datedif_month_days(start_value, end_value) {
+        Some(days) => i64::from(days),
+        None => return Ok(None),
+      },
+      _ => return Ok(None),
+    };
+    return Ok(Some(value.to_string()));
+  }
+
   if let Some(year_arg) = parse_year_formula(formula) {
     let date = parse_date_operand(connection, sheet, &year_arg)?;
     return Ok(Some(date.map(|value| value.year().to_string()).unwrap_or_default()));
@@ -3729,6 +3760,53 @@ fn shift_date_by_months(date: NaiveDate, months_delta: i32) -> Option<NaiveDate>
   let month_end = next_month_start - Duration::days(1);
   let clamped_day = date.day().min(month_end.day());
   NaiveDate::from_ymd_opt(month_start.year(), month_start.month(), clamped_day)
+}
+
+fn datedif_complete_years(start: NaiveDate, end: NaiveDate) -> u32 {
+  let mut years = end.year().saturating_sub(start.year());
+  if (end.month(), end.day()) < (start.month(), start.day()) {
+    years = years.saturating_sub(1);
+  }
+  years as u32
+}
+
+fn datedif_complete_months(start: NaiveDate, end: NaiveDate) -> u32 {
+  let mut months = (end.year().saturating_sub(start.year()) * 12)
+    + (end.month() as i32 - start.month() as i32);
+  if end.day() < start.day() {
+    months = months.saturating_sub(1);
+  }
+  months.max(0) as u32
+}
+
+fn datedif_year_days(start: NaiveDate, end: NaiveDate) -> Option<u32> {
+  let mut anchor = date_with_clamped_day(end.year(), start.month(), start.day())?;
+  if anchor > end {
+    anchor = date_with_clamped_day(end.year().saturating_sub(1), start.month(), start.day())?;
+  }
+  let days = end.signed_duration_since(anchor).num_days();
+  Some(days.max(0) as u32)
+}
+
+fn datedif_month_days(start: NaiveDate, end: NaiveDate) -> Option<u32> {
+  if end.day() >= start.day() {
+    return Some(end.day() - start.day());
+  }
+  let (prev_year, prev_month) = shift_year_month(end.year(), end.month(), -1)?;
+  let previous_month_end = date_with_clamped_day(prev_year, prev_month, 31)?;
+  Some(end.day() + previous_month_end.day() - start.day())
+}
+
+fn date_with_clamped_day(year: i32, month: u32, day: u32) -> Option<NaiveDate> {
+  if !(1..=12).contains(&month) {
+    return None;
+  }
+  let month_start = NaiveDate::from_ymd_opt(year, month, 1)?;
+  let (next_year, next_month) = shift_year_month(year, month, 1)?;
+  let next_month_start = NaiveDate::from_ymd_opt(next_year, next_month, 1)?;
+  let month_end = next_month_start - Duration::days(1);
+  let clamped_day = day.min(month_end.day()).max(month_start.day());
+  NaiveDate::from_ymd_opt(year, month, clamped_day)
 }
 
 fn excel_serial_origin() -> Option<NaiveDate> {
@@ -5660,12 +5738,48 @@ mod tests {
         value: None,
         formula: Some(r#"=TEXTJOIN(":",FALSE,A1:A3)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 222,
+        value: None,
+        formula: Some(r#"=DATEDIF("2024-01-31","2024-03-15","D")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 223,
+        value: None,
+        formula: Some(r#"=DATEDIF("2024-01-31","2024-03-15","M")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 224,
+        value: None,
+        formula: Some(r#"=DATEDIF("2024-01-31","2024-03-15","Y")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 225,
+        value: None,
+        formula: Some(r#"=DATEDIF("2024-01-31","2024-03-15","YM")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 226,
+        value: None,
+        formula: Some(r#"=DATEDIF("2024-01-31","2024-03-15","YD")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 227,
+        value: None,
+        formula: Some(r#"=DATEDIF("2024-01-31","2024-03-15","MD")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 219);
+    assert_eq!(updated_cells, 225);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5679,7 +5793,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 221,
+        end_col: 227,
       },
     )
     .expect("cells should be fetched");
@@ -6501,6 +6615,36 @@ mod tests {
       by_position(1, 221).evaluated_value.as_deref(),
       Some("120:80:"),
       "textjoin should keep blanks when ignore_empty is false",
+    );
+    assert_eq!(
+      by_position(1, 222).evaluated_value.as_deref(),
+      Some("44"),
+      "datedif D should return day difference",
+    );
+    assert_eq!(
+      by_position(1, 223).evaluated_value.as_deref(),
+      Some("1"),
+      "datedif M should return complete month difference",
+    );
+    assert_eq!(
+      by_position(1, 224).evaluated_value.as_deref(),
+      Some("0"),
+      "datedif Y should return complete year difference",
+    );
+    assert_eq!(
+      by_position(1, 225).evaluated_value.as_deref(),
+      Some("1"),
+      "datedif YM should return complete months excluding years",
+    );
+    assert_eq!(
+      by_position(1, 226).evaluated_value.as_deref(),
+      Some("44"),
+      "datedif YD should return day difference excluding years",
+    );
+    assert_eq!(
+      by_position(1, 227).evaluated_value.as_deref(),
+      Some("13"),
+      "datedif MD should return day difference excluding months/years",
     );
   }
 
@@ -8041,6 +8185,36 @@ mod tests {
       vec![
         r#"=DATEVALUE("not-a-date")"#.to_string(),
         r#"=TIMEVALUE("bad-time")"#.to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_datedif_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some(r#"=DATEDIF("2024-03-15","2024-01-31","D")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(r#"=DATEDIF("2024-01-31","2024-03-15","BAD")"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        r#"=DATEDIF("2024-03-15","2024-01-31","D")"#.to_string(),
+        r#"=DATEDIF("2024-01-31","2024-03-15","BAD")"#.to_string(),
       ],
     );
   }

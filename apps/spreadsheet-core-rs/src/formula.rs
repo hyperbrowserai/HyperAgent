@@ -1115,6 +1115,14 @@ pub fn parse_timevalue_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_datedif_formula(formula: &str) -> Option<(String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DATEDIF" && args.len() == 3 {
+    return Some((args[0].clone(), args[1].clone(), args[2].clone()));
+  }
+  None
+}
+
 pub fn parse_year_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "YEAR" && args.len() == 1 {
@@ -1830,7 +1838,7 @@ mod tests {
     parse_abs_formula, parse_concat_formula, parse_textjoin_formula,
     parse_date_formula, parse_edate_formula,
     parse_eomonth_formula, parse_days_formula, parse_datevalue_formula,
-    parse_timevalue_formula, parse_day_formula,
+    parse_timevalue_formula, parse_datedif_formula, parse_day_formula,
     parse_ceiling_formula, parse_ceiling_math_formula, parse_floor_formula,
     parse_floor_math_formula,
     parse_exact_formula,
@@ -2324,6 +2332,12 @@ mod tests {
     assert_eq!(
       parse_timevalue_formula(r#"=TIMEVALUE("13:45:30")"#).as_deref(),
       Some(r#""13:45:30""#),
+    );
+    let datedif_args = parse_datedif_formula(r#"=DATEDIF(A1,B1,"D")"#)
+      .expect("datedif should parse");
+    assert_eq!(
+      datedif_args,
+      ("A1".to_string(), "B1".to_string(), r#""D""#.to_string()),
     );
 
     assert_eq!(
