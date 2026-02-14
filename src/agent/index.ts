@@ -1235,7 +1235,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const hyperbrowserConfig = this.safeReadField(params, "hyperbrowserConfig");
     const localConfig = this.safeReadField(params, "localConfig");
 
-    // TODO(Phase4): This legacy provider branch will be replaced by connector configs.
+    // Provider selection currently supports Local/Hyperbrowser directly.
+    // Long-term connector config abstractions may replace this branch.
     this.browserProvider = (
       this.browserProviderType === "Hyperbrowser"
         ? new HyperbrowserProvider({

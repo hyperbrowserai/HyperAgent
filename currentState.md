@@ -156,6 +156,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.
 - Hardened CDP Playwright adapter debug-option reads (`sessionLogging`) so trap-prone debug-option lookups degrade to sanitized warnings and safe non-logging defaults.
+- Performed focused code-cleanup pass by replacing stale phase-specific TODO wording in constructor provider-selection comments with current-state guidance.
 - Hardened constructor LLM validation to reject malformed non-provider/non-client `llm` payloads instead of accepting invalid runtime objects, while preserving trap-safe config reads.
 - Added explicit constructor regression coverage for malformed partial `llm` objects to lock in fail-fast configuration behavior.
 - Hardened prompt final-goal rendering against malformed/trap-prone task inputs by normalizing non-string goals into bounded readable diagnostics instead of throwing.
