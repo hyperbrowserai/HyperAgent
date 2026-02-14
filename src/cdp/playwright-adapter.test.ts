@@ -74,6 +74,58 @@ describe("playwright adapter error formatting", () => {
     expect(detachWarning?.length ?? 0).toBeLessThan(700);
   });
 
+  it("surfaces sanitized diagnostics when session.detach getter traps", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const session = {
+      send: jest.fn().mockResolvedValue({}),
+      on: jest.fn(),
+      off: jest.fn(),
+      get detach() {
+        throw new Error(`detach getter trap\u0000\n${"x".repeat(10_000)}`);
+      },
+    } as unknown as PlaywrightSession;
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(session),
+      }),
+      once: jest.fn(),
+    } as unknown as Page;
+
+    await getCDPClientForPage(page);
+    await disposeCDPClientForPage(page);
+
+    const detachWarning = warnSpy.mock.calls
+      .map((call) => String(call[0]))
+      .find((line) => line.includes("Failed to detach session"));
+    expect(detachWarning).toBeDefined();
+    expect(detachWarning).toContain("Failed to read session.detach");
+    expect(detachWarning).toContain("[truncated");
+    expect(detachWarning).not.toContain("\u0000");
+    expect(detachWarning).not.toContain("\n");
+  });
+
+  it("surfaces explicit diagnostics when session.detach is unavailable", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const session = {
+      send: jest.fn().mockResolvedValue({}),
+      on: jest.fn(),
+      off: jest.fn(),
+    } as unknown as PlaywrightSession;
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(session),
+      }),
+      once: jest.fn(),
+    } as unknown as Page;
+
+    await getCDPClientForPage(page);
+    await disposeCDPClientForPage(page);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[CDP][PlaywrightAdapter] Failed to detach session: [CDP][PlaywrightAdapter] session.detach is unavailable"
+    );
+  });
+
   it("continues disposing sessions when debug-options lookup traps", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     const session = {

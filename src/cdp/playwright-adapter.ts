@@ -167,7 +167,24 @@ class PlaywrightSessionAdapter implements CDPSession {
 
   async detach(): Promise<void> {
     try {
-      await this.session.detach();
+      let detachMethod: unknown;
+      try {
+        detachMethod = (this.session as PlaywrightSession & { detach?: unknown })
+          .detach;
+      } catch (error) {
+        throw new Error(
+          `[CDP][PlaywrightAdapter] Failed to read session.detach: ${formatPlaywrightAdapterDiagnostic(
+            error
+          )}`
+        );
+      }
+      if (typeof detachMethod !== "function") {
+        throw new Error("[CDP][PlaywrightAdapter] session.detach is unavailable");
+      }
+
+      await (
+        detachMethod as (this: PlaywrightSession) => Promise<unknown>
+      ).call(this.session);
     } catch (error) {
       console.warn(
         `[CDP][PlaywrightAdapter] Failed to detach session: ${formatPlaywrightAdapterDiagnostic(
