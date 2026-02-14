@@ -3613,6 +3613,11 @@ mod tests {
           <= source_import_result.formula_cells_imported,
         "fixture {fixture_file_name} replay normalized formula count should remain bounded by source imported formulas",
       );
+      assert!(
+        replay_import_result.formula_cells_normalized
+          <= source_import_result.formula_cells_normalized,
+        "fixture {fixture_file_name} replay import should not require more compatibility normalization than source import",
+      );
       let replay_event = timeout(Duration::from_secs(1), replay_events.recv())
         .await
         .expect("replay import event should arrive")
