@@ -200,6 +200,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "CODE",
   "UNICHAR",
   "UNICODE",
+  "ROMAN",
+  "ARABIC",
   "SEARCH",
   "FIND",
   "UPPER",

@@ -962,6 +962,22 @@ pub fn parse_unicode_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_roman_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "ROMAN" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_arabic_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ARABIC" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_search_formula(
   formula: &str,
 ) -> Option<(String, String, Option<String>)> {
@@ -1731,6 +1747,7 @@ mod tests {
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
+    parse_roman_formula, parse_arabic_formula,
     parse_cell_address,
     parse_mod_formula, parse_quotient_formula, parse_mround_formula,
     parse_sign_formula,
@@ -2115,6 +2132,13 @@ mod tests {
     assert_eq!(
       parse_unicode_formula(r#"=UNICODE("⚡")"#).as_deref(),
       Some(r#""⚡""#),
+    );
+    let roman_args = parse_roman_formula("=ROMAN(1999,0)").expect("roman should parse");
+    assert_eq!(roman_args.0, "1999");
+    assert_eq!(roman_args.1.as_deref(), Some("0"));
+    assert_eq!(
+      parse_arabic_formula(r#"=ARABIC("MCMXCIX")"#).as_deref(),
+      Some(r#""MCMXCIX""#),
     );
 
     let search_args = parse_search_formula(r#"=SEARCH("sheet","spreadsheet",2)"#)

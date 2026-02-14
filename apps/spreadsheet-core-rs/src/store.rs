@@ -54,6 +54,7 @@ use crate::{
     parse_find_formula,
     parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
+    parse_roman_formula, parse_arabic_formula,
     parse_even_formula, parse_odd_formula,
     parse_single_ref_formula,
     parse_xor_formula,
@@ -1490,6 +1491,31 @@ fn evaluate_formula(
       return Ok(None);
     };
     return Ok(Some((first_char as u32).to_string()));
+  }
+
+  if let Some((roman_number_arg, roman_form_arg)) = parse_roman_formula(formula) {
+    if let Some(form_arg) = roman_form_arg {
+      let form = parse_required_integer(connection, sheet, &form_arg)?;
+      if form != 0 {
+        return Ok(None);
+      }
+    }
+    let value = parse_required_integer(connection, sheet, &roman_number_arg)?;
+    if !(1..=3999).contains(&value) {
+      return Ok(None);
+    }
+    let Some(numeral) = int_to_roman(value as u32) else {
+      return Ok(None);
+    };
+    return Ok(Some(numeral));
+  }
+
+  if let Some(arabic_arg) = parse_arabic_formula(formula) {
+    let value = resolve_scalar_operand(connection, sheet, &arabic_arg)?;
+    let Some(parsed) = roman_to_int(&value) else {
+      return Ok(None);
+    };
+    return Ok(Some(parsed.to_string()));
   }
 
   if parse_pi_formula(formula).is_some() {
@@ -3348,6 +3374,86 @@ fn gcd_u64(mut left: u64, mut right: u64) -> u64 {
   left
 }
 
+fn int_to_roman(value: u32) -> Option<String> {
+  if !(1..=3999).contains(&value) {
+    return None;
+  }
+
+  let mut remaining = value;
+  let mut output = String::new();
+  let symbols: [(u32, &str); 13] = [
+    (1000, "M"),
+    (900, "CM"),
+    (500, "D"),
+    (400, "CD"),
+    (100, "C"),
+    (90, "XC"),
+    (50, "L"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
+  ];
+
+  for (magnitude, symbol) in symbols {
+    while remaining >= magnitude {
+      output.push_str(symbol);
+      remaining -= magnitude;
+    }
+  }
+
+  Some(output)
+}
+
+fn roman_to_int(value: &str) -> Option<u32> {
+  let trimmed = value.trim().to_uppercase();
+  if trimmed.is_empty() {
+    return None;
+  }
+  let bytes = trimmed.as_bytes();
+  let mut index = 0usize;
+  let mut total: u32 = 0;
+
+  while index < bytes.len() {
+    let current = roman_char_value(bytes[index] as char)?;
+    if index + 1 < bytes.len() {
+      let next = roman_char_value(bytes[index + 1] as char)?;
+      if current < next {
+        total = total.checked_add(next - current)?;
+        index += 2;
+        continue;
+      }
+    }
+    total = total.checked_add(current)?;
+    index += 1;
+  }
+
+  if !(1..=3999).contains(&total) {
+    return None;
+  }
+
+  let canonical = int_to_roman(total)?;
+  if canonical == trimmed {
+    return Some(total);
+  }
+  None
+}
+
+fn roman_char_value(value: char) -> Option<u32> {
+  match value {
+    'I' => Some(1),
+    'V' => Some(5),
+    'X' => Some(10),
+    'L' => Some(50),
+    'C' => Some(100),
+    'D' => Some(500),
+    'M' => Some(1000),
+    _ => None,
+  }
+}
+
 fn lcm_u64(left: u64, right: u64) -> Result<u64, ApiError> {
   if left == 0 || right == 0 {
     return Ok(0);
@@ -5198,12 +5304,24 @@ mod tests {
         value: None,
         formula: Some("=ACSCH(2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 207,
+        value: None,
+        formula: Some("=ROMAN(1999)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 208,
+        value: None,
+        formula: Some("=ARABIC(\"MCMXCIX\")".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 204);
+    assert_eq!(updated_cells, 206);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5217,7 +5335,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 206,
+        end_col: 208,
       },
     )
     .expect("cells should be fetched");
@@ -5959,6 +6077,16 @@ mod tests {
     assert!(
       (acsch - 0.481_211_825_059_603_47).abs() < 1e-9,
       "acsch should be 0.481211..., got {acsch}",
+    );
+    assert_eq!(
+      by_position(1, 207).evaluated_value.as_deref(),
+      Some("MCMXCIX"),
+      "roman should evaluate to canonical numeral",
+    );
+    assert_eq!(
+      by_position(1, 208).evaluated_value.as_deref(),
+      Some("1999"),
+      "arabic should evaluate to integer text",
     );
   }
 
@@ -7396,6 +7524,43 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec![r#"=UNICODE("")"#.to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_roman_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=ROMAN(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=ROMAN(10,1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some(r#"=ARABIC("IC")"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=ROMAN(0)".to_string(),
+        "=ROMAN(10,1)".to_string(),
+        r#"=ARABIC("IC")"#.to_string(),
+      ],
+    );
   }
 
   #[test]
