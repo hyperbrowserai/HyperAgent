@@ -72,7 +72,16 @@ describe("HyperAgent constructor and task controls", () => {
       },
       {
         get: (target, prop: string | symbol, receiver) => {
-          if (prop === "cdpActions" || prop === "filterAdTrackingFrames") {
+          if (
+            prop === "cdpActions" ||
+            prop === "filterAdTrackingFrames" ||
+            prop === "debug" ||
+            prop === "debugOptions" ||
+            prop === "browserProvider" ||
+            prop === "customActions" ||
+            prop === "hyperbrowserConfig" ||
+            prop === "localConfig"
+          ) {
             throw new Error("constructor option trap");
           }
           return Reflect.get(target, prop, receiver);
@@ -88,8 +97,13 @@ describe("HyperAgent constructor and task controls", () => {
       cdpActions?: boolean;
       filterAdTrackingFrames?: boolean;
     };
+    const internalAgent = agent as unknown as {
+      browserProviderType?: string;
+    };
     expect(runtimeCtx?.cdpActions).toBe(true);
     expect(runtimeCtx?.filterAdTrackingFrames).toBe(true);
+    expect(internalAgent.browserProviderType).toBe("Local");
+    expect(getDebugOptions().enabled).toBe(false);
   });
 
   it("throws synchronously for reserved custom action names", () => {

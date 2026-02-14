@@ -1139,7 +1139,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   constructor(params: HyperAgentConfig<T> = {}) {
-    if (!params.llm) {
+    const rawLLM = this.safeReadField(params, "llm");
+    if (!rawLLM) {
       if (process.env.OPENAI_API_KEY) {
         this.llm = createLLMClient({
           provider: "openai",
@@ -1149,30 +1150,57 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       } else {
         throw new HyperagentError("No LLM provider provided", 400);
       }
-    } else if (typeof params.llm === "object" && "provider" in params.llm) {
+    } else if (
+      typeof rawLLM === "object" &&
+      typeof this.safeReadField(rawLLM, "provider") === "string"
+    ) {
       // It's an LLMConfig
-      this.llm = createLLMClient(params.llm);
+      this.llm = createLLMClient(
+        rawLLM as Parameters<typeof createLLMClient>[0]
+      );
     } else {
       // It's already a HyperAgentLLM instance
-      this.llm = params.llm;
+      this.llm = rawLLM as HyperAgentLLM;
     }
-    this.browserProviderType = (params.browserProvider ?? "Local") as T;
-    this.debug = params.debug ?? false;
+    const browserProvider =
+      this.safeReadField(params, "browserProvider") === "Hyperbrowser"
+        ? "Hyperbrowser"
+        : "Local";
+    this.browserProviderType = browserProvider as T;
+    this.debug = this.safeReadField(params, "debug") === true;
 
-    setDebugOptions(params.debugOptions, this.debug);
+    const debugOptions = this.safeReadField(params, "debugOptions");
+    setDebugOptions(
+      debugOptions && typeof debugOptions === "object"
+        ? (debugOptions as Parameters<typeof setDebugOptions>[0])
+        : undefined,
+      this.debug
+    );
+
+    const hyperbrowserConfig = this.safeReadField(params, "hyperbrowserConfig");
+    const localConfig = this.safeReadField(params, "localConfig");
 
     // TODO(Phase4): This legacy provider branch will be replaced by connector configs.
     this.browserProvider = (
       this.browserProviderType === "Hyperbrowser"
         ? new HyperbrowserProvider({
-            ...(params.hyperbrowserConfig ?? {}),
-            debug: params.debug,
+            ...(hyperbrowserConfig && typeof hyperbrowserConfig === "object"
+              ? hyperbrowserConfig
+              : {}),
+            debug: this.debug,
           })
-        : new LocalBrowserProvider(params.localConfig)
+        : new LocalBrowserProvider(
+            localConfig && typeof localConfig === "object"
+              ? (localConfig as ConstructorParameters<
+                  typeof LocalBrowserProvider
+                >[0])
+              : undefined
+          )
     ) as T extends "Hyperbrowser" ? HyperbrowserProvider : LocalBrowserProvider;
 
-    if (params.customActions) {
-      params.customActions.forEach((action) => {
+    const customActions = this.safeReadField(params, "customActions");
+    if (Array.isArray(customActions)) {
+      customActions.forEach((action) => {
         this.registerAction(action);
       });
     }
