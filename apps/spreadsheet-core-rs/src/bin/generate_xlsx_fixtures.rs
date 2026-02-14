@@ -293,6 +293,13 @@ mod tests {
   }
 
   #[test]
+  fn should_verify_committed_fixture_corpus_from_default_dir() {
+    let verified_files = verify_fixture_corpus(&default_fixture_dir())
+      .expect("committed fixture corpus should verify");
+    assert_eq!(verified_files.len(), 8);
+  }
+
+  #[test]
   fn should_fail_verify_when_fixture_file_is_missing() {
     let output_dir = tempdir()
       .expect("temp dir should create")
