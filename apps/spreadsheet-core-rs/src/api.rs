@@ -561,6 +561,7 @@ async fn import_bytes_into_workbook(
         "formula_cells_imported": import_result.formula_cells_imported,
         "formula_cells_with_cached_values": import_result.formula_cells_with_cached_values,
         "formula_cells_without_cached_values": import_result.formula_cells_without_cached_values,
+        "formula_cells_normalized": import_result.formula_cells_normalized,
         "warnings": import_result.warnings,
       }),
     )
@@ -572,6 +573,7 @@ async fn import_bytes_into_workbook(
     formula_cells_imported: import_result.formula_cells_imported,
     formula_cells_with_cached_values: import_result.formula_cells_with_cached_values,
     formula_cells_without_cached_values: import_result.formula_cells_without_cached_values,
+    formula_cells_normalized: import_result.formula_cells_normalized,
     warnings: import_result.warnings,
   })
 }
@@ -608,6 +610,7 @@ async fn import_workbook(
       "formula_cells_imported": import_result.formula_cells_imported,
       "formula_cells_with_cached_values": import_result.formula_cells_with_cached_values,
       "formula_cells_without_cached_values": import_result.formula_cells_without_cached_values,
+      "formula_cells_normalized": import_result.formula_cells_normalized,
       "warnings": import_result.warnings
     }
   })))
@@ -829,6 +832,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "formula_cells_imported": "number of imported cells carrying formulas",
       "formula_cells_with_cached_values": "formula cells with cached scalar values",
       "formula_cells_without_cached_values": "formula cells without cached scalar values",
+      "formula_cells_normalized": "formula cells normalized during compatibility import processing",
       "warnings": "array of compatibility warning strings"
     },
     "formula_capabilities": {
@@ -1381,6 +1385,7 @@ async fn get_agent_schema(
         "formula_cells_imported": "number of imported cells carrying formulas",
         "formula_cells_with_cached_values": "formula cells with cached scalar values",
         "formula_cells_without_cached_values": "formula cells without cached scalar values",
+        "formula_cells_normalized": "formula cells normalized during compatibility import processing",
         "warnings": "array of compatibility warning strings"
       }
     },
@@ -1398,6 +1403,7 @@ async fn get_agent_schema(
         "formula_cells_imported": "number of imported cells carrying formulas",
         "formula_cells_with_cached_values": "formula cells with cached scalar values",
         "formula_cells_without_cached_values": "formula cells without cached scalar values",
+        "formula_cells_normalized": "formula cells normalized during compatibility import processing",
         "warnings": "array of compatibility warning strings"
       }
     },
@@ -1421,6 +1427,7 @@ async fn get_agent_schema(
           "formula_cells_imported": "number of imported cells carrying formulas",
           "formula_cells_with_cached_values": "formula cells with cached scalar values",
           "formula_cells_without_cached_values": "formula cells without cached scalar values",
+          "formula_cells_normalized": "formula cells normalized during compatibility import processing",
           "warnings": "array of compatibility warning strings"
         }
       },
@@ -3103,6 +3110,10 @@ mod tests {
       import_result.formula_cells_imported > 0,
       "fixture should include formula cells",
     );
+    assert!(
+      import_result.formula_cells_normalized <= import_result.formula_cells_imported,
+      "normalized formula count should not exceed imported formula count",
+    );
 
     let refreshed = state
       .get_workbook(workbook.id)
@@ -3147,6 +3158,13 @@ mod tests {
         .get("formula_cells_without_cached_values")
         .and_then(serde_json::Value::as_u64),
       Some(import_result.formula_cells_without_cached_values as u64),
+    );
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_normalized")
+        .and_then(serde_json::Value::as_u64),
+      Some(import_result.formula_cells_normalized as u64),
     );
   }
 
@@ -5109,6 +5127,14 @@ mod tests {
     );
     assert_eq!(
       schema
+        .get("workbook_import_response_shape")
+        .and_then(|value| value.get("import"))
+        .and_then(|value| value.get("formula_cells_normalized"))
+        .and_then(serde_json::Value::as_str),
+      Some("formula cells normalized during compatibility import processing"),
+    );
+    assert_eq!(
+      schema
         .get("workbook_export_response_headers_shape")
         .and_then(|value| value.get("x-export-meta"))
         .and_then(serde_json::Value::as_str),
@@ -5536,6 +5562,13 @@ mod tests {
         .and_then(|value| value.get("formula_cells_without_cached_values"))
         .and_then(serde_json::Value::as_str),
       Some("formula cells without cached scalar values"),
+    );
+    assert_eq!(
+      schema
+        .get("import_response_shape")
+        .and_then(|value| value.get("formula_cells_normalized"))
+        .and_then(serde_json::Value::as_str),
+      Some("formula cells normalized during compatibility import processing"),
     );
     assert_eq!(
       schema

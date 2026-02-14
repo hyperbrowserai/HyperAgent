@@ -74,6 +74,7 @@ Server defaults to `http://localhost:8787`.
 - `import.formula_cells_imported`
 - `import.formula_cells_with_cached_values`
 - `import.formula_cells_without_cached_values`
+- `import.formula_cells_normalized`
 - `import.warnings`
 
 Import behavior notes:

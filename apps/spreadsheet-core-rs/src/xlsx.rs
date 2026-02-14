@@ -16,6 +16,7 @@ pub struct ImportResult {
   pub formula_cells_imported: usize,
   pub formula_cells_with_cached_values: usize,
   pub formula_cells_without_cached_values: usize,
+  pub formula_cells_normalized: usize,
   pub warnings: Vec<String>,
 }
 
@@ -121,6 +122,7 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
     formula_cells_imported,
     formula_cells_with_cached_values,
     formula_cells_without_cached_values,
+    formula_cells_normalized: normalized_formula_cells,
     warnings,
   })
 }
@@ -801,6 +803,10 @@ mod tests {
         + import_result.formula_cells_without_cached_values,
       "formula cached/non-cached counts should add up",
     );
+    assert!(
+      import_result.formula_cells_normalized <= import_result.formula_cells_imported,
+      "normalized formula count should not exceed imported formula count",
+    );
     assert_eq!(
       import_result.sheet_names,
       vec!["Inputs".to_string(), "Notes".to_string()],
@@ -973,6 +979,7 @@ mod tests {
     assert_eq!(import_result.sheets_imported, 1);
     assert_eq!(import_result.cells_imported, 3);
     assert_eq!(import_result.formula_cells_imported, 1);
+    assert_eq!(import_result.formula_cells_normalized, 1);
 
     let (_, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("offset fixture formulas should recalculate");
@@ -1050,6 +1057,10 @@ mod tests {
     assert_eq!(
       import_result.formula_cells_imported, 6,
       "formula fixture should import all formula cells",
+    );
+    assert!(
+      import_result.formula_cells_normalized >= 1,
+      "formula matrix fixture should report compatibility normalization for modern function tokens",
     );
 
     let (_updated_cells, unsupported_formulas) = recalculate_formulas(&source_db_path)
@@ -1211,6 +1222,7 @@ mod tests {
     assert_eq!(import_result.sheets_imported, 1);
     assert_eq!(import_result.formula_cells_imported, 1);
     assert_eq!(import_result.formula_cells_with_cached_values, 1);
+    assert_eq!(import_result.formula_cells_normalized, 1);
 
     let (_, unsupported_formulas) =
       recalculate_formulas(&source_db_path).expect("recalculation should complete");
@@ -1303,6 +1315,7 @@ mod tests {
       import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 1);
     assert_eq!(import_result.formula_cells_imported, 1);
+    assert_eq!(import_result.formula_cells_normalized, 1);
     assert!(
       import_result
         .warnings
@@ -1356,6 +1369,7 @@ mod tests {
       import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 1);
     assert_eq!(import_result.formula_cells_imported, 1);
+    assert_eq!(import_result.formula_cells_normalized, 1);
 
     let (_, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should complete");
