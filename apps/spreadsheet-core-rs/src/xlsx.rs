@@ -477,7 +477,7 @@ mod tests {
   };
   use chrono::Utc;
   use rust_xlsxwriter::{Formula, Workbook};
-  use std::collections::HashMap;
+  use std::{collections::HashMap, fs, path::PathBuf};
   use tempfile::tempdir;
 
   fn fixture_workbook_bytes() -> Vec<u8> {
@@ -654,6 +654,14 @@ mod tests {
     workbook
       .save_to_buffer()
       .expect("normalized prefix/operator fixture should serialize")
+  }
+
+  fn file_fixture_bytes(file_name: &str) -> Vec<u8> {
+    let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("fixtures")
+      .join(file_name);
+    fs::read(&fixture_path)
+      .unwrap_or_else(|error| panic!("failed to read fixture {}: {error}", fixture_path.display()))
   }
 
   fn comprehensive_normalization_fixture_workbook_bytes() -> Vec<u8> {
@@ -1634,6 +1642,90 @@ mod tests {
         .get("B3")
         .and_then(|cell| cell.evaluated_value.as_deref()),
       Some(r#"_xlfn.literal "@_xlws.keep""#),
+    );
+  }
+
+  #[tokio::test]
+  async fn should_import_generated_file_fixture_corpus_workbooks() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state = AppState::new(temp_dir.path().join("file-fixture-corpus"))
+      .expect("state should initialize");
+
+    let baseline_workbook = state
+      .create_workbook(Some("file-fixture-baseline".to_string()))
+      .await
+      .expect("baseline workbook should be created");
+    let baseline_db_path = state
+      .db_path(baseline_workbook.id)
+      .await
+      .expect("baseline db path should be available");
+    let baseline_result = import_xlsx(
+      &baseline_db_path,
+      &file_fixture_bytes("compat_baseline.xlsx"),
+    )
+    .expect("baseline file fixture should import");
+    assert_eq!(baseline_result.formula_cells_imported, 1);
+    assert_eq!(baseline_result.formula_cells_normalized, 0);
+    assert!(
+      !baseline_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("formula(s) were normalized")),
+      "canonical file fixture should not emit normalization warning",
+    );
+
+    let normalization_workbook = state
+      .create_workbook(Some("file-fixture-normalization".to_string()))
+      .await
+      .expect("normalization workbook should be created");
+    let normalization_db_path = state
+      .db_path(normalization_workbook.id)
+      .await
+      .expect("normalization db path should be available");
+    let normalization_result = import_xlsx(
+      &normalization_db_path,
+      &file_fixture_bytes("compat_normalization.xlsx"),
+    )
+    .expect("normalization file fixture should import");
+    assert_eq!(normalization_result.formula_cells_imported, 3);
+    assert_eq!(normalization_result.formula_cells_normalized, 3);
+    assert!(
+      normalization_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("3 formula(s) were normalized")),
+      "normalization file fixture should emit normalization warning telemetry",
+    );
+
+    let (_, unsupported_formulas) = recalculate_formulas(&normalization_db_path)
+      .expect("normalization file fixture recalc should succeed");
+    assert!(
+      unsupported_formulas.is_empty(),
+      "normalization file fixture formulas should remain supported: {:?}",
+      unsupported_formulas,
+    );
+
+    let normalization_snapshot =
+      load_sheet_snapshot(&normalization_db_path, "Comprehensive")
+        .expect("normalization sheet snapshot should load");
+    let by_address = snapshot_map(&normalization_snapshot);
+    assert_eq!(
+      by_address
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=SUM(A1:A2)"),
+    );
+    assert_eq!(
+      by_address
+        .get("B2")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=MIN(A1:A2)"),
+    );
+    assert_eq!(
+      by_address
+        .get("B3")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some(r#"=IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#),
     );
   }
 }

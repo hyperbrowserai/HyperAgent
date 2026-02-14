@@ -306,6 +306,12 @@ curl -X POST "http://localhost:8787/v1/agent/wizard/run-json" \
 cargo test
 ```
 
+Generate file-based XLSX compatibility fixtures (stored under `fixtures/`):
+
+```bash
+cargo run --bin generate_xlsx_fixtures
+```
+
 Performance baseline probe (manual, ignored by default):
 
 ```bash
@@ -326,4 +332,5 @@ XLSX compatibility regression coverage includes:
 - unsupported formula preservation fixtures (normalized text retained + surfaced via `unsupported_formulas`),
 - non-`A1` used-range import fixtures (coordinate offset preservation),
 - formula-token normalization fixtures (`_xlfn.`/`_xlws.`/`_xlpm.`, implicit `@`, unary `+`, and quoted-literal edge cases),
-- comprehensive normalization roundtrip fixtures validating telemetry + canonical replay after export/re-import.
+- comprehensive normalization roundtrip fixtures validating telemetry + canonical replay after export/re-import,
+- file-based fixture corpus regression coverage (`fixtures/compat_baseline.xlsx`, `fixtures/compat_normalization.xlsx`) to validate import behavior against generated workbook artifacts.
