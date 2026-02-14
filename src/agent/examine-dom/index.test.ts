@@ -107,6 +107,63 @@ describe("examineDom", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("sanitizes and truncates oversized examineDom diagnostics", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const invokeStructured = jest
+        .fn()
+        .mockRejectedValue(new Error(`llm\u0000\n${"x".repeat(10_000)}`));
+
+      const result = await examineDom(
+        "find element",
+        createContext(),
+        createLLM(invokeStructured)
+      );
+
+      expect(result.elements).toEqual([]);
+      const diagnostic = String(errorSpy.mock.calls[0]?.[0] ?? "");
+      expect(diagnostic).toContain("[truncated");
+      expect(diagnostic).not.toContain("\u0000");
+      expect(diagnostic).not.toContain("\n");
+      expect(diagnostic.length).toBeLessThan(700);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("sanitizes and truncates missing-element warning identifiers", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const invokeStructured = jest.fn().mockResolvedValue({
+        rawText: "{}",
+        parsed: {
+          elements: [
+            {
+              elementId: `missing\u0000\n${"x".repeat(400)}`,
+              confidence: 0.99,
+              reason: "nope",
+            },
+          ],
+        },
+      });
+
+      const result = await examineDom(
+        "click submit",
+        createContext(),
+        createLLM(invokeStructured)
+      );
+
+      expect(result.elements).toEqual([]);
+      const warning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+      expect(warning.length).toBeLessThan(500);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
 
 describe("extractValueFromInstruction", () => {

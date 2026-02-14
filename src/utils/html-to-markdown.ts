@@ -34,6 +34,27 @@ turndownService.addRule("inlineLink", {
 });
 // turndownService.use(gfm);
 
+const MAX_HTML_TO_MARKDOWN_DIAGNOSTIC_CHARS = 400;
+
+function formatHtmlToMarkdownDiagnostic(value: unknown): string {
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_HTML_TO_MARKDOWN_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omittedChars = fallback.length - MAX_HTML_TO_MARKDOWN_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_HTML_TO_MARKDOWN_DIAGNOSTIC_CHARS
+  )}... [truncated ${omittedChars} chars]`;
+}
+
 const processMultiLineLinks = (markdownContent: string): string => {
   let insideLinkContent = false;
   let newMarkdownContent = "";
@@ -79,7 +100,9 @@ export async function parseMarkdown(
     return markdownContent;
   } catch (error) {
     console.error(
-      `Error converting HTML to Markdown: ${formatUnknownError(error)}`
+      `Error converting HTML to Markdown: ${formatHtmlToMarkdownDiagnostic(
+        error
+      )}`
     );
     return ""; // Optionally return an empty string or handle the error as needed
   }

@@ -14,6 +14,47 @@ import {
 import { ExamineDomResultsSchema, ExamineDomResultsType } from "./schema";
 import { formatUnknownError } from "@/utils";
 
+const MAX_EXAMINE_DOM_DIAGNOSTIC_CHARS = 400;
+const MAX_EXAMINE_DOM_IDENTIFIER_CHARS = 128;
+
+function sanitizeExamineDomText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateExamineDomText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omittedChars = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omittedChars} chars]`;
+}
+
+function formatExamineDomDiagnostic(value: unknown): string {
+  const normalized = sanitizeExamineDomText(formatUnknownError(value));
+  if (normalized.length === 0) {
+    return "unknown error";
+  }
+  return truncateExamineDomText(normalized, MAX_EXAMINE_DOM_DIAGNOSTIC_CHARS);
+}
+
+function formatExamineDomIdentifier(value: unknown): string {
+  if (typeof value !== "string") {
+    return "unknown";
+  }
+  const normalized = sanitizeExamineDomText(value);
+  if (normalized.length === 0) {
+    return "unknown";
+  }
+  return truncateExamineDomText(normalized, MAX_EXAMINE_DOM_IDENTIFIER_CHARS);
+}
+
 /**
  * Find elements in the accessibility tree that match the given instruction
  *
@@ -88,7 +129,9 @@ export async function examineDom(
 
       if (!existsInElements && !existsInXpathMap) {
         console.warn(
-          `[examineDom] Element ${result.elementId} not found in context, skipping`
+          `[examineDom] Element ${formatExamineDomIdentifier(
+            result.elementId
+          )} not found in context, skipping`
         );
         return false;
       }
@@ -99,7 +142,9 @@ export async function examineDom(
     return { elements: validatedResults, llmResponse };
   } catch (error) {
     console.error(
-      `[examineDom] Error finding elements: ${formatUnknownError(error)}`
+      `[examineDom] Error finding elements: ${formatExamineDomDiagnostic(
+        error
+      )}`
     );
     // Return empty result on error (graceful degradation)
     return {
