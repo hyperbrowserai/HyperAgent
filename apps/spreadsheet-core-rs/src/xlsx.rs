@@ -526,6 +526,10 @@ mod tests {
       Some(r#"="keep _xlfn. literal""#),
     );
     assert_eq!(
+      normalize_imported_formula(r#"="escaped ""_xlfn."" literal""#).as_deref(),
+      Some(r#"="escaped ""_xlfn."" literal""#),
+    );
+    assert_eq!(
       normalize_imported_formula(r#"=IF(A1=1,"_XLWS.keep",_xlfn.BITAND(6,3))"#).as_deref(),
       Some(r#"=IF(A1=1,"_XLWS.keep",BITAND(6,3))"#),
     );
@@ -544,6 +548,11 @@ mod tests {
     assert_eq!(
       normalize_imported_formula("=\"user@example.com\"").as_deref(),
       Some("=\"user@example.com\""),
+    );
+    assert_eq!(
+      normalize_imported_formula(r#"=IF(A1=1,"user@example.com",@_XLFN.BITOR(4,1))"#)
+        .as_deref(),
+      Some(r#"=IF(A1=1,"user@example.com",BITOR(4,1))"#),
     );
     assert_eq!(
       normalize_imported_formula("  SUM(A1:A3)  ").as_deref(),
