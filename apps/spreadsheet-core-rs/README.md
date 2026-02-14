@@ -253,6 +253,11 @@ curl -X POST "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agent/ops" \
         ]
       },
       {
+        "op_type": "duckdb_query",
+        "sql": "SELECT row_index, col_index, raw_value FROM cells WHERE sheet = '\''Data'\'' ORDER BY row_index, col_index",
+        "row_limit": 50
+      },
+      {
         "op_type": "export_workbook",
         "include_file_base64": false
       }
@@ -268,6 +273,11 @@ PREVIEW=$(curl -s -X POST "http://localhost:8787/v1/workbooks/<WORKBOOK_ID>/agen
   -d '{
     "operations": [
       { "op_type": "recalculate" },
+      {
+        "op_type": "duckdb_query",
+        "sql": "SELECT sheet, COUNT(*) AS populated_cells FROM cells GROUP BY sheet ORDER BY sheet",
+        "row_limit": 20
+      },
       { "op_type": "export_workbook", "include_file_base64": false }
     ]
   }')
