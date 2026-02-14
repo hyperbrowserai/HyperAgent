@@ -3495,6 +3495,64 @@ mod tests {
     }
 
   #[tokio::test]
+  async fn should_apply_default_duckdb_query_row_limit() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("duckdb-query-default-limit".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let query_response = duckdb_query(
+      State(state),
+      Path(workbook.id),
+      Json(QueryRequest {
+        sql: "SELECT CAST(i AS INTEGER) AS value FROM range(0, 205) AS t(i) ORDER BY value"
+          .to_string(),
+        row_limit: None,
+      }),
+    )
+    .await
+    .expect("query should succeed with default row limit")
+    .0;
+
+    assert_eq!(query_response.row_limit, 200);
+    assert_eq!(query_response.row_count, 200);
+    assert!(query_response.truncated);
+    assert_eq!(query_response.rows.len(), 200);
+  }
+
+  #[tokio::test]
+  async fn should_clamp_duckdb_query_row_limit_to_maximum() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("duckdb-query-max-limit".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let query_response = duckdb_query(
+      State(state),
+      Path(workbook.id),
+      Json(QueryRequest {
+        sql: "SELECT CAST(i AS INTEGER) AS value FROM range(0, 1205) AS t(i) ORDER BY value"
+          .to_string(),
+        row_limit: Some(5_000),
+      }),
+    )
+    .await
+    .expect("query should clamp oversized row limit")
+    .0;
+
+    assert_eq!(query_response.row_limit, 1_000);
+    assert_eq!(query_response.row_count, 1_000);
+    assert!(query_response.truncated);
+    assert_eq!(query_response.rows.len(), 1_000);
+  }
+
+  #[tokio::test]
   async fn should_reject_multi_statement_duckdb_query_sql() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =
