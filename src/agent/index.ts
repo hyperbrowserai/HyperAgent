@@ -226,6 +226,22 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     );
   }
 
+  private isHyperAgentLLMClient(value: unknown): value is HyperAgentLLM {
+    const invoke = this.safeReadField(value, "invoke");
+    const invokeStructured = this.safeReadField(value, "invokeStructured");
+    const getProviderId = this.safeReadField(value, "getProviderId");
+    const getModelId = this.safeReadField(value, "getModelId");
+    const getCapabilities = this.safeReadField(value, "getCapabilities");
+
+    return (
+      typeof invoke === "function" &&
+      typeof invokeStructured === "function" &&
+      typeof getProviderId === "function" &&
+      typeof getModelId === "function" &&
+      typeof getCapabilities === "function"
+    );
+  }
+
   private resolveFilterAdTrackingFrames(value: unknown): boolean {
     if (typeof value === "boolean") {
       return value;
@@ -1192,9 +1208,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       this.llm = createLLMClient(
         rawLLM as Parameters<typeof createLLMClient>[0]
       );
-    } else {
+    } else if (this.isHyperAgentLLMClient(rawLLM)) {
       // It's already a HyperAgentLLM instance
-      this.llm = rawLLM as HyperAgentLLM;
+      this.llm = rawLLM;
+    } else {
+      throw new HyperagentError(
+        "Invalid llm configuration: expected provider config or HyperAgentLLM client",
+        400
+      );
     }
     const browserProvider =
       this.safeReadField(params, "browserProvider") === "Hyperbrowser"
