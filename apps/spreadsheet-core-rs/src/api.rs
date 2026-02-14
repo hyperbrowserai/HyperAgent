@@ -8828,6 +8828,24 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("agent_ops_cache_remove_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/remove"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_remove_by_prefix_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_remove_by_prefix_preview_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview"),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_cache_remove_stale_endpoint")
                 .and_then(serde_json::Value::as_str),
             Some("/v1/workbooks/{id}/agent/ops/cache/remove-stale"),
@@ -8852,6 +8870,13 @@ mod tests {
                 .and_then(|value| value.get("sort_by"))
                 .and_then(serde_json::Value::as_str),
             Some("optional string enum: count|recent|alpha|span (default count)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_prefixes_query_shape")
+                .and_then(|value| value.get("max_span_seconds"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional number > 0 (filter out prefixes with wider time spans; when combined with min_span_seconds must be >= min_span_seconds)"),
         );
         assert_eq!(
             schema
@@ -8901,6 +8926,17 @@ mod tests {
                 .and_then(|value| value.get("cutoff_timestamp"))
                 .and_then(serde_json::Value::as_str),
             Some("optional iso timestamp used for max_age_seconds filtering"),
+        );
+        let entries_item_cached_at_shape = schema
+            .get("agent_ops_cache_entries_response_shape")
+            .and_then(|value| value.get("entries"))
+            .and_then(serde_json::Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("cached_at"))
+            .and_then(serde_json::Value::as_str);
+        assert_eq!(
+            entries_item_cached_at_shape,
+            Some("iso timestamp when entry was cached"),
         );
         assert_eq!(
             schema
@@ -8965,6 +9001,14 @@ mod tests {
         assert!(
             cache_validation_error_codes.contains(&"INVALID_REQUEST_ID_PREFIX"),
             "wizard schema should advertise invalid request-id-prefix cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_PREFIX_SORT_BY"),
+            "wizard schema should advertise invalid prefix-sort cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_SPAN_RANGE"),
+            "wizard schema should advertise invalid span-range cache validation code",
         );
         assert!(
             cache_validation_error_codes.contains(&"CACHE_ENTRY_NOT_FOUND"),
