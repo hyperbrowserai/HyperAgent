@@ -17,6 +17,7 @@ use crate::{
     parse_covariance_formula, parse_correl_formula,
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
     parse_forecast_linear_formula, parse_steyx_formula,
+    parse_sumx_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -1012,6 +1013,37 @@ fn evaluate_formula(
       .sum::<f64>();
     let steyx = (residual_sum / (pairs.len() as f64 - 2.0)).sqrt();
     return Ok(Some(steyx.to_string()));
+  }
+
+  if let Some((function, left_start, left_end, right_start, right_end)) =
+    parse_sumx_formula(formula)
+  {
+    let Some(pairs) = collect_numeric_pairs_from_ranges(
+      connection,
+      sheet,
+      left_start,
+      left_end,
+      right_start,
+      right_end,
+    )? else {
+      return Ok(None);
+    };
+    if pairs.is_empty() {
+      return Ok(None);
+    }
+    let total = pairs.iter().fold(0.0f64, |acc, (left, right)| {
+      let term = match function.as_str() {
+        "SUMXMY2" => {
+          let delta = left - right;
+          delta * delta
+        }
+        "SUMX2MY2" => left.powi(2) - right.powi(2),
+        "SUMX2PY2" => left.powi(2) + right.powi(2),
+        _ => 0.0,
+      };
+      acc + term
+    });
+    return Ok(Some(total.to_string()));
   }
 
   if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
@@ -4613,12 +4645,30 @@ mod tests {
         value: None,
         formula: Some("=STEYX(U10:U12,T10:T12)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 179,
+        value: None,
+        formula: Some("=SUMXMY2(A1:A2,A4:A5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 180,
+        value: None,
+        formula: Some("=SUMX2MY2(A1:A2,A4:A5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 181,
+        value: None,
+        formula: Some("=SUMX2PY2(A1:A2,A4:A5)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 176);
+    assert_eq!(updated_cells, 179);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4632,7 +4682,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 178,
+        end_col: 181,
       },
     )
     .expect("cells should be fetched");
@@ -5187,6 +5237,36 @@ mod tests {
     assert!(
       (steyx - 0.408_248_290_463_863).abs() < 1e-9,
       "steyx should be sqrt(1/6), got {steyx}",
+    );
+    let sumxmy2 = by_position(1, 179)
+      .evaluated_value
+      .as_deref()
+      .expect("sumxmy2 should evaluate")
+      .parse::<f64>()
+      .expect("sumxmy2 should be numeric");
+    assert!(
+      (sumxmy2 - 1600.0).abs() < 1e-9,
+      "sumxmy2 should be 1600.0, got {sumxmy2}",
+    );
+    let sumx2my2 = by_position(1, 180)
+      .evaluated_value
+      .as_deref()
+      .expect("sumx2my2 should evaluate")
+      .parse::<f64>()
+      .expect("sumx2my2 should be numeric");
+    assert!(
+      (sumx2my2 - 4800.0).abs() < 1e-9,
+      "sumx2my2 should be 4800.0, got {sumx2my2}",
+    );
+    let sumx2py2 = by_position(1, 181)
+      .evaluated_value
+      .as_deref()
+      .expect("sumx2py2 should evaluate")
+      .parse::<f64>()
+      .expect("sumx2py2 should be numeric");
+    assert!(
+      (sumx2py2 - 36800.0).abs() < 1e-9,
+      "sumx2py2 should be 36800.0, got {sumx2py2}",
     );
   }
 
@@ -6558,6 +6638,67 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=SUMPRODUCT(A1:A2,B1:B3)".to_string()]
+    );
+  }
+
+  #[test]
+  fn should_leave_mismatched_sumx_ranges_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(10)),
+        formula: None,
+      },
+      CellMutation {
+        row: 3,
+        col: 2,
+        value: Some(json!(15)),
+        formula: None,
+      },
+      CellMutation {
+        row: 4,
+        col: 1,
+        value: None,
+        formula: Some("=SUMXMY2(A1:A2,B1:B3)".to_string()),
+      },
+      CellMutation {
+        row: 5,
+        col: 1,
+        value: None,
+        formula: Some("=SUMX2MY2(A1:A2,B1:B3)".to_string()),
+      },
+      CellMutation {
+        row: 6,
+        col: 1,
+        value: None,
+        formula: Some("=SUMX2PY2(A1:A2,B1:B3)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=SUMXMY2(A1:A2,B1:B3)".to_string(),
+        "=SUMX2MY2(A1:A2,B1:B3)".to_string(),
+        "=SUMX2PY2(A1:A2,B1:B3)".to_string(),
+      ]
     );
   }
 

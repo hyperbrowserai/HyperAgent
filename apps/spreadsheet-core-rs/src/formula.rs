@@ -1240,6 +1240,20 @@ pub fn parse_steyx_formula(
   Some((known_y_start, known_y_end, known_x_start, known_x_end))
 }
 
+pub fn parse_sumx_formula(
+  formula: &str,
+) -> Option<(String, (u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if (function != "SUMXMY2" && function != "SUMX2MY2" && function != "SUMX2PY2")
+    || args.len() != 2
+  {
+    return None;
+  }
+  let (left_start, left_end) = parse_range_reference(&args[0])?;
+  let (right_start, right_end) = parse_range_reference(&args[1])?;
+  Some((function, left_start, left_end, right_start, right_end))
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1531,6 +1545,7 @@ mod tests {
     parse_covariance_formula, parse_correl_formula,
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
     parse_forecast_linear_formula, parse_steyx_formula,
+    parse_sumx_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -2074,6 +2089,13 @@ mod tests {
     assert_eq!(steyx.1, (5, 2));
     assert_eq!(steyx.2, (1, 1));
     assert_eq!(steyx.3, (5, 1));
+    let sumx = parse_sumx_formula("=SUMXMY2(A1:A5,B1:B5)")
+      .expect("sumxmy2 should parse");
+    assert_eq!(sumx.0, "SUMXMY2");
+    assert_eq!(sumx.1, (1, 1));
+    assert_eq!(sumx.2, (5, 1));
+    assert_eq!(sumx.3, (1, 2));
+    assert_eq!(sumx.4, (5, 2));
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");
