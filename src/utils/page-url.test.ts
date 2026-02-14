@@ -20,6 +20,12 @@ describe("normalizePageUrl", () => {
     expect(normalizePageUrl(null, { fallback: "unknown" })).toBe("unknown");
   });
 
+  it("sanitizes custom fallback values", () => {
+    expect(normalizePageUrl(null, { fallback: " bad\u0000\nfallback " })).toBe(
+      "bad fallback"
+    );
+  });
+
   it("truncates sanitized URLs when maxChars is provided", () => {
     const normalized = normalizePageUrl(
       `https://example.com/${"x".repeat(200)}`,

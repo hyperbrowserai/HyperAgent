@@ -28,10 +28,12 @@ export function normalizePageUrl(
     maxChars?: number;
   }
 ): string {
-  const fallback =
-    typeof options?.fallback === "string" && options.fallback.trim().length > 0
-      ? options.fallback
+  const fallbackCandidate =
+    typeof options?.fallback === "string"
+      ? sanitizePageUrlText(options.fallback)
       : DEFAULT_PAGE_URL_FALLBACK;
+  const fallback =
+    fallbackCandidate.length > 0 ? fallbackCandidate : DEFAULT_PAGE_URL_FALLBACK;
   if (typeof value !== "string") {
     return fallback;
   }
