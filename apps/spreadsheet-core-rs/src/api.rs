@@ -2814,7 +2814,8 @@ mod tests {
   };
   use crate::{
     fixture_corpus::{
-      COMPAT_BASELINE_FILE_NAME, COMPAT_NORMALIZATION_FILE_NAME,
+      COMPAT_BASELINE_FILE_NAME, COMPAT_FORMULA_MATRIX_FILE_NAME,
+      COMPAT_NORMALIZATION_FILE_NAME,
       COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
     },
     models::{
@@ -2891,6 +2892,10 @@ mod tests {
 
   fn workbook_import_comprehensive_normalization_fixture_bytes() -> Vec<u8> {
     workbook_fixture_bytes(COMPAT_NORMALIZATION_FILE_NAME)
+  }
+
+  fn workbook_import_formula_matrix_fixture_bytes() -> Vec<u8> {
+    workbook_fixture_bytes(COMPAT_FORMULA_MATRIX_FILE_NAME)
   }
 
   #[test]
@@ -3332,6 +3337,64 @@ mod tests {
         .and_then(|cell| cell.formula.as_deref()),
       Some(r#"=IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#),
       "import should preserve quoted literal text while normalizing executable tokens",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_report_formula_matrix_import_metrics_on_import() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("import-formula-matrix-fixture".to_string()))
+      .await
+      .expect("workbook should be created");
+    let mut events = state
+      .subscribe(workbook.id)
+      .await
+      .expect("event subscription should work");
+
+    let import_result = import_bytes_into_workbook(
+      &state,
+      workbook.id,
+      &workbook_import_formula_matrix_fixture_bytes(),
+      "formula-matrix-import",
+    )
+    .await
+    .expect("formula matrix fixture import should succeed");
+
+    assert_eq!(import_result.formula_cells_imported, 6);
+    assert!(
+      import_result.formula_cells_normalized >= 1,
+      "formula matrix fixture should include normalized compatibility formulas",
+    );
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("formula(s) were normalized")),
+      "formula matrix import should emit normalization telemetry warning",
+    );
+
+    let emitted_event = timeout(Duration::from_secs(1), events.recv())
+      .await
+      .expect("import event should arrive")
+      .expect("event payload should decode");
+    assert_eq!(emitted_event.event_type, "workbook.imported");
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_imported")
+        .and_then(serde_json::Value::as_u64),
+      Some(6),
+    );
+    assert!(
+      emitted_event
+        .payload
+        .get("formula_cells_normalized")
+        .and_then(serde_json::Value::as_u64)
+        .is_some_and(|value| value >= 1),
+      "import event should report normalized formula count for matrix fixture",
     );
   }
 
