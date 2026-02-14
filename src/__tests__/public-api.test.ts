@@ -67,4 +67,12 @@ describe("public API exports", () => {
 
     expect(performParams.contextSwitchRetryDelayMs).toBe(500);
   });
+
+  it("exposes frame-filter configuration on public HyperAgentConfig", () => {
+    const config: HyperAgentConfig = {
+      filterAdTrackingFrames: false,
+    };
+
+    expect(config.filterAdTrackingFrames).toBe(false);
+  });
 });
