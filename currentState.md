@@ -100,6 +100,16 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Centralized page URL normalization into shared utility (`normalizePageUrl`) and reused it across agent loop, perform, and prompt-builder paths.
 - Hardened frame metadata normalization in `FrameContextManager` (sanitized/bounded frame URLs and names, trap-safe OOPIF metadata reads).
 - Hardened a11y frame resolution fallback logic to keep XPath traversal working when frame enumeration is trap-prone.
+- Hardened a11y context-provider diagnostics for build-map, scrollable-detection, and batch bounding-box collection failure paths (sanitized/truncated warnings and bounded identifiers).
+- Hardened CDP script-injector diagnostics for script registration/runtime evaluation failures with bounded key/context identifier formatting.
+- Hardened CDP element-resolver diagnostics by sanitizing/truncating encoded IDs and frame IDs in failure/warning paths.
+- Hardened `PerformanceTracker` warning paths in a11y DOM capture utilities and tightened metadata typing (`unknown` + safe readers) to reduce unsafe runtime assumptions.
+- Hardened CLI diagnostics in task-input/stdin/mcp-config flows with consistent control-character stripping and truncation in file-read/raw-mode/config-parse errors.
+- Hardened agent-side DOM streaming callback warnings (`dom-capture`) to avoid noisy unbounded callback failure logs.
+- Hardened retry helper warning diagnostics for callback/sleep failure paths, preventing control-character and oversized diagnostic leakage.
+- Hardened `examineDom` and HTML→Markdown utilities with bounded diagnostic formatting for LLM/tooling conversion failures.
+- Hardened perform-action failure formatting with explicit bounded diagnostics, including trap-prone DOM element lookup failures.
+- Hardened Anthropic provider structured-output warning diagnostics in schema validation fallback branches.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.
