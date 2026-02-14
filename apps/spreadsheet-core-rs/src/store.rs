@@ -324,6 +324,12 @@ fn evaluate_formula(
       }));
     }
 
+    if function == "SUMA" {
+      let values = collect_statisticala_range_values(connection, sheet, start, end)?;
+      let total = values.iter().sum::<f64>();
+      return Ok(Some(total.to_string()));
+    }
+
     let aggregate_sql = match function.as_str() {
       "SUM" => "SUM",
       "AVERAGE" => "AVG",
@@ -8304,12 +8310,36 @@ mod tests {
         value: None,
         formula: Some("=SERIESSUM(2,1,2,A23:C23)".to_string()),
       },
+      CellMutation {
+        row: 24,
+        col: 1,
+        value: Some(json!(true)),
+        formula: None,
+      },
+      CellMutation {
+        row: 24,
+        col: 2,
+        value: Some(json!("text")),
+        formula: None,
+      },
+      CellMutation {
+        row: 24,
+        col: 3,
+        value: Some(json!(2)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 294,
+        value: None,
+        formula: Some("=SUMA(A24:C24)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 291);
+    assert_eq!(updated_cells, 292);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -8321,9 +8351,9 @@ mod tests {
       "Sheet1",
       &CellRange {
         start_row: 1,
-        end_row: 23,
+        end_row: 24,
         start_col: 1,
-        end_col: 293,
+        end_col: 294,
       },
     )
     .expect("cells should be fetched");
@@ -9615,6 +9645,11 @@ mod tests {
       by_position(1, 293).evaluated_value.as_deref(),
       Some("114"),
       "seriessum should evaluate finite power series from coefficient range",
+    );
+    assert_eq!(
+      by_position(1, 294).evaluated_value.as_deref(),
+      Some("3"),
+      "suma should include logical/text coercions in additive total",
     );
   }
 

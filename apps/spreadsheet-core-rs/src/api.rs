@@ -47,6 +47,7 @@ use uuid::Uuid;
 
 const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "SUM",
+  "SUMA",
   "AVERAGE",
   "MIN",
   "MAX",

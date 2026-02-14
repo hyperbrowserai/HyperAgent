@@ -107,7 +107,7 @@ pub fn parse_cell_address(value: &str) -> Option<(u32, u32)> {
 
 pub fn parse_aggregate_formula(formula: &str) -> Option<(String, (u32, u32), (u32, u32))> {
   let re =
-    Regex::new(r"^=\s*(SUM|AVERAGE|MIN|MAX|COUNT|MEDIAN|PRODUCT|SUMSQ|STDEV|STDEVP|STDEV\.P|STDEV\.S|VAR|VARP|VAR\.P|VAR\.S)\s*\(\s*([A-Za-z]+\d+)\s*:\s*([A-Za-z]+\d+)\s*\)\s*$")
+    Regex::new(r"^=\s*(SUM|SUMA|AVERAGE|MIN|MAX|COUNT|MEDIAN|PRODUCT|SUMSQ|STDEV|STDEVP|STDEV\.P|STDEV\.S|VAR|VARP|VAR\.P|VAR\.S)\s*\(\s*([A-Za-z]+\d+)\s*:\s*([A-Za-z]+\d+)\s*\)\s*$")
       .ok()?;
   let captures = re.captures(formula.trim())?;
   let function = captures.get(1)?.as_str().to_uppercase();
@@ -2545,6 +2545,11 @@ mod tests {
     assert_eq!(function, "SUM");
     assert_eq!(start, (1, 1));
     assert_eq!(end, (2, 2));
+    let suma = parse_aggregate_formula("=SUMA(A1:B2)")
+      .expect("suma should parse");
+    assert_eq!(suma.0, "SUMA");
+    assert_eq!(suma.1, (1, 1));
+    assert_eq!(suma.2, (2, 2));
 
     let product = parse_aggregate_formula("=PRODUCT(C1:C3)")
       .expect("product should parse");
