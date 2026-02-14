@@ -416,7 +416,7 @@ type EndpointCatalogSortOption =
   | "mismatch_first"
   | "fallback_first";
 
-type EndpointCatalogViewMode = "all" | "issues" | "mismatches" | "fallback";
+type EndpointCatalogViewMode = "all" | "issues" | "mismatches" | "fallback" | "unmapped";
 
 function filterEndpointCatalogEntries<
   T extends { key: string; endpoint: string; openApiPath: string; summary: string | null },
@@ -466,6 +466,9 @@ function filterEndpointCatalogEntriesByMode<
     }
     if (viewMode === "mismatches") {
       return hasMismatch;
+    }
+    if (viewMode === "unmapped") {
+      return entry.methods.length === 0;
     }
     return hasFallback;
   });
@@ -5143,6 +5146,7 @@ export function SpreadsheetApp() {
                         <option value="issues">issues only</option>
                         <option value="mismatches">mismatches only</option>
                         <option value="fallback">fallback only</option>
+                        <option value="unmapped">unmapped only</option>
                       </select>
                     </label>
                     <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
@@ -5193,6 +5197,18 @@ export function SpreadsheetApp() {
                         }`}
                       >
                         fallback ({wizardEndpointCatalogOverallStats.visibleFallbackEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setWizardEndpointCatalogViewMode("unmapped");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          wizardEndpointCatalogViewMode === "unmapped"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        unmapped ({wizardEndpointCatalogOverallStats.visibleUnmappedEntries})
                       </button>
                       <button
                         onClick={() => {
@@ -6679,6 +6695,7 @@ export function SpreadsheetApp() {
                         <option value="issues">issues only</option>
                         <option value="mismatches">mismatches only</option>
                         <option value="fallback">fallback only</option>
+                        <option value="unmapped">unmapped only</option>
                       </select>
                     </label>
                     <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
@@ -6729,6 +6746,18 @@ export function SpreadsheetApp() {
                         }`}
                       >
                         fallback ({agentEndpointCatalogOverallStats.visibleFallbackEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAgentEndpointCatalogViewMode("unmapped");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          agentEndpointCatalogViewMode === "unmapped"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        unmapped ({agentEndpointCatalogOverallStats.visibleUnmappedEntries})
                       </button>
                       <button
                         onClick={() => {
