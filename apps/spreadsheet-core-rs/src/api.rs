@@ -3379,6 +3379,33 @@ mod tests {
     );
   }
 
+  #[tokio::test]
+  async fn should_allow_duckdb_query_with_leading_comment() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("duckdb-query-leading-comment".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let query_response = duckdb_query(
+      State(state),
+      Path(workbook.id),
+      Json(QueryRequest {
+        sql: "/* leading comment */ SELECT 7 AS value".to_string(),
+        row_limit: Some(5),
+      }),
+    )
+    .await
+    .expect("query with leading comment should pass read-only validation")
+    .0;
+
+    assert_eq!(query_response.columns, vec!["value".to_string()]);
+    assert_eq!(query_response.row_count, 1);
+    assert_eq!(query_response.rows[0], vec![Some("7".to_string())]);
+  }
+
     #[tokio::test]
     async fn should_reject_non_positive_duckdb_query_row_limit() {
         let temp_dir = tempdir().expect("temp dir should be created");

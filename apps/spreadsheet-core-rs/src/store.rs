@@ -266,7 +266,10 @@ fn normalize_duckdb_query_sql(sql: &str) -> Result<String, ApiError> {
     }
 
     let uppercase_sql = sanitized_sql.to_ascii_uppercase();
-    if !(uppercase_sql.starts_with("SELECT") || uppercase_sql.starts_with("WITH")) {
+    let normalized_statement_start = uppercase_sql.trim_start();
+    if !(normalized_statement_start.starts_with("SELECT")
+        || normalized_statement_start.starts_with("WITH"))
+    {
         return Err(ApiError::bad_request_with_code(
             "INVALID_QUERY_SQL",
             "DuckDB query endpoint only allows read-only SELECT or WITH statements.",
