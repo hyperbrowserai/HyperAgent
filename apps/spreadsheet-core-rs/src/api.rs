@@ -3407,6 +3407,35 @@ mod tests {
         .any(|warning| warning.contains("formula(s) were normalized")),
       "import event payload warnings should include formula-matrix normalization telemetry",
     );
+
+    let db_path = state
+      .db_path(workbook.id)
+      .await
+      .expect("db path should be available");
+    let calc_snapshot =
+      load_sheet_snapshot(&db_path, "Calc").expect("calc snapshot should load");
+    let calc_map = calc_snapshot
+      .iter()
+      .map(|cell| (cell.address.as_str(), cell))
+      .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+      calc_map
+        .get("B1")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(2),
+      "formula matrix fixture should persist BITAND evaluation",
+    );
+    assert_eq!(
+      calc_map
+        .get("B6")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(1),
+      "formula matrix fixture should persist MAXA evaluation",
+    );
   }
 
   #[tokio::test]
