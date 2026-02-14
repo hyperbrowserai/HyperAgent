@@ -193,6 +193,82 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     );
   });
 
+  it("allows per-call cdpActions override to disable CDP runtime setup", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: true,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+
+    await agent.executeSingleAction("click login", page, {
+      cdpActions: false,
+    });
+
+    expect(initializeRuntimeContext).not.toHaveBeenCalled();
+    const actionContext = performAction.mock.calls[0]?.[0] as {
+      cdpActions?: boolean;
+      cdp?: unknown;
+    };
+    expect(actionContext?.cdpActions).toBe(false);
+    expect(actionContext?.cdp).toBeUndefined();
+  });
+
+  it("allows per-call cdpActions override to enable CDP runtime setup", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+
+    await agent.executeSingleAction("click login", page, {
+      cdpActions: true,
+    });
+
+    expect(initializeRuntimeContext).toHaveBeenCalledTimes(1);
+    const actionContext = performAction.mock.calls[0]?.[0] as {
+      cdpActions?: boolean;
+      cdp?: unknown;
+    };
+    expect(actionContext?.cdpActions).toBe(true);
+    expect(actionContext?.cdp).toBeTruthy();
+  });
+
+  it("falls back to agent cdpActions when perform params cdp getter traps", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+    const trappedParams = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "cdpActions") {
+            throw new Error("perform cdp trap");
+          }
+          return undefined;
+        },
+      }
+    ) as PerformTaskParams;
+
+    await agent.executeSingleAction("click login", page, trappedParams);
+
+    expect(initializeRuntimeContext).not.toHaveBeenCalled();
+    const actionContext = performAction.mock.calls[0]?.[0] as {
+      cdpActions?: boolean;
+    };
+    expect(actionContext?.cdpActions).toBe(false);
+  });
+
   it("falls back to agent filter setting when perform params getter traps", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

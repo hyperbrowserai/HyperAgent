@@ -63,10 +63,12 @@ describe("public API exports", () => {
       retryDelayMs: 250,
       maxContextSwitchRetries: 4,
       contextSwitchRetryDelayMs: 500,
+      cdpActions: false,
       filterAdTrackingFrames: false,
     };
 
     expect(performParams.contextSwitchRetryDelayMs).toBe(500);
+    expect(performParams.cdpActions).toBe(false);
     expect(performParams.filterAdTrackingFrames).toBe(false);
   });
 
@@ -80,13 +82,17 @@ describe("public API exports", () => {
 
   it("exposes frame-filter overrides on task and replay params", () => {
     const taskParams: TaskParams = {
+      cdpActions: false,
       filterAdTrackingFrames: false,
     };
     const replayParams: RunFromActionCacheParams = {
+      cdpActions: false,
       filterAdTrackingFrames: false,
     };
 
+    expect(taskParams.cdpActions).toBe(false);
     expect(taskParams.filterAdTrackingFrames).toBe(false);
+    expect(replayParams.cdpActions).toBe(false);
     expect(replayParams.filterAdTrackingFrames).toBe(false);
   });
 });

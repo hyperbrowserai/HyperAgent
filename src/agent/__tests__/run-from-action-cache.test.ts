@@ -121,6 +121,7 @@ describe("runFromActionCache hardening", () => {
     expect(performClick).toHaveBeenCalledWith(
       "//button[1]",
       expect.objectContaining({
+        cdpActions: false,
         performInstruction: "click login",
       })
     );
@@ -167,12 +168,14 @@ describe("runFromActionCache hardening", () => {
     };
 
     await agent.runFromActionCache(cache, page, {
+      cdpActions: true,
       filterAdTrackingFrames: false,
     });
 
     expect(performClick).toHaveBeenCalledWith(
       "//button[1]",
       expect.objectContaining({
+        cdpActions: true,
         filterAdTrackingFrames: false,
       })
     );
@@ -1362,6 +1365,7 @@ describe("runFromActionCache hardening", () => {
     expect(perform).toHaveBeenCalledWith(
       "fallback source id",
       expect.objectContaining({
+        cdpActions: false,
         filterAdTrackingFrames: true,
       })
     );
@@ -1407,12 +1411,14 @@ describe("runFromActionCache hardening", () => {
     };
 
     await agent.runFromActionCache(cache, page, {
+      cdpActions: true,
       filterAdTrackingFrames: false,
     });
 
     expect(perform).toHaveBeenCalledWith(
       "click ad iframe CTA",
       expect.objectContaining({
+        cdpActions: true,
         filterAdTrackingFrames: false,
       })
     );

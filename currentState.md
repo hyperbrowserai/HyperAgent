@@ -119,6 +119,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Added `filterAdTrackingFrames` configuration in `HyperAgent` so CDP frame discovery can optionally include ad/tracking iframes for workflows that require them.
 - Propagated frame-filter policy through DOM-settle/replay/wait paths so `waitForSettledDOM` and special replay actions honor per-agent ad/tracking frame filtering settings.
 - Added per-invocation frame-filter overrides on `page.ai`, `page.perform`, and replay params so workflows can opt in/out of ad/tracking iframe filtering without constructing a new agent.
+- Added per-invocation `cdpActions` overrides on task/perform/replay params so workflows can force CDP on/off without rebuilding the agent.
 - Synced frame-filter policy into a11y DOM capture setup (`getA11yDOM`/`captureDOMState`) so first-attempt frame discovery uses the active task/action override instead of stale manager state.
 - Hardened per-call frame-filter option reads against trap-prone parameter objects in `executeTask`, `executeTaskAsync`, and `executeSingleAction` (falls back to agent default instead of throwing).
 - Hardened `waitForSettledDOM` frame-manager option setup so debug/filter configuration setter failures are isolated to sanitized warnings instead of aborting settle behavior.

@@ -209,6 +209,19 @@ function normalizeFilterAdTrackingFrames(
   return undefined;
 }
 
+function normalizeCdpActions(
+  value: unknown,
+  fallback: boolean | undefined
+): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof fallback === "boolean") {
+    return fallback;
+  }
+  return undefined;
+}
+
 function runCachedAction(
   agent: AgentDeps,
   page: HyperPage,
@@ -239,6 +252,10 @@ function runCachedAction(
     safeReadOptionField(options, "filterAdTrackingFrames"),
     agent.filterAdTrackingFrames
   );
+  const normalizedCdpActions = normalizeCdpActions(
+    safeReadOptionField(options, "cdpActions"),
+    agent.cdpActionsEnabled
+  );
   const normalizedMaxSteps = normalizeMaxSteps(
     safeReadOptionField(options, "maxSteps")
   );
@@ -261,11 +278,12 @@ function runCachedAction(
     mcpClient: agent.mcpClient,
     variables: agent.variables ?? [],
     preferScriptBoundingBox: agent.debug,
-    cdpActionsEnabled: agent.cdpActionsEnabled,
+    cdpActionsEnabled: normalizedCdpActions,
     filterAdTrackingFrames: normalizedFilterAdTrackingFrames,
     performFallback: normalizedPerformInstruction
       ? (instr) =>
           page.perform(instr, {
+            cdpActions: normalizedCdpActions,
             filterAdTrackingFrames: normalizedFilterAdTrackingFrames,
           })
       : undefined,

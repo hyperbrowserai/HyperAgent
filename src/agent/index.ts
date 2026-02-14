@@ -233,6 +233,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return this.filterAdTrackingFrames;
   }
 
+  private resolveCdpActions(value: unknown): boolean {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    return this.cdpActionsEnabled;
+  }
+
   private readTaskStatus(
     taskState: TaskState,
     fallback: TaskStatus = TaskStatus.FAILED
@@ -1724,6 +1731,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw error;
     }
     const mergedParams = params ?? {};
+    const cdpActions = this.resolveCdpActions(
+      this.safeReadField(mergedParams, "cdpActions")
+    );
     const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
       this.safeReadField(mergedParams, "filterAdTrackingFrames")
     );
@@ -1737,7 +1747,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           debug: this.debug,
           mcpClient: this.mcpClient,
           variables: this._variables,
-          cdpActions: this.cdpActionsEnabled,
+          cdpActions,
           filterAdTrackingFrames,
           activePage: async () => activeTaskPage,
         },
@@ -1887,6 +1897,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     try {
       const mergedParams = params ?? {};
+      const cdpActions = this.resolveCdpActions(
+        this.safeReadField(mergedParams, "cdpActions")
+      );
       const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
         this.safeReadField(mergedParams, "filterAdTrackingFrames")
       );
@@ -1898,7 +1911,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           debug: this.debug,
           mcpClient: this.mcpClient,
           variables: this._variables,
-          cdpActions: this.cdpActionsEnabled,
+          cdpActions,
           filterAdTrackingFrames,
           activePage: async () => activeTaskPage,
         },
@@ -1963,6 +1976,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     );
     const rawDebug = this.safeReadField(params, "debug");
     const debug = typeof rawDebug === "boolean" ? rawDebug : this.debug;
+    const cdpActions = this.resolveCdpActions(
+      this.safeReadField(params, "cdpActions")
+    );
     const sourceTaskId =
       this.normalizeVariableKey(this.safeReadField(cache, "taskId")) ??
       "unknown-task";
@@ -2361,6 +2377,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             if (!hasXPath) {
               if (replayInstruction) {
                 result = await hyperPage.perform(replayInstruction, {
+                  cdpActions,
                   filterAdTrackingFrames,
                 });
               } else {
@@ -2387,6 +2404,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             const options: PerformOptions = {
               performInstruction: replayInstruction,
               maxSteps: maxXPathRetries,
+              cdpActions,
               filterAdTrackingFrames,
             };
             if (stepFrameIndex !== null && stepFrameIndex !== undefined) {
@@ -2411,6 +2429,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             const replayInstruction = instruction;
             if (replayInstruction) {
               result = await hyperPage.perform(replayInstruction, {
+                cdpActions,
                 filterAdTrackingFrames,
               });
             } else {
@@ -2783,6 +2802,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       params?.maxElementRetries ?? params?.maxSteps,
       HyperAgent.PERFORM_CONFIG.MAX_RETRIES
     );
+    const cdpActions = this.resolveCdpActions(
+      this.safeReadField(params, "cdpActions")
+    );
     const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
       this.safeReadField(params, "filterAdTrackingFrames")
     );
@@ -2848,13 +2870,23 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         domState?.xpathMap?.[element.elementId] ?? null;
 
       // Use shared runtime context
-      const { cdpClient, frameContextManager } = await initializeRuntimeContext(
-        initialPage,
-        this.debug,
-        {
-          filterAdTrackingFrames,
-        }
-      );
+      let cdpClient: Awaited<
+        ReturnType<typeof initializeRuntimeContext>
+      >["cdpClient"] | null = null;
+      let frameContextManager: Awaited<
+        ReturnType<typeof initializeRuntimeContext>
+      >["frameContextManager"] | null = null;
+      if (cdpActions) {
+        const runtimeContext = await initializeRuntimeContext(
+          initialPage,
+          this.debug,
+          {
+            filterAdTrackingFrames,
+          }
+        );
+        cdpClient = runtimeContext.cdpClient;
+        frameContextManager = runtimeContext.frameContextManager;
+      }
 
       // Check context switch again before action
       if (hasPageContextSwitched()) {
@@ -2874,9 +2906,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         llm: this.llm,
         debug: this.debug,
         // Only provide CDP if enabled
-        cdpActions: this.cdpActionsEnabled,
+        cdpActions,
         filterAdTrackingFrames,
-        cdp: this.cdpActionsEnabled
+        cdp: cdpActions && cdpClient && frameContextManager
           ? {
               client: cdpClient,
               frameContextManager,

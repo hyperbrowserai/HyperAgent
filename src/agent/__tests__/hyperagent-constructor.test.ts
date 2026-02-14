@@ -146,6 +146,67 @@ describe("HyperAgent constructor and task controls", () => {
     expect(runtimeCtx?.filterAdTrackingFrames).toBe(false);
   });
 
+  it("forwards per-task cdpActions override into runAgentTask context", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id-cdp-override",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id-cdp-override",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: true,
+    });
+    const fakePage = {} as unknown as Page;
+    await agent.executeTask("test task", { cdpActions: false }, fakePage);
+
+    const runtimeCtx = mockedRunAgentTask.mock.calls[0]?.[0] as {
+      cdpActions?: boolean;
+    };
+    expect(runtimeCtx?.cdpActions).toBe(false);
+  });
+
+  it("forwards async task cdpActions override into runAgentTask context", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id-cdp-async-override",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id-cdp-async-override",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync(
+      "test task",
+      { cdpActions: true },
+      fakePage
+    );
+    await task.result;
+
+    const runtimeCtx = mockedRunAgentTask.mock.calls[0]?.[0] as {
+      cdpActions?: boolean;
+    };
+    expect(runtimeCtx?.cdpActions).toBe(true);
+  });
+
   it("prefers per-task filterAdTrackingFrames override over agent default", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({

@@ -326,4 +326,27 @@ describe("action-cache perform helper dispatch", () => {
       })
     );
   });
+
+  it("forwards cdpActions override from helper options", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+      filterAdTrackingFrames: true,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+
+    await page.performClick("//button[1]", {
+      cdpActions: true,
+    });
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cdpActionsEnabled: true,
+      })
+    );
+  });
 });

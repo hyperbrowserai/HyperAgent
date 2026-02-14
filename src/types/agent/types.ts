@@ -100,6 +100,10 @@ export interface RunFromActionCacheParams {
   maxXPathRetries?: number;
   debug?: boolean;
   /**
+   * Override CDP execution for this replay.
+   */
+  cdpActions?: boolean;
+  /**
    * Override ad/tracking iframe filtering for this replay.
    */
   filterAdTrackingFrames?: boolean;
@@ -118,6 +122,10 @@ export interface TaskParams extends AgentExecutionHooks {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
+  /**
+   * Override CDP execution for this task run.
+   */
+  cdpActions?: boolean;
   /**
    * Override ad/tracking iframe filtering for this task run.
    */
@@ -145,6 +153,10 @@ export interface PerformTaskParams {
    * @deprecated use maxElementRetries instead.
    */
   maxSteps?: number;
+  /**
+   * Override CDP execution for this single action.
+   */
+  cdpActions?: boolean;
   /**
    * Override ad/tracking iframe filtering for this single action.
    */
@@ -220,6 +232,10 @@ export interface PerformOptions {
   frameIndex?: number | null;
   performInstruction?: string | null;
   maxSteps?: number;
+  /**
+   * Override CDP execution for this helper replay call.
+   */
+  cdpActions?: boolean;
   /**
    * Override ad/tracking iframe filtering for this helper replay call.
    */

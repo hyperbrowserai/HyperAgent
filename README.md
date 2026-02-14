@@ -200,6 +200,7 @@ await page.perform("click the login button", {
 - `retryDelayMs`: delay between element-refetch retries.
 - `maxContextSwitchRetries`: retries when a tab/context switch interrupts an in-flight action.
 - `contextSwitchRetryDelayMs`: delay between context-switch retries (defaults to 500ms, capped for safety).
+- `cdpActions`: override CDP usage for this call (`true` by default from agent config).
 - `filterAdTrackingFrames`: override iframe filtering for this action (`true` by default). Set to `false` when you intentionally need ad/tracking iframes in scope.
 - `maxSteps` (**deprecated**): compatibility alias for `maxElementRetries`.
   - Using `maxSteps` emits a one-time deprecation warning per agent instance.
@@ -219,6 +220,7 @@ await page.perform("click the login button", {
 
 - `useDomCache` (boolean): Reuse DOM snapshots for speed
 - `enableVisualMode` (boolean): Enable screenshots and overlays (default: false)
+- `cdpActions` (boolean): override CDP usage for this task (inherits agent-level default when omitted)
 - `filterAdTrackingFrames` (boolean): override ad/tracking iframe filtering for this task (inherits agent-level default when omitted)
 
 **Example**:
@@ -527,6 +529,7 @@ const page = await agent.newPage();
 const replay = await page.runFromActionCache(cache, {
   maxXPathRetries: 3,  // Retry XPath resolution up to 3 times before LLM fallback
   debug: true,
+  cdpActions: true, // Optional: override CDP usage for this replay
   filterAdTrackingFrames: false, // Optional: include ad/tracking iframes during replay resolution
 });
 
