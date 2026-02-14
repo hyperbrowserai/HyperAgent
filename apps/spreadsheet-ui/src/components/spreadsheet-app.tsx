@@ -2002,8 +2002,8 @@ export function SpreadsheetApp() {
       setLastAgentOps(response.cached_response.results);
       setNotice(
         response.cached_response.served_from_cache
-          ? `Replay served from idempotency cache (cached at ${formatIsoTimestamp(response.cached_at)}).`
-          : `Replay executed fresh (cache miss; source cached at ${formatIsoTimestamp(response.cached_at)}).`,
+          ? `Replay served from idempotency cache (cached at ${formatIsoTimestamp(response.cached_at)} · ${formatRelativeAge(response.cached_at)}).`
+          : `Replay executed fresh (cache miss; source cached at ${formatIsoTimestamp(response.cached_at)} · ${formatRelativeAge(response.cached_at)}).`,
       );
       await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
@@ -2155,7 +2155,7 @@ export function SpreadsheetApp() {
       setLastServedFromCache(response.cached_response.served_from_cache ?? true);
       setLastAgentOps(response.cached_response.results);
       setNotice(
-        `Replayed cached response for request_id ${requestId} (cached at ${formatIsoTimestamp(response.cached_at)}).`,
+        `Replayed cached response for request_id ${requestId} (cached at ${formatIsoTimestamp(response.cached_at)} · ${formatRelativeAge(response.cached_at)}).`,
       );
       await refreshAgentOpsCacheQueries(workbook.id);
     } catch (error) {
