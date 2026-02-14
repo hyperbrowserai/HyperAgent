@@ -251,6 +251,30 @@ describe("sanitizeProviderOptions", () => {
     });
   });
 
+  it("sanitizes and truncates traversal diagnostics for arrays", () => {
+    const trappedArray = new Proxy(["ok"], {
+      get: (target, prop, receiver) => {
+        if (prop === "map") {
+          throw new Error(`array\u0000\n${"x".repeat(2_000)}`);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const result = sanitizeProviderOptions(
+      {
+        metadata: trappedArray,
+      },
+      reserved
+    ) as Record<string, unknown>;
+
+    expect(typeof result.metadata).toBe("string");
+    expect(result.metadata as string).toContain("[UnserializableArray: ");
+    expect(result.metadata as string).toContain("[truncated");
+    expect(result.metadata as string).not.toContain("\u0000");
+    expect(result.metadata as string).not.toContain("\n");
+  });
+
   it("returns deterministic marker for objects that fail during entry traversal", () => {
     const trappedObject = new Proxy(
       {},

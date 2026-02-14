@@ -38,13 +38,14 @@ function formatProviderOptionDiagnostic(value: unknown): string {
   )
     .replace(/\s+/g, " ")
     .trim();
-  if (normalized.length <= MAX_PROVIDER_OPTIONS_DIAGNOSTIC_CHARS) {
-    return normalized;
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_PROVIDER_OPTIONS_DIAGNOSTIC_CHARS) {
+    return fallback;
   }
-  return `${normalized.slice(
+  return `${fallback.slice(
     0,
     MAX_PROVIDER_OPTIONS_DIAGNOSTIC_CHARS
-  )}... [truncated ${normalized.length - MAX_PROVIDER_OPTIONS_DIAGNOSTIC_CHARS} chars]`;
+  )}... [truncated ${fallback.length - MAX_PROVIDER_OPTIONS_DIAGNOSTIC_CHARS} chars]`;
 }
 
 function truncateProviderOptionString(value: string): string {
