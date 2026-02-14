@@ -9512,11 +9512,15 @@ mod tests {
             "/v1/agent/wizard/presets/{preset}/operations",
             "/v1/agent/wizard/scenarios",
             "/v1/agent/wizard/scenarios/{scenario}/operations",
+            "/v1/agent/wizard/run",
+            "/v1/agent/wizard/run-json",
             "/v1/workbooks/{id}/agent/schema",
             "/v1/workbooks/{id}/agent/presets",
             "/v1/workbooks/{id}/agent/presets/{preset}/operations",
+            "/v1/workbooks/{id}/agent/presets/{preset}",
             "/v1/workbooks/{id}/agent/scenarios",
             "/v1/workbooks/{id}/agent/scenarios/{scenario}/operations",
+            "/v1/workbooks/{id}/agent/scenarios/{scenario}",
             "/v1/workbooks/{id}/events",
         ];
 
@@ -9547,6 +9551,28 @@ mod tests {
         assert!(
             agent_schema_summary.contains("AI agent callers"),
             "agent schema summary should mention AI agent callers",
+        );
+
+        let wizard_run_json_summary = paths
+            .get("/v1/agent/wizard/run-json")
+            .and_then(|value| value.get("post"))
+            .and_then(|value| value.get("summary"))
+            .and_then(serde_json::Value::as_str)
+            .expect("wizard run-json path should expose post summary");
+        assert!(
+            wizard_run_json_summary.contains("JSON wizard endpoint"),
+            "wizard run-json summary should mention JSON wizard endpoint",
+        );
+
+        let agent_scenario_run_summary = paths
+            .get("/v1/workbooks/{id}/agent/scenarios/{scenario}")
+            .and_then(|value| value.get("post"))
+            .and_then(|value| value.get("summary"))
+            .and_then(serde_json::Value::as_str)
+            .expect("agent scenario run path should expose post summary");
+        assert!(
+            agent_scenario_run_summary.contains("Run built-in AI scenario"),
+            "agent scenario run summary should mention built-in AI scenario execution",
         );
 
         let events_summary = paths
