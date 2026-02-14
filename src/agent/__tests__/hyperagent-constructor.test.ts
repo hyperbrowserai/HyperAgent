@@ -313,6 +313,46 @@ describe("HyperAgent constructor and task controls", () => {
     expect(runtimeCtx?.filterAdTrackingFrames).toBe(false);
   });
 
+  it("falls back to agent cdpActions setting when task params cdp getter traps", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id-cdp-trap",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id-cdp-trap",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const trappedParams = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "cdpActions") {
+            throw new Error("cdp option trap");
+          }
+          return undefined;
+        },
+      }
+    ) as TaskParams;
+    const fakePage = {} as unknown as Page;
+    const task = await agent.executeTaskAsync("test task", trappedParams, fakePage);
+    await task.result;
+
+    const runtimeCtx = mockedRunAgentTask.mock.calls[0]?.[0] as {
+      cdpActions?: boolean;
+    };
+    expect(runtimeCtx?.cdpActions).toBe(false);
+  });
+
   it("executeTaskAsync cleans up state when setup throws before run starts", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
