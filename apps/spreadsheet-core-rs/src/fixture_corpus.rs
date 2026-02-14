@@ -186,3 +186,30 @@ fn apply_deterministic_fixture_properties(
   workbook.set_properties(&properties);
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use super::generate_fixture_corpus;
+  use std::collections::HashSet;
+
+  #[test]
+  fn should_generate_non_empty_fixture_files_with_unique_names() {
+    let fixture_corpus = generate_fixture_corpus()
+      .expect("fixture corpus generation should succeed");
+    let mut seen_names = HashSet::new();
+    for (file_name, bytes) in fixture_corpus {
+      assert!(
+        !file_name.trim().is_empty(),
+        "fixture file names should not be blank",
+      );
+      assert!(
+        seen_names.insert(file_name),
+        "fixture file names should be unique: {file_name}",
+      );
+      assert!(
+        !bytes.is_empty(),
+        "fixture file bytes should not be empty for {file_name}",
+      );
+    }
+  }
+}
