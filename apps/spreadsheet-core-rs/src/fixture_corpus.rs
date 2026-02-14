@@ -24,6 +24,8 @@ pub const COMPAT_ERROR_CACHED_FORMULA_FILE_NAME: &str =
   "compat_error_cached_formula.xlsx";
 pub const COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME: &str =
   "compat_formula_only_normalized.xlsx";
+pub const COMPAT_FORMULA_ONLY_SHEET_FILE_NAME: &str =
+  "compat_formula_only_sheet.xlsx";
 
 pub fn generate_fixture_corpus(
 ) -> Result<Vec<(&'static str, Vec<u8>)>, Box<dyn std::error::Error>> {
@@ -71,6 +73,10 @@ pub fn generate_fixture_corpus(
     (
       COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
       build_compat_formula_only_normalized_fixture_bytes()?,
+    ),
+    (
+      COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
+      build_compat_formula_only_sheet_fixture_bytes()?,
     ),
   ])
 }
@@ -268,6 +274,22 @@ fn build_compat_formula_only_normalized_fixture_bytes(
     &bytes,
     "xl/worksheets/sheet1.xml",
     "B1",
+  )
+}
+
+fn build_compat_formula_only_sheet_fixture_bytes(
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let sheet = workbook.add_worksheet();
+  sheet.set_name("OnlyFormula")?;
+  sheet.write_formula(1, 1, Formula::new("=1+1"))?;
+
+  let bytes = workbook.save_to_buffer()?;
+  strip_formula_cached_value_from_cell(
+    &bytes,
+    "xl/worksheets/sheet1.xml",
+    "B2",
   )
 }
 
