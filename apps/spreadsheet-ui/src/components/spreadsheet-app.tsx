@@ -922,6 +922,27 @@ export function SpreadsheetApp() {
       ),
     [wizardSchemaQuery.data?.agent_ops_cache_stats_response_shape],
   );
+  const wizardCacheStatsQueryFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_stats_query_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_stats_query_shape],
+  );
+  const wizardCacheEntriesQueryFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_entries_query_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_entries_query_shape],
+  );
+  const wizardCachePrefixesQueryFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_prefixes_query_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_prefixes_query_shape],
+  );
   const wizardCacheEntriesResponseFields = useMemo(
     () =>
       flattenSchemaShapeEntries(
@@ -3325,6 +3346,30 @@ export function SpreadsheetApp() {
                 wizard cache reexecute response shape:{" "}
                 <span className="font-mono text-slate-300">
                   {formatSchemaShapeEntries(wizardCacheReexecuteResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheStatsQueryFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache stats query shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheStatsQueryFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheEntriesQueryFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache entries query shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheEntriesQueryFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCachePrefixesQueryFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache prefixes query shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCachePrefixesQueryFields)}
                 </span>
               </p>
             ) : null}

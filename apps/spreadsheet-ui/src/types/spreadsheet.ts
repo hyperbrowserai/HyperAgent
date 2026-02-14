@@ -343,6 +343,9 @@ export interface AgentWizardSchemaInfo {
   duckdb_query_request_shape?: Record<string, string>;
   duckdb_query_response_shape?: Record<string, string>;
   duckdb_query_validation_error_codes?: string[];
+  agent_ops_cache_stats_query_shape?: Record<string, string>;
+  agent_ops_cache_entries_query_shape?: Record<string, string>;
+  agent_ops_cache_prefixes_query_shape?: Record<string, string>;
   agent_ops_cache_stats_response_shape?: Record<string, string>;
   agent_ops_cache_entries_response_shape?: Record<string, string | Record<string, string>>;
   agent_ops_cache_entry_detail_response_shape?: Record<string, string>;
