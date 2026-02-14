@@ -74,6 +74,7 @@ Server defaults to `http://localhost:8787`.
 
 Import behavior notes:
 - Formula tokens are normalized for engine compatibility (`_xlfn.` / `_xlws.` prefixes are stripped and formulas are stored with a leading `=`).
+- Excel implicit-intersection operators (`@`) are normalized in import-time formula tokens when used as prefix operators (for example `=@SUM(...)` becomes `=SUM(...)`), while preserving structured-reference and quoted-string usage.
 - Cell coordinates are imported using worksheet range offsets, so sheets with first used cells outside `A1` preserve their original row/column placement.
 
 > Note: `/v1/workbooks/{id}/duckdb/query` currently returns a guarded `400` response in this build to avoid a known upstream panic in the underlying DuckDB Rust wrapper for ad-hoc SQL execution paths.
