@@ -687,6 +687,39 @@ fn endpoint_openapi_fingerprint(openapi_spec: &serde_json::Value) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+fn endpoint_openapi_stats(openapi_spec: &serde_json::Value) -> serde_json::Value {
+    let mut path_count = 0u64;
+    let mut operation_count = 0u64;
+    let mut summarized_operation_count = 0u64;
+    if let Some(paths) = openapi_spec.get("paths").and_then(serde_json::Value::as_object) {
+        path_count = paths.len() as u64;
+        for methods in paths.values() {
+            let Some(method_map) = methods.as_object() else {
+                continue;
+            };
+            for (method, metadata) in method_map {
+                if method.trim().is_empty() {
+                    continue;
+                }
+                operation_count += 1;
+                let has_summary = metadata
+                    .get("summary")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .is_some_and(|value| !value.is_empty());
+                if has_summary {
+                    summarized_operation_count += 1;
+                }
+            }
+        }
+    }
+    json!({
+      "path_count": path_count,
+      "operation_count": operation_count,
+      "summarized_operation_count": summarized_operation_count
+    })
+}
+
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -1438,6 +1471,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
     let endpoint_openapi_paths = endpoint_openapi_paths_from_schema(&schema);
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
     let endpoint_openapi_fingerprint = endpoint_openapi_fingerprint(&openapi_spec);
+    let endpoint_openapi_stats = endpoint_openapi_stats(&openapi_spec);
     let endpoint_catalog_coverage =
         endpoint_catalog_coverage_from_operations(&schema, &endpoint_openapi_operations);
     let endpoint_catalog_diagnostics =
@@ -1462,6 +1496,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
             "endpoint_catalog_openapi_fingerprint".to_string(),
             json!(endpoint_openapi_fingerprint),
         );
+        schema_object.insert("endpoint_catalog_openapi_stats".to_string(), endpoint_openapi_stats);
     }
     Json(schema)
 }
@@ -2333,6 +2368,7 @@ async fn get_agent_schema(
     let endpoint_openapi_paths = endpoint_openapi_paths_from_schema(&schema);
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
     let endpoint_openapi_fingerprint = endpoint_openapi_fingerprint(&openapi_spec);
+    let endpoint_openapi_stats = endpoint_openapi_stats(&openapi_spec);
     let endpoint_catalog_coverage =
         endpoint_catalog_coverage_from_operations(&schema, &endpoint_openapi_operations);
     let endpoint_catalog_diagnostics =
@@ -2357,6 +2393,7 @@ async fn get_agent_schema(
             "endpoint_catalog_openapi_fingerprint".to_string(),
             json!(endpoint_openapi_fingerprint),
         );
+        schema_object.insert("endpoint_catalog_openapi_stats".to_string(), endpoint_openapi_stats);
     }
     Ok(Json(schema))
 }
@@ -3476,7 +3513,8 @@ mod tests {
         agent_ops_cache_stats, build_export_artifacts, build_preset_operations,
         build_scenario_operations, clear_agent_ops_cache, duckdb_query,
         ensure_non_empty_operations, export_workbook, formula_supported_functions_summary,
-        endpoint_openapi_fingerprint, formula_unsupported_behaviors_summary, get_agent_schema,
+        endpoint_openapi_fingerprint, endpoint_openapi_stats,
+        formula_unsupported_behaviors_summary, get_agent_schema,
         get_agent_wizard_schema,
         import_bytes_into_workbook, normalize_sheet_name, openapi, operations_signature,
         parse_optional_bool, preview_remove_agent_ops_cache_entries_by_prefix,
@@ -4392,6 +4430,44 @@ mod tests {
         assert_eq!(
             fingerprint, expected,
             "{schema_name} endpoint_catalog_openapi_fingerprint should match openapi-derived fingerprint",
+        );
+    }
+
+    fn assert_endpoint_openapi_stats_are_consistent(
+        schema: &serde_json::Value,
+        schema_name: &str,
+        openapi_spec: &serde_json::Value,
+    ) {
+        let stats = schema
+            .get("endpoint_catalog_openapi_stats")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_catalog_openapi_stats object");
+        let path_count = stats
+            .get("path_count")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_openapi_stats.path_count should be integer");
+        let operation_count = stats
+            .get("operation_count")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_openapi_stats.operation_count should be integer");
+        let summarized_operation_count = stats
+            .get("summarized_operation_count")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_openapi_stats.summarized_operation_count should be integer");
+        assert!(
+            summarized_operation_count <= operation_count,
+            "{schema_name} endpoint_catalog_openapi_stats.summarized_operation_count should not exceed operation_count",
+        );
+        let expected_stats = endpoint_openapi_stats(openapi_spec);
+        assert_eq!(
+            schema.get("endpoint_catalog_openapi_stats"),
+            Some(&expected_stats),
+            "{schema_name} endpoint_catalog_openapi_stats should match openapi-derived counters",
+        );
+        assert!(path_count > 0, "{schema_name} endpoint_catalog_openapi_stats.path_count should be positive");
+        assert!(
+            operation_count > 0,
+            "{schema_name} endpoint_catalog_openapi_stats.operation_count should be positive",
         );
     }
 
@@ -9447,6 +9523,7 @@ mod tests {
             "agent schema",
             &openapi_spec,
         );
+        assert_endpoint_openapi_stats_are_consistent(&schema, "agent schema", &openapi_spec);
         assert_endpoint_catalog_coverage_is_consistent(&schema, "agent schema");
         assert_eq!(
             schema
@@ -10354,6 +10431,7 @@ mod tests {
             "wizard schema",
             &openapi_spec,
         );
+        assert_endpoint_openapi_stats_are_consistent(&schema, "wizard schema", &openapi_spec);
         assert_endpoint_catalog_coverage_is_consistent(&schema, "wizard schema");
         assert_eq!(
             schema
@@ -10965,6 +11043,7 @@ mod tests {
             "agent_ops_cache_remove_stale_response_shape",
             "agent_ops_idempotency_cache_max_entries",
             "endpoint_catalog_openapi_fingerprint",
+            "endpoint_catalog_openapi_stats",
         ];
 
         for key in parity_keys {
@@ -11464,6 +11543,7 @@ mod tests {
             "agent schema",
             &spec,
         );
+        assert_endpoint_openapi_stats_are_consistent(&agent_schema, "agent schema", &spec);
         assert_endpoint_catalog_coverage_is_consistent(&agent_schema, "agent schema");
     }
 
@@ -11522,6 +11602,7 @@ mod tests {
             "wizard schema",
             &spec,
         );
+        assert_endpoint_openapi_stats_are_consistent(&wizard_schema, "wizard schema", &spec);
         assert_endpoint_catalog_coverage_is_consistent(&wizard_schema, "wizard schema");
     }
 
@@ -11591,10 +11672,21 @@ mod tests {
             "wizard schema",
             &openapi_spec,
         );
+        assert_endpoint_openapi_stats_are_consistent(&agent_schema, "agent schema", &openapi_spec);
+        assert_endpoint_openapi_stats_are_consistent(
+            &wizard_schema,
+            "wizard schema",
+            &openapi_spec,
+        );
         assert_eq!(
             agent_schema.get("endpoint_catalog_openapi_fingerprint"),
             wizard_schema.get("endpoint_catalog_openapi_fingerprint"),
             "wizard and agent schemas should advertise identical openapi fingerprint metadata",
+        );
+        assert_eq!(
+            agent_schema.get("endpoint_catalog_openapi_stats"),
+            wizard_schema.get("endpoint_catalog_openapi_stats"),
+            "wizard and agent schemas should advertise identical openapi stats metadata",
         );
 
         let agent_method_map = agent_endpoint_http_methods

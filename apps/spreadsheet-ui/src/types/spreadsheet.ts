@@ -217,6 +217,12 @@ export interface EndpointCatalogCoverage {
   missing_operation_entries: number;
 }
 
+export interface EndpointCatalogOpenApiStats {
+  path_count: number;
+  operation_count: number;
+  summarized_operation_count: number;
+}
+
 export interface EndpointCatalogDiagnostics {
   status: "healthy" | "warning" | "error";
   issue_count: number;
@@ -242,6 +248,7 @@ export interface AgentSchemaInfo {
   endpoint_catalog_coverage?: EndpointCatalogCoverage;
   endpoint_catalog_diagnostics?: EndpointCatalogDiagnostics;
   endpoint_catalog_openapi_fingerprint?: string;
+  endpoint_catalog_openapi_stats?: EndpointCatalogOpenApiStats;
   request_shape?: Record<string, unknown>;
   agent_ops_request_shape?: Record<string, unknown>;
   workbook_import_endpoint?: string;
@@ -376,6 +383,7 @@ export interface AgentWizardSchemaInfo {
   endpoint_catalog_coverage?: EndpointCatalogCoverage;
   endpoint_catalog_diagnostics?: EndpointCatalogDiagnostics;
   endpoint_catalog_openapi_fingerprint?: string;
+  endpoint_catalog_openapi_stats?: EndpointCatalogOpenApiStats;
   json_endpoint?: string;
   presets_endpoint?: string;
   preset_operations_endpoint?: string;

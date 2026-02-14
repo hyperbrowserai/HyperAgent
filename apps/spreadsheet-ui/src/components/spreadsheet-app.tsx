@@ -101,6 +101,12 @@ interface EndpointCatalogSchemaCoverage {
   missingOperationEntries: number;
 }
 
+interface EndpointCatalogOpenApiStats {
+  pathCount: number;
+  operationCount: number;
+  summarizedOperationCount: number;
+}
+
 interface EndpointCatalogSchemaDiagnostics {
   status: "healthy" | "warning" | "error";
   issueCount: number;
@@ -110,6 +116,13 @@ interface EndpointCatalogSchemaDiagnostics {
   openApiSyncIssueCount: number;
   missingOperationEntries: number;
   isOpenApiSyncAvailable: boolean;
+}
+
+interface EndpointCatalogOpenApiStatsDrift {
+  hasDrift: boolean;
+  pathCount: boolean;
+  operationCount: boolean;
+  summarizedOperationCount: boolean;
 }
 
 interface EndpointCatalogCoverageDrift {
@@ -607,6 +620,30 @@ function normalizeSchemaEndpointCatalogCoverage(
   };
 }
 
+function normalizeSchemaEndpointCatalogOpenApiStats(
+  value: unknown,
+): EndpointCatalogOpenApiStats | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const statsValue = value as Record<string, unknown>;
+  const pathCount = statsValue.path_count;
+  const operationCount = statsValue.operation_count;
+  const summarizedOperationCount = statsValue.summarized_operation_count;
+  if (
+    typeof pathCount !== "number"
+    || typeof operationCount !== "number"
+    || typeof summarizedOperationCount !== "number"
+  ) {
+    return null;
+  }
+  return {
+    pathCount,
+    operationCount,
+    summarizedOperationCount,
+  };
+}
+
 function normalizeSchemaEndpointCatalogDiagnostics(
   value: unknown,
 ): EndpointCatalogSchemaDiagnostics | null {
@@ -674,6 +711,63 @@ function buildEndpointCatalogCoverageDrift(
     summaryOperationBacked,
     pathOperationBacked,
     operationFallback,
+  };
+}
+
+function collectOpenApiStats(spec: unknown): EndpointCatalogOpenApiStats | null {
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+    return null;
+  }
+  const paths = (spec as { paths?: unknown }).paths;
+  if (!paths || typeof paths !== "object" || Array.isArray(paths)) {
+    return null;
+  }
+  let operationCount = 0;
+  let summarizedOperationCount = 0;
+  for (const methods of Object.values(paths as Record<string, unknown>)) {
+    if (!methods || typeof methods !== "object" || Array.isArray(methods)) {
+      continue;
+    }
+    for (const [method, metadata] of Object.entries(methods as Record<string, unknown>)) {
+      if (!method.trim()) {
+        continue;
+      }
+      operationCount += 1;
+      const summary = (
+        metadata
+          && typeof metadata === "object"
+          && !Array.isArray(metadata)
+          ? (metadata as { summary?: unknown }).summary
+          : undefined
+      );
+      if (typeof summary === "string" && summary.trim()) {
+        summarizedOperationCount += 1;
+      }
+    }
+  }
+  return {
+    pathCount: Object.keys(paths as Record<string, unknown>).length,
+    operationCount,
+    summarizedOperationCount,
+  };
+}
+
+function buildEndpointCatalogOpenApiStatsDrift(args: {
+  schemaStats: EndpointCatalogOpenApiStats | null;
+  openApiStats: EndpointCatalogOpenApiStats | null;
+}): EndpointCatalogOpenApiStatsDrift | null {
+  if (!args.schemaStats || !args.openApiStats) {
+    return null;
+  }
+  const pathCount = args.schemaStats.pathCount !== args.openApiStats.pathCount;
+  const operationCount = args.schemaStats.operationCount !== args.openApiStats.operationCount;
+  const summarizedOperationCount =
+    args.schemaStats.summarizedOperationCount !== args.openApiStats.summarizedOperationCount;
+  return {
+    hasDrift: pathCount || operationCount || summarizedOperationCount,
+    pathCount,
+    operationCount,
+    summarizedOperationCount,
   };
 }
 
@@ -1725,6 +1819,13 @@ export function SpreadsheetApp() {
     () => normalizeEndpointSummariesByKey(wizardSchemaQuery.data?.endpoint_summaries),
     [wizardSchemaQuery.data?.endpoint_summaries],
   );
+  const wizardSchemaEndpointOpenApiStats = useMemo(
+    () =>
+      normalizeSchemaEndpointCatalogOpenApiStats(
+        wizardSchemaQuery.data?.endpoint_catalog_openapi_stats,
+      ),
+    [wizardSchemaQuery.data?.endpoint_catalog_openapi_stats],
+  );
   const wizardSchemaEndpoints = useMemo(
     () => collectSchemaEndpointMetadata(wizardSchemaQuery.data, wizardEndpointOpenApiPathsByKey),
     [wizardEndpointOpenApiPathsByKey, wizardSchemaQuery.data],
@@ -1735,6 +1836,10 @@ export function SpreadsheetApp() {
   );
   const openApiSummariesByPath = useMemo(
     () => collectOpenApiSummariesByPath(openApiSpecQuery.data),
+    [openApiSpecQuery.data],
+  );
+  const openApiStats = useMemo(
+    () => collectOpenApiStats(openApiSpecQuery.data),
     [openApiSpecQuery.data],
   );
   const wizardSchemaEndpointsWithMethods = useMemo(
@@ -1866,6 +1971,14 @@ export function SpreadsheetApp() {
       ),
     [wizardEndpointCoverageStats, wizardSchemaEndpointCoverage],
   );
+  const wizardOpenApiStatsDrift = useMemo(
+    () =>
+      buildEndpointCatalogOpenApiStatsDrift({
+        schemaStats: wizardSchemaEndpointOpenApiStats,
+        openApiStats,
+      }),
+    [openApiStats, wizardSchemaEndpointOpenApiStats],
+  );
   const wizardEndpointCatalogDiagnostics = useMemo(
     () =>
       buildEndpointCatalogDiagnostics({
@@ -1899,10 +2012,14 @@ export function SpreadsheetApp() {
     && !wizardEndpointDiagnosticsDrift.hasDrift,
   );
   const hasWizardSchemaEndpointMetadata = Boolean(
-    wizardSchemaEndpointCoverage && wizardSchemaEndpointDiagnostics,
+    wizardSchemaEndpointCoverage
+    && wizardSchemaEndpointDiagnostics
+    && wizardSchemaEndpointOpenApiStats,
   );
   const hasWizardSchemaEndpointDrift = Boolean(
-    wizardEndpointCoverageDrift?.hasDrift || wizardEndpointDiagnosticsDrift?.hasDrift,
+    wizardEndpointCoverageDrift?.hasDrift
+    || wizardEndpointDiagnosticsDrift?.hasDrift
+    || wizardOpenApiStatsDrift?.hasDrift,
   );
   const wizardEndpointCatalogOpenApiFingerprint = useMemo(
     () => {
@@ -1953,6 +2070,8 @@ export function SpreadsheetApp() {
         schema_coverage: wizardSchemaEndpointCoverage,
         coverage_drift: wizardEndpointCoverageDrift,
         coverage_in_sync: hasWizardSchemaCoverageInSync,
+        openapi_stats: wizardSchemaEndpointOpenApiStats,
+        openapi_stats_drift: wizardOpenApiStatsDrift,
         schema_metadata_available: hasWizardSchemaEndpointMetadata,
         schema_drift_detected: hasWizardSchemaEndpointDrift,
         openapi_fingerprint: wizardEndpointCatalogOpenApiFingerprint,
@@ -2014,9 +2133,11 @@ export function SpreadsheetApp() {
       hasWizardSchemaEndpointDrift,
       hasWizardSchemaEndpointMetadata,
       hasEndpointCatalogFingerprintMismatch,
+      wizardOpenApiStatsDrift,
       wizardEndpointCatalogOpenApiFingerprint,
       wizardSchemaEndpointCoverage,
       wizardSchemaEndpointDiagnostics,
+      wizardSchemaEndpointOpenApiStats,
       wizardSchemaEndpointsWithMethods,
     ],
   );
@@ -2349,6 +2470,13 @@ export function SpreadsheetApp() {
       ),
     [agentSchemaQuery.data?.endpoint_catalog_coverage],
   );
+  const agentSchemaEndpointOpenApiStats = useMemo(
+    () =>
+      normalizeSchemaEndpointCatalogOpenApiStats(
+        agentSchemaQuery.data?.endpoint_catalog_openapi_stats,
+      ),
+    [agentSchemaQuery.data?.endpoint_catalog_openapi_stats],
+  );
   const agentSchemaEndpointDiagnostics = useMemo(
     () =>
       normalizeSchemaEndpointCatalogDiagnostics(
@@ -2363,6 +2491,14 @@ export function SpreadsheetApp() {
         agentSchemaEndpointCoverage,
       ),
     [agentEndpointCoverageStats, agentSchemaEndpointCoverage],
+  );
+  const agentOpenApiStatsDrift = useMemo(
+    () =>
+      buildEndpointCatalogOpenApiStatsDrift({
+        schemaStats: agentSchemaEndpointOpenApiStats,
+        openApiStats,
+      }),
+    [agentSchemaEndpointOpenApiStats, openApiStats],
   );
   const agentEndpointCatalogDiagnostics = useMemo(
     () =>
@@ -2397,10 +2533,14 @@ export function SpreadsheetApp() {
     && !agentEndpointDiagnosticsDrift.hasDrift,
   );
   const hasAgentSchemaEndpointMetadata = Boolean(
-    agentSchemaEndpointCoverage && agentSchemaEndpointDiagnostics,
+    agentSchemaEndpointCoverage
+    && agentSchemaEndpointDiagnostics
+    && agentSchemaEndpointOpenApiStats,
   );
   const hasAgentSchemaEndpointDrift = Boolean(
-    agentEndpointCoverageDrift?.hasDrift || agentEndpointDiagnosticsDrift?.hasDrift,
+    agentEndpointCoverageDrift?.hasDrift
+    || agentEndpointDiagnosticsDrift?.hasDrift
+    || agentOpenApiStatsDrift?.hasDrift,
   );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
@@ -2424,6 +2564,8 @@ export function SpreadsheetApp() {
         schema_coverage: agentSchemaEndpointCoverage,
         coverage_drift: agentEndpointCoverageDrift,
         coverage_in_sync: hasAgentSchemaCoverageInSync,
+        openapi_stats: agentSchemaEndpointOpenApiStats,
+        openapi_stats_drift: agentOpenApiStatsDrift,
         schema_metadata_available: hasAgentSchemaEndpointMetadata,
         schema_drift_detected: hasAgentSchemaEndpointDrift,
         openapi_fingerprint: agentEndpointCatalogOpenApiFingerprint,
@@ -2485,6 +2627,8 @@ export function SpreadsheetApp() {
       hasAgentSchemaEndpointDrift,
       hasAgentSchemaEndpointMetadata,
       agentEndpointCatalogOpenApiFingerprint,
+      agentOpenApiStatsDrift,
+      agentSchemaEndpointOpenApiStats,
       hasEndpointCatalogFingerprintMismatch,
       agentSchemaEndpointCoverage,
       agentSchemaEndpointDiagnostics,
@@ -4697,6 +4841,46 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_coverage metadata missing.
                   </p>
                 )}
+                {wizardSchemaEndpointOpenApiStats ? (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    schema openapi stats: paths{" "}
+                    <span className="font-mono text-slate-300">
+                      {wizardSchemaEndpointOpenApiStats.pathCount}
+                    </span>
+                    , operations{" "}
+                    <span className="font-mono text-slate-300">
+                      {wizardSchemaEndpointOpenApiStats.operationCount}
+                    </span>
+                    , summarized{" "}
+                    <span className="font-mono text-slate-300">
+                      {wizardSchemaEndpointOpenApiStats.summarizedOperationCount}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-amber-300">
+                    schema endpoint_catalog_openapi_stats metadata missing.
+                  </p>
+                )}
+                {wizardOpenApiStatsDrift?.hasDrift ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    schema/openapi stats drift:{" "}
+                    <span className="font-mono">
+                      {[
+                        wizardOpenApiStatsDrift.pathCount ? "path_count" : null,
+                        wizardOpenApiStatsDrift.operationCount ? "operation_count" : null,
+                        wizardOpenApiStatsDrift.summarizedOperationCount
+                          ? "summarized_operation_count"
+                          : null,
+                      ]
+                        .filter((value): value is string => Boolean(value))
+                        .join(", ")}
+                    </span>
+                  </p>
+                ) : wizardSchemaEndpointOpenApiStats ? (
+                  <p className="mt-1 text-[11px] text-emerald-300">
+                    schema/openapi stats are in sync.
+                  </p>
+                ) : null}
                 {hasWizardSchemaCoverageInSync ? (
                   <p className="mt-1 text-[11px] text-emerald-300">
                     schema/local coverage counters are in sync.
@@ -6001,6 +6185,46 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_coverage metadata missing.
                   </p>
                 )}
+                {agentSchemaEndpointOpenApiStats ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    schema openapi stats: paths{" "}
+                    <span className="font-mono text-slate-300">
+                      {agentSchemaEndpointOpenApiStats.pathCount}
+                    </span>
+                    , operations{" "}
+                    <span className="font-mono text-slate-300">
+                      {agentSchemaEndpointOpenApiStats.operationCount}
+                    </span>
+                    , summarized{" "}
+                    <span className="font-mono text-slate-300">
+                      {agentSchemaEndpointOpenApiStats.summarizedOperationCount}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-amber-300">
+                    schema endpoint_catalog_openapi_stats metadata missing.
+                  </p>
+                )}
+                {agentOpenApiStatsDrift?.hasDrift ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    schema/openapi stats drift:{" "}
+                    <span className="font-mono">
+                      {[
+                        agentOpenApiStatsDrift.pathCount ? "path_count" : null,
+                        agentOpenApiStatsDrift.operationCount ? "operation_count" : null,
+                        agentOpenApiStatsDrift.summarizedOperationCount
+                          ? "summarized_operation_count"
+                          : null,
+                      ]
+                        .filter((value): value is string => Boolean(value))
+                        .join(", ")}
+                    </span>
+                  </p>
+                ) : agentSchemaEndpointOpenApiStats ? (
+                  <p className="mt-1 text-xs text-emerald-300">
+                    schema/openapi stats are in sync.
+                  </p>
+                ) : null}
                 {hasAgentSchemaCoverageInSync ? (
                   <p className="mt-1 text-xs text-emerald-300">
                     schema/local coverage counters are in sync.
