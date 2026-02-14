@@ -2778,6 +2778,7 @@ async fn openapi() -> Json<serde_json::Value> {
 mod tests {
   use axum::{extract::Path, extract::Query, extract::State, Json};
   use rust_xlsxwriter::{Formula, Workbook};
+  use serde_json::json;
   use std::time::Duration;
   use tempfile::tempdir;
   use tokio::time::timeout;
@@ -2814,6 +2815,7 @@ mod tests {
       ReexecuteAgentOpsCacheEntryRequest,
       ReplayAgentOpsCacheEntryRequest, SetCellsRequest, CellMutation,
     },
+    store::load_sheet_snapshot,
     state::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES},
   };
 
@@ -3008,6 +3010,63 @@ mod tests {
       }
       other => panic!("expected bad request for blank formula, got {other:?}"),
     }
+  }
+
+  #[tokio::test]
+  async fn should_trim_formula_inputs_in_set_cells_batch() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("set-cells-trim-formula".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let response = set_cells_batch(
+      State(state.clone()),
+      Path(workbook.id),
+      Json(SetCellsRequest {
+        sheet: "Sheet1".to_string(),
+        actor: Some("test".to_string()),
+        cells: vec![
+          CellMutation {
+            row: 1,
+            col: 1,
+            value: Some(json!(12)),
+            formula: None,
+          },
+          CellMutation {
+            row: 1,
+            col: 2,
+            value: None,
+            formula: Some("  SUM(A1:A1)  ".to_string()),
+          },
+        ],
+      }),
+    )
+    .await
+    .expect("trimmed formulas should be accepted");
+    assert_eq!(response.0.updated, 2);
+
+    let db_path = state
+      .db_path(workbook.id)
+      .await
+      .expect("db path should be available");
+    let snapshot =
+      load_sheet_snapshot(&db_path, "Sheet1").expect("sheet snapshot should load");
+    let formula_cell = snapshot
+      .iter()
+      .find(|cell| cell.row == 1 && cell.col == 2)
+      .expect("formula cell should exist");
+    assert_eq!(formula_cell.formula.as_deref(), Some("=SUM(A1:A1)"));
+    assert_eq!(
+      formula_cell
+        .evaluated_value
+        .as_deref()
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(12),
+    );
   }
 
   #[tokio::test]
