@@ -371,6 +371,12 @@ const agent = new HyperAgent({
 });
 ```
 
+`llm` must be either:
+- a provider config object (`{ provider, model, ... }`), or
+- an object implementing the HyperAgent LLM client interface (`invoke`, `invokeStructured`, `getProviderId`, `getModelId`, `getCapabilities`).
+
+Invalid/malformed `llm` payloads fail fast with a configuration error.
+
 ### MCP Support
 
 HyperAgent functions as a fully functional MCP client. For best results, we recommend using
