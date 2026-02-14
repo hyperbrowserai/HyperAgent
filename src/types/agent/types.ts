@@ -124,6 +124,10 @@ export interface PerformTaskParams {
    */
   maxContextSwitchRetries?: number;
   /**
+   * Delay between retries caused by tab/page context switches in milliseconds.
+   */
+  contextSwitchRetryDelayMs?: number;
+  /**
    * @deprecated use maxElementRetries instead.
    */
   maxSteps?: number;

@@ -3612,6 +3612,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         3,
         10
       );
+      const contextSwitchRetryDelayMs = this.normalizeRetryDelayMs(
+        params?.contextSwitchRetryDelayMs,
+        500
+      );
       for (let i = 0; i < maxRetries; i++) {
         try {
           return await this.executeSingleAction(
@@ -3635,7 +3639,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
               );
             }
             // Wait briefly for stability
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await new Promise((resolve) =>
+              setTimeout(resolve, contextSwitchRetryDelayMs)
+            );
             continue;
           }
           throw err;

@@ -2201,6 +2201,66 @@ describe("HyperAgent constructor and task controls", () => {
     expect(internalAgent.executeSingleAction).toHaveBeenCalledTimes(2);
   });
 
+  it("normalizes invalid contextSwitchRetryDelayMs for hyperPage.perform retries", async () => {
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: jest.fn(),
+        off: jest.fn(),
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+      executeSingleAction: jest.Mock;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+    internalAgent.executeSingleAction = jest
+      .fn()
+      .mockRejectedValueOnce(
+        new HyperagentError("Page context switched during execution", 409)
+      )
+      .mockResolvedValue({
+        taskId: "task-id",
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: "done",
+      });
+    const setTimeoutSpy = jest
+      .spyOn(global, "setTimeout")
+      .mockImplementation(
+        ((handler: TimerHandler) => {
+          if (typeof handler === "function") {
+            handler();
+          }
+          return 0 as unknown as NodeJS.Timeout;
+        }) as unknown as typeof setTimeout
+      );
+
+    try {
+      const [hyperPage] = await agent.getPages();
+      const result = await hyperPage.perform("click submit", {
+        maxContextSwitchRetries: 2,
+        contextSwitchRetryDelayMs: -1,
+      });
+
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(internalAgent.executeSingleAction).toHaveBeenCalledTimes(2);
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
   it("warns once when deprecated hyperPage.aiAction alias is used", async () => {
     const page = {
       on: jest.fn(),

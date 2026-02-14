@@ -191,6 +191,7 @@ await page.perform("click the login button", {
   maxElementRetries: 5,
   retryDelayMs: 250,
   maxContextSwitchRetries: 4,
+  contextSwitchRetryDelayMs: 500,
 });
 ```
 
