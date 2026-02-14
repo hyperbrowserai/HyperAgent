@@ -8713,10 +8713,38 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("operations_preview_response_shape")
+                .and_then(|value| value.get("operations_signature"))
+                .and_then(serde_json::Value::as_str),
+            Some("sha256 signature over generated operations"),
+        );
+        assert_eq!(
+            schema
+                .get("operations_preview_response_shape")
+                .and_then(|value| value.get("operations"))
+                .and_then(serde_json::Value::as_str),
+            Some("array of operation objects"),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_response_shape")
                 .and_then(|value| value.get("served_from_cache"))
                 .and_then(serde_json::Value::as_str),
             Some("boolean; true when response reused by request_id idempotency cache"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_response_shape")
+                .and_then(|value| value.get("operations_signature"))
+                .and_then(serde_json::Value::as_str),
+            Some("sha256 signature over submitted operations"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_response_shape")
+                .and_then(|value| value.get("results"))
+                .and_then(serde_json::Value::as_str),
+            Some("array of operation results"),
         );
         assert_eq!(
             schema
@@ -8737,6 +8765,13 @@ mod tests {
                 .and_then(|value| value.get("operations_signature"))
                 .and_then(serde_json::Value::as_str),
             Some("sha256 signature over submitted operations"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_preview_response_shape")
+                .and_then(|value| value.get("operations"))
+                .and_then(serde_json::Value::as_str),
+            Some("echoed operation array"),
         );
         let signature_error_codes = schema
             .get("signature_error_codes")
