@@ -895,6 +895,10 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.run_response_shape),
     [wizardSchemaQuery.data?.run_response_shape],
   );
+  const wizardAgentOpsResponseFields = useMemo(
+    () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.agent_ops_response_shape),
+    [wizardSchemaQuery.data?.agent_ops_response_shape],
+  );
   const wizardImportResponseFields = useMemo(
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.import_response_shape),
     [wizardSchemaQuery.data?.import_response_shape],
@@ -3247,6 +3251,14 @@ export function SpreadsheetApp() {
                 run response fields:{" "}
                 <span className="font-mono text-slate-300">
                   {formatSchemaShapeEntries(wizardRunResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardAgentOpsResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                agent ops response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardAgentOpsResponseFields)}
                 </span>
               </p>
             ) : null}

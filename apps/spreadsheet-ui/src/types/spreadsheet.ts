@@ -348,6 +348,7 @@ export interface AgentWizardSchemaInfo {
   agent_ops_preview_endpoint?: string;
   agent_ops_preview_request_shape?: Record<string, string>;
   agent_ops_preview_response_shape?: Record<string, string>;
+  agent_ops_response_shape?: Record<string, string>;
   run_response_shape?: Record<string, string>;
   import_response_shape?: Record<string, string>;
   duckdb_query_endpoint?: string;
