@@ -22,6 +22,8 @@ pub const COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME: &str =
   "compat_default_cached_formula.xlsx";
 pub const COMPAT_ERROR_CACHED_FORMULA_FILE_NAME: &str =
   "compat_error_cached_formula.xlsx";
+pub const COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME: &str =
+  "compat_formula_only_normalized.xlsx";
 
 pub fn generate_fixture_corpus(
 ) -> Result<Vec<(&'static str, Vec<u8>)>, Box<dyn std::error::Error>> {
@@ -65,6 +67,10 @@ pub fn generate_fixture_corpus(
     (
       COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
       build_compat_error_cached_formula_fixture_bytes()?,
+    ),
+    (
+      COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
+      build_compat_formula_only_normalized_fixture_bytes()?,
     ),
   ])
 }
@@ -238,6 +244,24 @@ fn build_compat_error_cached_formula_fixture_bytes(
   sheet.write_number(0, 0, 5.0)?;
   sheet.write_number(1, 0, 0.0)?;
   sheet.write_formula(0, 1, Formula::new("=A1/A2"))?;
+
+  let bytes = workbook.save_to_buffer()?;
+  strip_formula_cached_value_from_cell(
+    &bytes,
+    "xl/worksheets/sheet1.xml",
+    "B1",
+  )
+}
+
+fn build_compat_formula_only_normalized_fixture_bytes(
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let sheet = workbook.add_worksheet();
+  sheet.set_name("FormulaOnlyNorm")?;
+  sheet.write_number(0, 0, 2.0)?;
+  sheet.write_number(1, 0, 3.0)?;
+  sheet.write_formula(0, 1, Formula::new("=+@_xlfn.SUM(A1:A2)"))?;
 
   let bytes = workbook.save_to_buffer()?;
   strip_formula_cached_value_from_cell(

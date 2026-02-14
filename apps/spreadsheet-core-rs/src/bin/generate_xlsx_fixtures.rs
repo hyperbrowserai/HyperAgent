@@ -260,6 +260,7 @@ mod tests {
       fixture_corpus::COMPAT_FORMULA_MATRIX_FILE_NAME,
       fixture_corpus::COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
       fixture_corpus::COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
+      fixture_corpus::COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
     ]
     .into_iter()
     .collect::<HashSet<_>>();
@@ -291,14 +292,14 @@ mod tests {
 
     let verified_files = verify_fixture_corpus(&output_dir)
       .expect("written fixture corpus should verify");
-    assert_eq!(verified_files.len(), 10);
+    assert_eq!(verified_files.len(), 11);
   }
 
   #[test]
   fn should_verify_committed_fixture_corpus_from_default_dir() {
     let verified_files = verify_fixture_corpus(&default_fixture_dir())
       .expect("committed fixture corpus should verify");
-    assert_eq!(verified_files.len(), 10);
+    assert_eq!(verified_files.len(), 11);
   }
 
   #[test]

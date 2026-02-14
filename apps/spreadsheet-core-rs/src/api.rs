@@ -2817,6 +2817,7 @@ mod tests {
       COMPAT_BASELINE_FILE_NAME, COMPAT_FORMULA_MATRIX_FILE_NAME,
       COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
       COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
+      COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
       COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
     },
@@ -2906,6 +2907,10 @@ mod tests {
 
   fn workbook_import_error_cached_formula_fixture_bytes() -> Vec<u8> {
     workbook_fixture_bytes(COMPAT_ERROR_CACHED_FORMULA_FILE_NAME)
+  }
+
+  fn workbook_import_formula_only_normalized_fixture_bytes() -> Vec<u8> {
+    workbook_fixture_bytes(COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME)
   }
 
   #[test]
@@ -3543,6 +3548,73 @@ mod tests {
         .get("formula_cells_without_cached_values")
         .and_then(serde_json::Value::as_u64),
       Some(1),
+    );
+  }
+
+  #[tokio::test]
+  async fn should_report_formula_only_normalized_import_metrics_on_import() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("import-formula-only-normalized-fixture".to_string()))
+      .await
+      .expect("workbook should be created");
+    let mut events = state
+      .subscribe(workbook.id)
+      .await
+      .expect("event subscription should work");
+
+    let import_result = import_bytes_into_workbook(
+      &state,
+      workbook.id,
+      &workbook_import_formula_only_normalized_fixture_bytes(),
+      "formula-only-normalized-import",
+    )
+    .await
+    .expect("formula-only normalized fixture import should succeed");
+
+    assert_eq!(import_result.formula_cells_imported, 1);
+    assert_eq!(import_result.formula_cells_with_cached_values, 0);
+    assert_eq!(import_result.formula_cells_without_cached_values, 1);
+    assert_eq!(import_result.formula_cells_normalized, 1);
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("1 formula(s) were normalized")),
+      "import warnings should include formula-only normalization telemetry",
+    );
+
+    let emitted_event = timeout(Duration::from_secs(1), events.recv())
+      .await
+      .expect("import event should arrive")
+      .expect("event payload should decode");
+    assert_eq!(emitted_event.event_type, "workbook.imported");
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_without_cached_values")
+        .and_then(serde_json::Value::as_u64),
+      Some(1),
+    );
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_normalized")
+        .and_then(serde_json::Value::as_u64),
+      Some(1),
+    );
+    assert!(
+      emitted_event
+        .payload
+        .get("warnings")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .any(|warning| warning.contains("1 formula(s) were normalized")),
+      "import event warning telemetry should include formula-only normalization detail",
     );
   }
 
