@@ -111,8 +111,11 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened perform-action failure formatting with explicit bounded diagnostics, including trap-prone DOM element lookup failures.
 - Hardened Anthropic provider structured-output warning diagnostics in schema validation fallback branches.
 - Hardened network-settle waiting (`waitForSettledDOM`) with safe listener attach/detach handling, timeout fallback when listener registration fails, and bounded stalled-request diagnostics.
+- Added bounded timeout normalization in `waitForSettledDOM` so invalid/non-finite/non-positive waits no longer resolve immediately and oversized values are capped.
 - Hardened replay-step diagnostics in `runFromActionCache` to strip control characters in cached-step/page getter failure messages.
 - Sanitized control characters in prompt-builder task/step/DOM payload serialization before truncation to keep LLM context inputs clean under malformed runtime values.
+- Tightened agent-loop action/output typing by normalizing parsed structured outputs into explicit `AgentOutput`/`ActionType` shapes before runtime dispatch and cache recording.
+- Removed direct `as any` casts in OpenAI/Anthropic/DeepSeek/Gemini provider request payload assembly in favor of SDK-derived parameter field typing.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.

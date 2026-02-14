@@ -1,5 +1,6 @@
 import {
   ActionCacheOutput,
+  AgentOutput,
   AgentStep,
   AgentTaskOutput,
 } from "@/types/agent/types";
@@ -224,6 +225,28 @@ function normalizeActionOutput(
     message,
     ...(extract !== undefined ? { extract: extract as object } : {}),
     ...(debug !== undefined ? { debug } : {}),
+  };
+}
+
+function normalizeAgentOutput(value: unknown): AgentOutput {
+  const thoughts = formatDiagnosticText(
+    safeReadRecordField(value, "thoughts"),
+    MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+    ""
+  );
+  const memory = formatDiagnosticText(
+    safeReadRecordField(value, "memory"),
+    MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+    ""
+  );
+  const action = safeReadRecordField(value, "action");
+  return {
+    thoughts,
+    memory,
+    action: {
+      type: normalizeRuntimeActionType(safeReadRecordField(action, "type")),
+      params: safeReadRecordField(action, "params"),
+    },
   };
 }
 
@@ -855,7 +878,7 @@ export const runAgentTask = async (
       }
 
       // Invoke LLM with structured output
-      const agentOutput = await (async () => {
+      const rawAgentOutput = await (async () => {
         const maxAttempts = 3;
         let currentMsgs = msgs;
 
@@ -1004,6 +1027,7 @@ export const runAgentTask = async (
         }
         throw new Error("Failed to get structured output from LLM");
       })();
+      const agentOutput = normalizeAgentOutput(rawAgentOutput);
 
       params?.debugOnAgentOutput?.(agentOutput);
 

@@ -46,7 +46,12 @@ function createMockPage(): Page {
   } as unknown as Page;
 }
 
-function createCompleteActionDefinition(): AgentActionDefinition {
+function createCompleteActionDefinition(): AgentActionDefinition<
+  z.ZodObject<{
+    success: z.ZodBoolean;
+    text: z.ZodOptional<z.ZodString>;
+  }>
+> {
   return {
     type: "complete",
     actionParams: z.object({

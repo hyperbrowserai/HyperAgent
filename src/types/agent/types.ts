@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ActionOutput } from "./actions/types";
+import { ActionOutput, ActionType } from "./actions/types";
 import { Page } from "playwright-core";
 import { ErrorEmitter } from "@/utils";
 import type { HyperAgentLLM } from "@/llm/types";
@@ -24,7 +24,11 @@ export const AgentOutputFn = (
     action: actionsSchema,
   });
 
-export type AgentOutput = z.infer<ReturnType<typeof AgentOutputFn>>;
+export interface AgentOutput {
+  thoughts: string;
+  memory: string;
+  action: ActionType;
+}
 
 export interface AgentStep {
   idx: number;
