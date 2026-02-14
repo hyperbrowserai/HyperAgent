@@ -26,6 +26,12 @@ const agent = new HyperAgent({
 - `true` (default): skip likely ad/tracking frames during OOPIF/session discovery.
 - `false`: include those frames, which is useful for workflows that intentionally interact with ad-tech, analytics tags, or embedded consent/tracking widgets.
 
+Override scopes:
+- agent-level default via `new HyperAgent({ filterAdTrackingFrames: ... })`,
+- per-task override via `page.ai(task, { filterAdTrackingFrames: ... })`,
+- per-single-action override via `page.perform(instruction, { filterAdTrackingFrames: ... })`,
+- replay override via `runFromActionCache(..., { filterAdTrackingFrames: ... })`.
+
 The same setting is propagated through:
 - task loop runtime context initialization (`page.ai()` flow),
 - single-action execution (`page.perform()` flow),

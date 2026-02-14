@@ -66,7 +66,12 @@ describe("runFromActionCache hardening", () => {
 
     const replay = await agent.runFromActionCache(cache, page);
 
-    expect(perform).toHaveBeenCalledWith("click login");
+    expect(perform).toHaveBeenCalledWith(
+      "click login",
+      expect.objectContaining({
+        filterAdTrackingFrames: true,
+      })
+    );
     expect(performClick).not.toHaveBeenCalled();
     expect(replay.status).toBe(TaskStatus.COMPLETED);
     expect(replay.steps[0]?.usedXPath).toBe(false);
@@ -1218,8 +1223,20 @@ describe("runFromActionCache hardening", () => {
     const replay = await agent.runFromActionCache(cache, page);
 
     expect(replay.status).toBe(TaskStatus.COMPLETED);
-    expect(perform).toHaveBeenNthCalledWith(1, "normal step");
-    expect(perform).toHaveBeenNthCalledWith(2, "nan index step");
+    expect(perform).toHaveBeenNthCalledWith(
+      1,
+      "normal step",
+      expect.objectContaining({
+        filterAdTrackingFrames: true,
+      })
+    );
+    expect(perform).toHaveBeenNthCalledWith(
+      2,
+      "nan index step",
+      expect.objectContaining({
+        filterAdTrackingFrames: true,
+      })
+    );
     expect(replay.steps[0]?.stepIndex).toBe(0);
     expect(replay.steps[1]?.stepIndex).toBe(-1);
   });
@@ -1291,7 +1308,63 @@ describe("runFromActionCache hardening", () => {
 
     expect(replay.sourceTaskId).toBe("unknown-task");
     expect(replay.status).toBe(TaskStatus.COMPLETED);
-    expect(perform).toHaveBeenCalledWith("fallback source id");
+    expect(perform).toHaveBeenCalledWith(
+      "fallback source id",
+      expect.objectContaining({
+        filterAdTrackingFrames: true,
+      })
+    );
+  });
+
+  it("applies runFromActionCache filter override to perform fallback calls", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      taskId: "perform-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "performed via instruction",
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: true,
+        retries: 1,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "click ad iframe CTA",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: null,
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    await agent.runFromActionCache(cache, page, {
+      filterAdTrackingFrames: false,
+    });
+
+    expect(perform).toHaveBeenCalledWith(
+      "click ad iframe CTA",
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
   });
 
   it("truncates oversized cached-step read diagnostics", async () => {

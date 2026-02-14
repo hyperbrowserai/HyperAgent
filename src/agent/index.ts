@@ -226,6 +226,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     );
   }
 
+  private resolveFilterAdTrackingFrames(value: unknown): boolean {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    return this.filterAdTrackingFrames;
+  }
+
   private readTaskStatus(
     taskState: TaskState,
     fallback: TaskStatus = TaskStatus.FAILED
@@ -1717,6 +1724,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       throw error;
     }
     const mergedParams = params ?? {};
+    const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
+      mergedParams.filterAdTrackingFrames
+    );
     let taskResult: Promise<AgentTaskOutput>;
     try {
       taskResult = runAgentTask(
@@ -1728,7 +1738,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           cdpActions: this.cdpActionsEnabled,
-          filterAdTrackingFrames: this.filterAdTrackingFrames,
+          filterAdTrackingFrames,
           activePage: async () => activeTaskPage,
         },
         taskState,
@@ -1877,6 +1887,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     try {
       const mergedParams = params ?? {};
+      const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
+        mergedParams.filterAdTrackingFrames
+      );
       let result = await runAgentTask(
         {
           llm: this.llm,
@@ -1886,7 +1899,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           cdpActions: this.cdpActionsEnabled,
-          filterAdTrackingFrames: this.filterAdTrackingFrames,
+          filterAdTrackingFrames,
           activePage: async () => activeTaskPage,
         },
         taskState,
@@ -1944,6 +1957,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       rawMaxXPathRetries,
       3,
       20
+    );
+    const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
+      this.safeReadField(params, "filterAdTrackingFrames")
     );
     const rawDebug = this.safeReadField(params, "debug");
     const debug = typeof rawDebug === "boolean" ? rawDebug : this.debug;
@@ -2344,7 +2360,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             const replayInstruction = instruction;
             if (!hasXPath) {
               if (replayInstruction) {
-                result = await hyperPage.perform(replayInstruction);
+                result = await hyperPage.perform(replayInstruction, {
+                  filterAdTrackingFrames,
+                });
               } else {
                 result = {
                   taskId: sourceTaskId,
@@ -2369,6 +2387,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
             const options: PerformOptions = {
               performInstruction: replayInstruction,
               maxSteps: maxXPathRetries,
+              filterAdTrackingFrames,
             };
             if (stepFrameIndex !== null && stepFrameIndex !== undefined) {
               options.frameIndex = stepFrameIndex;
@@ -2391,7 +2410,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           } else {
             const replayInstruction = instruction;
             if (replayInstruction) {
-              result = await hyperPage.perform(replayInstruction);
+              result = await hyperPage.perform(replayInstruction, {
+                filterAdTrackingFrames,
+              });
             } else {
               result = {
                 taskId: sourceTaskId,
@@ -2497,7 +2518,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     page: Page,
     maxRetries: number,
     retryDelayMs: number,
-    startTime: string
+    startTime: string,
+    filterAdTrackingFrames: boolean
   ): Promise<{
     element: ExamineDomResult;
     domState: A11yDOMState;
@@ -2513,7 +2535,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         maxRetries,
         retryDelayMs,
         debug: this.debug,
-        filterAdTrackingFrames: this.filterAdTrackingFrames,
+        filterAdTrackingFrames,
       }
     );
 
@@ -2761,6 +2783,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       params?.maxElementRetries ?? params?.maxSteps,
       HyperAgent.PERFORM_CONFIG.MAX_RETRIES
     );
+    const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
+      params?.filterAdTrackingFrames
+    );
     const retryDelayMs = this.normalizeRetryDelayMs(
       params?.retryDelayMs,
       HyperAgent.PERFORM_CONFIG.RETRY_DELAY_MS
@@ -2779,7 +2804,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         initialPage,
         maxRetries,
         retryDelayMs,
-        startTime
+        startTime,
+        filterAdTrackingFrames
       );
 
       // Check if page context switched during findElement (e.g. new tab opened by previous action)
@@ -2826,7 +2852,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         initialPage,
         this.debug,
         {
-          filterAdTrackingFrames: this.filterAdTrackingFrames,
+          filterAdTrackingFrames,
         }
       );
 
@@ -2849,7 +2875,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         debug: this.debug,
         // Only provide CDP if enabled
         cdpActions: this.cdpActionsEnabled,
-        filterAdTrackingFrames: this.filterAdTrackingFrames,
+        filterAdTrackingFrames,
         cdp: this.cdpActionsEnabled
           ? {
               client: cdpClient,
@@ -2883,7 +2909,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       // Wait for DOM to settle after action
       const waitStart = performance.now();
       await waitForSettledDOM(initialPage, undefined, {
-        filterAdTrackingFrames: this.filterAdTrackingFrames,
+        filterAdTrackingFrames,
       });
       markDomSnapshotDirty(initialPage);
       logPerf(

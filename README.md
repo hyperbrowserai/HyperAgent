@@ -200,6 +200,7 @@ await page.perform("click the login button", {
 - `retryDelayMs`: delay between element-refetch retries.
 - `maxContextSwitchRetries`: retries when a tab/context switch interrupts an in-flight action.
 - `contextSwitchRetryDelayMs`: delay between context-switch retries (defaults to 500ms, capped for safety).
+- `filterAdTrackingFrames`: override iframe filtering for this action (`true` by default). Set to `false` when you intentionally need ad/tracking iframes in scope.
 - `maxSteps` (**deprecated**): compatibility alias for `maxElementRetries`.
   - Using `maxSteps` emits a one-time deprecation warning per agent instance.
 
@@ -218,6 +219,7 @@ await page.perform("click the login button", {
 
 - `useDomCache` (boolean): Reuse DOM snapshots for speed
 - `enableVisualMode` (boolean): Enable screenshots and overlays (default: false)
+- `filterAdTrackingFrames` (boolean): override ad/tracking iframe filtering for this task (inherits agent-level default when omitted)
 
 **Example**:
 
@@ -573,6 +575,7 @@ HyperAgent integrates seamlessly with Playwright, so you can still use familiar 
 
 Keep in mind that CDP is still experimental, and stability is not guaranteed. If you'd like the agent to use Playwright's native locators/actions instead, set `cdpActions: false` when you create the agent and it will fall back automatically.
 If you need to inspect ad/tracking iframes for a specific workflow, keep CDP enabled and set `filterAdTrackingFrames: false` in `new HyperAgent({ ... })`.
+You can also override this per invocation using `page.ai(..., { filterAdTrackingFrames: false })` or `page.perform(..., { filterAdTrackingFrames: false })`.
 
 The CDP layer is still evolving—expect rapid polish (and the occasional sharp edge). If you hit something quirky you can toggle CDP off for that workflow and drop us a bug report.
 

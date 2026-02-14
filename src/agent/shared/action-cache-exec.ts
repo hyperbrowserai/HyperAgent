@@ -196,6 +196,19 @@ function normalizeFrameIndex(value: unknown): number | null {
   return Math.min(Math.floor(value), MAX_PERFORM_FRAME_INDEX);
 }
 
+function normalizeFilterAdTrackingFrames(
+  value: unknown,
+  fallback: boolean | undefined
+): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof fallback === "boolean") {
+    return fallback;
+  }
+  return undefined;
+}
+
 function runCachedAction(
   agent: AgentDeps,
   page: HyperPage,
@@ -222,6 +235,10 @@ function runCachedAction(
   const normalizedFrameIndex = normalizeFrameIndex(
     safeReadOptionField(options, "frameIndex")
   );
+  const normalizedFilterAdTrackingFrames = normalizeFilterAdTrackingFrames(
+    safeReadOptionField(options, "filterAdTrackingFrames"),
+    agent.filterAdTrackingFrames
+  );
   const normalizedMaxSteps = normalizeMaxSteps(
     safeReadOptionField(options, "maxSteps")
   );
@@ -245,9 +262,12 @@ function runCachedAction(
     variables: agent.variables ?? [],
     preferScriptBoundingBox: agent.debug,
     cdpActionsEnabled: agent.cdpActionsEnabled,
-    filterAdTrackingFrames: agent.filterAdTrackingFrames,
+    filterAdTrackingFrames: normalizedFilterAdTrackingFrames,
     performFallback: normalizedPerformInstruction
-      ? (instr) => page.perform(instr)
+      ? (instr) =>
+          page.perform(instr, {
+            filterAdTrackingFrames: normalizedFilterAdTrackingFrames,
+          })
       : undefined,
   });
 }

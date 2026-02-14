@@ -146,6 +146,39 @@ describe("HyperAgent constructor and task controls", () => {
     expect(runtimeCtx?.filterAdTrackingFrames).toBe(false);
   });
 
+  it("prefers per-task filterAdTrackingFrames override over agent default", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id-filter-override",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id-filter-override",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      filterAdTrackingFrames: true,
+    });
+    const fakePage = {} as unknown as Page;
+
+    await agent.executeTask(
+      "test task",
+      { filterAdTrackingFrames: false },
+      fakePage
+    );
+
+    const runtimeCtx = mockedRunAgentTask.mock.calls[0]?.[0] as {
+      filterAdTrackingFrames?: boolean;
+    };
+    expect(runtimeCtx?.filterAdTrackingFrames).toBe(false);
+  });
+
   it("executeTaskAsync cleans up state when setup throws before run starts", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

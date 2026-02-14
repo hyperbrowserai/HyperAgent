@@ -167,6 +167,31 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     );
   });
 
+  it("prefers per-call filterAdTrackingFrames override over agent default", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+      filterAdTrackingFrames: true,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+
+    await agent.executeSingleAction("click login", page, {
+      filterAdTrackingFrames: false,
+    });
+
+    expect(findElementWithInstruction).toHaveBeenCalledWith(
+      "click login",
+      page,
+      expect.any(Object),
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
+  });
+
   it("uses deprecated maxSteps as fallback for single-action retries", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

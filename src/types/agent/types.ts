@@ -99,6 +99,7 @@ export interface ActionCacheReplayResult {
 export interface RunFromActionCacheParams {
   maxXPathRetries?: number;
   debug?: boolean;
+  filterAdTrackingFrames?: boolean;
 }
 
 export interface AgentExecutionHooks {
@@ -114,6 +115,7 @@ export interface TaskParams extends AgentExecutionHooks {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
+  filterAdTrackingFrames?: boolean;
 }
 
 export interface PerformTaskParams {
@@ -137,6 +139,10 @@ export interface PerformTaskParams {
    * @deprecated use maxElementRetries instead.
    */
   maxSteps?: number;
+  /**
+   * Override ad/tracking iframe filtering for this single action.
+   */
+  filterAdTrackingFrames?: boolean;
 }
 
 export interface TaskOutput {
@@ -208,6 +214,7 @@ export interface PerformOptions {
   frameIndex?: number | null;
   performInstruction?: string | null;
   maxSteps?: number;
+  filterAdTrackingFrames?: boolean;
 }
 
 export interface HyperPage extends Page {

@@ -63,9 +63,11 @@ describe("public API exports", () => {
       retryDelayMs: 250,
       maxContextSwitchRetries: 4,
       contextSwitchRetryDelayMs: 500,
+      filterAdTrackingFrames: false,
     };
 
     expect(performParams.contextSwitchRetryDelayMs).toBe(500);
+    expect(performParams.filterAdTrackingFrames).toBe(false);
   });
 
   it("exposes frame-filter configuration on public HyperAgentConfig", () => {
@@ -74,5 +76,17 @@ describe("public API exports", () => {
     };
 
     expect(config.filterAdTrackingFrames).toBe(false);
+  });
+
+  it("exposes frame-filter overrides on task and replay params", () => {
+    const taskParams: TaskParams = {
+      filterAdTrackingFrames: false,
+    };
+    const replayParams: RunFromActionCacheParams = {
+      filterAdTrackingFrames: false,
+    };
+
+    expect(taskParams.filterAdTrackingFrames).toBe(false);
+    expect(replayParams.filterAdTrackingFrames).toBe(false);
   });
 });
