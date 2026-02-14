@@ -252,6 +252,59 @@ describe("waitForSettledDOM diagnostics", () => {
     expect(setFrameFilteringEnabled).toHaveBeenCalledWith(false);
   });
 
+  it("enables network trace diagnostics when context is recording video", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session, emit } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({
+        _options: {
+          recordVideo: {},
+        },
+      }),
+    } as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 5_000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      emit("Network.requestWillBeSent", {
+        requestId: "req-1",
+        type: "Document",
+        request: { url: "https://example.com/video" },
+      });
+
+      await jest.advanceTimersByTimeAsync(3_100);
+      await waitPromise;
+
+      const traceMessages = warnSpy.mock.calls
+        .map((call) => String(call[0] ?? ""))
+        .filter((message) => message.includes("[waitForSettledDOM]"));
+      expect(
+        traceMessages.some((message) =>
+          message.includes("Forcing completion of stalled request")
+        )
+      ).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("continues when frame-filter configuration throws", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     const { session } = createSessionWithEvents();

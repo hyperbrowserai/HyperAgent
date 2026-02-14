@@ -149,6 +149,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened `waitForSettledDOM` option reads for frame filtering with trap-safe accessors, so malformed/trap-prone option objects no longer break settle flow or frame-manager configuration.
 - Hardened wait-listener lifecycle cleanup against trap-prone session listener-method getters, preserving settle completion while emitting sanitized detach diagnostics.
 - Expanded settle-flow listener regressions to cover trap-prone `session.on` getters, ensuring timeout-based fallback remains deterministic under unreadable listener APIs.
+- Aligned settle network-tracing behavior so recording-video sessions now propagate trace mode into network-idle diagnostics (including stalled-request warnings) even when debug flags are off.
 - Hardened constructor LLM validation to reject malformed non-provider/non-client `llm` payloads instead of accepting invalid runtime objects, while preserving trap-safe config reads.
 - Added explicit constructor regression coverage for malformed partial `llm` objects to lock in fail-fast configuration behavior.
 - Hardened prompt final-goal rendering against malformed/trap-prone task inputs by normalizing non-string goals into bounded readable diagnostics instead of throwing.

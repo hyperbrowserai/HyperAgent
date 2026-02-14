@@ -265,7 +265,7 @@ export async function waitForSettledDOM(
   const networkStart = performance.now();
   const stats = await waitForNetworkIdle(lifecycleSession, {
     timeoutMs: normalizedTimeoutMs,
-    trace: traceWaitFlag,
+    trace: traceWait,
   });
   const networkDuration = performance.now() - networkStart;
 
