@@ -240,6 +240,22 @@ function getBoundedVariables(variables: HyperVariable[]): {
   };
 }
 
+function materializeSafeSteps(steps: AgentStep[]): AgentStep[] {
+  const total = safeArrayLength(steps);
+  if (total === 0) {
+    return [];
+  }
+
+  const normalizedSteps: AgentStep[] = [];
+  for (let index = 0; index < total; index += 1) {
+    const step = safeReadArrayItem<AgentStep>(steps, index);
+    if (typeof step !== "undefined") {
+      normalizedSteps.push(step);
+    }
+  }
+  return normalizedSteps;
+}
+
 function normalizeStepText(value: unknown, fallback: string): string {
   if (typeof value === "string") {
     return truncatePromptText(value);
@@ -405,6 +421,7 @@ export const buildAgentStepMessages = async (
   variables: HyperVariable[]
 ): Promise<HyperAgentMessage[]> => {
   const messages = [...baseMessages];
+  const normalizedSteps = materializeSafeSteps(steps);
 
   // Add the final goal section
   messages.push({
@@ -432,20 +449,20 @@ export const buildAgentStepMessages = async (
   });
 
   // Add previous actions section if there are steps
-  if (steps.length > 0) {
+  if (normalizedSteps.length > 0) {
     const relevantSteps =
-      steps.length > MAX_HISTORY_STEPS
-        ? steps.slice(-MAX_HISTORY_STEPS)
-        : steps;
-    const hiddenStepCount = steps.length - relevantSteps.length;
+      normalizedSteps.length > MAX_HISTORY_STEPS
+        ? normalizedSteps.slice(-MAX_HISTORY_STEPS)
+        : normalizedSteps;
+    const hiddenStepCount = normalizedSteps.length - relevantSteps.length;
     const omittedSteps =
-      hiddenStepCount > 0 ? steps.slice(0, hiddenStepCount) : [];
+      hiddenStepCount > 0 ? normalizedSteps.slice(0, hiddenStepCount) : [];
 
     messages.push({
       role: "user",
       content:
         hiddenStepCount > 0
-          ? `=== Previous Actions ===\n(Showing latest ${relevantSteps.length} of ${steps.length} steps; ${hiddenStepCount} older steps omitted for context budget.)\n`
+          ? `=== Previous Actions ===\n(Showing latest ${relevantSteps.length} of ${normalizedSteps.length} steps; ${hiddenStepCount} older steps omitted for context budget.)\n`
           : "=== Previous Actions ===\n",
     });
     if (hiddenStepCount > 0) {

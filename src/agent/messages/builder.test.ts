@@ -214,6 +214,82 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("Action output unavailable");
   });
 
+  it("falls back to no previous-actions section when step array length getter traps", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const trappedSteps = new Proxy([createStep(0)], {
+      get: (target, prop, receiver) => {
+        if (prop === "length") {
+          throw new Error("steps length trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      trappedSteps as unknown as AgentStep[],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).not.toContain("=== Previous Actions ===");
+    expect(joined).toContain("=== Final Goal ===");
+  });
+
+  it("ignores unreadable step array entries when index getter traps", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const trappedSteps = new Proxy([createStep(0)], {
+      get: (target, prop, receiver) => {
+        if (prop === "0") {
+          throw new Error("steps item trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      trappedSteps as unknown as AgentStep[],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).not.toContain("=== Previous Actions ===");
+    expect(joined).not.toContain("thought-0");
+  });
+
   it("falls back to zeroed page state when scroll info lookup fails", async () => {
     retry.mockRejectedValue({ reason: "scroll failed" });
     const page = createFakePage("https://example.com/current", [
