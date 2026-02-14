@@ -96,6 +96,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     new Date(0).toISOString();
   private static readonly AIACTION_DEPRECATION_MESSAGE =
     "[HyperPage] page.aiAction() is deprecated; use page.perform() instead.";
+  private static readonly PERFORM_MAX_STEPS_DEPRECATION_MESSAGE =
+    "[HyperPage] perform({ maxSteps }) is deprecated; use perform({ maxElementRetries }) instead.";
   private static readonly PERFORM_DEBUG_DIR = "debug/perform";
 
   private llm: HyperAgentLLM;
@@ -117,6 +119,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private scopeListenerCleanupByPage: WeakMap<Page, () => void> = new WeakMap();
   private lifecycleGeneration = 0;
   private hasWarnedAiActionDeprecation = false;
+  private hasWarnedPerformMaxStepsDeprecation = false;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -198,6 +201,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     this.hasWarnedAiActionDeprecation = true;
     try {
       console.warn(HyperAgent.AIACTION_DEPRECATION_MESSAGE);
+    } catch {
+      // no-op
+    }
+  }
+
+  private warnPerformMaxStepsDeprecation(): void {
+    if (this.hasWarnedPerformMaxStepsDeprecation) {
+      return;
+    }
+    this.hasWarnedPerformMaxStepsDeprecation = true;
+    try {
+      console.warn(HyperAgent.PERFORM_MAX_STEPS_DEPRECATION_MESSAGE);
     } catch {
       // no-op
     }
@@ -2708,6 +2723,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     const getPage = (): Page => this.resolveActionPageInput(pageOrGetter);
+    if (
+      typeof params?.maxElementRetries !== "number" &&
+      typeof params?.maxSteps === "number"
+    ) {
+      this.warnPerformMaxStepsDeprecation();
+    }
+
     const initialPage = getPage();
     const hasPageContextSwitched = (): boolean => {
       try {

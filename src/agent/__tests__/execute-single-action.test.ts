@@ -152,21 +152,26 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     const page = {
       url: () => "https://example.com",
     } as unknown as Page;
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
-    await agent.executeSingleAction("click login", page, {
-      maxSteps: 4,
-      retryDelayMs: 33,
-    });
-
-    expect(findElementWithInstruction).toHaveBeenCalledWith(
-      "click login",
-      page,
-      expect.any(Object),
-      expect.objectContaining({
-        maxRetries: 4,
+    try {
+      await agent.executeSingleAction("click login", page, {
+        maxSteps: 4,
         retryDelayMs: 33,
-      })
-    );
+      });
+
+      expect(findElementWithInstruction).toHaveBeenCalledWith(
+        "click login",
+        page,
+        expect.any(Object),
+        expect.objectContaining({
+          maxRetries: 4,
+          retryDelayMs: 33,
+        })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it("prefers maxElementRetries over deprecated maxSteps when both are set", async () => {
@@ -192,6 +197,59 @@ describe("HyperAgent.executeSingleAction retry options", () => {
         maxRetries: 6,
       })
     );
+  });
+
+  it("warns once when deprecated maxSteps perform option is used", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await agent.executeSingleAction("click login", page, {
+        maxSteps: 2,
+      });
+      await agent.executeSingleAction("click continue", page, {
+        maxSteps: 3,
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("perform({ maxSteps }) is deprecated")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not warn about maxSteps deprecation when maxElementRetries is used", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await agent.executeSingleAction("click login", page, {
+        maxElementRetries: 4,
+      });
+
+      const deprecationWarnings = warnSpy.mock.calls.filter((call) =>
+        String(call[0] ?? "").includes("perform({ maxSteps }) is deprecated")
+      );
+      expect(deprecationWarnings).toHaveLength(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it("formats non-Error execution failures with readable messages", async () => {
