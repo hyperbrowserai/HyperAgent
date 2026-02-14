@@ -2803,6 +2803,26 @@ mod tests {
     state::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES},
   };
 
+  #[test]
+  fn should_keep_supported_formula_list_unique_and_trimmed() {
+    let mut seen = std::collections::HashSet::new();
+    for function_name in FORMULA_SUPPORTED_FUNCTION_LIST {
+      assert!(
+        !function_name.trim().is_empty(),
+        "supported function names should not be blank",
+      );
+      assert_eq!(
+        function_name.trim(),
+        *function_name,
+        "supported function names should be trimmed",
+      );
+      assert!(
+        seen.insert(*function_name),
+        "supported function list should not contain duplicates: {function_name}",
+      );
+    }
+  }
+
   fn workbook_import_fixture_bytes() -> Vec<u8> {
     let mut workbook = Workbook::new();
     let inputs_sheet = workbook.add_worksheet();
