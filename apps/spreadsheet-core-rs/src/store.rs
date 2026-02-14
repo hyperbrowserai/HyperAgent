@@ -29,7 +29,9 @@ use crate::{
     parse_sin_formula, parse_cos_formula, parse_tan_formula,
     parse_cot_formula, parse_sec_formula, parse_csc_formula,
     parse_sinh_formula,
-    parse_cosh_formula, parse_tanh_formula, parse_asin_formula, parse_acos_formula,
+    parse_cosh_formula, parse_tanh_formula,
+    parse_asinh_formula, parse_acosh_formula, parse_atanh_formula,
+    parse_asin_formula, parse_acos_formula,
     parse_atan_formula, parse_atan2_formula,
     parse_degrees_formula, parse_radians_formula,
     parse_choose_formula, parse_left_formula,
@@ -1746,6 +1748,27 @@ fn evaluate_formula(
   if let Some(tanh_arg) = parse_tanh_formula(formula) {
     let value = parse_required_float(connection, sheet, &tanh_arg)?;
     return Ok(Some(value.tanh().to_string()));
+  }
+
+  if let Some(asinh_arg) = parse_asinh_formula(formula) {
+    let value = parse_required_float(connection, sheet, &asinh_arg)?;
+    return Ok(Some(value.asinh().to_string()));
+  }
+
+  if let Some(acosh_arg) = parse_acosh_formula(formula) {
+    let value = parse_required_float(connection, sheet, &acosh_arg)?;
+    if value < 1.0 {
+      return Ok(None);
+    }
+    return Ok(Some(value.acosh().to_string()));
+  }
+
+  if let Some(atanh_arg) = parse_atanh_formula(formula) {
+    let value = parse_required_float(connection, sheet, &atanh_arg)?;
+    if value <= -1.0 || value >= 1.0 {
+      return Ok(None);
+    }
+    return Ok(Some(value.atanh().to_string()));
   }
 
   if let Some(asin_arg) = parse_asin_formula(formula) {
@@ -5022,12 +5045,30 @@ mod tests {
         value: None,
         formula: Some("=CSC(1.5707963267948966)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 195,
+        value: None,
+        formula: Some("=ASINH(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 196,
+        value: None,
+        formula: Some("=ACOSH(1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 197,
+        value: None,
+        formula: Some("=ATANH(0)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 192);
+    assert_eq!(updated_cells, 195);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5041,7 +5082,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 194,
+        end_col: 197,
       },
     )
     .expect("cells should be fetched");
@@ -5700,6 +5741,9 @@ mod tests {
       .parse::<f64>()
       .expect("csc should be numeric");
     assert!((csc - 1.0).abs() < 1e-9, "csc should be 1.0, got {csc}");
+    assert_eq!(by_position(1, 195).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 196).evaluated_value.as_deref(), Some("0"));
+    assert_eq!(by_position(1, 197).evaluated_value.as_deref(), Some("0"));
   }
 
   #[test]
@@ -6810,6 +6854,18 @@ mod tests {
         value: None,
         formula: Some("=ACOS(-2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=ACOSH(0.5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 4,
+        value: None,
+        formula: Some("=ATANH(1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
@@ -6817,7 +6873,12 @@ mod tests {
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(
       unsupported_formulas,
-      vec!["=ASIN(2)".to_string(), "=ACOS(-2)".to_string()],
+      vec![
+        "=ASIN(2)".to_string(),
+        "=ACOS(-2)".to_string(),
+        "=ACOSH(0.5)".to_string(),
+        "=ATANH(1)".to_string(),
+      ],
     );
   }
 
