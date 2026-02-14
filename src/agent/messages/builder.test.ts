@@ -592,6 +592,45 @@ describe("buildAgentStepMessages", () => {
     expect(joined.length).toBeLessThan(9000);
   });
 
+  it("sanitizes control characters in step and DOM prompt content", async () => {
+    const step = createStep(0);
+    step.agentOutput.thoughts = "thought\u0000with\u0007control";
+    step.agentOutput.memory = "memory\u0000with\u0007control";
+    step.actionOutput.message = "result\u0000with\u0007control";
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [step],
+      "task\u0000value",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom\u0000state\u0007payload",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("thought with control");
+    expect(joined).toContain("memory with control");
+    expect(joined).toContain("result with control");
+    expect(joined).toContain("task value");
+    expect(joined).toContain("dom state payload");
+    expect(joined).not.toContain("\u0000");
+    expect(joined).not.toContain("\u0007");
+  });
+
   it("truncates oversized task goal and variable descriptions", async () => {
     const page = createFakePage("https://example.com/current", [
       "https://example.com/current",

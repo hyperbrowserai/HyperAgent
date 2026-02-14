@@ -18,12 +18,26 @@ const MAX_OMITTED_STEP_SUMMARY_CHARS = 1_500;
 const MAX_OMITTED_STEP_ACTION_CHARS = 120;
 const MAX_OMITTED_STEP_OUTCOME_CHARS = 220;
 
-function truncatePromptText(value: string): string {
-  if (value.length <= MAX_SERIALIZED_PROMPT_VALUE_CHARS) {
+function sanitizePromptText(value: string): string {
+  if (value.length === 0) {
     return value;
   }
+  return Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    if (code === 9 || code === 10 || code === 13) {
+      return char;
+    }
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+}
+
+function truncatePromptText(value: string): string {
+  const sanitized = sanitizePromptText(value);
+  if (sanitized.length <= MAX_SERIALIZED_PROMPT_VALUE_CHARS) {
+    return sanitized;
+  }
   return (
-    value.slice(0, MAX_SERIALIZED_PROMPT_VALUE_CHARS) +
+    sanitized.slice(0, MAX_SERIALIZED_PROMPT_VALUE_CHARS) +
     "... [truncated for prompt budget]"
   );
 }
@@ -47,11 +61,12 @@ function truncateTabUrl(url: string): string {
 }
 
 function truncateDomState(domState: string): string {
-  if (domState.length <= MAX_DOM_STATE_CHARS) {
-    return domState;
+  const sanitized = sanitizePromptText(domState);
+  if (sanitized.length <= MAX_DOM_STATE_CHARS) {
+    return sanitized;
   }
   return (
-    domState.slice(0, MAX_DOM_STATE_CHARS) +
+    sanitized.slice(0, MAX_DOM_STATE_CHARS) +
     "... [DOM truncated for prompt budget]"
   );
 }
