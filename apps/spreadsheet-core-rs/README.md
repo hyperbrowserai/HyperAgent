@@ -314,6 +314,12 @@ cargo test store::tests::benchmark_large_range_recalculation -- --ignored --noca
 
 This emits a `large_range_recalc_benchmark` JSON line with row count plus `upsert_ms`, `recalc_ms`, `total_ms`, and `updated_cells`.
 
+Sample baseline captured in this repository (Linux CI-sized VM, debug test profile):
+
+| rows | upsert_ms | recalc_ms | total_ms | updated_cells |
+| ---: | ---: | ---: | ---: | ---: |
+| 3000 | 31194 | 69 | 31263 | 1 |
+
 XLSX compatibility regression coverage includes:
 - supported formula roundtrip fixtures (engineering + financial families),
 - unsupported formula preservation fixtures (normalized text retained + surfaced via `unsupported_formulas`),
