@@ -310,6 +310,8 @@ const FORMULA_UNSUPPORTED_BEHAVIOR_LIST: &[&str] = &[
 const FORMULA_FALLBACK_BEHAVIOR: &str =
     "unsupported formulas are preserved and reported by formula.recalculated payloads";
 const FORMULA_VALIDATION_ERROR_CODES: &[&str] = &["INVALID_FORMULA"];
+const AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION: &str =
+    "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)";
 
 fn formula_supported_functions_summary() -> String {
     FORMULA_SUPPORTED_FUNCTION_LIST.join(", ")
@@ -324,7 +326,7 @@ fn agent_ops_request_shape_schema() -> serde_json::Value {
       "request_id": "optional string (if repeated, returns cached response for idempotency)",
       "actor": "optional string",
       "stop_on_error": "optional boolean (default false)",
-      "expected_operations_signature": "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
+      "expected_operations_signature": AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION,
       "operations (non-empty array)": [
         {
           "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
@@ -3061,6 +3063,7 @@ mod tests {
         validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
         AgentOpsCachePrefixesQuery, AgentOpsCacheStatsQuery, FORMULA_SUPPORTED_FUNCTION_LIST,
         FORMULA_UNSUPPORTED_BEHAVIOR_LIST, FORMULA_VALIDATION_ERROR_CODES,
+        AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION,
         MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
     };
     use crate::{
@@ -8017,9 +8020,7 @@ mod tests {
                 .get("request_shape")
                 .and_then(|value| value.get("expected_operations_signature"))
                 .and_then(serde_json::Value::as_str),
-            Some(
-                "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
-            ),
+            Some(AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION),
         );
         assert_eq!(
             schema.get("request_shape"),
@@ -8065,9 +8066,7 @@ mod tests {
                 .get("agent_ops_request_shape")
                 .and_then(|value| value.get("expected_operations_signature"))
                 .and_then(serde_json::Value::as_str),
-            Some(
-                "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
-            ),
+            Some(AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION),
         );
         assert!(
             schema
@@ -8821,9 +8820,7 @@ mod tests {
                 .get("agent_ops_request_shape")
                 .and_then(|value| value.get("expected_operations_signature"))
                 .and_then(serde_json::Value::as_str),
-            Some(
-                "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
-            ),
+            Some(AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION),
         );
         assert!(
             schema
