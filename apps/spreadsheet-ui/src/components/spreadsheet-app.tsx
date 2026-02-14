@@ -71,6 +71,27 @@ const CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT = "12";
 const CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT: "count" | "recent" | "alpha" | "span" =
   "count";
 
+interface EndpointCatalogCoverageStats {
+  total: number;
+  methodOperationBacked: number;
+  summaryOperationBacked: number;
+  pathOperationBacked: number;
+  operationFallback: number;
+  methodMismatches: number;
+  summaryMismatches: number;
+  pathMismatches: number;
+}
+
+interface EndpointCatalogDiagnostics {
+  level: "healthy" | "warning" | "error";
+  issueCount: number;
+  mismatchCount: number;
+  fallbackCount: number;
+  unmappedCount: number;
+  openApiSyncIssueCount: number;
+  isOpenApiSyncAvailable: boolean;
+}
+
 interface LatestImportSummary {
   sheetsImported: number;
   cellsImported: number;
@@ -445,16 +466,7 @@ function buildEndpointCatalogCoverageStats(
     hasSummaryMismatch: boolean;
     hasPathMismatch: boolean;
   }>,
-): {
-  total: number;
-  methodOperationBacked: number;
-  summaryOperationBacked: number;
-  pathOperationBacked: number;
-  operationFallback: number;
-  methodMismatches: number;
-  summaryMismatches: number;
-  pathMismatches: number;
-} {
+): EndpointCatalogCoverageStats {
   return entries.reduce(
     (accumulator, entry) => ({
       total: accumulator.total + 1,
@@ -488,6 +500,38 @@ function buildEndpointCatalogCoverageStats(
       pathMismatches: 0,
     },
   );
+}
+
+function buildEndpointCatalogDiagnostics(args: {
+  coverage: EndpointCatalogCoverageStats;
+  unmappedCount: number;
+  isOpenApiSyncAvailable: boolean;
+}): EndpointCatalogDiagnostics {
+  const mismatchCount =
+    args.coverage.methodMismatches
+    + args.coverage.summaryMismatches
+    + args.coverage.pathMismatches;
+  const openApiSyncIssueCount = args.isOpenApiSyncAvailable ? 0 : 1;
+  const issueCount =
+    mismatchCount
+    + args.coverage.operationFallback
+    + args.unmappedCount
+    + openApiSyncIssueCount;
+  const level: EndpointCatalogDiagnostics["level"] = !args.isOpenApiSyncAvailable
+    || mismatchCount > 0
+    ? "error"
+    : issueCount > 0
+      ? "warning"
+      : "healthy";
+  return {
+    level,
+    issueCount,
+    mismatchCount,
+    fallbackCount: args.coverage.operationFallback,
+    unmappedCount: args.unmappedCount,
+    openApiSyncIssueCount,
+    isOpenApiSyncAvailable: args.isOpenApiSyncAvailable,
+  };
 }
 
 function formatSchemaShapeEntries(
@@ -1610,6 +1654,19 @@ export function SpreadsheetApp() {
     () => buildEndpointCatalogCoverageStats(wizardSchemaEndpointsWithMethods),
     [wizardSchemaEndpointsWithMethods],
   );
+  const wizardEndpointCatalogDiagnostics = useMemo(
+    () =>
+      buildEndpointCatalogDiagnostics({
+        coverage: wizardEndpointCoverageStats,
+        unmappedCount: wizardUnmappedSchemaEndpointKeys.length,
+        isOpenApiSyncAvailable: !openApiSpecQuery.isError,
+      }),
+    [
+      openApiSpecQuery.isError,
+      wizardEndpointCoverageStats,
+      wizardUnmappedSchemaEndpointKeys.length,
+    ],
+  );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
@@ -1629,6 +1686,15 @@ export function SpreadsheetApp() {
     () =>
       ({
         coverage: wizardEndpointCoverageStats,
+        diagnostics: {
+          status: wizardEndpointCatalogDiagnostics.level,
+          issue_count: wizardEndpointCatalogDiagnostics.issueCount,
+          mismatch_count: wizardEndpointCatalogDiagnostics.mismatchCount,
+          operation_fallback_count: wizardEndpointCatalogDiagnostics.fallbackCount,
+          unmapped_endpoint_count: wizardEndpointCatalogDiagnostics.unmappedCount,
+          openapi_sync_issue_count: wizardEndpointCatalogDiagnostics.openApiSyncIssueCount,
+          openapi_sync_available: wizardEndpointCatalogDiagnostics.isOpenApiSyncAvailable,
+        },
         endpoints: wizardSchemaEndpointsWithMethods.map((entry) => ({
           key: entry.key,
           endpoint: entry.endpoint,
@@ -1658,7 +1724,17 @@ export function SpreadsheetApp() {
           },
         })),
       }),
-    [wizardEndpointCoverageStats, wizardSchemaEndpointsWithMethods],
+    [
+      wizardEndpointCatalogDiagnostics.fallbackCount,
+      wizardEndpointCatalogDiagnostics.isOpenApiSyncAvailable,
+      wizardEndpointCatalogDiagnostics.issueCount,
+      wizardEndpointCatalogDiagnostics.level,
+      wizardEndpointCatalogDiagnostics.mismatchCount,
+      wizardEndpointCatalogDiagnostics.openApiSyncIssueCount,
+      wizardEndpointCatalogDiagnostics.unmappedCount,
+      wizardEndpointCoverageStats,
+      wizardSchemaEndpointsWithMethods,
+    ],
   );
   const agentWorkbookImportResponseFields = useMemo(
     () =>
@@ -1982,6 +2058,19 @@ export function SpreadsheetApp() {
     () => buildEndpointCatalogCoverageStats(agentSchemaEndpointsWithMethods),
     [agentSchemaEndpointsWithMethods],
   );
+  const agentEndpointCatalogDiagnostics = useMemo(
+    () =>
+      buildEndpointCatalogDiagnostics({
+        coverage: agentEndpointCoverageStats,
+        unmappedCount: agentUnmappedSchemaEndpointKeys.length,
+        isOpenApiSyncAvailable: !openApiSpecQuery.isError,
+      }),
+    [
+      agentEndpointCoverageStats,
+      agentUnmappedSchemaEndpointKeys.length,
+      openApiSpecQuery.isError,
+    ],
+  );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
@@ -2001,6 +2090,15 @@ export function SpreadsheetApp() {
     () =>
       ({
         coverage: agentEndpointCoverageStats,
+        diagnostics: {
+          status: agentEndpointCatalogDiagnostics.level,
+          issue_count: agentEndpointCatalogDiagnostics.issueCount,
+          mismatch_count: agentEndpointCatalogDiagnostics.mismatchCount,
+          operation_fallback_count: agentEndpointCatalogDiagnostics.fallbackCount,
+          unmapped_endpoint_count: agentEndpointCatalogDiagnostics.unmappedCount,
+          openapi_sync_issue_count: agentEndpointCatalogDiagnostics.openApiSyncIssueCount,
+          openapi_sync_available: agentEndpointCatalogDiagnostics.isOpenApiSyncAvailable,
+        },
         endpoints: agentSchemaEndpointsWithMethods.map((entry) => ({
           key: entry.key,
           endpoint: entry.endpoint,
@@ -2030,7 +2128,17 @@ export function SpreadsheetApp() {
           },
         })),
       }),
-    [agentEndpointCoverageStats, agentSchemaEndpointsWithMethods],
+    [
+      agentEndpointCatalogDiagnostics.fallbackCount,
+      agentEndpointCatalogDiagnostics.isOpenApiSyncAvailable,
+      agentEndpointCatalogDiagnostics.issueCount,
+      agentEndpointCatalogDiagnostics.level,
+      agentEndpointCatalogDiagnostics.mismatchCount,
+      agentEndpointCatalogDiagnostics.openApiSyncIssueCount,
+      agentEndpointCatalogDiagnostics.unmappedCount,
+      agentEndpointCoverageStats,
+      agentSchemaEndpointsWithMethods,
+    ],
   );
   const agentWorkbookImportEventFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
@@ -4164,6 +4272,40 @@ export function SpreadsheetApp() {
                   </span>
                   /{wizardEndpointCoverageStats.total}
                 </p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  catalog status:{" "}
+                  <span
+                    className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                      wizardEndpointCatalogDiagnostics.level === "healthy"
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                        : wizardEndpointCatalogDiagnostics.level === "warning"
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                          : "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                    }`}
+                  >
+                    {wizardEndpointCatalogDiagnostics.level.toUpperCase()}
+                  </span>{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogDiagnostics.issueCount}
+                  </span>{" "}
+                  issues (mismatch:{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogDiagnostics.mismatchCount}
+                  </span>
+                  , fallback:{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogDiagnostics.fallbackCount}
+                  </span>
+                  , unmapped:{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogDiagnostics.unmappedCount}
+                  </span>
+                  , openapi sync:{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogDiagnostics.openApiSyncIssueCount}
+                  </span>
+                  )
+                </p>
                 {wizardUnmappedSchemaEndpointKeys.length > 0 ? (
                   <p className="mt-2 text-[11px] text-amber-300">
                     openapi method mapping missing for:{" "}
@@ -5277,6 +5419,40 @@ export function SpreadsheetApp() {
                     {agentEndpointCoverageStats.pathOperationBacked}
                   </span>
                   /{agentEndpointCoverageStats.total}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  catalog status:{" "}
+                  <span
+                    className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                      agentEndpointCatalogDiagnostics.level === "healthy"
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                        : agentEndpointCatalogDiagnostics.level === "warning"
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                          : "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                    }`}
+                  >
+                    {agentEndpointCatalogDiagnostics.level.toUpperCase()}
+                  </span>{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogDiagnostics.issueCount}
+                  </span>{" "}
+                  issues (mismatch:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogDiagnostics.mismatchCount}
+                  </span>
+                  , fallback:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogDiagnostics.fallbackCount}
+                  </span>
+                  , unmapped:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogDiagnostics.unmappedCount}
+                  </span>
+                  , openapi sync:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogDiagnostics.openApiSyncIssueCount}
+                  </span>
+                  )
                 </p>
                 {agentUnmappedSchemaEndpointKeys.length > 0 ? (
                   <p className="mt-2 text-xs text-amber-300">
