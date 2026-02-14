@@ -476,6 +476,7 @@ mod tests {
       COMPAT_FORMULA_MATRIX_FILE_NAME,
       COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
+      COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
       COMPAT_OFFSET_RANGE_FILE_NAME, COMPAT_PREFIX_OPERATOR_FILE_NAME,
       COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
     },
@@ -1525,6 +1526,59 @@ mod tests {
         .and_then(|cell| cell.formula.as_deref()),
       Some(r#"=IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#),
     );
+  }
+
+  #[tokio::test]
+  async fn should_import_every_committed_fixture_corpus_workbook() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state = AppState::new(temp_dir.path().join("fixture-corpus-imports"))
+      .expect("state should initialize");
+    let fixture_file_names = [
+      COMPAT_BASELINE_FILE_NAME,
+      COMPAT_FORMULA_MATRIX_FILE_NAME,
+      COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
+      COMPAT_NORMALIZATION_FILE_NAME,
+      COMPAT_OFFSET_RANGE_FILE_NAME,
+      COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
+      COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
+      COMPAT_PREFIX_OPERATOR_FILE_NAME,
+    ];
+
+    for (fixture_index, fixture_file_name) in fixture_file_names.iter().enumerate() {
+      let workbook = state
+        .create_workbook(Some(format!(
+          "fixture-corpus-import-{fixture_index}"
+        )))
+        .await
+        .expect("fixture import workbook should be created");
+      let db_path = state
+        .db_path(workbook.id)
+        .await
+        .expect("fixture import db path should be available");
+      let import_result = import_xlsx(
+        &db_path,
+        &file_fixture_bytes(fixture_file_name),
+      )
+      .unwrap_or_else(|error| {
+        panic!("fixture {fixture_file_name} should import successfully: {error:?}")
+      });
+      assert!(
+        import_result.sheets_imported >= 1,
+        "fixture {fixture_file_name} should import at least one sheet",
+      );
+      assert!(
+        import_result.cells_imported >= 1,
+        "fixture {fixture_file_name} should import at least one cell",
+      );
+      assert!(
+        import_result.formula_cells_imported <= import_result.cells_imported,
+        "fixture {fixture_file_name} formula counts should not exceed total imported cells",
+      );
+      assert!(
+        import_result.formula_cells_normalized <= import_result.formula_cells_imported,
+        "fixture {fixture_file_name} normalized formula counts should not exceed imported formula counts",
+      );
+    }
   }
 
   #[test]
