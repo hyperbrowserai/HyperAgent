@@ -7306,6 +7306,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_generate_new_request_id_when_reexecuting_without_override() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-generated-id".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-generated-id-1".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::Recalculate],
+            }),
+        )
+        .await
+        .expect("initial request should succeed");
+
+        let reexecute = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-generated-id-1".to_string(),
+                new_request_id: None,
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+            }),
+        )
+        .await
+        .expect("reexecute should generate request id when override is missing")
+        .0;
+
+        assert_eq!(reexecute.source_request_id, "source-generated-id-1");
+        assert!(reexecute.generated_request_id);
+        assert!(
+            reexecute
+                .response
+                .request_id
+                .as_deref()
+                .is_some_and(|value| value.starts_with("source-generated-id-1-rerun-")),
+            "generated request id should use rerun prefix",
+        );
+    }
+
+    #[tokio::test]
     async fn should_reject_blank_new_request_id_when_reexecuting_cache_entry() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
