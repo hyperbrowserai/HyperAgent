@@ -28,7 +28,9 @@ pub const COMPAT_FORMULA_ONLY_SHEET_FILE_NAME: &str =
   "compat_formula_only_sheet.xlsx";
 pub const COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME: &str =
   "compat_formula_only_offset_normalized.xlsx";
-pub const FIXTURE_CORPUS_FILE_NAMES: [&str; 13] = [
+pub const COMPAT_FORMULA_ONLY_DUAL_FILE_NAME: &str =
+  "compat_formula_only_dual.xlsx";
+pub const FIXTURE_CORPUS_FILE_NAMES: [&str; 14] = [
   COMPAT_BASELINE_FILE_NAME,
   COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
   COMPAT_NORMALIZATION_FILE_NAME,
@@ -42,6 +44,7 @@ pub const FIXTURE_CORPUS_FILE_NAMES: [&str; 13] = [
   COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
   COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
   COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
+  COMPAT_FORMULA_ONLY_DUAL_FILE_NAME,
 ];
 
 pub fn fixture_corpus_file_names() -> &'static [&'static str] {
@@ -102,6 +105,10 @@ pub fn generate_fixture_corpus(
     (
       COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
       build_compat_formula_only_offset_normalized_fixture_bytes()?,
+    ),
+    (
+      COMPAT_FORMULA_ONLY_DUAL_FILE_NAME,
+      build_compat_formula_only_dual_fixture_bytes()?,
     ),
   ])
 }
@@ -331,6 +338,25 @@ fn build_compat_formula_only_offset_normalized_fixture_bytes(
     &bytes,
     "xl/worksheets/sheet1.xml",
     "D7",
+  )
+}
+
+fn build_compat_formula_only_dual_fixture_bytes(
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let sheet = workbook.add_worksheet();
+  sheet.set_name("FormulaOnlyDual")?;
+  sheet.write_formula(0, 1, Formula::new("=1+1"))?;
+  sheet.write_formula(1, 1, Formula::new("=+@_xlfn.DELTA(2,2)"))?;
+
+  let bytes = workbook.save_to_buffer()?;
+  let without_b1 =
+    strip_formula_cached_value_from_cell(&bytes, "xl/worksheets/sheet1.xml", "B1")?;
+  strip_formula_cached_value_from_cell(
+    without_b1.as_slice(),
+    "xl/worksheets/sheet1.xml",
+    "B2",
   )
 }
 

@@ -100,10 +100,23 @@ fn verify_fixture_corpus(fixtures_dir: &Path) -> Result<Vec<String>, Box<dyn Err
     .into_iter()
     .map(|(file_name, bytes)| (file_name.to_string(), bytes))
     .collect::<BTreeMap<_, _>>();
-  let expected_names = expected_map
+  let expected_names = fixture_corpus::fixture_corpus_file_names()
+    .iter()
+    .map(|file_name| file_name.to_string())
+    .collect::<BTreeSet<_>>();
+  let generated_names = expected_map
     .keys()
     .cloned()
     .collect::<BTreeSet<_>>();
+  if generated_names != expected_names {
+    return Err(
+      format!(
+        "generated fixture corpus membership mismatch: expected {:?}, generated {:?}",
+        expected_names, generated_names
+      )
+      .into(),
+    );
+  }
 
   let committed_names = fs::read_dir(fixtures_dir)?
     .filter_map(|entry| entry.ok())
