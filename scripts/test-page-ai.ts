@@ -52,20 +52,20 @@ dotenv.config();
 //   });
 //   const page = await agent.newPage();
 //   page.goto("https://flights.google.com");
-//   await page.aiAction("click source location box");
-//   await page.aiAction("type 'Rio de Janeiro' into the source location box");
-//   await page.aiAction("press enter");
-//   await page.aiAction("click destination location box");
-//   await page.aiAction("type 'Los Angeles' into the destination location box");
-//   await page.aiAction("press enter");
-//   await page.aiAction("click the departure date box");
-//   await page.aiAction(
+//   await page.perform("click source location box");
+//   await page.perform("type 'Rio de Janeiro' into the source location box");
+//   await page.perform("press enter");
+//   await page.perform("click destination location box");
+//   await page.perform("type 'Los Angeles' into the destination location box");
+//   await page.perform("press enter");
+//   await page.perform("click the departure date box");
+//   await page.perform(
 //     "fill 12/01/2025 into the departure date box"
 //   );
-//   await page.aiAction("click the return date box");
-//   await page.aiAction("fill 12/22/2025 into the return date box");
-//   await page.aiAction("click the search button");
-//   await page.aiAction("click the first flight option");
+//   await page.perform("click the return date box");
+//   await page.perform("fill 12/22/2025 into the return date box");
+//   await page.perform("click the search button");
+//   await page.perform("click the first flight option");
 
 //   // const page2 = await agent.newPage();
 //   // await page2.goto("https://maps.google.com");

@@ -39,34 +39,34 @@ async function runWorkflow() {
 
     // Step 2: Perform action
     console.log(`Performing action: click the Sign In or Join button`);
-    await page.aiAction(`click the Sign In or Join button`);
+    await page.perform(`click the Sign In or Join button`);
 
     // Step 3: Perform action
     console.log(`Performing action: click the Trips (1) link`);
-    await page.aiAction(`click the Trips (1) link`);
+    await page.perform(`click the Trips (1) link`);
 
     // Step 4: Perform action
     console.log(`Performing action: click the View/Modify Room link`);
-    await page.aiAction(`click the View/Modify Room link`);
+    await page.perform(`click the View/Modify Room link`);
 
     // Step 5: Perform action
     console.log(
       `Performing action: click the Summary of Charges 344.85 USD Total button`
     );
-    await page.aiAction(`click the Summary of Charges 344.85 USD Total button`);
+    await page.perform(`click the Summary of Charges 344.85 USD Total button`);
 
     // Scroll: Scrolled down 300 pixels
-    await page.aiAction(`Scrolled down 300 pixels`);
+    await page.perform(`Scrolled down 300 pixels`);
 
     // Scroll: Scrolled up 500 pixels
-    await page.aiAction(`Scrolled up 500 pixels`);
+    await page.perform(`Scrolled up 500 pixels`);
 
     // Scroll: Scrolled up 300 pixels
-    await page.aiAction(`Scrolled up 300 pixels`);
+    await page.perform(`Scrolled up 300 pixels`);
 
     // Step 9: Perform action
     console.log(`Performing action: click the Print button`);
-    await page.aiAction(`click the Print button`);
+    await page.perform(`click the Print button`);
 
     // Step 10: Extract data
     console.log(
@@ -99,19 +99,19 @@ async function runWorkflow() {
     console.log("Extracted:", extractedData10);
 
     // Scroll: Scrolled down 400 pixels
-    await page.aiAction(`Scrolled down 400 pixels`);
+    await page.perform(`Scrolled down 400 pixels`);
 
     // Scroll: Scrolled down 300 pixels
-    await page.aiAction(`Scrolled down 300 pixels`);
+    await page.perform(`Scrolled down 300 pixels`);
 
     // Scroll: Scrolled down 200 pixels
-    await page.aiAction(`Scrolled down 200 pixels`);
+    await page.perform(`Scrolled down 200 pixels`);
 
     // Scroll: Scrolled up 800 pixels
-    await page.aiAction(`Scrolled up 800 pixels`);
+    await page.perform(`Scrolled up 800 pixels`);
 
     // Scroll: Scrolled up 200 pixels
-    await page.aiAction(`Scrolled up 200 pixels`);
+    await page.perform(`Scrolled up 200 pixels`);
 
     // Step 16: Extract data
     console.log(

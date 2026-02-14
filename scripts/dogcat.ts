@@ -40,41 +40,41 @@ async function runWorkflow() {
     console.log("Navigating to: https://www.bing.com/");
     await page.goto("https://www.bing.com/");
 
-    // Step 2: Perform action using aiAction (single granular action, a11y mode)
+    // Step 2: Perform action using perform() (single granular action, a11y mode)
     console.log(
       `Performing action: type ${variables.input1} into the search box`
     );
-    await page.aiAction(`type ${variables.input1} into the search box`);
+    await page.perform(`type ${variables.input1} into the search box`);
 
-    // Step 3: Perform action using aiAction
+    // Step 3: Perform action using perform()
     console.log(`Performing action: click the first search suggestion 'cats'`);
-    await page.aiAction(`click the first search suggestion 'cats'`);
+    await page.perform(`click the first search suggestion 'cats'`);
 
-    // Step 4: Perform action using aiAction
+    // Step 4: Perform action using perform()
     console.log(`Performing action: click the search box with 'cats' text`);
-    await page.aiAction(`click the search box with 'cats' text`);
+    await page.perform(`click the search box with 'cats' text`);
 
-    // Step 5: Perform action using aiAction
+    // Step 5: Perform action using perform()
     console.log(
       `Performing action: click the X button to clear the search box`
     );
-    await page.aiAction(`click the X button to clear the search box`);
+    await page.perform(`click the X button to clear the search box`);
 
-    // Step 6: Perform action using aiAction
+    // Step 6: Perform action using perform()
     console.log(
       `Performing action: type ${variables.input2} into the search box`
     );
-    await page.aiAction(`type ${variables.input2} into the search box`);
+    await page.perform(`type ${variables.input2} into the search box`);
 
-    // Step 7: Perform action using aiAction
+    // Step 7: Perform action using perform()
     console.log(`Performing action: click the first search suggestion 'dogs'`);
-    await page.aiAction(`click the first search suggestion 'dogs'`);
+    await page.perform(`click the first search suggestion 'dogs'`);
 
-    // Step 8: Perform action using aiAction
+    // Step 8: Perform action using perform()
     console.log(
       `Performing action: click the first search result 'Dog - Wikipedia'`
     );
-    await page.aiAction(`click the first search result 'Dog - Wikipedia'`);
+    await page.perform(`click the first search result 'Dog - Wikipedia'`);
 
     console.log("Workflow completed successfully");
     await new Promise((resolve) => setTimeout(resolve, 5000));

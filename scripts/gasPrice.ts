@@ -43,40 +43,40 @@ async function runWorkflow() {
 
     // Step 2: Perform action
     console.log(`Performing action: click the search box`);
-    await page.aiAction(`click the search box`);
+    await page.perform(`click the search box`);
 
     // Step 3: Perform action
     console.log(`Performing action: click the directions button`);
-    await page.aiAction(`click the directions button`);
+    await page.perform(`click the directions button`);
 
     // Step 4: Perform action
     console.log(
       `Performing action: type 'San Francisco' into the starting point field`
     );
-    await page.aiAction(`type 'San Francisco' into the starting point field`);
+    await page.perform(`type 'San Francisco' into the starting point field`);
 
     // Step 5: Perform action
     console.log(
       `Performing action: type 'Los Angeles' into the destination field`
     );
-    await page.aiAction(`type 'Los Angeles' into the destination field`);
+    await page.perform(`type 'Los Angeles' into the destination field`);
 
     // Step 6: Perform action
     console.log(`Performing action: click the 'Los Angeles CA' option`);
-    await page.aiAction(`click the 'Los Angeles CA' option`);
+    await page.perform(`click the 'Los Angeles CA' option`);
 
     // Step 7: Perform action
     console.log(`Performing action: click the Gas button`);
-    await page.aiAction(`click the Gas button`);
+    await page.perform(`click the Gas button`);
 
     // Scroll: Scrolled down 300 pixels
-    await page.aiAction(`Scroll down to bottom`);
+    await page.perform(`Scroll down to bottom`);
 
     // Scroll: Scrolled down 500 pixels
-    await page.aiAction(`Scroll down to bottom`);
+    await page.perform(`Scroll down to bottom`);
 
     // Scroll: Scrolled down 800 pixels
-    await page.aiAction(`Scroll down to bottom`);
+    await page.perform(`Scroll down to bottom`);
 
     // Step 11: Extract data
     // console.log(
