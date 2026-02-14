@@ -2943,6 +2943,38 @@ mod tests {
       .expect("normalized fixture workbook should serialize")
   }
 
+  fn workbook_import_comprehensive_normalization_fixture_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let inputs_sheet = workbook.add_worksheet();
+    inputs_sheet
+      .set_name("Comprehensive")
+      .expect("sheet should be renamed");
+    inputs_sheet
+      .write_number(0, 0, 3.0)
+      .expect("first number should write");
+    inputs_sheet
+      .write_number(1, 0, 4.0)
+      .expect("second number should write");
+    inputs_sheet
+      .write_formula(0, 1, Formula::new("= +@_xlfn.SUM(A1:A2)").set_result("7"))
+      .expect("first formula should write");
+    inputs_sheet
+      .write_formula(1, 1, Formula::new("=_xlpm.MIN(A1:A2)").set_result("3"))
+      .expect("second formula should write");
+    inputs_sheet
+      .write_formula(
+        2,
+        1,
+        Formula::new(r#"=+@IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#)
+          .set_result(r#"_xlfn.literal "@_xlws.keep""#),
+      )
+      .expect("third formula should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("comprehensive normalized fixture workbook should serialize")
+  }
+
   #[test]
   fn should_validate_sheet_name_rules() {
     assert!(normalize_sheet_name("Sheet 1").is_ok());
@@ -3285,6 +3317,103 @@ mod tests {
         .filter_map(serde_json::Value::as_str)
         .any(|warning| warning.contains("1 formula(s) were normalized")),
       "import event payload warnings should include normalization telemetry",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_report_comprehensive_normalized_formula_metrics_on_import() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("import-comprehensive-normalization-fixture".to_string()))
+      .await
+      .expect("workbook should be created");
+    let mut events = state
+      .subscribe(workbook.id)
+      .await
+      .expect("event subscription should work");
+
+    let import_result = import_bytes_into_workbook(
+      &state,
+      workbook.id,
+      &workbook_import_comprehensive_normalization_fixture_bytes(),
+      "comprehensive-normalized-import",
+    )
+    .await
+    .expect("comprehensive normalized fixture import should succeed");
+
+    assert_eq!(import_result.formula_cells_imported, 3);
+    assert_eq!(import_result.formula_cells_normalized, 3);
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("3 formula(s) were normalized")),
+      "import warnings should surface comprehensive normalization telemetry",
+    );
+
+    let emitted_event = timeout(Duration::from_secs(1), events.recv())
+      .await
+      .expect("import event should arrive")
+      .expect("event payload should decode");
+    assert_eq!(emitted_event.event_type, "workbook.imported");
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_imported")
+        .and_then(serde_json::Value::as_u64),
+      Some(3),
+    );
+    assert_eq!(
+      emitted_event
+        .payload
+        .get("formula_cells_normalized")
+        .and_then(serde_json::Value::as_u64),
+      Some(3),
+    );
+    assert!(
+      emitted_event
+        .payload
+        .get("warnings")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .any(|warning| warning.contains("3 formula(s) were normalized")),
+      "import event payload warnings should include comprehensive normalization telemetry",
+    );
+
+    let db_path = state
+      .db_path(workbook.id)
+      .await
+      .expect("db path should be available");
+    let snapshot = load_sheet_snapshot(&db_path, "Comprehensive")
+      .expect("comprehensive sheet snapshot should load");
+    let cells_by_address = snapshot
+      .iter()
+      .map(|cell| (cell.address.as_str(), cell))
+      .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+      cells_by_address
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=SUM(A1:A2)"),
+      "import should persist canonical first formula",
+    );
+    assert_eq!(
+      cells_by_address
+        .get("B2")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=MIN(A1:A2)"),
+      "import should persist canonical second formula",
+    );
+    assert_eq!(
+      cells_by_address
+        .get("B3")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some(r#"=IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#),
+      "import should preserve quoted literal text while normalizing executable tokens",
     );
   }
 
