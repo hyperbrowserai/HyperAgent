@@ -662,6 +662,14 @@ mod tests {
       Some("=SUM(A1:A3)"),
     );
     assert_eq!(
+      normalize_imported_formula("=1+2").as_deref(),
+      Some("=1+2"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=A1*+B1").as_deref(),
+      Some("=A1*B1"),
+    );
+    assert_eq!(
       normalize_imported_formula("=IF(A1=1,+_XLFN.BITOR(4,1),0)").as_deref(),
       Some("=IF(A1=1,BITOR(4,1),0)"),
     );
