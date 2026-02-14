@@ -30,6 +30,7 @@ use crate::{
     parse_cot_formula, parse_sec_formula, parse_csc_formula,
     parse_sinh_formula,
     parse_cosh_formula, parse_tanh_formula,
+    parse_coth_formula, parse_sech_formula, parse_csch_formula,
     parse_asinh_formula, parse_acosh_formula, parse_atanh_formula,
     parse_asin_formula, parse_acos_formula,
     parse_atan_formula, parse_atan2_formula,
@@ -1748,6 +1749,33 @@ fn evaluate_formula(
   if let Some(tanh_arg) = parse_tanh_formula(formula) {
     let value = parse_required_float(connection, sheet, &tanh_arg)?;
     return Ok(Some(value.tanh().to_string()));
+  }
+
+  if let Some(coth_arg) = parse_coth_formula(formula) {
+    let value = parse_required_float(connection, sheet, &coth_arg)?;
+    let tanh_value = value.tanh();
+    if tanh_value.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / tanh_value).to_string()));
+  }
+
+  if let Some(sech_arg) = parse_sech_formula(formula) {
+    let value = parse_required_float(connection, sheet, &sech_arg)?;
+    let cosh_value = value.cosh();
+    if cosh_value.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / cosh_value).to_string()));
+  }
+
+  if let Some(csch_arg) = parse_csch_formula(formula) {
+    let value = parse_required_float(connection, sheet, &csch_arg)?;
+    let sinh_value = value.sinh();
+    if sinh_value.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / sinh_value).to_string()));
   }
 
   if let Some(asinh_arg) = parse_asinh_formula(formula) {
@@ -5063,12 +5091,30 @@ mod tests {
         value: None,
         formula: Some("=ATANH(0)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 198,
+        value: None,
+        formula: Some("=COTH(1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 199,
+        value: None,
+        formula: Some("=SECH(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 200,
+        value: None,
+        formula: Some("=CSCH(1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 195);
+    assert_eq!(updated_cells, 198);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5082,7 +5128,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 197,
+        end_col: 200,
       },
     )
     .expect("cells should be fetched");
@@ -5744,6 +5790,27 @@ mod tests {
     assert_eq!(by_position(1, 195).evaluated_value.as_deref(), Some("0"));
     assert_eq!(by_position(1, 196).evaluated_value.as_deref(), Some("0"));
     assert_eq!(by_position(1, 197).evaluated_value.as_deref(), Some("0"));
+    let coth = by_position(1, 198)
+      .evaluated_value
+      .as_deref()
+      .expect("coth should evaluate")
+      .parse::<f64>()
+      .expect("coth should be numeric");
+    assert!(
+      (coth - 1.313_035_285_499_331_5).abs() < 1e-9,
+      "coth should be 1.313035..., got {coth}",
+    );
+    assert_eq!(by_position(1, 199).evaluated_value.as_deref(), Some("1"));
+    let csch = by_position(1, 200)
+      .evaluated_value
+      .as_deref()
+      .expect("csch should evaluate")
+      .parse::<f64>()
+      .expect("csch should be numeric");
+    assert!(
+      (csch - 0.850_918_128_239_321_6).abs() < 1e-9,
+      "csch should be 0.850918..., got {csch}",
+    );
   }
 
   #[test]
@@ -6904,6 +6971,18 @@ mod tests {
         value: None,
         formula: Some("=CSC(0)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 4,
+        value: None,
+        formula: Some("=COTH(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 5,
+        value: None,
+        formula: Some("=CSCH(0)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
@@ -6915,6 +6994,8 @@ mod tests {
         "=COT(0)".to_string(),
         "=SEC(1.5707963267948966)".to_string(),
         "=CSC(0)".to_string(),
+        "=COTH(0)".to_string(),
+        "=CSCH(0)".to_string(),
       ],
     );
   }
