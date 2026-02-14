@@ -2,6 +2,7 @@
 
 mod api;
 mod error;
+mod fixture_corpus;
 mod formula;
 mod models;
 mod state;

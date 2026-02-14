@@ -2813,6 +2813,10 @@ mod tests {
     MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
   };
   use crate::{
+    fixture_corpus::{
+      COMPAT_BASELINE_FILE_NAME, COMPAT_NORMALIZATION_FILE_NAME,
+      COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
+    },
     models::{
       AgentOperation, AgentOpsRequest, RemoveAgentOpsCacheEntryRequest,
       RemoveAgentOpsCacheEntriesByPrefixRequest,
@@ -2878,15 +2882,15 @@ mod tests {
   }
 
   fn workbook_import_fixture_bytes() -> Vec<u8> {
-    workbook_fixture_bytes("compat_baseline.xlsx")
+    workbook_fixture_bytes(COMPAT_BASELINE_FILE_NAME)
   }
 
   fn workbook_import_normalized_formula_fixture_bytes() -> Vec<u8> {
-    workbook_fixture_bytes("compat_normalization_single.xlsx")
+    workbook_fixture_bytes(COMPAT_NORMALIZATION_SINGLE_FILE_NAME)
   }
 
   fn workbook_import_comprehensive_normalization_fixture_bytes() -> Vec<u8> {
-    workbook_fixture_bytes("compat_normalization.xlsx")
+    workbook_fixture_bytes(COMPAT_NORMALIZATION_FILE_NAME)
   }
 
   #[test]

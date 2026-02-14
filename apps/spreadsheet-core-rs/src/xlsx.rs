@@ -471,6 +471,10 @@ mod tests {
     is_formula_normalized_for_compatibility, normalize_imported_formula,
   };
   use crate::{
+    fixture_corpus::{
+      write_fixture_corpus, COMPAT_BASELINE_FILE_NAME,
+      COMPAT_NORMALIZATION_FILE_NAME,
+    },
     models::{ChartSpec, ChartType, WorkbookSummary},
     state::AppState,
     store::{load_sheet_snapshot, recalculate_formulas},
@@ -1661,7 +1665,7 @@ mod tests {
       .expect("baseline db path should be available");
     let baseline_result = import_xlsx(
       &baseline_db_path,
-      &file_fixture_bytes("compat_baseline.xlsx"),
+      &file_fixture_bytes(COMPAT_BASELINE_FILE_NAME),
     )
     .expect("baseline file fixture should import");
     assert_eq!(baseline_result.formula_cells_imported, 1);
@@ -1684,7 +1688,7 @@ mod tests {
       .expect("normalization db path should be available");
     let normalization_result = import_xlsx(
       &normalization_db_path,
-      &file_fixture_bytes("compat_normalization.xlsx"),
+      &file_fixture_bytes(COMPAT_NORMALIZATION_FILE_NAME),
     )
     .expect("normalization file fixture should import");
     assert_eq!(normalization_result.formula_cells_imported, 3);
@@ -1727,5 +1731,23 @@ mod tests {
         .and_then(|cell| cell.formula.as_deref()),
       Some(r#"=IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#),
     );
+  }
+
+  #[test]
+  fn should_keep_committed_file_fixture_corpus_in_sync_with_generator() {
+    let generated_dir = tempdir()
+      .expect("temp dir should be created")
+      .path()
+      .join("generated-fixtures");
+    let generated_files = write_fixture_corpus(&generated_dir)
+      .expect("fixture corpus should be generated");
+    for file_name in generated_files {
+      assert_eq!(
+        file_fixture_bytes(file_name),
+        fs::read(generated_dir.join(file_name))
+          .expect("generated fixture file should be readable"),
+        "committed fixture file {file_name} should match generated corpus output",
+      );
+    }
   }
 }
