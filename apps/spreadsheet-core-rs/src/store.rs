@@ -32,6 +32,7 @@ use crate::{
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
     parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
+    parse_ipmt_formula, parse_ppmt_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1830,6 +1831,62 @@ fn evaluate_formula(
     };
     let rate = calculate_rate(periods, payment, present_value, future_value, payment_type, guess);
     return Ok(rate.map(|value| value.to_string()));
+  }
+
+  if let Some((rate_arg, period_arg, nper_arg, pv_arg, fv_arg, type_arg)) = parse_ipmt_formula(formula)
+  {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let period = parse_required_integer(connection, sheet, &period_arg)?;
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    let present_value = parse_required_float(connection, sheet, &pv_arg)?;
+    let future_value = match fv_arg {
+      Some(raw_fv) => parse_required_float(connection, sheet, &raw_fv)?,
+      None => 0.0,
+    };
+    let payment_type = match parse_payment_type(connection, sheet, type_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let (interest_payment, _principal_payment) = match calculate_ipmt_ppmt(
+      rate,
+      period,
+      periods,
+      present_value,
+      future_value,
+      payment_type,
+    ) {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    return Ok(Some(interest_payment.to_string()));
+  }
+
+  if let Some((rate_arg, period_arg, nper_arg, pv_arg, fv_arg, type_arg)) = parse_ppmt_formula(formula)
+  {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let period = parse_required_integer(connection, sheet, &period_arg)?;
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    let present_value = parse_required_float(connection, sheet, &pv_arg)?;
+    let future_value = match fv_arg {
+      Some(raw_fv) => parse_required_float(connection, sheet, &raw_fv)?,
+      None => 0.0,
+    };
+    let payment_type = match parse_payment_type(connection, sheet, type_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let (_interest_payment, principal_payment) = match calculate_ipmt_ppmt(
+      rate,
+      period,
+      periods,
+      present_value,
+      future_value,
+      payment_type,
+    ) {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    return Ok(Some(principal_payment.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -4148,6 +4205,48 @@ fn bisection_rate(
   } else {
     Some(high)
   }
+}
+
+fn calculate_ipmt_ppmt(
+  rate: f64,
+  period: i32,
+  periods: f64,
+  present_value: f64,
+  future_value: f64,
+  payment_type: f64,
+) -> Option<(f64, f64)> {
+  if period < 1 || periods <= 0.0 || f64::from(period) > periods.ceil() {
+    return None;
+  }
+  let payment = if rate.abs() < f64::EPSILON {
+    -(present_value + future_value) / periods
+  } else {
+    let growth = (1.0 + rate).powf(periods);
+    let denominator = (1.0 + (rate * payment_type)) * (growth - 1.0);
+    if denominator.abs() < f64::EPSILON {
+      return None;
+    }
+    -(rate * (future_value + (growth * present_value))) / denominator
+  };
+  if !payment.is_finite() {
+    return None;
+  }
+
+  let mut balance = present_value;
+  for current_period in 1..=period {
+    let interest_payment = if (payment_type - 1.0).abs() < f64::EPSILON && current_period == 1 {
+      0.0
+    } else {
+      -(balance * rate)
+    };
+    let principal_payment = payment - interest_payment;
+    balance += principal_payment;
+    if current_period == period {
+      return Some((interest_payment, principal_payment));
+    }
+  }
+
+  None
 }
 
 fn calculate_irr(cash_flows: &[f64], guess: f64) -> Option<f64> {
@@ -6998,12 +7097,24 @@ mod tests {
         value: None,
         formula: Some("=RATE(1,0,-100,110)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 258,
+        value: None,
+        formula: Some("=IPMT(0.1,1,2,100)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 259,
+        value: None,
+        formula: Some("=PPMT(0.1,1,2,100)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 255);
+    assert_eq!(updated_cells, 257);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7017,7 +7128,7 @@ mod tests {
         start_row: 1,
         end_row: 20,
         start_col: 1,
-        end_col: 257,
+        end_col: 259,
       },
     )
     .expect("cells should be fetched");
@@ -8070,6 +8181,26 @@ mod tests {
       (rate_value - 0.1).abs() < 1e-9,
       "rate should solve interest rate from payment terms, got {rate_value}",
     );
+    let ipmt_value = by_position(1, 258)
+      .evaluated_value
+      .as_deref()
+      .expect("ipmt should evaluate")
+      .parse::<f64>()
+      .expect("ipmt should be numeric");
+    assert!(
+      (ipmt_value + 10.0).abs() < 1e-9,
+      "ipmt should compute interest portion of payment, got {ipmt_value}",
+    );
+    let ppmt_value = by_position(1, 259)
+      .evaluated_value
+      .as_deref()
+      .expect("ppmt should evaluate")
+      .parse::<f64>()
+      .expect("ppmt should be numeric");
+    assert!(
+      (ppmt_value + 47.619_047_619_047_62).abs() < 1e-9,
+      "ppmt should compute principal portion of payment, got {ppmt_value}",
+    );
   }
 
   #[test]
@@ -8393,6 +8524,36 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=RATE(0,0,1000)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_ipmt_ppmt_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=IPMT(0.1,3,2,100)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=PPMT(0.1,3,2,100)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=IPMT(0.1,3,2,100)".to_string(),
+        "=PPMT(0.1,3,2,100)".to_string(),
+      ],
+    );
   }
 
   #[test]

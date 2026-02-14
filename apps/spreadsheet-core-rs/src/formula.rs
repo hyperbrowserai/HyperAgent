@@ -610,6 +610,40 @@ pub fn parse_rate_formula(
   ))
 }
 
+pub fn parse_ipmt_formula(
+  formula: &str,
+) -> Option<(String, String, String, String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "IPMT" || !(args.len() == 4 || args.len() == 5 || args.len() == 6) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+    args.get(4).cloned(),
+    args.get(5).cloned(),
+  ))
+}
+
+pub fn parse_ppmt_formula(
+  formula: &str,
+) -> Option<(String, String, String, String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "PPMT" || !(args.len() == 4 || args.len() == 5 || args.len() == 6) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+    args.get(4).cloned(),
+    args.get(5).cloned(),
+  ))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2097,6 +2131,7 @@ mod tests {
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
     parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
+    parse_ipmt_formula, parse_ppmt_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2414,6 +2449,20 @@ mod tests {
     assert_eq!(rate_args.3.as_deref(), Some("D1"));
     assert_eq!(rate_args.4.as_deref(), Some("0"));
     assert_eq!(rate_args.5.as_deref(), Some("0.2"));
+    let ipmt_args = parse_ipmt_formula("=IPMT(A1,B1,C1,D1,E1,1)").expect("ipmt should parse");
+    assert_eq!(ipmt_args.0, "A1");
+    assert_eq!(ipmt_args.1, "B1");
+    assert_eq!(ipmt_args.2, "C1");
+    assert_eq!(ipmt_args.3, "D1");
+    assert_eq!(ipmt_args.4.as_deref(), Some("E1"));
+    assert_eq!(ipmt_args.5.as_deref(), Some("1"));
+    let ppmt_args = parse_ppmt_formula("=PPMT(A1,B1,C1,D1)").expect("ppmt should parse");
+    assert_eq!(ppmt_args.0, "A1");
+    assert_eq!(ppmt_args.1, "B1");
+    assert_eq!(ppmt_args.2, "C1");
+    assert_eq!(ppmt_args.3, "D1");
+    assert_eq!(ppmt_args.4, None);
+    assert_eq!(ppmt_args.5, None);
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),

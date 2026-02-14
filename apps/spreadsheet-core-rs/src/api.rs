@@ -159,6 +159,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "MIRR",
   "NPER",
   "RATE",
+  "IPMT",
+  "PPMT",
   "SIN",
   "COS",
   "TAN",
