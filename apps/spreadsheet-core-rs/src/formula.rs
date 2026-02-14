@@ -1254,6 +1254,22 @@ pub fn parse_sumx_formula(
   Some((function, left_start, left_end, right_start, right_end))
 }
 
+pub fn parse_skew_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SKEW" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_kurt_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "KURT" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1546,6 +1562,7 @@ mod tests {
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
     parse_forecast_linear_formula, parse_steyx_formula,
     parse_sumx_formula,
+    parse_skew_formula, parse_kurt_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -2096,6 +2113,12 @@ mod tests {
     assert_eq!(sumx.2, (5, 1));
     assert_eq!(sumx.3, (1, 2));
     assert_eq!(sumx.4, (5, 2));
+    let skew = parse_skew_formula("=SKEW(A1:A5)").expect("skew should parse");
+    assert_eq!(skew.0, (1, 1));
+    assert_eq!(skew.1, (5, 1));
+    let kurt = parse_kurt_formula("=KURT(A1:A5)").expect("kurt should parse");
+    assert_eq!(kurt.0, (1, 1));
+    assert_eq!(kurt.1, (5, 1));
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");

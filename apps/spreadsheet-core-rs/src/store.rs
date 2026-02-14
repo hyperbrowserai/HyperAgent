@@ -17,7 +17,7 @@ use crate::{
     parse_covariance_formula, parse_correl_formula,
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
     parse_forecast_linear_formula, parse_steyx_formula,
-    parse_sumx_formula,
+    parse_sumx_formula, parse_skew_formula, parse_kurt_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -1044,6 +1044,65 @@ fn evaluate_formula(
       acc + term
     });
     return Ok(Some(total.to_string()));
+  }
+
+  if let Some((start, end)) = parse_skew_formula(formula) {
+    let values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.len() < 3 {
+      return Ok(None);
+    }
+    let n = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / n;
+    let sum_squares = values
+      .iter()
+      .map(|value| {
+        let delta = *value - mean;
+        delta * delta
+      })
+      .sum::<f64>();
+    if sum_squares <= 0.0 {
+      return Ok(None);
+    }
+    let sample_std = (sum_squares / (n - 1.0)).sqrt();
+    if sample_std <= 0.0 {
+      return Ok(None);
+    }
+    let third_moment = values
+      .iter()
+      .map(|value| ((*value - mean) / sample_std).powi(3))
+      .sum::<f64>();
+    let skew = (n / ((n - 1.0) * (n - 2.0))) * third_moment;
+    return Ok(Some(skew.to_string()));
+  }
+
+  if let Some((start, end)) = parse_kurt_formula(formula) {
+    let values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.len() < 4 {
+      return Ok(None);
+    }
+    let n = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / n;
+    let sum_squares = values
+      .iter()
+      .map(|value| {
+        let delta = *value - mean;
+        delta * delta
+      })
+      .sum::<f64>();
+    if sum_squares <= 0.0 {
+      return Ok(None);
+    }
+    let sample_std = (sum_squares / (n - 1.0)).sqrt();
+    if sample_std <= 0.0 {
+      return Ok(None);
+    }
+    let fourth_moment = values
+      .iter()
+      .map(|value| ((*value - mean) / sample_std).powi(4))
+      .sum::<f64>();
+    let kurt = (n * (n + 1.0) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * fourth_moment
+      - (3.0 * (n - 1.0).powi(2) / ((n - 2.0) * (n - 3.0)));
+    return Ok(Some(kurt.to_string()));
   }
 
   if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
@@ -3534,6 +3593,18 @@ mod tests {
         formula: None,
       },
       CellMutation {
+        row: 13,
+        col: 20,
+        value: Some(json!(4)),
+        formula: None,
+      },
+      CellMutation {
+        row: 14,
+        col: 20,
+        value: Some(json!(5)),
+        formula: None,
+      },
+      CellMutation {
         row: 10,
         col: 21,
         value: Some(json!(2)),
@@ -4663,12 +4734,24 @@ mod tests {
         value: None,
         formula: Some("=SUMX2PY2(A1:A2,A4:A5)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 182,
+        value: None,
+        formula: Some("=SKEW(T10:T14)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 183,
+        value: None,
+        formula: Some("=KURT(T10:T14)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 179);
+    assert_eq!(updated_cells, 181);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4682,7 +4765,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 181,
+        end_col: 183,
       },
     )
     .expect("cells should be fetched");
@@ -5267,6 +5350,23 @@ mod tests {
     assert!(
       (sumx2py2 - 36800.0).abs() < 1e-9,
       "sumx2py2 should be 36800.0, got {sumx2py2}",
+    );
+    let skew = by_position(1, 182)
+      .evaluated_value
+      .as_deref()
+      .expect("skew should evaluate")
+      .parse::<f64>()
+      .expect("skew should be numeric");
+    assert!(skew.abs() < 1e-9, "skew should be 0.0, got {skew}");
+    let kurt = by_position(1, 183)
+      .evaluated_value
+      .as_deref()
+      .expect("kurt should evaluate")
+      .parse::<f64>()
+      .expect("kurt should be numeric");
+    assert!(
+      (kurt + 1.2).abs() < 1e-9,
+      "kurt should be -1.2, got {kurt}",
     );
   }
 
@@ -6136,6 +6236,102 @@ mod tests {
         "=FORECAST(4,B1:B2,A1:A2)".to_string(),
         "=STEYX(B1:B2,A1:A2)".to_string(),
       ],
+    );
+  }
+
+  #[test]
+  fn should_leave_skew_and_kurt_with_insufficient_values_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(1)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(2)),
+        formula: None,
+      },
+      CellMutation {
+        row: 3,
+        col: 1,
+        value: Some(json!(3)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=SKEW(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=KURT(A1:A3)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=SKEW(A1:A2)".to_string(), "=KURT(A1:A3)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_skew_and_kurt_with_zero_variance_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(5)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(5)),
+        formula: None,
+      },
+      CellMutation {
+        row: 3,
+        col: 1,
+        value: Some(json!(5)),
+        formula: None,
+      },
+      CellMutation {
+        row: 4,
+        col: 1,
+        value: Some(json!(5)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=SKEW(A1:A4)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=KURT(A1:A4)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=SKEW(A1:A4)".to_string(), "=KURT(A1:A4)".to_string()],
     );
   }
 
