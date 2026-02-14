@@ -211,6 +211,8 @@ fn normalize_imported_formula(formula: &str) -> Option<String> {
     strip_known_formula_prefixes(trimmed.strip_prefix('=').unwrap_or(trimmed));
   let normalized_body =
     strip_implicit_intersection_operators(normalized_body.as_str());
+  let normalized_body =
+    strip_unary_plus_formula_operators(normalized_body.as_str());
   let normalized_body = normalized_body.trim();
   if normalized_body.is_empty() {
     return None;
@@ -323,6 +325,74 @@ fn strip_implicit_intersection_operators(formula_body: &str) -> String {
           | Some('{')
       );
       if starts_identifier && is_prefix_position {
+        index += 1;
+        continue;
+      }
+    }
+
+    normalized.push(ch);
+    if !ch.is_whitespace() {
+      previous_non_whitespace = Some(ch);
+    }
+    index += 1;
+  }
+
+  normalized
+}
+
+fn strip_unary_plus_formula_operators(formula_body: &str) -> String {
+  let chars = formula_body.chars().collect::<Vec<_>>();
+  let mut normalized = String::with_capacity(formula_body.len());
+  let mut index = 0usize;
+  let mut in_string = false;
+  let mut previous_non_whitespace = None;
+
+  while index < chars.len() {
+    let ch = chars[index];
+
+    if ch == '"' {
+      normalized.push(ch);
+      if in_string && index + 1 < chars.len() && chars[index + 1] == '"' {
+        normalized.push(chars[index + 1]);
+        index += 2;
+        continue;
+      }
+      in_string = !in_string;
+      previous_non_whitespace = Some(ch);
+      index += 1;
+      continue;
+    }
+
+    if !in_string && ch == '+' {
+      let mut lookahead_index = index + 1;
+      while lookahead_index < chars.len() && chars[lookahead_index].is_whitespace() {
+        lookahead_index += 1;
+      }
+      let next_non_whitespace = chars.get(lookahead_index).copied();
+      let starts_value_token = next_non_whitespace
+        .is_some_and(|next| {
+          next.is_ascii_alphabetic() || next == '_' || next == '$' || next == '('
+            || next == '"' || next.is_ascii_digit()
+        });
+      let is_unary_position = matches!(
+        previous_non_whitespace,
+        None
+          | Some('(')
+          | Some(',')
+          | Some('+')
+          | Some('-')
+          | Some('*')
+          | Some('/')
+          | Some('^')
+          | Some('&')
+          | Some('=')
+          | Some('<')
+          | Some('>')
+          | Some(':')
+          | Some(';')
+          | Some('{')
+      );
+      if starts_value_token && is_unary_position {
         index += 1;
         continue;
       }
@@ -580,6 +650,18 @@ mod tests {
       normalize_imported_formula(r#"=IF(A1=1,"user@example.com",@_XLFN.BITOR(4,1))"#)
         .as_deref(),
       Some(r#"=IF(A1=1,"user@example.com",BITOR(4,1))"#),
+    );
+    assert_eq!(
+      normalize_imported_formula("=+SUM(A1:A3)").as_deref(),
+      Some("=SUM(A1:A3)"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=IF(A1=1,+_XLFN.BITOR(4,1),0)").as_deref(),
+      Some("=IF(A1=1,BITOR(4,1),0)"),
+    );
+    assert_eq!(
+      normalize_imported_formula(r#"="literal +_xlfn. token""#).as_deref(),
+      Some(r#"="literal +_xlfn. token""#),
     );
     assert_eq!(
       normalize_imported_formula("  SUM(A1:A3)  ").as_deref(),
