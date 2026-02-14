@@ -90,6 +90,16 @@ function createFakeClient(session: CDPSession): CDPClient {
   };
 }
 
+function createFakeClientWithPage(
+  session: CDPSession,
+  page: unknown
+): CDPClient {
+  return {
+    ...createFakeClient(session),
+    getPage: () => page,
+  };
+}
+
 describe("FrameContextManager listener bookkeeping", () => {
   it("cleans up both page and runtime listeners on clear", async () => {
     const session = new FakeSession();
@@ -213,5 +223,96 @@ describe("FrameContextManager listener bookkeeping", () => {
       (event) => event === "Page.frameAttached"
     ).length;
     expect(secondAttachedRegistrations).toBe(2);
+  });
+
+  it("captureOOPIFs tolerates trap-prone frame metadata on same-origin frames", async () => {
+    const session = new FakeSession();
+    const mainFrame = {
+      url: () => "https://example.com",
+      parentFrame: () => null,
+      name: () => "main",
+      isDetached: () => false,
+    };
+    const trappedFrame = {
+      url: () => {
+        throw new Error("frame url trap");
+      },
+      parentFrame: () => {
+        throw new Error("parent frame trap");
+      },
+      name: () => {
+        throw new Error("frame name trap");
+      },
+      isDetached: () => false,
+    };
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockRejectedValue(new Error("same origin frame")),
+      }),
+      frames: () => [mainFrame, trappedFrame],
+      mainFrame: () => mainFrame,
+    };
+
+    const manager = new FrameContextManager(
+      createFakeClientWithPage(session, page)
+    );
+
+    await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
+  });
+
+  it("captureOOPIFs keeps cached records when frame metadata getters trap", async () => {
+    const session = new FakeSession();
+    const mainFrame = {
+      url: () => "https://example.com",
+      parentFrame: () => null,
+      name: () => "main",
+      isDetached: () => false,
+    };
+    const trappedFrame = {
+      url: () => {
+        throw new Error("frame url trap");
+      },
+      parentFrame: () => null,
+      name: () => {
+        throw new Error("frame name trap");
+      },
+      isDetached: () => false,
+    };
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn(),
+      }),
+      frames: () => [mainFrame, trappedFrame],
+      mainFrame: () => mainFrame,
+    };
+
+    const manager = new FrameContextManager(
+      createFakeClientWithPage(session, page)
+    );
+    (
+      manager as unknown as {
+        playwrightOopifCache: Map<unknown, unknown>;
+      }
+    ).playwrightOopifCache.set(trappedFrame, {
+      frameId: "cached-oopif",
+      session,
+      url: "https://cached.example",
+      name: "cached-name",
+      parentFrameUrl: null,
+      playwrightFrame: trappedFrame,
+    });
+
+    await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
+    const cached = (
+      manager as unknown as {
+        playwrightOopifCache: Map<
+          unknown,
+          { url?: string; name?: string; frameId?: string }
+        >;
+      }
+    ).playwrightOopifCache.get(trappedFrame);
+    expect(cached?.frameId).toBe("cached-oopif");
+    expect(cached?.url).toBe("about:blank");
+    expect(cached?.name).toBeUndefined();
   });
 });

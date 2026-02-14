@@ -3,7 +3,7 @@ import type { CDPSession, CDPClient } from "./types";
 import type { FrameRecord } from "./frame-graph";
 import { FrameGraph } from "./frame-graph";
 import { isAdOrTrackingFrame } from "./frame-filters";
-import { formatUnknownError } from "@/utils";
+import { formatUnknownError, normalizePageUrl } from "@/utils";
 
 const MAX_FRAME_CONTEXT_DIAGNOSTIC_CHARS = 400;
 
@@ -62,6 +62,48 @@ function formatFrameContextDiagnostic(value: unknown): string {
     return "unknown error";
   }
   return truncateFrameContextDiagnostic(normalized);
+}
+
+function safeReadFrameUrl(
+  frame: PlaywrightFrameHandle,
+  fallback: string = "about:blank"
+): string {
+  try {
+    return normalizePageUrl(frame.url(), { fallback });
+  } catch {
+    return fallback;
+  }
+}
+
+function safeReadFrameName(frame: PlaywrightFrameHandle): string | undefined {
+  try {
+    const name = frame.name();
+    if (typeof name !== "string") {
+      return undefined;
+    }
+    const normalized = sanitizeFrameContextDiagnostic(name);
+    return normalized.length > 0 ? normalized : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeReadParentFrameUrl(
+  frame: PlaywrightFrameHandle
+): string | null {
+  try {
+    const parentFrameUnknown = frame.parentFrame();
+    if (!parentFrameUnknown || typeof parentFrameUnknown !== "object") {
+      return null;
+    }
+    const parentFrame = parentFrameUnknown as { url?: () => unknown };
+    if (typeof parentFrame.url !== "function") {
+      return null;
+    }
+    return normalizePageUrl(parentFrame.url(), { fallback: "about:blank" });
+  } catch {
+    return null;
+  }
 }
 
 export class FrameContextManager {
@@ -460,17 +502,17 @@ export class FrameContextManager {
     // Parallelize OOPIF discovery: try to create CDP session for all frames simultaneously
     const discoveryPromises = framesToCheck.map(async (frame, index) => {
       const cachedRecord = this.playwrightOopifCache.get(frame);
-      const parentFrameUnknown = frame.parentFrame();
-      const parentFrame = parentFrameUnknown as { url(): string } | null;
-      const parentFrameUrl = parentFrame?.url();
+      const parentFrameUrl = safeReadParentFrameUrl(frame);
+      const frameUrl = safeReadFrameUrl(frame);
+      const frameName = safeReadFrameName(frame);
 
       if (cachedRecord) {
         this.log(
-          `[FrameContext] Frame ${frame.url()} already has a cached record, skipping`
+          `[FrameContext] Frame ${frameUrl} already has a cached record, skipping`
         );
         if (typeof frame.isDetached === "function" && frame.isDetached()) {
           this.log(
-            `[FrameContext] Frame ${frame.url()} is detached, removing cached record`
+            `[FrameContext] Frame ${frameUrl} is detached, removing cached record`
           );
           const frameId = cachedRecord.frameId;
           this.removeCachedPlaywrightFrame(frame);
@@ -479,8 +521,8 @@ export class FrameContextManager {
           }
           return null;
         }
-        cachedRecord.url = frame.url();
-        cachedRecord.name = frame.name() || undefined;
+        cachedRecord.url = frameUrl;
+        cachedRecord.name = frameName;
         cachedRecord.parentFrameUrl = parentFrameUrl;
         cachedRecord.playwrightFrame = frame;
         return {
@@ -489,10 +531,15 @@ export class FrameContextManager {
           playwrightFrame: frame,
         };
       }
-      const frameUrl = frame.url();
 
       // Filter ad/tracking frames before attempting CDP session creation
-      if (isAdOrTrackingFrame({ url: frameUrl, name: frame.name(), parentUrl: parentFrameUrl || undefined })) {
+      if (
+        isAdOrTrackingFrame({
+          url: frameUrl,
+          name: frameName,
+          parentUrl: parentFrameUrl || undefined,
+        })
+      ) {
         this.log(`[FrameContext] Skipping ad/tracking frame: ${frameUrl}`);
         return null;
       }
@@ -524,7 +571,7 @@ export class FrameContextManager {
           frameId,
           session: oopifSession,
           url: frameUrl,
-          name: frame.name() || undefined,
+          name: frameName,
           parentFrameUrl,
           playwrightFrame: frame,
         };
