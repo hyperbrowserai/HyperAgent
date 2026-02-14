@@ -285,3 +285,9 @@ curl -X POST "http://localhost:8787/v1/agent/wizard/run-json" \
 ```bash
 cargo test
 ```
+
+XLSX compatibility regression coverage includes:
+- supported formula roundtrip fixtures (engineering + financial families),
+- unsupported formula preservation fixtures (normalized text retained + surfaced via `unsupported_formulas`),
+- non-`A1` used-range import fixtures (coordinate offset preservation),
+- formula-token normalization fixtures (`_xlfn.`/`_xlws.`, implicit `@`, and quoted-literal edge cases).
