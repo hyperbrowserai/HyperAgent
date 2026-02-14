@@ -9227,6 +9227,11 @@ mod tests {
             .expect("agent schema should resolve")
             .0;
         let wizard_schema = get_agent_wizard_schema().await.0;
+        assert_eq!(
+            agent_schema.get("request_shape"),
+            agent_schema.get("agent_ops_request_shape"),
+            "agent schema request_shape alias should stay in sync with agent_ops_request_shape",
+        );
 
         let parity_keys = [
             "agent_ops_endpoint",
