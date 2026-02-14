@@ -12,6 +12,28 @@ This document explains every relevant function added or changed since commit `f3
 
 ---
 
+## Runtime Frame-Filtering Policy (Current Behavior)
+
+By default, HyperAgent filters likely ad/tracking iframes during CDP frame discovery to reduce noise in the frame graph. This is now configurable per agent:
+
+```ts
+const agent = new HyperAgent({
+  // default is true
+  filterAdTrackingFrames: false,
+});
+```
+
+- `true` (default): skip likely ad/tracking frames during OOPIF/session discovery.
+- `false`: include those frames, which is useful for workflows that intentionally interact with ad-tech, analytics tags, or embedded consent/tracking widgets.
+
+The same setting is propagated through:
+- task loop runtime context initialization (`page.ai()` flow),
+- single-action execution (`page.perform()` flow),
+- cached replay + special replay actions,
+- DOM settle/wait paths (`waitForSettledDOM`).
+
+---
+
 ## 0. THE BIG PICTURE: The Map Problem & Why We Need Multiple Event Listeners
 
 ### Why So Many Maps?
