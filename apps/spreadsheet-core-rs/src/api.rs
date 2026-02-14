@@ -848,6 +848,41 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "INVALID_QUERY_SQL",
         "INVALID_QUERY_ROW_LIMIT"
       ],
+      "agent_ops_cache_replay_endpoint": "/v1/workbooks/{id}/agent/ops/cache/replay",
+      "agent_ops_cache_reexecute_endpoint": "/v1/workbooks/{id}/agent/ops/cache/reexecute",
+      "agent_ops_cache_replay_request_shape": {
+        "request_id": "string (required)"
+      },
+      "agent_ops_cache_replay_response_shape": {
+        "cached_at": "iso timestamp when source cache entry was created",
+        "cached_response": {
+          "request_id": "optional string",
+          "operations_signature": "sha256 signature over cached operations",
+          "served_from_cache": "always true when replay succeeds",
+          "results": "array of cached operation results"
+        },
+        "operations": "cached operation array for request replay portability"
+      },
+      "agent_ops_cache_reexecute_request_shape": {
+        "request_id": "string (required source cache entry id)",
+        "new_request_id": "optional string for target execution request id",
+        "actor": "optional string",
+        "stop_on_error": "optional boolean (default true)",
+        "expected_operations_signature": "optional string guard for cached operations payload"
+      },
+      "agent_ops_cache_reexecute_response_shape": {
+        "source_request_id": "string",
+        "generated_request_id": "true if server generated request id",
+        "operations_signature": "sha256 signature over replayed operations",
+        "operations_count": "number of operations reexecuted",
+        "operations": "reexecuted operations array",
+        "response": "agent ops response from reexecution"
+      },
+      "cache_validation_error_codes": [
+        "INVALID_REQUEST_ID",
+        "INVALID_NEW_REQUEST_ID",
+        "CACHE_ENTRY_NOT_FOUND"
+      ],
       "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
       "scenarios": scenario_catalog(),
       "presets": preset_catalog()
@@ -8631,6 +8666,72 @@ mod tests {
         assert!(
             duckdb_query_validation_error_codes.contains(&"INVALID_QUERY_ROW_LIMIT"),
             "wizard schema should advertise query row-limit validation code",
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_replay_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/replay"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_reexecute_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/reexecute"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_replay_request_shape")
+                .and_then(|value| value.get("request_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("string (required)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_replay_response_shape")
+                .and_then(|value| value.get("operations"))
+                .and_then(serde_json::Value::as_str),
+            Some("cached operation array for request replay portability"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_reexecute_request_shape")
+                .and_then(|value| value.get("request_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("string (required source cache entry id)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_reexecute_request_shape")
+                .and_then(|value| value.get("new_request_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional string for target execution request id"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_reexecute_response_shape")
+                .and_then(|value| value.get("generated_request_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("true if server generated request id"),
+        );
+        let cache_validation_error_codes = schema
+            .get("cache_validation_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("cache_validation_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<Vec<_>>();
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_REQUEST_ID"),
+            "wizard schema should advertise invalid request-id cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_NEW_REQUEST_ID"),
+            "wizard schema should advertise invalid new request-id cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"CACHE_ENTRY_NOT_FOUND"),
+            "wizard schema should advertise cache-entry-not-found validation code",
         );
     }
 }
