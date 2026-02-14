@@ -9582,4 +9582,42 @@ mod tests {
             "openapi summary should mention OpenAPI",
         );
     }
+
+    #[tokio::test]
+    async fn should_keep_schema_openapi_endpoint_in_sync_with_openapi_spec() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("schema-openapi-endpoint".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let agent_schema = get_agent_schema(State(state), Path(workbook.id))
+            .await
+            .expect("agent schema should resolve")
+            .0;
+        let wizard_schema = get_agent_wizard_schema().await.0;
+        let openapi_endpoint = agent_schema
+            .get("openapi_endpoint")
+            .and_then(serde_json::Value::as_str)
+            .expect("agent schema should advertise openapi endpoint");
+        let wizard_openapi_endpoint = wizard_schema
+            .get("openapi_endpoint")
+            .and_then(serde_json::Value::as_str)
+            .expect("wizard schema should advertise openapi endpoint");
+        assert_eq!(
+            openapi_endpoint, wizard_openapi_endpoint,
+            "agent and wizard schema should advertise same openapi endpoint",
+        );
+
+        let spec = openapi().await.0;
+        let paths = spec
+            .get("paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi spec should include paths");
+        assert!(
+            paths.contains_key(openapi_endpoint),
+            "openapi spec should expose schema-advertised openapi endpoint",
+        );
+    }
 }
