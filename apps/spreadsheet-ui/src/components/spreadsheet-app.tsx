@@ -896,6 +896,23 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.formula_capabilities),
     [wizardSchemaQuery.data?.formula_capabilities],
   );
+  const wizardDuckdbQueryRequestFields = useMemo(
+    () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.duckdb_query_request_shape),
+    [wizardSchemaQuery.data?.duckdb_query_request_shape],
+  );
+  const wizardDuckdbQueryResponseFields = useMemo(
+    () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.duckdb_query_response_shape),
+    [wizardSchemaQuery.data?.duckdb_query_response_shape],
+  );
+  const wizardOpsResultErrorFields = useMemo(
+    () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.agent_ops_result_error_shape),
+    [wizardSchemaQuery.data?.agent_ops_result_error_shape],
+  );
+  const wizardDuckdbValidationErrorCodes = useMemo(
+    () =>
+      parseCommaSeparatedList(wizardSchemaQuery.data?.duckdb_query_validation_error_codes),
+    [wizardSchemaQuery.data?.duckdb_query_validation_error_codes],
+  );
   const wizardSupportedFormulaFunctions = useMemo(
     () => {
       const capabilities = wizardSchemaQuery.data?.formula_capabilities;
@@ -2956,6 +2973,38 @@ export function SpreadsheetApp() {
                 unsupported formula behaviors:{" "}
                 <span className="font-mono text-slate-300">
                   {wizardUnsupportedFormulaBehaviors.join(" | ")}
+                </span>
+              </p>
+            ) : null}
+            {wizardDuckdbQueryRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard duckdb query request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardDuckdbQueryRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardDuckdbQueryResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard duckdb query response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardDuckdbQueryResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardDuckdbValidationErrorCodes.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard duckdb validation codes:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardDuckdbValidationErrorCodes.join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {wizardOpsResultErrorFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard operation error shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardOpsResultErrorFields)}
                 </span>
               </p>
             ) : null}
