@@ -2791,6 +2791,7 @@ mod tests {
     remove_stale_agent_ops_cache_entries,
     preview_remove_agent_ops_cache_entries_by_prefix,
     replay_agent_ops_cache_entry, reexecute_agent_ops_cache_entry,
+    set_cells_batch,
     build_export_artifacts, build_preset_operations, build_scenario_operations,
     ensure_non_empty_operations,
     import_bytes_into_workbook,
@@ -2807,7 +2808,7 @@ mod tests {
       PreviewRemoveAgentOpsCacheEntriesByPrefixRequest,
       RemoveStaleAgentOpsCacheEntriesRequest,
       ReexecuteAgentOpsCacheEntryRequest,
-      ReplayAgentOpsCacheEntryRequest,
+      ReplayAgentOpsCacheEntryRequest, SetCellsRequest, CellMutation,
     },
     state::{AppState, AGENT_OPS_CACHE_MAX_ENTRIES},
   };
@@ -2967,6 +2968,41 @@ mod tests {
       parse_optional_bool(Some("not-a-bool".to_string()), "flag").is_err(),
       "invalid bool-like value should fail",
     );
+  }
+
+  #[tokio::test]
+  async fn should_reject_blank_formula_values_in_set_cells_batch() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("set-cells-blank-formula".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let error = set_cells_batch(
+      State(state),
+      Path(workbook.id),
+      Json(SetCellsRequest {
+        sheet: "Sheet1".to_string(),
+        actor: Some("test".to_string()),
+        cells: vec![CellMutation {
+          row: 1,
+          col: 1,
+          value: None,
+          formula: Some("   ".to_string()),
+        }],
+      }),
+    )
+    .await
+    .expect_err("blank formulas should be rejected");
+
+    match error {
+      crate::error::ApiError::BadRequest(message) => {
+        assert_eq!(message, "Formula values cannot be blank.");
+      }
+      other => panic!("expected bad request for blank formula, got {other:?}"),
+    }
   }
 
   #[tokio::test]
