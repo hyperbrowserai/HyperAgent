@@ -11,7 +11,7 @@ import type { AccessibilityNode } from "@/context-providers/a11y-dom/types";
 import { captureDOMState } from "./dom-capture";
 import type { A11yDOMState } from "@/context-providers/a11y-dom/types";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
-import { formatUnknownError } from "@/utils";
+import { formatUnknownError, normalizePageUrl } from "@/utils";
 
 export interface FindElementOptions {
   /**
@@ -78,18 +78,7 @@ function normalizeRetryDelayMs(value: unknown): number {
 
 function safeGetPageUrl(page: Page): string {
   try {
-    const url = page.url();
-    if (typeof url !== "string") {
-      return "about:blank";
-    }
-    const normalized = Array.from(url, (char) => {
-      const code = char.charCodeAt(0);
-      return (code >= 0 && code < 32) || code === 127 ? " " : char;
-    })
-      .join("")
-      .replace(/\s+/g, " ")
-      .trim();
-    return normalized.length > 0 ? normalized : "about:blank";
+    return normalizePageUrl(page.url());
   } catch {
     return "about:blank";
   }

@@ -50,7 +50,7 @@ import type {
   PerformTaskParams,
 } from "../types/agent/types";
 import { z } from "zod";
-import { ErrorEmitter, formatUnknownError } from "../utils";
+import { ErrorEmitter, formatUnknownError, normalizePageUrl } from "../utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { performance } from "perf_hooks";
 import { ExamineDomResult } from "./examine-dom/types";
@@ -132,18 +132,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   private safeGetPageUrl(page: Page): string {
     try {
-      const url = page.url();
-      if (typeof url !== "string") {
-        return "about:blank";
-      }
-      const normalized = Array.from(url, (char) => {
-        const code = char.charCodeAt(0);
-        return (code >= 0 && code < 32) || code === 127 ? " " : char;
-      })
-        .join("")
-        .replace(/\s+/g, " ")
-        .trim();
-      return normalized.length > 0 ? normalized : "about:blank";
+      return normalizePageUrl(page.url());
     } catch {
       return "about:blank";
     }

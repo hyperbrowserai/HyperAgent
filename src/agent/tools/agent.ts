@@ -20,6 +20,7 @@ import {
   getOrCreateFrameContextManager,
 } from "@/cdp";
 import { formatUnknownError } from "@/utils";
+import { normalizePageUrl } from "@/utils/page-url";
 import { retry } from "@/utils/retry";
 import { sleep } from "@/utils/sleep";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
@@ -141,21 +142,9 @@ function normalizeTaskOutputText(value: unknown, fallback: string): string {
 
 function safeGetPageUrl(page: Page): string {
   try {
-    const url = page.url();
-    if (typeof url !== "string") {
-      return "about:blank";
-    }
-    const normalized = Array.from(url, (char) => {
-      const code = char.charCodeAt(0);
-      return (code >= 0 && code < 32) || code === 127 ? " " : char;
-    })
-      .join("")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (normalized.length === 0) {
-      return "about:blank";
-    }
-    return truncateDiagnosticText(normalized, MAX_RUNTIME_URL_CHARS);
+    return normalizePageUrl(page.url(), {
+      maxChars: MAX_RUNTIME_URL_CHARS,
+    });
   } catch {
     return "about:blank";
   }
