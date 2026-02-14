@@ -22,7 +22,7 @@ use crate::{
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
     parse_days_formula, parse_datevalue_formula, parse_timevalue_formula,
-    parse_datedif_formula,
+    parse_datedif_formula, parse_networkdays_formula,
     parse_day_formula,
     parse_if_formula, parse_ifs_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -86,6 +86,7 @@ use chrono::{
 use duckdb::{params, Connection};
 use regex::Regex;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 pub fn set_cells(
@@ -2420,6 +2421,25 @@ fn evaluate_formula(
     return Ok(Some(value.to_string()));
   }
 
+  if let Some((start_date_arg, end_date_arg, holidays_arg)) =
+    parse_networkdays_formula(formula)
+  {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let end_date = parse_date_operand(connection, sheet, &end_date_arg)?;
+    let (Some(start_value), Some(end_value)) = (start_date, end_date) else {
+      return Ok(None);
+    };
+    let holiday_dates = match holidays_arg {
+      Some(raw_holidays) => match collect_holiday_dates(connection, sheet, &raw_holidays)? {
+        Some(values) => values,
+        None => return Ok(None),
+      },
+      None => HashSet::new(),
+    };
+    let networkdays = count_networkdays(start_value, end_value, &holiday_dates);
+    return Ok(Some(networkdays.to_string()));
+  }
+
   if let Some(year_arg) = parse_year_formula(formula) {
     let date = parse_date_operand(connection, sheet, &year_arg)?;
     return Ok(Some(date.map(|value| value.year().to_string()).unwrap_or_default()));
@@ -3843,37 +3863,36 @@ fn excel_serial_to_time(serial: f64) -> Option<NaiveTime> {
   NaiveTime::from_num_seconds_from_midnight_opt(seconds as u32, nanos as u32)
 }
 
+fn parse_date_text(value: &str) -> Option<NaiveDate> {
+  let trimmed = value.trim();
+  if trimmed.is_empty() {
+    return None;
+  }
+  if let Ok(serial_value) = trimmed.parse::<f64>() {
+    return excel_serial_to_date(serial_value);
+  }
+  if let Ok(parsed) = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
+    return Some(parsed);
+  }
+  if let Ok(parsed) = DateTime::parse_from_rfc3339(trimmed) {
+    return Some(parsed.date_naive());
+  }
+  if let Ok(parsed) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S") {
+    return Some(parsed.date());
+  }
+  if let Ok(parsed) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S") {
+    return Some(parsed.date());
+  }
+  NaiveDate::parse_from_str(trimmed, "%m/%d/%Y").ok()
+}
+
 fn parse_date_operand(
   connection: &Connection,
   sheet: &str,
   operand: &str,
 ) -> Result<Option<NaiveDate>, ApiError> {
   let resolved = resolve_scalar_operand(connection, sheet, operand)?;
-  let trimmed = resolved.trim();
-  if trimmed.is_empty() {
-    return Ok(None);
-  }
-
-  if let Ok(serial_value) = trimmed.parse::<f64>() {
-    return Ok(excel_serial_to_date(serial_value));
-  }
-
-  let iso_parsed = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d").ok();
-  if iso_parsed.is_some() {
-    return Ok(iso_parsed);
-  }
-
-  if let Ok(parsed) = DateTime::parse_from_rfc3339(trimmed) {
-    return Ok(Some(parsed.date_naive()));
-  }
-  if let Ok(parsed) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S") {
-    return Ok(Some(parsed.date()));
-  }
-  if let Ok(parsed) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S") {
-    return Ok(Some(parsed.date()));
-  }
-
-  Ok(NaiveDate::parse_from_str(trimmed, "%m/%d/%Y").ok())
+  Ok(parse_date_text(&resolved))
 }
 
 fn parse_time_operand(
@@ -3915,6 +3934,67 @@ fn parse_time_operand(
   }
 
   Ok(None)
+}
+
+fn collect_holiday_dates(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<Option<HashSet<NaiveDate>>, ApiError> {
+  if let Some((start, end)) = parse_operand_range_bounds(operand) {
+    let bounds = normalized_range_bounds(start, end);
+    let mut holidays = HashSet::new();
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        let cell_value = load_cell_scalar(
+          connection,
+          sheet,
+          bounds.start_row + row_offset,
+          bounds.start_col + col_offset,
+        )?;
+        let trimmed = cell_value.trim();
+        if trimmed.is_empty() {
+          continue;
+        }
+        let Some(parsed_date) = parse_date_text(trimmed) else {
+          return Ok(None);
+        };
+        holidays.insert(parsed_date);
+      }
+    }
+    return Ok(Some(holidays));
+  }
+
+  let parsed = parse_date_operand(connection, sheet, operand)?;
+  let Some(date_value) = parsed else {
+    return Ok(None);
+  };
+  Ok(Some(HashSet::from([date_value])))
+}
+
+fn count_networkdays(
+  start: NaiveDate,
+  end: NaiveDate,
+  holidays: &HashSet<NaiveDate>,
+) -> i64 {
+  let (from, to, direction) = if start <= end {
+    (start, end, 1i64)
+  } else {
+    (end, start, -1i64)
+  };
+
+  let mut current = from;
+  let mut days = 0i64;
+  while current <= to {
+    let weekday = current.weekday().num_days_from_monday();
+    let is_weekday = weekday < 5;
+    if is_weekday && !holidays.contains(&current) {
+      days += 1;
+    }
+    current += Duration::days(1);
+  }
+
+  days * direction
 }
 
 fn evaluate_vlookup_formula(
@@ -5774,12 +5854,24 @@ mod tests {
         value: None,
         formula: Some(r#"=DATEDIF("2024-01-31","2024-03-15","MD")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 228,
+        value: None,
+        formula: Some(r#"=NETWORKDAYS("2024-03-01","2024-03-10","2024-03-04")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 229,
+        value: None,
+        formula: Some(r#"=NETWORKDAYS("2024-03-10","2024-03-01","2024-03-04")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 225);
+    assert_eq!(updated_cells, 227);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5793,7 +5885,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 227,
+        end_col: 229,
       },
     )
     .expect("cells should be fetched");
@@ -6645,6 +6737,16 @@ mod tests {
       by_position(1, 227).evaluated_value.as_deref(),
       Some("13"),
       "datedif MD should return day difference excluding months/years",
+    );
+    assert_eq!(
+      by_position(1, 228).evaluated_value.as_deref(),
+      Some("5"),
+      "networkdays should count weekdays minus holidays inclusively",
+    );
+    assert_eq!(
+      by_position(1, 229).evaluated_value.as_deref(),
+      Some("-5"),
+      "networkdays should be signed when start is after end",
     );
   }
 
@@ -8215,6 +8317,36 @@ mod tests {
       vec![
         r#"=DATEDIF("2024-03-15","2024-01-31","D")"#.to_string(),
         r#"=DATEDIF("2024-01-31","2024-03-15","BAD")"#.to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_networkdays_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some(r#"=NETWORKDAYS("bad","2024-03-10")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(r#"=NETWORKDAYS("2024-03-01","2024-03-10","not-a-date")"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        r#"=NETWORKDAYS("bad","2024-03-10")"#.to_string(),
+        r#"=NETWORKDAYS("2024-03-01","2024-03-10","not-a-date")"#.to_string(),
       ],
     );
   }

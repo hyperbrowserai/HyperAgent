@@ -1123,6 +1123,16 @@ pub fn parse_datedif_formula(formula: &str) -> Option<(String, String, String)> 
   None
 }
 
+pub fn parse_networkdays_formula(
+  formula: &str,
+) -> Option<(String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "NETWORKDAYS" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
+}
+
 pub fn parse_year_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "YEAR" && args.len() == 1 {
@@ -1838,7 +1848,8 @@ mod tests {
     parse_abs_formula, parse_concat_formula, parse_textjoin_formula,
     parse_date_formula, parse_edate_formula,
     parse_eomonth_formula, parse_days_formula, parse_datevalue_formula,
-    parse_timevalue_formula, parse_datedif_formula, parse_day_formula,
+    parse_timevalue_formula, parse_datedif_formula, parse_networkdays_formula,
+    parse_day_formula,
     parse_ceiling_formula, parse_ceiling_math_formula, parse_floor_formula,
     parse_floor_math_formula,
     parse_exact_formula,
@@ -2339,6 +2350,11 @@ mod tests {
       datedif_args,
       ("A1".to_string(), "B1".to_string(), r#""D""#.to_string()),
     );
+    let networkdays_args = parse_networkdays_formula("=NETWORKDAYS(A1,B1,C1:C4)")
+      .expect("networkdays should parse");
+    assert_eq!(networkdays_args.0, "A1");
+    assert_eq!(networkdays_args.1, "B1");
+    assert_eq!(networkdays_args.2.as_deref(), Some("C1:C4"));
 
     assert_eq!(
       parse_year_formula("=YEAR(A1)").as_deref(),

@@ -228,6 +228,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "DATEVALUE",
   "TIMEVALUE",
   "DATEDIF",
+  "NETWORKDAYS",
   "YEAR",
   "MONTH",
   "DAY",
