@@ -297,4 +297,5 @@ XLSX compatibility regression coverage includes:
 - supported formula roundtrip fixtures (engineering + financial families),
 - unsupported formula preservation fixtures (normalized text retained + surfaced via `unsupported_formulas`),
 - non-`A1` used-range import fixtures (coordinate offset preservation),
-- formula-token normalization fixtures (`_xlfn.`/`_xlws.`, implicit `@`, and quoted-literal edge cases).
+- formula-token normalization fixtures (`_xlfn.`/`_xlws.`/`_xlpm.`, implicit `@`, unary `+`, and quoted-literal edge cases),
+- comprehensive normalization roundtrip fixtures validating telemetry + canonical replay after export/re-import.

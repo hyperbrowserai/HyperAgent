@@ -656,6 +656,42 @@ mod tests {
       .expect("normalized prefix/operator fixture should serialize")
   }
 
+  fn comprehensive_normalization_fixture_workbook_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let comprehensive_sheet = workbook.add_worksheet();
+    comprehensive_sheet
+      .set_name("Comprehensive")
+      .expect("sheet should be renamed");
+    comprehensive_sheet
+      .write_number(0, 0, 3.0)
+      .expect("first number should write");
+    comprehensive_sheet
+      .write_number(1, 0, 4.0)
+      .expect("second number should write");
+    comprehensive_sheet
+      .write_formula(
+        0,
+        1,
+        Formula::new(r#"= +@_xlfn.SUM(A1:A2)"#).set_result("7"),
+      )
+      .expect("comprehensive first formula should write");
+    comprehensive_sheet
+      .write_formula(1, 1, Formula::new("=_xlpm.MIN(A1:A2)").set_result("3"))
+      .expect("comprehensive second formula should write");
+    comprehensive_sheet
+      .write_formula(
+        2,
+        1,
+        Formula::new(r#"=+@IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#)
+          .set_result(r#"_xlfn.literal "@_xlws.keep""#),
+      )
+      .expect("comprehensive third formula should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("comprehensive normalization fixture should serialize")
+  }
+
   fn snapshot_map(
     cells: &[crate::models::CellSnapshot],
   ) -> HashMap<String, crate::models::CellSnapshot> {
@@ -1426,6 +1462,178 @@ mod tests {
         .map(|value| value as i64),
       Some(5),
       "normalized formula should evaluate as expected",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_roundtrip_comprehensive_formula_normalization_fixture() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let source_state = AppState::new(temp_dir.path().join("source-comprehensive"))
+      .expect("state should initialize");
+    let source_workbook = source_state
+      .create_workbook(Some("xlsx-comprehensive-source".to_string()))
+      .await
+      .expect("source workbook should be created");
+    let source_db_path = source_state
+      .db_path(source_workbook.id)
+      .await
+      .expect("source db path should be accessible");
+
+    let fixture_bytes = comprehensive_normalization_fixture_workbook_bytes();
+    let source_import_result =
+      import_xlsx(&source_db_path, &fixture_bytes).expect("fixture workbook should import");
+    assert_eq!(source_import_result.sheets_imported, 1);
+    assert_eq!(source_import_result.formula_cells_imported, 3);
+    assert_eq!(source_import_result.formula_cells_normalized, 3);
+    assert!(
+      source_import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("3 formula(s) were normalized")),
+      "comprehensive fixture should emit normalization telemetry warning",
+    );
+
+    let (_, source_unsupported) =
+      recalculate_formulas(&source_db_path).expect("source recalc should complete");
+    assert!(
+      source_unsupported.is_empty(),
+      "comprehensive fixture formulas should remain supported after normalization: {:?}",
+      source_unsupported,
+    );
+
+    let source_snapshot = load_sheet_snapshot(&source_db_path, "Comprehensive")
+      .expect("source snapshot should load");
+    let source_map = snapshot_map(&source_snapshot);
+    assert_eq!(
+      source_map
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=SUM(A1:A2)"),
+      "first formula should normalize prefixes/operators into canonical SUM",
+    );
+    assert_eq!(
+      source_map
+        .get("B2")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=MIN(A1:A2)"),
+      "second formula should normalize xlpm prefix into canonical MIN token",
+    );
+    assert_eq!(
+      source_map
+        .get("B3")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some(r#"=IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#),
+      "third formula should normalize operators but preserve nested quoted literal tokens",
+    );
+    assert_eq!(
+      source_map
+        .get("B1")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(7),
+      "first normalized formula should evaluate to expected value",
+    );
+    assert_eq!(
+      source_map
+        .get("B2")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(3),
+      "second normalized formula should evaluate to expected value",
+    );
+    assert_eq!(
+      source_map
+        .get("B3")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some(r#"_xlfn.literal "@_xlws.keep""#),
+      "third normalized formula should preserve quoted literal text evaluation",
+    );
+
+    let summary = WorkbookSummary {
+      id: source_workbook.id,
+      name: "comprehensive-roundtrip".to_string(),
+      created_at: Utc::now(),
+      sheets: vec!["Comprehensive".to_string()],
+      charts: Vec::new(),
+      compatibility_warnings: Vec::new(),
+    };
+    let (exported_bytes, _) =
+      export_xlsx(&source_db_path, &summary).expect("source workbook should export");
+
+    let replay_state = AppState::new(temp_dir.path().join("replay-comprehensive"))
+      .expect("replay state should initialize");
+    let replay_workbook = replay_state
+      .create_workbook(Some("xlsx-comprehensive-replay".to_string()))
+      .await
+      .expect("replay workbook should be created");
+    let replay_db_path = replay_state
+      .db_path(replay_workbook.id)
+      .await
+      .expect("replay db path should be accessible");
+    let replay_import_result = import_xlsx(&replay_db_path, &exported_bytes)
+      .expect("replay workbook should import exported bytes");
+    assert_eq!(replay_import_result.formula_cells_imported, 3);
+    assert_eq!(replay_import_result.formula_cells_normalized, 0);
+    assert!(
+      !replay_import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("formula(s) were normalized")),
+      "canonical replay import should not emit normalization telemetry warning",
+    );
+
+    let (_, replay_unsupported) =
+      recalculate_formulas(&replay_db_path).expect("replay recalc should complete");
+    assert!(
+      replay_unsupported.is_empty(),
+      "roundtrip comprehensive formulas should remain supported: {:?}",
+      replay_unsupported,
+    );
+
+    let replay_snapshot = load_sheet_snapshot(&replay_db_path, "Comprehensive")
+      .expect("replay snapshot should load");
+    let replay_map = snapshot_map(&replay_snapshot);
+    assert_eq!(
+      replay_map
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=SUM(A1:A2)"),
+    );
+    assert_eq!(
+      replay_map
+        .get("B2")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=MIN(A1:A2)"),
+    );
+    assert_eq!(
+      replay_map
+        .get("B3")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some(r#"=IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#),
+    );
+    assert_eq!(
+      replay_map
+        .get("B1")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(7),
+    );
+    assert_eq!(
+      replay_map
+        .get("B2")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(3),
+    );
+    assert_eq!(
+      replay_map
+        .get("B3")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some(r#"_xlfn.literal "@_xlws.keep""#),
     );
   }
 }
