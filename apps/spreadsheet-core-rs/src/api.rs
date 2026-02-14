@@ -9780,6 +9780,15 @@ mod tests {
                 paths.contains_key(normalized),
                 "openapi paths should include agent schema endpoint '{key}' -> '{endpoint}' (normalized '{normalized}')",
             );
+            let method_count = paths
+                .get(normalized)
+                .and_then(serde_json::Value::as_object)
+                .map(|entry| entry.len())
+                .expect("openapi endpoint entry should be an object");
+            assert_eq!(
+                method_count, 1,
+                "agent schema endpoint '{key}' -> '{normalized}' should map to exactly one HTTP method",
+            );
         }
     }
 
@@ -9814,6 +9823,15 @@ mod tests {
             assert!(
                 paths.contains_key(normalized),
                 "openapi paths should include wizard schema endpoint '{key}' -> '{endpoint}' (normalized '{normalized}')",
+            );
+            let method_count = paths
+                .get(normalized)
+                .and_then(serde_json::Value::as_object)
+                .map(|entry| entry.len())
+                .expect("openapi endpoint entry should be an object");
+            assert_eq!(
+                method_count, 1,
+                "wizard schema endpoint '{key}' -> '{normalized}' should map to exactly one HTTP method",
             );
         }
     }
