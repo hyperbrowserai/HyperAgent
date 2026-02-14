@@ -7027,6 +7027,149 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_reject_invalid_signature_format_when_reexecuting_cache_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-invalid-signature".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-invalid-signature-1".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::Recalculate],
+            }),
+        )
+        .await
+        .expect("initial request should succeed");
+
+        let error = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-invalid-signature-1".to_string(),
+                new_request_id: Some("reexecute-invalid-signature-1".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: Some("invalid-signature".to_string()),
+            }),
+        )
+        .await
+        .expect_err("invalid signature format should fail reexecute");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "INVALID_SIGNATURE_FORMAT");
+            }
+            _ => panic!("expected invalid signature format code for reexecute"),
+        }
+    }
+
+    #[tokio::test]
+    async fn should_reject_mismatched_signature_when_reexecuting_cache_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-mismatch-signature".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-mismatch-signature-1".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::Recalculate],
+            }),
+        )
+        .await
+        .expect("initial request should succeed");
+
+        let operation_signature = operations_signature(&[AgentOperation::Recalculate])
+            .expect("signature should build");
+        let mismatched_signature = if operation_signature == "0".repeat(64) {
+            "1".repeat(64)
+        } else {
+            "0".repeat(64)
+        };
+
+        let error = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-mismatch-signature-1".to_string(),
+                new_request_id: Some("reexecute-mismatch-signature-1".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: Some(mismatched_signature),
+            }),
+        )
+        .await
+        .expect_err("mismatched signature should fail reexecute");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "OPERATION_SIGNATURE_MISMATCH");
+            }
+            _ => panic!("expected signature mismatch code for reexecute"),
+        }
+    }
+
+    #[tokio::test]
+    async fn should_allow_blank_signature_when_reexecuting_cache_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-blank-signature".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-blank-signature-1".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::Recalculate],
+            }),
+        )
+        .await
+        .expect("initial request should succeed");
+
+        let reexecute = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-blank-signature-1".to_string(),
+                new_request_id: Some("reexecute-blank-signature-1".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: Some("   ".to_string()),
+            }),
+        )
+        .await
+        .expect("blank signature should be treated as absent")
+        .0;
+
+        assert_eq!(
+            reexecute.response.request_id.as_deref(),
+            Some("reexecute-blank-signature-1"),
+        );
+        assert!(!reexecute.response.results.is_empty());
+    }
+
+    #[tokio::test]
     async fn should_reexecute_cached_failed_entry_with_structured_errors() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
