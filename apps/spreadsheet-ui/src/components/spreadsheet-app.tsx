@@ -1188,6 +1188,13 @@ export function SpreadsheetApp() {
       })),
     [openApiMethodsByPath, wizardSchemaEndpoints],
   );
+  const wizardUnmappedSchemaEndpointKeys = useMemo(
+    () =>
+      wizardSchemaEndpointsWithMethods
+        .filter((entry) => entry.methods.length === 0)
+        .map((entry) => entry.key),
+    [wizardSchemaEndpointsWithMethods],
+  );
   const agentWorkbookImportResponseFields = useMemo(
     () =>
       flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
@@ -1394,6 +1401,13 @@ export function SpreadsheetApp() {
         methods: openApiMethodsByPath[entry.openApiPath] ?? [],
       })),
     [agentSchemaEndpoints, openApiMethodsByPath],
+  );
+  const agentUnmappedSchemaEndpointKeys = useMemo(
+    () =>
+      agentSchemaEndpointsWithMethods
+        .filter((entry) => entry.methods.length === 0)
+        .map((entry) => entry.key),
+    [agentSchemaEndpointsWithMethods],
   );
   const agentWorkbookImportEventFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
@@ -3402,6 +3416,18 @@ export function SpreadsheetApp() {
                 <summary className="cursor-pointer text-[11px] text-slate-400">
                   discovered endpoint catalog ({wizardSchemaEndpointsWithMethods.length})
                 </summary>
+                {wizardUnmappedSchemaEndpointKeys.length > 0 ? (
+                  <p className="mt-2 text-[11px] text-amber-300">
+                    openapi method mapping missing for:{" "}
+                    <span className="font-mono">
+                      {wizardUnmappedSchemaEndpointKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[11px] text-emerald-300">
+                    openapi method mapping available for all discovered endpoints.
+                  </p>
+                )}
                 <div className="mt-2 space-y-1">
                   {wizardSchemaEndpointsWithMethods.map((entry) => (
                     <p
@@ -4307,6 +4333,18 @@ export function SpreadsheetApp() {
                 <summary className="cursor-pointer text-xs text-slate-400">
                   discovered endpoint catalog ({agentSchemaEndpointsWithMethods.length})
                 </summary>
+                {agentUnmappedSchemaEndpointKeys.length > 0 ? (
+                  <p className="mt-2 text-xs text-amber-300">
+                    openapi method mapping missing for:{" "}
+                    <span className="font-mono">
+                      {agentUnmappedSchemaEndpointKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-emerald-300">
+                    openapi method mapping available for all discovered endpoints.
+                  </p>
+                )}
                 <div className="mt-2 space-y-1">
                   {agentSchemaEndpointsWithMethods.map((entry) => (
                     <p
