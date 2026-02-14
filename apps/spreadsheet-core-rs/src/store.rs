@@ -6291,10 +6291,16 @@ fn normalize_cell_payload(
   cell: &CellMutation,
 ) -> Result<(Option<String>, Option<String>, Option<String>), ApiError> {
   if let Some(formula) = &cell.formula {
-    let normalized = if formula.starts_with('=') {
-      formula.clone()
+    let trimmed_formula = formula.trim();
+    if trimmed_formula.is_empty() {
+      return Err(ApiError::BadRequest(
+        "Formula values cannot be blank.".to_string(),
+      ));
+    }
+    let normalized = if trimmed_formula.starts_with('=') {
+      trimmed_formula.to_string()
     } else {
-      format!("={formula}")
+      format!("={trimmed_formula}")
     };
     let cached_formula_value = cell
       .value
@@ -6327,7 +6333,10 @@ fn json_value_to_string(value: &Value) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
   use super::{get_cells, recalculate_formulas, set_cells};
-  use crate::models::{CellMutation, CellRange};
+  use crate::{
+    error::ApiError,
+    models::{CellMutation, CellRange},
+  };
   use chrono::{DateTime, NaiveDate};
   use duckdb::Connection;
   use serde_json::json;
@@ -6355,6 +6364,85 @@ mod tests {
       )
       .expect("cells table should be created");
     (temp_dir, db_path)
+  }
+
+  #[test]
+  fn should_trim_and_normalize_formula_inputs_on_set_cells() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(10)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("  SUM(A1:A1)  ".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert!(
+      unsupported_formulas.is_empty(),
+      "normalized formula should remain supported",
+    );
+
+    let snapshots = get_cells(
+      &db_path,
+      "Sheet1",
+      &CellRange {
+        start_row: 1,
+        end_row: 1,
+        start_col: 1,
+        end_col: 2,
+      },
+    )
+    .expect("cells should be fetched");
+    let normalized_formula_cell = snapshots
+      .iter()
+      .find(|cell| cell.col == 2)
+      .expect("formula cell should exist");
+    assert_eq!(
+      normalized_formula_cell.formula.as_deref(),
+      Some("=SUM(A1:A1)"),
+      "formula text should be trimmed and normalized",
+    );
+    assert_eq!(
+      normalized_formula_cell
+        .evaluated_value
+        .as_deref()
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(10),
+      "normalized formula should evaluate correctly",
+    );
+  }
+
+  #[test]
+  fn should_reject_blank_formula_inputs_on_set_cells() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("   ".to_string()),
+    }];
+
+    let error =
+      set_cells(&db_path, "Sheet1", &cells).expect_err("blank formula should fail");
+    match error {
+      ApiError::BadRequest(message) => assert_eq!(
+        message,
+        "Formula values cannot be blank.",
+        "blank formula should return descriptive validation error",
+      ),
+      other => panic!("expected bad request for blank formula, got {other:?}"),
+    }
   }
 
   #[test]
