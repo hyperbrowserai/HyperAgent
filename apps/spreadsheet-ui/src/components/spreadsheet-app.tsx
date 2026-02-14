@@ -915,6 +915,41 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.agent_ops_result_error_shape),
     [wizardSchemaQuery.data?.agent_ops_result_error_shape],
   );
+  const wizardCacheStatsResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_stats_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_stats_response_shape],
+  );
+  const wizardCacheEntriesResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_entries_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_entries_response_shape],
+  );
+  const wizardCachePrefixesResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_prefixes_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_prefixes_response_shape],
+  );
+  const wizardCacheEntryDetailResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_entry_detail_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_entry_detail_response_shape],
+  );
+  const wizardCacheClearResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_clear_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_clear_response_shape],
+  );
   const wizardCacheReplayRequestFields = useMemo(
     () =>
       flattenSchemaShapeEntries(
@@ -3173,6 +3208,46 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_stats_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache stats endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_stats_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_entries_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache entries endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_entries_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_prefixes_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache prefixes endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_prefixes_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_entry_detail_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache entry-detail endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_entry_detail_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_clear_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache clear endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_clear_endpoint}
+                </span>
+              </p>
+            ) : null}
             {wizardSchemaQuery.data?.agent_ops_cache_replay_endpoint ? (
               <p className="mb-2 text-[11px] text-slate-500">
                 wizard cache replay endpoint:{" "}
@@ -3250,6 +3325,54 @@ export function SpreadsheetApp() {
                 wizard cache reexecute response shape:{" "}
                 <span className="font-mono text-slate-300">
                   {formatSchemaShapeEntries(wizardCacheReexecuteResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheStatsResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache stats response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheStatsResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheEntriesResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache entries response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheEntriesResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCachePrefixesResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache prefixes response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCachePrefixesResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheEntryDetailResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache entry-detail response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheEntryDetailResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheClearResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache clear response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheClearResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {typeof wizardSchemaQuery.data?.agent_ops_idempotency_cache_max_entries === "number" ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache max entries:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_idempotency_cache_max_entries}
                 </span>
               </p>
             ) : null}

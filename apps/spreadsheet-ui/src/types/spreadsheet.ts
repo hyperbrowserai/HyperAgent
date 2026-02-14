@@ -323,6 +323,11 @@ export interface AgentWizardSchemaInfo {
   signature_error_codes?: string[];
   cache_validation_error_codes?: string[];
   agent_ops_result_error_shape?: Record<string, string>;
+  agent_ops_cache_stats_endpoint?: string;
+  agent_ops_cache_entries_endpoint?: string;
+  agent_ops_cache_entry_detail_endpoint?: string;
+  agent_ops_cache_prefixes_endpoint?: string;
+  agent_ops_cache_clear_endpoint?: string;
   agent_ops_cache_replay_endpoint?: string;
   agent_ops_cache_reexecute_endpoint?: string;
   agent_ops_cache_remove_endpoint?: string;
@@ -338,6 +343,11 @@ export interface AgentWizardSchemaInfo {
   duckdb_query_request_shape?: Record<string, string>;
   duckdb_query_response_shape?: Record<string, string>;
   duckdb_query_validation_error_codes?: string[];
+  agent_ops_cache_stats_response_shape?: Record<string, string>;
+  agent_ops_cache_entries_response_shape?: Record<string, string | Record<string, string>>;
+  agent_ops_cache_entry_detail_response_shape?: Record<string, string>;
+  agent_ops_cache_prefixes_response_shape?: Record<string, string | Record<string, string>>;
+  agent_ops_cache_clear_response_shape?: Record<string, string>;
   agent_ops_cache_replay_request_shape?: Record<string, string | Record<string, string>>;
   agent_ops_cache_replay_response_shape?: Record<string, string | Record<string, string>>;
   agent_ops_cache_reexecute_request_shape?: Record<string, string>;
@@ -350,6 +360,7 @@ export interface AgentWizardSchemaInfo {
   agent_ops_cache_remove_by_prefix_preview_response_shape?: Record<string, string>;
   agent_ops_cache_remove_stale_request_shape?: Record<string, string>;
   agent_ops_cache_remove_stale_response_shape?: Record<string, string>;
+  agent_ops_idempotency_cache_max_entries?: number;
   formula_capabilities?: FormulaCapabilitiesSchema;
   presets: AgentPresetInfo[];
   scenarios: AgentScenarioInfo[];
