@@ -193,6 +193,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened task-scoped context page-listener wiring in `HyperAgent`:
   - task listener attach/detach now resolves `context.on/off` methods safely before invocation,
   - `executeTask`/`executeTaskAsync` now tolerate trap-prone `context.on`/`context.off` getter access without aborting task execution.
+- Clarified CDP deep-dive OOPIF notes to distinguish main-frame limitations from full runtime behavior (main-frame traversal alone cannot see OOPIF content; dedicated OOPIF session pass supplies it).
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

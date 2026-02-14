@@ -2878,7 +2878,7 @@ OOPIF IFRAME (index 3):
 From buildBackendIdMaps (main frame):
   [frameMap]        { iframeBackendNodeId: 123,
                       contentDocBackendNodeId: undefined }  
-                    ❌ NO content (cross-origin blocked!)
+                    ❌ NO content in main-frame pass (cross-origin blocked here)
 
 From ensureInitialized (Phase 1):
   [FrameGraph]      { frameId: "XYZ789",
@@ -3486,7 +3486,7 @@ OOPIF / CROSS-ORIGIN IFRAME (frameIndex 3):
 ──────────────────────────────────────────────────────────────
 {
   // From buildBackendIdMaps (main frame):
-  // ❌ OOPIF content NOT captured (cross-origin blocked)
+  // ❌ Main-frame pass does NOT capture OOPIF content (cross-origin blocked here)
   
   // From captureOOPIFs → buildBackendIdMaps(oopifSession, pierce: false):
   backendNodeMap: { "3-89": 89, "3-90": 90, ... },
