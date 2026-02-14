@@ -242,6 +242,69 @@ describe("AnthropicClient", () => {
     warnSpy.mockRestore();
   });
 
+  it("uses deterministic tool choice policy for multi-action structured calls", async () => {
+    createMessageMock.mockResolvedValue({
+      content: [
+        {
+          type: "tool_use",
+          name: "click",
+          input: {
+            thoughts: "select click",
+            memory: "state",
+            action: {
+              params: {},
+            },
+          },
+        },
+      ],
+    });
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    const result = await client.invokeStructured(
+      {
+        schema: z.object({
+          thoughts: z.string().optional(),
+          memory: z.string().optional(),
+          action: z.object({
+            type: z.string(),
+            params: z.record(z.string(), z.unknown()),
+          }),
+        }),
+        actions: [
+          {
+            type: "click",
+            actionParams: z.object({}),
+            run: async () => ({ success: true, message: "ok" }),
+          },
+          {
+            type: "type",
+            actionParams: z.object({}),
+            run: async () => ({ success: true, message: "ok" }),
+          },
+        ],
+      },
+      [{ role: "user", content: "pick one action" }]
+    );
+
+    expect(result.parsed).toEqual({
+      thoughts: "select click",
+      memory: "state",
+      action: {
+        type: "click",
+        params: {},
+      },
+    });
+
+    const payload = createMessageMock.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(payload?.tool_choice).toEqual({
+      type: "any",
+      disable_parallel_tool_use: true,
+    });
+  });
+
   it("does not crash simple-tool debug logging on circular tool payloads", async () => {
     const circularTool: Record<string, unknown> = { name: "structured_output" };
     circularTool.self = circularTool;
