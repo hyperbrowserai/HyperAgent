@@ -1253,6 +1253,8 @@ export function SpreadsheetApp() {
     useState(false);
   const [isCopyingVisibleWizardIssueSummaries, setIsCopyingVisibleWizardIssueSummaries] =
     useState(false);
+  const [isCopyingVisibleWizardIssuePaths, setIsCopyingVisibleWizardIssuePaths] =
+    useState(false);
   const [isCopyingAgentEndpointCatalog, setIsCopyingAgentEndpointCatalog] =
     useState(false);
   const [isCopyingVisibleAgentEndpointCatalog, setIsCopyingVisibleAgentEndpointCatalog] =
@@ -1278,6 +1280,8 @@ export function SpreadsheetApp() {
   const [isCopyingVisibleAgentIssueReasonCounts, setIsCopyingVisibleAgentIssueReasonCounts] =
     useState(false);
   const [isCopyingVisibleAgentIssueSummaries, setIsCopyingVisibleAgentIssueSummaries] =
+    useState(false);
+  const [isCopyingVisibleAgentIssuePaths, setIsCopyingVisibleAgentIssuePaths] =
     useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
@@ -4539,6 +4543,27 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyVisibleWizardIssuePaths() {
+    if (wizardVisibleEndpointIssueReportPayload.issue_entries.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleWizardIssuePaths(true);
+    try {
+      const payload = wizardVisibleEndpointIssueReportPayload.issue_entries
+        .map((entry) => `${entry.key}: ${entry.openapi_path} (${entry.reasons.join(", ")})`)
+        .join("\n");
+      await navigator.clipboard.writeText(payload);
+      clearUiError();
+      setNotice(
+        `Copied visible wizard issue OpenAPI paths (${wizardVisibleEndpointIssueReportPayload.issue_entries.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible wizard issue OpenAPI paths.");
+    } finally {
+      setIsCopyingVisibleWizardIssuePaths(false);
+    }
+  }
+
   async function handleCopyWizardEndpointIssueReport() {
     if (wizardEndpointIssueReportPayload.issue_entries.length === 0) {
       return;
@@ -4877,6 +4902,27 @@ export function SpreadsheetApp() {
       applyUiError(error, "Failed to copy visible agent issue summaries.");
     } finally {
       setIsCopyingVisibleAgentIssueSummaries(false);
+    }
+  }
+
+  async function handleCopyVisibleAgentIssuePaths() {
+    if (agentVisibleEndpointIssueReportPayload.issue_entries.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleAgentIssuePaths(true);
+    try {
+      const payload = agentVisibleEndpointIssueReportPayload.issue_entries
+        .map((entry) => `${entry.key}: ${entry.openapi_path} (${entry.reasons.join(", ")})`)
+        .join("\n");
+      await navigator.clipboard.writeText(payload);
+      clearUiError();
+      setNotice(
+        `Copied visible agent issue OpenAPI paths (${agentVisibleEndpointIssueReportPayload.issue_entries.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible agent issue OpenAPI paths.");
+    } finally {
+      setIsCopyingVisibleAgentIssuePaths(false);
     }
   }
 
@@ -6255,6 +6301,18 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleWizardIssueUrls
                         ? "Copying..."
                         : "Copy visible issue URLs"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleWizardIssuePaths}
+                      disabled={
+                        isCopyingVisibleWizardIssuePaths
+                        || wizardVisibleEndpointIssueReportPayload.issue_entries.length === 0
+                      }
+                      className="rounded border border-amber-600/60 px-2 py-0.5 text-[10px] text-amber-200 hover:bg-amber-500/10 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleWizardIssuePaths
+                        ? "Copying..."
+                        : "Copy visible issue paths"}
                     </button>
                     <button
                       onClick={handleCopyVisibleWizardIssueReasonCounts}
@@ -7954,6 +8012,18 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleAgentIssueUrls
                         ? "Copying..."
                         : "Copy visible issue URLs"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleAgentIssuePaths}
+                      disabled={
+                        isCopyingVisibleAgentIssuePaths
+                        || agentVisibleEndpointIssueReportPayload.issue_entries.length === 0
+                      }
+                      className="rounded border border-amber-600/60 px-2 py-0.5 text-[10px] text-amber-200 hover:bg-amber-500/10 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleAgentIssuePaths
+                        ? "Copying..."
+                        : "Copy visible issue paths"}
                     </button>
                     <button
                       onClick={handleCopyVisibleAgentIssueReasonCounts}
