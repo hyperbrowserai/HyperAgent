@@ -1777,6 +1777,32 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(agent.getPages()).rejects.toThrow(/\[truncated/);
   });
 
+  it("surfaces readable diagnostics when context.pages getter traps", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: unknown;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "pages") {
+            throw new Error("pages getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    await expect(agent.getPages()).rejects.toThrow(
+      "Failed to list pages from context: failed to read context.pages: pages getter trap"
+    );
+  });
+
   it("returns readable pages when context page entries are partially trap-prone", async () => {
     let goodPage: Page;
     const contextOn = jest.fn();

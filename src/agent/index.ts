@@ -446,7 +446,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   private getContextPagesOrThrow(context: BrowserContext): Page[] {
-    const pagesMethod = this.safeReadField(context, "pages");
+    let pagesMethod: unknown;
+    try {
+      pagesMethod = (context as BrowserContext & { pages?: unknown }).pages;
+    } catch (error) {
+      throw new Error(
+        `failed to read context.pages: ${this.formatLifecycleDiagnostic(error)}`
+      );
+    }
     if (typeof pagesMethod !== "function") {
       throw new Error("context.pages is unavailable");
     }
