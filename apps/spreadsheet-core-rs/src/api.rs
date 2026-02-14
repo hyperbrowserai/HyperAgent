@@ -8828,6 +8828,36 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("agent_ops_cache_stats_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_entries_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&max_age_seconds=3600&offset=0&limit=20"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_entry_detail_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_prefixes_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&min_span_seconds=60&max_span_seconds=86400&sort_by=recent&offset=0&limit=8&max_age_seconds=3600"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_clear_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/clear"),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_cache_remove_endpoint")
                 .and_then(serde_json::Value::as_str),
             Some("/v1/workbooks/{id}/agent/ops/cache/remove"),
@@ -8997,6 +9027,18 @@ mod tests {
         assert!(
             cache_validation_error_codes.contains(&"INVALID_MAX_AGE_SECONDS"),
             "wizard schema should advertise invalid max-age cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_MIN_ENTRY_COUNT"),
+            "wizard schema should advertise invalid min-entry-count cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_MIN_SPAN_SECONDS"),
+            "wizard schema should advertise invalid min-span cache validation code",
+        );
+        assert!(
+            cache_validation_error_codes.contains(&"INVALID_MAX_SPAN_SECONDS"),
+            "wizard schema should advertise invalid max-span cache validation code",
         );
         assert!(
             cache_validation_error_codes.contains(&"INVALID_REQUEST_ID_PREFIX"),
