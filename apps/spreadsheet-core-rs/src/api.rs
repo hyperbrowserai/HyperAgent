@@ -6963,6 +6963,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_reject_blank_request_id_when_replaying_cache_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-replay-blank".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let error = replay_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReplayAgentOpsCacheEntryRequest {
+                request_id: "   ".to_string(),
+            }),
+        )
+        .await
+        .expect_err("blank request id should fail replay");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "INVALID_REQUEST_ID");
+            }
+            _ => panic!("expected invalid request id code for replay"),
+        }
+    }
+
+    #[tokio::test]
     async fn should_reexecute_cached_entry_via_handler() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
@@ -7320,6 +7347,37 @@ mod tests {
                 assert_eq!(code, "INVALID_NEW_REQUEST_ID");
             }
             _ => panic!("expected invalid new request id to use custom error code"),
+        }
+    }
+
+    #[tokio::test]
+    async fn should_reject_blank_request_id_when_reexecuting_cache_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-blank".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let error = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "   ".to_string(),
+                new_request_id: Some("reexecute-blank-source".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+            }),
+        )
+        .await
+        .expect_err("blank source request id should fail reexecute");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "INVALID_REQUEST_ID");
+            }
+            _ => panic!("expected invalid request id code for reexecute"),
         }
     }
 
