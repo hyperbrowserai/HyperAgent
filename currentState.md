@@ -181,6 +181,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Fixed frame-metadata receiver handling in element locator diagnostics:
   - `safeReadFrameText` now invokes frame `url`/`name` methods with the frame object receiver,
   - debug payloads now preserve receiver-sensitive frame metadata values instead of falling back to placeholders.
+- Hardened pooled CDP listener wiring in Playwright adapter:
+  - pooled-session detach listener attach/detach now uses guarded method resolution with sanitized diagnostics,
+  - adapter disposal now guards pooled cleanup callbacks so listener-cleanup traps cannot abort disposal.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

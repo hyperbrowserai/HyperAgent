@@ -245,7 +245,17 @@ class PlaywrightCDPClient implements CDPClient {
   }
 
   async dispose(): Promise<void> {
-    this.sessionPoolCleanup.forEach((cleanup) => cleanup());
+    this.sessionPoolCleanup.forEach((cleanup) => {
+      try {
+        cleanup();
+      } catch (error) {
+        console.warn(
+          `[CDP][PlaywrightAdapter] Failed to run session cleanup: ${formatPlaywrightAdapterDiagnostic(
+            error
+          )}`
+        );
+      }
+    });
     this.sessionPoolCleanup.clear();
     this.sessionPool.clear();
 
@@ -265,7 +275,7 @@ class PlaywrightCDPClient implements CDPClient {
     );
 
     const cleanup = (): void => {
-      session.off?.("Detached", onDetached);
+      this.detachPooledSessionListener(kind, session, onDetached);
       this.sessionPoolCleanup.delete(kind);
       this.sessionPool.delete(kind);
     };
@@ -277,11 +287,83 @@ class PlaywrightCDPClient implements CDPClient {
       cleanup();
     };
 
-    session.on?.("Detached", onDetached);
+    this.attachPooledSessionListener(kind, session, onDetached);
     this.sessionPoolCleanup.set(kind, cleanup);
 
     await this.initializeSessionForKind(kind, session);
     return session;
+  }
+
+  private attachPooledSessionListener(
+    kind: CDPSessionKind,
+    session: CDPSession,
+    listener: () => void
+  ): void {
+    let onMethod: unknown;
+    try {
+      onMethod = (session as CDPSession & { on?: unknown }).on;
+    } catch (error) {
+      console.warn(
+        `[CDP][PlaywrightAdapter] Failed to read pooled ${kind} listener method: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+      return;
+    }
+    if (typeof onMethod !== "function") {
+      return;
+    }
+    try {
+      (
+        onMethod as (
+          this: CDPSession,
+          event: "Detached",
+          listener: () => void
+        ) => void
+      ).call(session, "Detached", listener);
+    } catch (error) {
+      console.warn(
+        `[CDP][PlaywrightAdapter] Failed to attach pooled ${kind} detach listener: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
+  }
+
+  private detachPooledSessionListener(
+    kind: CDPSessionKind,
+    session: CDPSession,
+    listener: () => void
+  ): void {
+    let offMethod: unknown;
+    try {
+      offMethod = (session as CDPSession & { off?: unknown }).off;
+    } catch (error) {
+      console.warn(
+        `[CDP][PlaywrightAdapter] Failed to read pooled ${kind} off method: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+      return;
+    }
+    if (typeof offMethod !== "function") {
+      return;
+    }
+    try {
+      (
+        offMethod as (
+          this: CDPSession,
+          event: "Detached",
+          listener: () => void
+        ) => void
+      ).call(session, "Detached", listener);
+    } catch (error) {
+      console.warn(
+        `[CDP][PlaywrightAdapter] Failed to detach pooled ${kind} listener: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
   }
 
   private async initializeSessionForKind(

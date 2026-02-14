@@ -212,4 +212,73 @@ describe("playwright adapter error formatting", () => {
     await expect(client.acquireSession("lifecycle")).resolves.toBeDefined();
     expect(context.newCDPSession).toHaveBeenCalled();
   });
+
+  it("continues pooled session creation when detach-listener attach traps", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const session = {
+      send: jest.fn().mockResolvedValue({}),
+      get on() {
+        throw new Error(`listener-on\u0000\n${"x".repeat(2_000)}`);
+      },
+      off: jest.fn(),
+      detach: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PlaywrightSession;
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(session),
+      }),
+      once: jest.fn(),
+    } as unknown as Page;
+
+    try {
+      const client = await getCDPClientForPage(page);
+      await expect(client.acquireSession("lifecycle")).resolves.toBeDefined();
+
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to attach pooled lifecycle")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("continues disposal when pooled listener cleanup traps", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const session = {
+      send: jest.fn().mockResolvedValue({}),
+      on: jest.fn(),
+      get off() {
+        throw new Error(`listener-off\u0000\n${"x".repeat(2_000)}`);
+      },
+      detach: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PlaywrightSession;
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(session),
+      }),
+      once: jest.fn(),
+    } as unknown as Page;
+
+    try {
+      const client = await getCDPClientForPage(page);
+      await expect(client.acquireSession("lifecycle")).resolves.toBeDefined();
+      await expect(disposeCDPClientForPage(page)).resolves.toBeUndefined();
+
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to detach pooled lifecycle listener")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
