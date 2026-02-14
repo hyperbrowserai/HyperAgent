@@ -167,6 +167,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "DDB",
   "RRI",
   "PDURATION",
+  "FVSCHEDULE",
+  "ISPMT",
   "SIN",
   "COS",
   "TAN",

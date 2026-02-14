@@ -36,6 +36,7 @@ use crate::{
     parse_sln_formula, parse_syd_formula,
     parse_db_formula, parse_ddb_formula,
     parse_rri_formula, parse_pduration_formula,
+    parse_fvschedule_formula, parse_ispmt_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1979,6 +1980,34 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(periods.to_string()));
+  }
+
+  if let Some((principal_arg, schedule_arg)) = parse_fvschedule_formula(formula) {
+    let principal = parse_required_float(connection, sheet, &principal_arg)?;
+    let rates = resolve_numeric_values_for_operand(connection, sheet, &schedule_arg)?;
+    let mut future_value = principal;
+    for rate in rates {
+      future_value *= 1.0 + rate;
+    }
+    if !future_value.is_finite() {
+      return Ok(None);
+    }
+    return Ok(Some(future_value.to_string()));
+  }
+
+  if let Some((rate_arg, period_arg, nper_arg, pv_arg)) = parse_ispmt_formula(formula) {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let period = parse_required_float(connection, sheet, &period_arg)?;
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    let present_value = parse_required_float(connection, sheet, &pv_arg)?;
+    if periods <= 0.0 || period < 1.0 || period > periods {
+      return Ok(None);
+    }
+    let interest_payment = present_value * rate * ((period / periods) - 1.0);
+    if !interest_payment.is_finite() {
+      return Ok(None);
+    }
+    return Ok(Some(interest_payment.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -7301,12 +7330,24 @@ mod tests {
         value: None,
         formula: Some("=PDURATION(0.1,100,121)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 266,
+        value: None,
+        formula: Some("=FVSCHEDULE(100,0.1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 267,
+        value: None,
+        formula: Some("=ISPMT(0.1,1,3,100)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 263);
+    assert_eq!(updated_cells, 265);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7320,7 +7361,7 @@ mod tests {
         start_row: 1,
         end_row: 20,
         start_col: 1,
-        end_col: 265,
+        end_col: 267,
       },
     )
     .expect("cells should be fetched");
@@ -8433,6 +8474,26 @@ mod tests {
       (pduration_value - 2.0).abs() < 1e-9,
       "pduration should compute periods to target value, got {pduration_value}",
     );
+    let fvschedule_value = by_position(1, 266)
+      .evaluated_value
+      .as_deref()
+      .expect("fvschedule should evaluate")
+      .parse::<f64>()
+      .expect("fvschedule should be numeric");
+    assert!(
+      (fvschedule_value - 110.0).abs() < 1e-9,
+      "fvschedule should apply sequential growth schedule, got {fvschedule_value}",
+    );
+    let ispmt_value = by_position(1, 267)
+      .evaluated_value
+      .as_deref()
+      .expect("ispmt should evaluate")
+      .parse::<f64>()
+      .expect("ispmt should be numeric");
+    assert!(
+      (ispmt_value + 6.666_666_666_666_667).abs() < 1e-9,
+      "ispmt should compute linear-interest payment amount, got {ispmt_value}",
+    );
   }
 
   #[test]
@@ -8866,6 +8927,36 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=RRI(0,100,121)".to_string(), "=PDURATION(0,100,121)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_fvschedule_ispmt_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=FVSCHEDULE(1e308,1e308)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=ISPMT(0.1,4,3,100)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=FVSCHEDULE(1e308,1e308)".to_string(),
+        "=ISPMT(0.1,4,3,100)".to_string(),
+      ],
     );
   }
 

@@ -713,6 +713,27 @@ pub fn parse_pduration_formula(formula: &str) -> Option<(String, String, String)
   Some((args[0].clone(), args[1].clone(), args[2].clone()))
 }
 
+pub fn parse_fvschedule_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "FVSCHEDULE" || args.len() != 2 {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone()))
+}
+
+pub fn parse_ispmt_formula(formula: &str) -> Option<(String, String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "ISPMT" || args.len() != 4 {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+  ))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2204,6 +2225,7 @@ mod tests {
     parse_sln_formula, parse_syd_formula,
     parse_db_formula, parse_ddb_formula,
     parse_rri_formula, parse_pduration_formula,
+    parse_fvschedule_formula, parse_ispmt_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2565,6 +2587,15 @@ mod tests {
     assert_eq!(pduration_args.0, "A1");
     assert_eq!(pduration_args.1, "B1");
     assert_eq!(pduration_args.2, "C1");
+    let fvschedule_args =
+      parse_fvschedule_formula("=FVSCHEDULE(A1,B1:B3)").expect("fvschedule should parse");
+    assert_eq!(fvschedule_args.0, "A1");
+    assert_eq!(fvschedule_args.1, "B1:B3");
+    let ispmt_args = parse_ispmt_formula("=ISPMT(A1,B1,C1,D1)").expect("ispmt should parse");
+    assert_eq!(ispmt_args.0, "A1");
+    assert_eq!(ispmt_args.1, "B1");
+    assert_eq!(ispmt_args.2, "C1");
+    assert_eq!(ispmt_args.3, "D1");
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),
