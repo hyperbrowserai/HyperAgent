@@ -77,7 +77,7 @@ Server defaults to `http://localhost:8787`.
 - `import.warnings`
 
 Import behavior notes:
-- Formula tokens are normalized for engine compatibility (`_xlfn.` / `_xlws.` prefixes are stripped and formulas are stored with a leading `=`), while preserving quoted string literals.
+- Formula tokens are normalized for engine compatibility (`_xlfn.` / `_xlws.` / `_xlpm.` prefixes are stripped and formulas are stored with a leading `=`), while preserving quoted string literals.
 - Excel implicit-intersection operators (`@`) are normalized in import-time formula tokens when used as prefix operators (for example `=@SUM(...)` becomes `=SUM(...)`), while preserving structured-reference and quoted-string usage.
 - Unary leading `+` operators are normalized in import-time formula tokens for compatibility with modern Excel export patterns (for example `=+SUM(...)` becomes `=SUM(...)`).
 - Cell coordinates are imported using worksheet range offsets, so sheets with first used cells outside `A1` preserve their original row/column placement.
