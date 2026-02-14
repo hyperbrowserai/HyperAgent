@@ -22,7 +22,7 @@ use crate::{
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
     parse_days_formula, parse_datevalue_formula, parse_timevalue_formula,
-    parse_datedif_formula, parse_networkdays_formula,
+    parse_time_formula, parse_datedif_formula, parse_networkdays_formula,
     parse_workday_formula, parse_networkdays_intl_formula, parse_workday_intl_formula,
     parse_day_formula,
     parse_if_formula, parse_ifs_formula, parse_iferror_formula,
@@ -2390,6 +2390,20 @@ fn evaluate_formula(
       + (f64::from(time_value.nanosecond()) / 1_000_000_000.0);
     let fraction = elapsed_seconds / 86_400.0;
     return Ok(Some(fraction.to_string()));
+  }
+
+  if let Some((hour_arg, minute_arg, second_arg)) = parse_time_formula(formula) {
+    let hours = parse_required_integer(connection, sheet, &hour_arg)?;
+    let minutes = parse_required_integer(connection, sheet, &minute_arg)?;
+    let seconds = parse_required_integer(connection, sheet, &second_arg)?;
+    if hours < 0 || minutes < 0 || seconds < 0 {
+      return Ok(None);
+    }
+    let total_seconds = i64::from(hours) * 3_600
+      + i64::from(minutes) * 60
+      + i64::from(seconds);
+    let normalized_seconds = total_seconds.rem_euclid(86_400) as f64;
+    return Ok(Some((normalized_seconds / 86_400.0).to_string()));
   }
 
   if let Some((start_date_arg, end_date_arg, unit_arg)) = parse_datedif_formula(formula) {
@@ -6073,12 +6087,18 @@ mod tests {
         value: None,
         formula: Some(r#"=ISOWEEKNUM("2024-01-04")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 237,
+        value: None,
+        formula: Some("=TIME(13,45,30)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 234);
+    assert_eq!(updated_cells, 235);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6092,7 +6112,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 236,
+        end_col: 237,
       },
     )
     .expect("cells should be fetched");
@@ -6989,6 +7009,16 @@ mod tests {
       by_position(1, 236).evaluated_value.as_deref(),
       Some("1"),
       "isoweeknum should return ISO week numbers",
+    );
+    let time_serial = by_position(1, 237)
+      .evaluated_value
+      .as_deref()
+      .expect("time should evaluate")
+      .parse::<f64>()
+      .expect("time should be numeric");
+    assert!(
+      (time_serial - 0.573_263_888_888_888_9).abs() < 1e-12,
+      "time should return fraction-of-day serial, got {time_serial}",
     );
   }
 
@@ -8531,6 +8561,22 @@ mod tests {
         r#"=TIMEVALUE("bad-time")"#.to_string(),
       ],
     );
+  }
+
+  #[test]
+  fn should_leave_invalid_time_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=TIME(-1,10,0)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=TIME(-1,10,0)".to_string()]);
   }
 
   #[test]

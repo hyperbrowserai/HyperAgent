@@ -222,6 +222,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "RAND",
   "RANDBETWEEN",
   "DATE",
+  "TIME",
   "EDATE",
   "EOMONTH",
   "DAYS",
