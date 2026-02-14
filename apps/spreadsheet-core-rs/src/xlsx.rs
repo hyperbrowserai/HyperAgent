@@ -473,6 +473,7 @@ mod tests {
   use crate::{
     fixture_corpus::{
       write_fixture_corpus, COMPAT_BASELINE_FILE_NAME,
+      COMPAT_FORMULA_MATRIX_FILE_NAME,
       COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
       COMPAT_OFFSET_RANGE_FILE_NAME, COMPAT_PREFIX_OPERATOR_FILE_NAME,
@@ -483,92 +484,8 @@ mod tests {
     store::{load_sheet_snapshot, recalculate_formulas},
   };
   use chrono::Utc;
-  use rust_xlsxwriter::{Formula, Workbook};
   use std::{collections::HashMap, fs, path::PathBuf};
   use tempfile::tempdir;
-
-  fn fixture_workbook_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let inputs_sheet = workbook.add_worksheet();
-    inputs_sheet.set_name("Inputs").expect("sheet should be renamed");
-    inputs_sheet
-      .write_string(0, 0, "Region")
-      .expect("header should write");
-    inputs_sheet
-      .write_string(1, 0, "North")
-      .expect("text should write");
-    inputs_sheet
-      .write_string(2, 0, "South")
-      .expect("text should write");
-    inputs_sheet
-      .write_string(0, 1, "Sales")
-      .expect("header should write");
-    inputs_sheet
-      .write_number(1, 1, 120.0)
-      .expect("number should write");
-    inputs_sheet
-      .write_number(2, 1, 80.0)
-      .expect("number should write");
-    inputs_sheet
-      .write_string(0, 2, "Total")
-      .expect("header should write");
-    inputs_sheet
-      .write_formula(1, 2, Formula::new("=SUM(B2:B3)"))
-      .expect("formula should write");
-    inputs_sheet
-      .write_string(0, 3, "Active")
-      .expect("header should write");
-    inputs_sheet
-      .write_boolean(1, 3, true)
-      .expect("boolean should write");
-
-    let notes_sheet = workbook.add_worksheet();
-    notes_sheet.set_name("Notes").expect("sheet should be renamed");
-    notes_sheet
-      .write_string(0, 0, "Generated from fixture workbook")
-      .expect("notes text should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("fixture workbook should serialize")
-  }
-
-  fn formula_matrix_fixture_workbook_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let calc_sheet = workbook.add_worksheet();
-    calc_sheet.set_name("Calc").expect("sheet should be renamed");
-    calc_sheet
-      .write_formula(0, 1, Formula::new("=BITAND(6,3)").set_result("2"))
-      .expect("bitand should write");
-    calc_sheet
-      .write_formula(1, 1, Formula::new("=DEC2HEX(255,4)").set_result("00FF"))
-      .expect("dec2hex should write");
-    calc_sheet
-      .write_formula(2, 1, Formula::new("=DOLLARDE(1.02,16)").set_result("1.125"))
-      .expect("dollarde should write");
-    calc_sheet
-      .write_formula(3, 1, Formula::new("=DELTA(5,5)").set_result("1"))
-      .expect("delta should write");
-    calc_sheet
-      .write_boolean(4, 0, true)
-      .expect("boolean should write");
-    calc_sheet
-      .write_string(5, 0, "text")
-      .expect("string should write");
-    calc_sheet
-      .write_number(6, 0, -2.0)
-      .expect("number should write");
-    calc_sheet
-      .write_formula(4, 1, Formula::new("=MINA(A5:A7)").set_result("-2"))
-      .expect("mina should write");
-    calc_sheet
-      .write_formula(5, 1, Formula::new("=MAXA(A5:A7)").set_result("1"))
-      .expect("maxa should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("formula matrix fixture workbook should serialize")
-  }
 
   fn file_fixture_bytes(file_name: &str) -> Vec<u8> {
     let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -706,7 +623,7 @@ mod tests {
       .await
       .expect("db path should be accessible");
 
-    let fixture_bytes = fixture_workbook_bytes();
+    let fixture_bytes = file_fixture_bytes(COMPAT_BASELINE_FILE_NAME);
     let import_result =
       import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 2);
@@ -811,7 +728,7 @@ mod tests {
       .db_path(source_workbook.id)
       .await
       .expect("source db path should be accessible");
-    let fixture_bytes = fixture_workbook_bytes();
+    let fixture_bytes = file_fixture_bytes(COMPAT_BASELINE_FILE_NAME);
     let import_result =
       import_xlsx(&source_db_path, &fixture_bytes).expect("source fixture should import");
     let summary = WorkbookSummary {
@@ -986,7 +903,8 @@ mod tests {
       .await
       .expect("source db path should be accessible");
 
-    let formula_fixture_bytes = formula_matrix_fixture_workbook_bytes();
+    let formula_fixture_bytes =
+      file_fixture_bytes(COMPAT_FORMULA_MATRIX_FILE_NAME);
     let import_result = import_xlsx(&source_db_path, &formula_fixture_bytes)
       .expect("formula fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 1);

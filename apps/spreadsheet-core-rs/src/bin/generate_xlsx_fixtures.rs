@@ -121,6 +121,7 @@ mod tests {
       fixture_corpus::COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
       fixture_corpus::COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
       fixture_corpus::COMPAT_PREFIX_OPERATOR_FILE_NAME,
+      fixture_corpus::COMPAT_FORMULA_MATRIX_FILE_NAME,
     ]
     .into_iter()
     .collect::<HashSet<_>>();

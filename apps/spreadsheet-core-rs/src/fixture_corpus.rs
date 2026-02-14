@@ -12,6 +12,7 @@ pub const COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME: &str =
   "compat_mixed_literal_prefix.xlsx";
 pub const COMPAT_PREFIX_OPERATOR_FILE_NAME: &str =
   "compat_prefix_operator.xlsx";
+pub const COMPAT_FORMULA_MATRIX_FILE_NAME: &str = "compat_formula_matrix.xlsx";
 
 pub fn generate_fixture_corpus(
 ) -> Result<Vec<(&'static str, Vec<u8>)>, XlsxError> {
@@ -44,6 +45,10 @@ pub fn generate_fixture_corpus(
       COMPAT_PREFIX_OPERATOR_FILE_NAME,
       build_compat_prefix_operator_fixture_bytes()?,
     ),
+    (
+      COMPAT_FORMULA_MATRIX_FILE_NAME,
+      build_compat_formula_matrix_fixture_bytes()?,
+    ),
   ])
 }
 
@@ -73,10 +78,12 @@ fn build_compat_baseline_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
   inputs_sheet.write_number(2, 1, 80.0)?;
   inputs_sheet.write_string(0, 2, "Total")?;
   inputs_sheet.write_formula(1, 2, Formula::new("=SUM(B2:B3)").set_result("200"))?;
+  inputs_sheet.write_string(0, 3, "Active")?;
+  inputs_sheet.write_boolean(1, 3, true)?;
 
   let notes_sheet = workbook.add_worksheet();
   notes_sheet.set_name("Notes")?;
-  notes_sheet.write_string(0, 0, "Generated fixture workbook")?;
+  notes_sheet.write_string(0, 0, "Generated from fixture workbook")?;
 
   workbook.save_to_buffer()
 }
@@ -171,6 +178,24 @@ fn build_compat_prefix_operator_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
     1,
     Formula::new("=+@_xlws.SUM(A1:A2)").set_result("5"),
   )?;
+
+  workbook.save_to_buffer()
+}
+
+fn build_compat_formula_matrix_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let calc_sheet = workbook.add_worksheet();
+  calc_sheet.set_name("Calc")?;
+  calc_sheet.write_formula(0, 1, Formula::new("=BITAND(6,3)").set_result("2"))?;
+  calc_sheet.write_formula(1, 1, Formula::new("=DEC2HEX(255,4)").set_result("00FF"))?;
+  calc_sheet.write_formula(2, 1, Formula::new("=DOLLARDE(1.02,16)").set_result("1.125"))?;
+  calc_sheet.write_formula(3, 1, Formula::new("=DELTA(5,5)").set_result("1"))?;
+  calc_sheet.write_boolean(4, 0, true)?;
+  calc_sheet.write_string(5, 0, "text")?;
+  calc_sheet.write_number(6, 0, -2.0)?;
+  calc_sheet.write_formula(4, 1, Formula::new("=MINA(A5:A7)").set_result("-2"))?;
+  calc_sheet.write_formula(5, 1, Formula::new("=MAXA(A5:A7)").set_result("1"))?;
 
   workbook.save_to_buffer()
 }

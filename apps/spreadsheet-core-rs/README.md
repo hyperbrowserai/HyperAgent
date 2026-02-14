@@ -339,5 +339,5 @@ XLSX compatibility regression coverage includes:
 - non-`A1` used-range import fixtures (coordinate offset preservation),
 - formula-token normalization fixtures (`_xlfn.`/`_xlws.`/`_xlpm.`, implicit `@`, unary `+`, and quoted-literal edge cases),
 - comprehensive normalization roundtrip fixtures validating telemetry + canonical replay after export/re-import,
-- file-based fixture corpus regression coverage (`fixtures/compat_baseline.xlsx`, `fixtures/compat_normalization_single.xlsx`, `fixtures/compat_normalization.xlsx`, `fixtures/compat_offset_range.xlsx`, `fixtures/compat_unsupported_formula.xlsx`, `fixtures/compat_mixed_literal_prefix.xlsx`, `fixtures/compat_prefix_operator.xlsx`) to validate import behavior against generated workbook artifacts,
+- file-based fixture corpus regression coverage (`fixtures/compat_baseline.xlsx`, `fixtures/compat_formula_matrix.xlsx`, `fixtures/compat_normalization_single.xlsx`, `fixtures/compat_normalization.xlsx`, `fixtures/compat_offset_range.xlsx`, `fixtures/compat_unsupported_formula.xlsx`, `fixtures/compat_mixed_literal_prefix.xlsx`, `fixtures/compat_prefix_operator.xlsx`) to validate import behavior against generated workbook artifacts,
 - generator-sync regression coverage to ensure committed fixture binaries stay byte-identical with deterministic generated output.

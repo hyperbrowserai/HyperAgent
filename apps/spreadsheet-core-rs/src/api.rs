@@ -3101,7 +3101,7 @@ mod tests {
     .expect("fixture import should succeed");
 
     assert_eq!(import_result.sheets_imported, 2);
-    assert_eq!(import_result.cells_imported, 9);
+    assert_eq!(import_result.cells_imported, 11);
     assert_eq!(
       import_result.formula_cells_imported,
       import_result.formula_cells_with_cached_values
