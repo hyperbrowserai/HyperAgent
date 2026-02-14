@@ -796,6 +796,14 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "operations_signature": "sha256 signature over generated operations",
         "operations": "array of operation objects"
       },
+      "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
+      "agent_ops_preview_request_shape": {
+        "operations": "non-empty array of operation objects"
+      },
+      "agent_ops_preview_response_shape": {
+        "operations_signature": "sha256 signature over submitted operations",
+        "operations": "echoed operation array"
+      },
       "signature_error_codes": [
         "INVALID_SIGNATURE_FORMAT",
         "OPERATION_SIGNATURE_MISMATCH",
@@ -8690,6 +8698,26 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("optional import summary object (see import_response_shape)"),
         );
+        assert_eq!(
+            schema
+                .get("agent_ops_preview_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/preview"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_preview_request_shape")
+                .and_then(|value| value.get("operations"))
+                .and_then(serde_json::Value::as_str),
+            Some("non-empty array of operation objects"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_preview_response_shape")
+                .and_then(|value| value.get("operations_signature"))
+                .and_then(serde_json::Value::as_str),
+            Some("sha256 signature over submitted operations"),
+        );
         let signature_error_codes = schema
             .get("signature_error_codes")
             .and_then(serde_json::Value::as_array)
@@ -9078,6 +9106,9 @@ mod tests {
         let wizard_schema = get_agent_wizard_schema().await.0;
 
         let parity_keys = [
+            "agent_ops_preview_endpoint",
+            "agent_ops_preview_request_shape",
+            "agent_ops_preview_response_shape",
             "agent_ops_result_error_shape",
             "duckdb_query_endpoint",
             "duckdb_query_request_shape",
