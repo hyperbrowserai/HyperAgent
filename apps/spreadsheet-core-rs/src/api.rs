@@ -3893,6 +3893,73 @@ mod tests {
         }
     }
 
+    fn assert_endpoint_openapi_metadata_keysets_in_sync(
+        schema: &serde_json::Value,
+        schema_name: &str,
+    ) {
+        let endpoint_entries = schema
+            .as_object()
+            .expect("schema should be encoded as object")
+            .iter()
+            .filter_map(|(key, value)| {
+                if key == "endpoint" || key.ends_with("_endpoint") {
+                    value.as_str().map(|_| key.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            !endpoint_entries.is_empty(),
+            "{schema_name} should expose endpoint metadata keys",
+        );
+
+        let endpoint_openapi_paths = schema
+            .get("endpoint_openapi_paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_openapi_paths");
+        let endpoint_http_methods = schema
+            .get("endpoint_http_methods")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_http_methods");
+        let endpoint_summaries = schema
+            .get("endpoint_summaries")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_summaries");
+        let endpoint_openapi_operations = schema
+            .get("endpoint_openapi_operations")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_openapi_operations");
+
+        let endpoint_openapi_path_keys =
+            endpoint_openapi_paths.keys().cloned().collect::<std::collections::BTreeSet<_>>();
+        let endpoint_http_method_keys =
+            endpoint_http_methods.keys().cloned().collect::<std::collections::BTreeSet<_>>();
+        let endpoint_summary_keys =
+            endpoint_summaries.keys().cloned().collect::<std::collections::BTreeSet<_>>();
+        let endpoint_openapi_operation_keys = endpoint_openapi_operations
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(
+            endpoint_openapi_path_keys, endpoint_entries,
+            "{schema_name} endpoint_openapi_paths keyset should match endpoint fields",
+        );
+        assert_eq!(
+            endpoint_http_method_keys, endpoint_entries,
+            "{schema_name} endpoint_http_methods keyset should match endpoint fields",
+        );
+        assert_eq!(
+            endpoint_summary_keys, endpoint_entries,
+            "{schema_name} endpoint_summaries keyset should match endpoint fields",
+        );
+        assert_eq!(
+            endpoint_openapi_operation_keys, endpoint_entries,
+            "{schema_name} endpoint_openapi_operations keyset should match endpoint fields",
+        );
+    }
+
     fn assert_endpoint_http_methods_match_openapi_paths(
         schema: &serde_json::Value,
         schema_name: &str,
@@ -10376,8 +10443,28 @@ mod tests {
 
         assert_schema_endpoint_fields_are_normalized(&agent_schema, "agent schema");
         assert_schema_endpoint_fields_are_normalized(&wizard_schema, "wizard schema");
+        assert_endpoint_openapi_metadata_keysets_in_sync(&agent_schema, "agent schema");
+        assert_endpoint_openapi_metadata_keysets_in_sync(&wizard_schema, "wizard schema");
         assert_endpoint_openapi_paths_match_schema_endpoints(&agent_schema, "agent schema");
         assert_endpoint_openapi_paths_match_schema_endpoints(&wizard_schema, "wizard schema");
+    }
+
+    #[tokio::test]
+    async fn should_keep_endpoint_openapi_metadata_maps_in_sync_with_endpoint_fields() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("endpoint-openapi-metadata-keyset-sync".to_string()))
+            .await
+            .expect("workbook should be created");
+        let agent_schema = get_agent_schema(State(state), Path(workbook.id))
+            .await
+            .expect("agent schema should resolve")
+            .0;
+        let wizard_schema = get_agent_wizard_schema().await.0;
+
+        assert_endpoint_openapi_metadata_keysets_in_sync(&agent_schema, "agent schema");
+        assert_endpoint_openapi_metadata_keysets_in_sync(&wizard_schema, "wizard schema");
     }
 
     #[tokio::test]
