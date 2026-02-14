@@ -231,6 +231,10 @@ export interface AgentSchemaInfo {
   agent_ops_cache_clear_endpoint?: string;
   agent_ops_cache_replay_endpoint?: string;
   agent_ops_cache_reexecute_endpoint?: string;
+  agent_ops_cache_replay_request_shape?: Record<string, string | Record<string, string>>;
+  agent_ops_cache_replay_response_shape?: Record<string, string | Record<string, string>>;
+  agent_ops_cache_reexecute_request_shape?: Record<string, string>;
+  agent_ops_cache_reexecute_response_shape?: Record<string, string>;
   agent_ops_cache_remove_endpoint?: string;
   agent_ops_cache_remove_by_prefix_endpoint?: string;
   agent_ops_cache_remove_by_prefix_preview_endpoint?: string;

@@ -967,6 +967,28 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.agent_ops_cache_remove_request_shape),
     [agentSchemaQuery.data?.agent_ops_cache_remove_request_shape],
   );
+  const agentCacheReplayRequestFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.agent_ops_cache_replay_request_shape),
+    [agentSchemaQuery.data?.agent_ops_cache_replay_request_shape],
+  );
+  const agentCacheReplayResponseFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.agent_ops_cache_replay_response_shape),
+    [agentSchemaQuery.data?.agent_ops_cache_replay_response_shape],
+  );
+  const agentCacheReexecuteRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_reexecute_request_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_reexecute_request_shape],
+  );
+  const agentCacheReexecuteResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_reexecute_response_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_reexecute_response_shape],
+  );
   const agentCacheRemoveResponseFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.agent_ops_cache_remove_response_shape),
     [agentSchemaQuery.data?.agent_ops_cache_remove_response_shape],
@@ -3664,6 +3686,38 @@ export function SpreadsheetApp() {
                 cache reexecute endpoint:{" "}
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.agent_ops_cache_reexecute_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheReplayRequestFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache replay request shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheReplayRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheReplayResponseFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache replay response shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheReplayResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheReexecuteRequestFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache reexecute request shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheReexecuteRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheReexecuteResponseFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache reexecute response shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheReexecuteResponseFields)}
                 </span>
               </p>
             ) : null}
