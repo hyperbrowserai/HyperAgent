@@ -390,6 +390,13 @@ export function SpreadsheetApp() {
   const normalizedDuckdbQueryRowLimit = parsePositiveIntegerInput(
     duckdbQueryRowLimit,
   );
+  const effectiveDuckdbQueryRowLimit =
+    typeof normalizedDuckdbQueryRowLimit === "number"
+      ? Math.min(normalizedDuckdbQueryRowLimit, 1_000)
+      : undefined;
+  const isDuckdbQueryRowLimitCapped =
+    typeof normalizedDuckdbQueryRowLimit === "number"
+    && normalizedDuckdbQueryRowLimit > 1_000;
   const hasInvalidDuckdbQueryRowLimitInput =
     duckdbQueryRowLimit.trim().length > 0
     && typeof normalizedDuckdbQueryRowLimit !== "number";
@@ -2346,7 +2353,7 @@ export function SpreadsheetApp() {
       const response = await runDuckdbQuery(
         workbook.id,
         normalizedSql,
-        normalizedDuckdbQueryRowLimit,
+        effectiveDuckdbQueryRowLimit,
       );
       setDuckdbQueryResult(response);
       setNotice(
@@ -2660,6 +2667,11 @@ export function SpreadsheetApp() {
             {hasInvalidDuckdbQueryRowLimitInput ? (
               <p className="mb-2 text-[10px] text-rose-300">
                 row limit must be a positive integer.
+              </p>
+            ) : null}
+            {isDuckdbQueryRowLimitCapped ? (
+              <p className="mb-2 text-[10px] text-amber-300">
+                row limit will be capped to 1000.
               </p>
             ) : null}
             {duckdbQueryResult ? (

@@ -33,6 +33,7 @@ import {
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_SPREADSHEET_API_URL ?? "http://localhost:8787";
+const DUCKDB_QUERY_MAX_ROW_LIMIT = 1_000;
 
 interface JsonError {
   error?: {
@@ -183,6 +184,9 @@ export async function runDuckdbQuery(
   rowLimit?: number,
 ): Promise<DuckdbQueryResponse> {
   const normalizedRowLimit = normalizePositiveInteger(rowLimit);
+  const safeRowLimit = typeof normalizedRowLimit === "number"
+    ? Math.min(normalizedRowLimit, DUCKDB_QUERY_MAX_ROW_LIMIT)
+    : undefined;
   const response = await fetch(
     `${API_BASE_URL}/v1/workbooks/${workbookId}/duckdb/query`,
     {
@@ -190,7 +194,7 @@ export async function runDuckdbQuery(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         sql,
-        row_limit: normalizedRowLimit,
+        row_limit: safeRowLimit,
       }),
     },
   );
