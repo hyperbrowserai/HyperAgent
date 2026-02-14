@@ -6486,8 +6486,10 @@ mod tests {
     });
 
     set_cells(&db_path, "Perf", &cells).expect("large range cells should upsert");
+    let recalc_started = Instant::now();
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("large range recalc should succeed");
+    let recalc_elapsed = recalc_started.elapsed();
     assert!(
       unsupported_formulas.is_empty(),
       "large range aggregate formulas should remain supported: {:?}",
@@ -6496,6 +6498,11 @@ mod tests {
     assert!(
       updated_cells >= 3,
       "aggregate formulas should be updated after recalculation",
+    );
+    assert!(
+      recalc_elapsed.as_secs_f64() < 2.0,
+      "large range recalc should remain performant (elapsed_ms={})",
+      recalc_elapsed.as_millis(),
     );
 
     let snapshots = get_cells(
