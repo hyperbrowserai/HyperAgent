@@ -8259,6 +8259,32 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("health_endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["GET"]),
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("agent_ops_cache_clear_endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["POST"]),
+        );
+        assert_eq!(
+            schema
                 .get("operation_payloads")
                 .and_then(|value| value.get("duckdb_query"))
                 .and_then(|value| value.get("sql"))
@@ -9062,6 +9088,32 @@ mod tests {
             schema
                 .get("endpoint_http_methods")
                 .and_then(|value| value.get("openapi_endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["GET"]),
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("json_endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["POST"]),
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("health_endpoint"))
                 .and_then(serde_json::Value::as_array)
                 .map(|methods| {
                     methods
