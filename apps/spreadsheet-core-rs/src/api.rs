@@ -5187,6 +5187,112 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_allow_blank_expected_signature_for_preset_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("preset-signature-blank".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let response = run_agent_preset(
+            State(state),
+            Path((workbook.id, "export_snapshot".to_string())),
+            Json(AgentPresetRunRequest {
+                request_id: Some("preset-blank-signature".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some("   ".to_string()),
+            }),
+        )
+        .await
+        .expect("blank signature should be treated as absent")
+        .0;
+
+        assert_eq!(
+            response
+                .get("request_id")
+                .and_then(serde_json::Value::as_str),
+            Some("preset-blank-signature"),
+        );
+        let result_len = response
+            .get("results")
+            .and_then(serde_json::Value::as_array)
+            .map(std::vec::Vec::len)
+            .unwrap_or(0);
+        assert!(result_len > 0);
+    }
+
+    #[tokio::test]
+    async fn should_allow_blank_expected_signature_for_scenario_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("scenario-signature-blank".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let response = run_agent_scenario(
+            State(state),
+            Path((workbook.id, "refresh_and_export".to_string())),
+            Json(AgentScenarioRunRequest {
+                request_id: Some("scenario-blank-signature".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some("  ".to_string()),
+            }),
+        )
+        .await
+        .expect("blank signature should be treated as absent")
+        .0;
+
+        assert_eq!(
+            response
+                .get("request_id")
+                .and_then(serde_json::Value::as_str),
+            Some("scenario-blank-signature"),
+        );
+        let result_len = response
+            .get("results")
+            .and_then(serde_json::Value::as_array)
+            .map(std::vec::Vec::len)
+            .unwrap_or(0);
+        assert!(result_len > 0);
+    }
+
+    #[tokio::test]
+    async fn should_allow_blank_expected_signature_for_wizard_json_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+
+        let response = run_agent_wizard_json(
+            State(state),
+            Json(AgentWizardRunJsonRequest {
+                scenario: "refresh_and_export".to_string(),
+                request_id: Some("wizard-blank-signature".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some("   ".to_string()),
+                workbook_name: Some("wizard-signature-blank".to_string()),
+                file_name: None,
+                file_base64: None,
+            }),
+        )
+        .await
+        .expect("blank signature should be treated as absent")
+        .0;
+
+        assert_eq!(
+            response.request_id.as_deref(),
+            Some("wizard-blank-signature"),
+        );
+        assert!(!response.results.is_empty());
+    }
+
+    #[tokio::test]
     async fn should_round_trip_cache_stats_and_clear_via_handlers() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
