@@ -2553,6 +2553,11 @@ fn evaluate_formula(
       1 => date_value.weekday().num_days_from_sunday() + 1,
       2 => date_value.weekday().num_days_from_monday() + 1,
       3 => date_value.weekday().num_days_from_monday(),
+      11..=17 => {
+        let weekday_monday = date_value.weekday().num_days_from_monday();
+        let start_day = u32::try_from(return_type - 11).unwrap_or_default();
+        ((weekday_monday + 7 - start_day) % 7) + 1
+      }
       _ => return Ok(None),
     };
     return Ok(Some(weekday.to_string()));
@@ -2567,14 +2572,25 @@ fn evaluate_formula(
       Some(raw_type) => parse_required_integer(connection, sheet, &raw_type)?,
       None => 1,
     };
-    let year_start = NaiveDate::from_ymd_opt(date_value.year(), 1, 1)
-      .ok_or_else(|| ApiError::internal("Invalid year for WEEKNUM".to_string()))?;
-    let day_offset = match return_type {
-      1 => year_start.weekday().num_days_from_sunday(),
-      2 => year_start.weekday().num_days_from_monday(),
-      _ => return Ok(None),
+    let week_number = if return_type == 21 {
+      date_value.iso_week().week()
+    } else {
+      let year_start = NaiveDate::from_ymd_opt(date_value.year(), 1, 1)
+        .ok_or_else(|| ApiError::internal("Invalid year for WEEKNUM".to_string()))?;
+      let start_day = match return_type {
+        1 | 17 => 6u32,
+        2 | 11 => 0u32,
+        12 => 1u32,
+        13 => 2u32,
+        14 => 3u32,
+        15 => 4u32,
+        16 => 5u32,
+        _ => return Ok(None),
+      };
+      let year_start_weekday = year_start.weekday().num_days_from_monday();
+      let day_offset = (7 + year_start_weekday - start_day) % 7;
+      ((date_value.ordinal() + day_offset - 1) / 7) + 1
     };
-    let week_number = ((date_value.ordinal() + day_offset - 1) / 7) + 1;
     return Ok(Some(week_number.to_string()));
   }
 
@@ -6093,12 +6109,30 @@ mod tests {
         value: None,
         formula: Some("=TIME(13,45,30)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 238,
+        value: None,
+        formula: Some("=WEEKDAY(L1,11)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 239,
+        value: None,
+        formula: Some("=WEEKDAY(L1,16)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 240,
+        value: None,
+        formula: Some("=WEEKNUM(L1,21)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 235);
+    assert_eq!(updated_cells, 238);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6112,7 +6146,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 237,
+        end_col: 240,
       },
     )
     .expect("cells should be fetched");
@@ -7019,6 +7053,21 @@ mod tests {
     assert!(
       (time_serial - 0.573_263_888_888_888_9).abs() < 1e-12,
       "time should return fraction-of-day serial, got {time_serial}",
+    );
+    assert_eq!(
+      by_position(1, 238).evaluated_value.as_deref(),
+      Some("5"),
+      "weekday return type 11 should use Monday-based indexing",
+    );
+    assert_eq!(
+      by_position(1, 239).evaluated_value.as_deref(),
+      Some("7"),
+      "weekday return type 16 should treat Saturday as day 1",
+    );
+    assert_eq!(
+      by_position(1, 240).evaluated_value.as_deref(),
+      Some("7"),
+      "weeknum return type 21 should use ISO week numbers",
     );
   }
 
