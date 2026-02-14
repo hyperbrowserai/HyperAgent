@@ -425,6 +425,28 @@ mod tests {
       .expect("offset range fixture workbook should serialize")
   }
 
+  fn unsupported_formula_fixture_workbook_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let modern_sheet = workbook.add_worksheet();
+    modern_sheet
+      .set_name("Modern")
+      .expect("sheet should be renamed");
+    modern_sheet
+      .write_number(0, 0, 5.0)
+      .expect("seed number should write");
+    modern_sheet
+      .write_formula(
+        0,
+        1,
+        Formula::new("=_xlfn.LET(x,A1,x+1)").set_result("6"),
+      )
+      .expect("unsupported formula should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("unsupported formula fixture workbook should serialize")
+  }
+
   fn snapshot_map(
     cells: &[crate::models::CellSnapshot],
   ) -> HashMap<String, crate::models::CellSnapshot> {
@@ -876,6 +898,99 @@ mod tests {
     assert!(
       (replay_dollarde_value - 1.125).abs() < 1e-9,
       "replay dollarde should evaluate to 1.125",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_preserve_unsupported_formula_through_import_export_roundtrip() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let source_state = AppState::new(temp_dir.path().join("source-unsupported"))
+      .expect("state should initialize");
+    let source_workbook = source_state
+      .create_workbook(Some("xlsx-unsupported-source".to_string()))
+      .await
+      .expect("source workbook should be created");
+    let source_db_path = source_state
+      .db_path(source_workbook.id)
+      .await
+      .expect("source db path should be accessible");
+
+    let fixture_bytes = unsupported_formula_fixture_workbook_bytes();
+    let import_result =
+      import_xlsx(&source_db_path, &fixture_bytes).expect("fixture workbook should import");
+    assert_eq!(import_result.sheets_imported, 1);
+    assert_eq!(import_result.formula_cells_imported, 1);
+    assert_eq!(import_result.formula_cells_with_cached_values, 1);
+
+    let (_, unsupported_formulas) =
+      recalculate_formulas(&source_db_path).expect("recalculation should complete");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=LET(x,A1,x+1)".to_string()],
+      "unsupported formulas should be normalized and tracked",
+    );
+
+    let source_snapshot =
+      load_sheet_snapshot(&source_db_path, "Modern").expect("snapshot should load");
+    let source_map = snapshot_map(&source_snapshot);
+    assert_eq!(
+      source_map
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=LET(x,A1,x+1)"),
+      "normalized unsupported formula should be preserved in storage",
+    );
+    assert_eq!(
+      source_map
+        .get("B1")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(6),
+      "cached formula result should be preserved on initial import",
+    );
+
+    let summary = WorkbookSummary {
+      id: source_workbook.id,
+      name: "unsupported-roundtrip".to_string(),
+      created_at: Utc::now(),
+      sheets: vec!["Modern".to_string()],
+      charts: Vec::new(),
+      compatibility_warnings: Vec::new(),
+    };
+    let (exported_bytes, _) =
+      export_xlsx(&source_db_path, &summary).expect("fixture workbook should export");
+
+    let replay_state = AppState::new(temp_dir.path().join("replay-unsupported"))
+      .expect("state should initialize");
+    let replay_workbook = replay_state
+      .create_workbook(Some("xlsx-unsupported-replay".to_string()))
+      .await
+      .expect("replay workbook should be created");
+    let replay_db_path = replay_state
+      .db_path(replay_workbook.id)
+      .await
+      .expect("replay db path should be accessible");
+    import_xlsx(&replay_db_path, &exported_bytes)
+      .expect("exported workbook should import in replay");
+
+    let (_, replay_unsupported_formulas) =
+      recalculate_formulas(&replay_db_path).expect("replay recalculation should complete");
+    assert_eq!(
+      replay_unsupported_formulas,
+      vec!["=LET(x,A1,x+1)".to_string()],
+      "unsupported formula should remain preserved after roundtrip",
+    );
+
+    let replay_snapshot =
+      load_sheet_snapshot(&replay_db_path, "Modern").expect("replay snapshot should load");
+    let replay_map = snapshot_map(&replay_snapshot);
+    assert_eq!(
+      replay_map
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=LET(x,A1,x+1)"),
+      "roundtrip should keep normalized unsupported formula text",
     );
   }
 }
