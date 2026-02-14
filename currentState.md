@@ -163,6 +163,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
   - guard trap-prone `page.context`, `context.newCDPSession`, `page.frames`, and `page.mainFrame` reads,
   - short-circuit gracefully when required APIs are unavailable,
   - emit sanitized diagnostics in debug logs for getter/method trap failures.
+- Refreshed stale CDP deep-dive flow notes that previously described OOPIF capture as incomplete; docs now reflect the current runtime OOPIF discovery + map-sync + multi-frame accessibility capture flow.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

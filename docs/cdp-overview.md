@@ -2885,14 +2885,14 @@ From ensureInitialized (Phase 1):
                       backendNodeId: 123,
                       sessionId: "oopif-sess" }  ✅ Has separate session
 
-Status: ❌ INCOMPLETE - Need Phase 3 to get OOPIF content
-        → captureOOPIFs will call buildBackendIdMaps(oopifSession)
+Status: ✅ COMPLETE - OOPIF content is captured in runtime flow
+        → captureOOPIFs discovers per-frame sessions, then buildBackendIdMaps(oopifSession, pierce: false) materializes OOPIF maps
 
 ────────────────────────────────────────────────────────────────
-NEXT STEPS:
-1. Phase 3: Fetch OOPIF content via their separate CDP sessions
-2. Phase 4: syncFrameContextManager to populate missing frameIds
-3. Phase 5: Fetch accessibility trees for all frames
+CURRENT FLOW:
+1. OOPIF discovery creates/refreshes per-frame sessions (with optional ad/tracking filtering).
+2. Frame graph sync backfills frame IDs/execution-context state from discovered sessions.
+3. Accessibility tree + map capture runs across main frame, same-origin iframes, and discovered OOPIF sessions.
 ```
 
 ---
