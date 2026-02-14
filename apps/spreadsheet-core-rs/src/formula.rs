@@ -107,7 +107,7 @@ pub fn parse_cell_address(value: &str) -> Option<(u32, u32)> {
 
 pub fn parse_aggregate_formula(formula: &str) -> Option<(String, (u32, u32), (u32, u32))> {
   let re =
-    Regex::new(r"^=\s*(SUM|AVERAGE|MIN|MAX|COUNT|MEDIAN|PRODUCT|SUMSQ|STDEV\.P|STDEV\.S|VAR\.P|VAR\.S)\s*\(\s*([A-Za-z]+\d+)\s*:\s*([A-Za-z]+\d+)\s*\)\s*$")
+    Regex::new(r"^=\s*(SUM|AVERAGE|MIN|MAX|COUNT|MEDIAN|PRODUCT|SUMSQ|STDEV|STDEVP|STDEV\.P|STDEV\.S|VAR|VARP|VAR\.P|VAR\.S)\s*\(\s*([A-Za-z]+\d+)\s*:\s*([A-Za-z]+\d+)\s*\)\s*$")
       .ok()?;
   let captures = re.captures(formula.trim())?;
   let function = captures.get(1)?.as_str().to_uppercase();
@@ -1012,7 +1012,9 @@ pub fn parse_percentile_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String)> {
   let (function, args) = parse_function_arguments(formula)?;
-  if function != "PERCENTILE.INC" || args.len() != 2 {
+  if (function != "PERCENTILE.INC" && function != "PERCENTILE")
+    || args.len() != 2
+  {
     return None;
   }
   let (start, end) = parse_range_reference(&args[0])?;
@@ -1023,7 +1025,9 @@ pub fn parse_quartile_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String)> {
   let (function, args) = parse_function_arguments(formula)?;
-  if function != "QUARTILE.INC" || args.len() != 2 {
+  if (function != "QUARTILE.INC" && function != "QUARTILE")
+    || args.len() != 2
+  {
     return None;
   }
   let (start, end) = parse_range_reference(&args[0])?;
@@ -1107,7 +1111,9 @@ pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
   let (function, args) = parse_function_arguments(formula)?;
-  if function != "PERCENTRANK.INC" || !(args.len() == 2 || args.len() == 3) {
+  if (function != "PERCENTRANK.INC" && function != "PERCENTRANK")
+    || !(args.len() == 2 || args.len() == 3)
+  {
     return None;
   }
   let (start, end) = parse_range_reference(&args[0])?;
@@ -1431,6 +1437,12 @@ mod tests {
     assert_eq!(stdev_pop.0, "STDEV.P");
     assert_eq!(stdev_pop.1, (1, 1));
     assert_eq!(stdev_pop.2, (5, 1));
+
+    let stdev_legacy = parse_aggregate_formula("=STDEV(A1:A5)")
+      .expect("stdev should parse");
+    assert_eq!(stdev_legacy.0, "STDEV");
+    assert_eq!(stdev_legacy.1, (1, 1));
+    assert_eq!(stdev_legacy.2, (5, 1));
   }
 
   #[test]
@@ -1789,11 +1801,21 @@ mod tests {
     assert_eq!(percentile.0, (1, 1));
     assert_eq!(percentile.1, (5, 1));
     assert_eq!(percentile.2, "0.25");
+    let percentile_legacy = parse_percentile_inc_formula("=PERCENTILE(A1:A5,0.25)")
+      .expect("legacy percentile should parse");
+    assert_eq!(percentile_legacy.0, (1, 1));
+    assert_eq!(percentile_legacy.1, (5, 1));
+    assert_eq!(percentile_legacy.2, "0.25");
     let quartile = parse_quartile_inc_formula("=QUARTILE.INC(A1:A5,3)")
       .expect("quartile should parse");
     assert_eq!(quartile.0, (1, 1));
     assert_eq!(quartile.1, (5, 1));
     assert_eq!(quartile.2, "3");
+    let quartile_legacy = parse_quartile_inc_formula("=QUARTILE(A1:A5,3)")
+      .expect("legacy quartile should parse");
+    assert_eq!(quartile_legacy.0, (1, 1));
+    assert_eq!(quartile_legacy.1, (5, 1));
+    assert_eq!(quartile_legacy.2, "3");
     let percentile_exc =
       parse_percentile_exc_formula("=PERCENTILE.EXC(A1:A5,0.6)")
         .expect("percentile.exc should parse");
@@ -1837,6 +1859,13 @@ mod tests {
     assert_eq!(percentrank_inc.1, (5, 1));
     assert_eq!(percentrank_inc.2, "3");
     assert_eq!(percentrank_inc.3.as_deref(), Some("4"));
+    let percentrank_legacy =
+      parse_percentrank_inc_formula("=PERCENTRANK(A1:A5,3)")
+        .expect("legacy percentrank should parse");
+    assert_eq!(percentrank_legacy.0, (1, 1));
+    assert_eq!(percentrank_legacy.1, (5, 1));
+    assert_eq!(percentrank_legacy.2, "3");
+    assert_eq!(percentrank_legacy.3.as_deref(), None);
     let percentrank_exc =
       parse_percentrank_exc_formula("=PERCENTRANK.EXC(A1:A5,3)")
         .expect("percentrank exc should parse");

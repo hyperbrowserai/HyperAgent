@@ -281,8 +281,12 @@ fn evaluate_formula(
       "MAX" => "MAX",
       "COUNT" => "COUNT",
       "MEDIAN" => "MEDIAN",
+      "STDEV" => "STDDEV_SAMP",
+      "STDEVP" => "STDDEV_POP",
       "STDEV.P" => "STDDEV_POP",
       "STDEV.S" => "STDDEV_SAMP",
+      "VAR" => "VAR_SAMP",
+      "VARP" => "VAR_POP",
       "VAR.P" => "VAR_POP",
       "VAR.S" => "VAR_SAMP",
       "SUMSQ" => "SUM",
@@ -4041,12 +4045,54 @@ mod tests {
         value: None,
         formula: Some("=AVEDEV(A1:A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 156,
+        value: None,
+        formula: Some("=STDEV(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 157,
+        value: None,
+        formula: Some("=STDEVP(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 158,
+        value: None,
+        formula: Some("=VAR(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 159,
+        value: None,
+        formula: Some("=VARP(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 160,
+        value: None,
+        formula: Some("=PERCENTILE(A1:A2,0.25)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 161,
+        value: None,
+        formula: Some("=QUARTILE(A1:A2,3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 162,
+        value: None,
+        formula: Some("=PERCENTRANK(A1:A2,120)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 153);
+    assert_eq!(updated_cells, 160);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4060,7 +4106,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 155,
+        end_col: 162,
       },
     )
     .expect("cells should be fetched");
@@ -4415,6 +4461,70 @@ mod tests {
     assert!(
       (avedev - 20.0).abs() < 1e-9,
       "avedev should be 20.0, got {avedev}",
+    );
+    let stdev_legacy = by_position(1, 156)
+      .evaluated_value
+      .as_deref()
+      .expect("stdev should evaluate")
+      .parse::<f64>()
+      .expect("stdev should be numeric");
+    assert!(
+      (stdev_legacy - 28.284_271_247_461_902).abs() < 1e-9,
+      "stdev should be sqrt(800), got {stdev_legacy}",
+    );
+    let stdevp_legacy = by_position(1, 157)
+      .evaluated_value
+      .as_deref()
+      .expect("stdevp should evaluate")
+      .parse::<f64>()
+      .expect("stdevp should be numeric");
+    assert!(
+      (stdevp_legacy - 20.0).abs() < 1e-9,
+      "stdevp should be 20.0, got {stdevp_legacy}",
+    );
+    let var_legacy = by_position(1, 158)
+      .evaluated_value
+      .as_deref()
+      .expect("var should evaluate")
+      .parse::<f64>()
+      .expect("var should be numeric");
+    assert!((var_legacy - 800.0).abs() < 1e-9, "var should be 800.0, got {var_legacy}");
+    let varp_legacy = by_position(1, 159)
+      .evaluated_value
+      .as_deref()
+      .expect("varp should evaluate")
+      .parse::<f64>()
+      .expect("varp should be numeric");
+    assert!((varp_legacy - 400.0).abs() < 1e-9, "varp should be 400.0, got {varp_legacy}");
+    let percentile_legacy = by_position(1, 160)
+      .evaluated_value
+      .as_deref()
+      .expect("percentile should evaluate")
+      .parse::<f64>()
+      .expect("percentile should be numeric");
+    assert!(
+      (percentile_legacy - 90.0).abs() < 1e-9,
+      "legacy percentile should be 90.0, got {percentile_legacy}",
+    );
+    let quartile_legacy = by_position(1, 161)
+      .evaluated_value
+      .as_deref()
+      .expect("quartile should evaluate")
+      .parse::<f64>()
+      .expect("quartile should be numeric");
+    assert!(
+      (quartile_legacy - 110.0).abs() < 1e-9,
+      "legacy quartile should be 110.0, got {quartile_legacy}",
+    );
+    let percentrank_legacy = by_position(1, 162)
+      .evaluated_value
+      .as_deref()
+      .expect("percentrank should evaluate")
+      .parse::<f64>()
+      .expect("percentrank should be numeric");
+    assert!(
+      (percentrank_legacy - 1.0).abs() < 1e-9,
+      "legacy percentrank should be 1.0, got {percentrank_legacy}",
     );
   }
 
