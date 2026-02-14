@@ -249,6 +249,7 @@ export interface AgentSchemaInfo {
   endpoint_catalog_diagnostics?: EndpointCatalogDiagnostics;
   endpoint_catalog_openapi_fingerprint?: string;
   endpoint_catalog_openapi_stats?: EndpointCatalogOpenApiStats;
+  endpoint_catalog_contract_version?: string;
   request_shape?: Record<string, unknown>;
   agent_ops_request_shape?: Record<string, unknown>;
   workbook_import_endpoint?: string;
@@ -372,6 +373,7 @@ export interface OpenApiSpec {
     operation_count?: number;
     summarized_operation_count?: number;
   };
+  "x-endpoint-catalog-contract-version"?: string;
   [key: string]: unknown;
 }
 
@@ -390,6 +392,7 @@ export interface AgentWizardSchemaInfo {
   endpoint_catalog_diagnostics?: EndpointCatalogDiagnostics;
   endpoint_catalog_openapi_fingerprint?: string;
   endpoint_catalog_openapi_stats?: EndpointCatalogOpenApiStats;
+  endpoint_catalog_contract_version?: string;
   json_endpoint?: string;
   presets_endpoint?: string;
   preset_operations_endpoint?: string;

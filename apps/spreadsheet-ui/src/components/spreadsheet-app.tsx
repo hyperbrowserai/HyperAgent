@@ -1892,6 +1892,17 @@ export function SpreadsheetApp() {
     },
     [openApiSpecQuery.data],
   );
+  const openApiSpecContractVersion = useMemo(
+    () => {
+      const version = openApiSpecQuery.data?.["x-endpoint-catalog-contract-version"];
+      if (typeof version !== "string") {
+        return null;
+      }
+      const normalized = version.trim();
+      return normalized.length > 0 ? normalized : null;
+    },
+    [openApiSpecQuery.data],
+  );
   const openApiSpecExtensionStats = useMemo(
     () =>
       normalizeSchemaEndpointCatalogOpenApiStats(
@@ -2097,6 +2108,17 @@ export function SpreadsheetApp() {
     },
     [wizardSchemaQuery.data?.endpoint_catalog_openapi_fingerprint],
   );
+  const wizardEndpointCatalogContractVersion = useMemo(
+    () => {
+      const version = wizardSchemaQuery.data?.endpoint_catalog_contract_version;
+      if (typeof version !== "string") {
+        return null;
+      }
+      const normalized = version.trim();
+      return normalized.length > 0 ? normalized : null;
+    },
+    [wizardSchemaQuery.data?.endpoint_catalog_contract_version],
+  );
   const agentEndpointCatalogOpenApiFingerprint = useMemo(
     () => {
       const fingerprint = agentSchemaQuery.data?.endpoint_catalog_openapi_fingerprint;
@@ -2107,6 +2129,17 @@ export function SpreadsheetApp() {
       return normalized.length > 0 ? normalized : null;
     },
     [agentSchemaQuery.data?.endpoint_catalog_openapi_fingerprint],
+  );
+  const agentEndpointCatalogContractVersion = useMemo(
+    () => {
+      const version = agentSchemaQuery.data?.endpoint_catalog_contract_version;
+      if (typeof version !== "string") {
+        return null;
+      }
+      const normalized = version.trim();
+      return normalized.length > 0 ? normalized : null;
+    },
+    [agentSchemaQuery.data?.endpoint_catalog_contract_version],
   );
   const hasEndpointCatalogFingerprintMismatch = Boolean(
     wizardEndpointCatalogOpenApiFingerprint
@@ -2123,9 +2156,26 @@ export function SpreadsheetApp() {
     && openApiSpecFingerprint
     && agentEndpointCatalogOpenApiFingerprint !== openApiSpecFingerprint,
   );
+  const hasEndpointCatalogContractVersionMismatch = Boolean(
+    wizardEndpointCatalogContractVersion
+    && agentEndpointCatalogContractVersion
+    && wizardEndpointCatalogContractVersion !== agentEndpointCatalogContractVersion,
+  );
+  const hasWizardContractVersionVsOpenApiMismatch = Boolean(
+    wizardEndpointCatalogContractVersion
+    && openApiSpecContractVersion
+    && wizardEndpointCatalogContractVersion !== openApiSpecContractVersion,
+  );
+  const hasAgentContractVersionVsOpenApiMismatch = Boolean(
+    agentEndpointCatalogContractVersion
+    && openApiSpecContractVersion
+    && agentEndpointCatalogContractVersion !== openApiSpecContractVersion,
+  );
   const hasWizardEndpointCatalogDrift = Boolean(
     hasWizardSchemaEndpointDrift
     || hasWizardFingerprintVsOpenApiMismatch
+    || hasWizardContractVersionVsOpenApiMismatch
+    || hasEndpointCatalogContractVersionMismatch
     || openApiSpecExtensionStatsDrift?.hasDrift,
   );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
@@ -2164,6 +2214,10 @@ export function SpreadsheetApp() {
         openapi_fingerprint: wizardEndpointCatalogOpenApiFingerprint,
         fingerprint_mismatch_with_agent_schema: hasEndpointCatalogFingerprintMismatch,
         fingerprint_mismatch_with_openapi_spec: hasWizardFingerprintVsOpenApiMismatch,
+        contract_version: wizardEndpointCatalogContractVersion,
+        contract_version_mismatch_with_agent_schema: hasEndpointCatalogContractVersionMismatch,
+        contract_version_mismatch_with_openapi_spec: hasWizardContractVersionVsOpenApiMismatch,
+        openapi_spec_contract_version: openApiSpecContractVersion,
         openapi_spec_fingerprint: openApiSpecFingerprint,
         openapi_spec_stats: openApiSpecExtensionStats,
         openapi_spec_stats_drift: openApiSpecExtensionStatsDrift,
@@ -2226,12 +2280,16 @@ export function SpreadsheetApp() {
       hasWizardSchemaDiagnosticsInSync,
       hasWizardEndpointCatalogDrift,
       hasWizardSchemaEndpointMetadata,
+      hasEndpointCatalogContractVersionMismatch,
       hasEndpointCatalogFingerprintMismatch,
+      hasWizardContractVersionVsOpenApiMismatch,
       hasWizardFingerprintVsOpenApiMismatch,
+      openApiSpecContractVersion,
       openApiSpecExtensionStats,
       openApiSpecExtensionStatsDrift,
       openApiSpecFingerprint,
       wizardOpenApiStatsDrift,
+      wizardEndpointCatalogContractVersion,
       wizardEndpointCatalogOpenApiFingerprint,
       wizardSchemaEndpointCoverage,
       wizardSchemaEndpointDiagnostics,
@@ -2643,6 +2701,8 @@ export function SpreadsheetApp() {
   const hasAgentEndpointCatalogDrift = Boolean(
     hasAgentSchemaEndpointDrift
     || hasAgentFingerprintVsOpenApiMismatch
+    || hasAgentContractVersionVsOpenApiMismatch
+    || hasEndpointCatalogContractVersionMismatch
     || openApiSpecExtensionStatsDrift?.hasDrift,
   );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
@@ -2681,6 +2741,10 @@ export function SpreadsheetApp() {
         openapi_fingerprint: agentEndpointCatalogOpenApiFingerprint,
         fingerprint_mismatch_with_wizard_schema: hasEndpointCatalogFingerprintMismatch,
         fingerprint_mismatch_with_openapi_spec: hasAgentFingerprintVsOpenApiMismatch,
+        contract_version: agentEndpointCatalogContractVersion,
+        contract_version_mismatch_with_wizard_schema: hasEndpointCatalogContractVersionMismatch,
+        contract_version_mismatch_with_openapi_spec: hasAgentContractVersionVsOpenApiMismatch,
+        openapi_spec_contract_version: openApiSpecContractVersion,
         openapi_spec_fingerprint: openApiSpecFingerprint,
         openapi_spec_stats: openApiSpecExtensionStats,
         openapi_spec_stats_drift: openApiSpecExtensionStatsDrift,
@@ -2743,11 +2807,15 @@ export function SpreadsheetApp() {
       hasAgentSchemaDiagnosticsInSync,
       hasAgentEndpointCatalogDrift,
       hasAgentSchemaEndpointMetadata,
+      agentEndpointCatalogContractVersion,
       agentEndpointCatalogOpenApiFingerprint,
       agentOpenApiStatsDrift,
       agentSchemaEndpointOpenApiStats,
+      hasAgentContractVersionVsOpenApiMismatch,
       hasAgentFingerprintVsOpenApiMismatch,
+      hasEndpointCatalogContractVersionMismatch,
       hasEndpointCatalogFingerprintMismatch,
+      openApiSpecContractVersion,
       openApiSpecExtensionStats,
       openApiSpecExtensionStatsDrift,
       openApiSpecFingerprint,
@@ -5072,6 +5140,18 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_openapi_fingerprint metadata missing.
                   </p>
                 )}
+                {wizardEndpointCatalogContractVersion ? (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    contract version:{" "}
+                    <span className="font-mono text-slate-300">
+                      {wizardEndpointCatalogContractVersion}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-amber-300">
+                    schema endpoint_catalog_contract_version metadata missing.
+                  </p>
+                )}
                 {hasEndpointCatalogFingerprintMismatch ? (
                   <p className="mt-1 text-[11px] text-rose-300">
                     openapi fingerprint mismatch between wizard and agent schemas.
@@ -5090,6 +5170,28 @@ export function SpreadsheetApp() {
                     ? (
                       <p className="mt-1 text-[11px] text-emerald-300">
                         openapi fingerprint matches /v1/openapi extension metadata.
+                      </p>
+                    )
+                    : null
+                )}
+                {hasEndpointCatalogContractVersionMismatch ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    endpoint catalog contract version mismatch between wizard and agent schemas.
+                  </p>
+                ) : wizardEndpointCatalogContractVersion ? (
+                  <p className="mt-1 text-[11px] text-emerald-300">
+                    endpoint catalog contract version matches agent schema.
+                  </p>
+                ) : null}
+                {hasWizardContractVersionVsOpenApiMismatch ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    endpoint catalog contract version mismatch between wizard schema and /v1/openapi extension.
+                  </p>
+                ) : (
+                  wizardEndpointCatalogContractVersion && openApiSpecContractVersion
+                    ? (
+                      <p className="mt-1 text-[11px] text-emerald-300">
+                        endpoint catalog contract version matches /v1/openapi extension.
                       </p>
                     )
                     : null
@@ -6487,6 +6589,18 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_openapi_fingerprint metadata missing.
                   </p>
                 )}
+                {agentEndpointCatalogContractVersion ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    contract version:{" "}
+                    <span className="font-mono text-slate-300">
+                      {agentEndpointCatalogContractVersion}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-amber-300">
+                    schema endpoint_catalog_contract_version metadata missing.
+                  </p>
+                )}
                 {hasEndpointCatalogFingerprintMismatch ? (
                   <p className="mt-1 text-xs text-rose-300">
                     openapi fingerprint mismatch between wizard and agent schemas.
@@ -6505,6 +6619,28 @@ export function SpreadsheetApp() {
                     ? (
                       <p className="mt-1 text-xs text-emerald-300">
                         openapi fingerprint matches /v1/openapi extension metadata.
+                      </p>
+                    )
+                    : null
+                )}
+                {hasEndpointCatalogContractVersionMismatch ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    endpoint catalog contract version mismatch between wizard and agent schemas.
+                  </p>
+                ) : agentEndpointCatalogContractVersion ? (
+                  <p className="mt-1 text-xs text-emerald-300">
+                    endpoint catalog contract version matches wizard schema.
+                  </p>
+                ) : null}
+                {hasAgentContractVersionVsOpenApiMismatch ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    endpoint catalog contract version mismatch between agent schema and /v1/openapi extension.
+                  </p>
+                ) : (
+                  agentEndpointCatalogContractVersion && openApiSpecContractVersion
+                    ? (
+                      <p className="mt-1 text-xs text-emerald-300">
+                        endpoint catalog contract version matches /v1/openapi extension.
                       </p>
                     )
                     : null

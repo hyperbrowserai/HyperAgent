@@ -310,6 +310,7 @@ const FORMULA_UNSUPPORTED_BEHAVIOR_LIST: &[&str] = &[
 const FORMULA_FALLBACK_BEHAVIOR: &str =
     "unsupported formulas are preserved and reported by formula.recalculated payloads";
 const FORMULA_VALIDATION_ERROR_CODES: &[&str] = &["INVALID_FORMULA"];
+const ENDPOINT_CATALOG_CONTRACT_VERSION: &str = "2026-02-endpoint-catalog-v1";
 const AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION: &str =
     "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)";
 
@@ -1497,6 +1498,10 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
             json!(endpoint_openapi_fingerprint),
         );
         schema_object.insert("endpoint_catalog_openapi_stats".to_string(), endpoint_openapi_stats);
+        schema_object.insert(
+            "endpoint_catalog_contract_version".to_string(),
+            json!(ENDPOINT_CATALOG_CONTRACT_VERSION),
+        );
     }
     Json(schema)
 }
@@ -2394,6 +2399,10 @@ async fn get_agent_schema(
             json!(endpoint_openapi_fingerprint),
         );
         schema_object.insert("endpoint_catalog_openapi_stats".to_string(), endpoint_openapi_stats);
+        schema_object.insert(
+            "endpoint_catalog_contract_version".to_string(),
+            json!(ENDPOINT_CATALOG_CONTRACT_VERSION),
+        );
     }
     Ok(Json(schema))
 }
@@ -3503,6 +3512,10 @@ async fn openapi() -> Json<serde_json::Value> {
             json!(fingerprint),
         );
         spec_object.insert("x-endpoint-catalog-openapi-stats".to_string(), stats);
+        spec_object.insert(
+            "x-endpoint-catalog-contract-version".to_string(),
+            json!(ENDPOINT_CATALOG_CONTRACT_VERSION),
+        );
     }
     Json(spec)
 }
@@ -3536,7 +3549,7 @@ mod tests {
         AgentOpsCachePrefixesQuery, AgentOpsCacheStatsQuery,
         AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION, FORMULA_SUPPORTED_FUNCTION_LIST,
         FORMULA_UNSUPPORTED_BEHAVIOR_LIST, FORMULA_VALIDATION_ERROR_CODES,
-        MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
+        MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT, ENDPOINT_CATALOG_CONTRACT_VERSION,
     };
     use crate::{
         error::ApiError,
@@ -4478,6 +4491,37 @@ mod tests {
         assert!(
             operation_count > 0,
             "{schema_name} endpoint_catalog_openapi_stats.operation_count should be positive",
+        );
+    }
+
+    fn assert_endpoint_catalog_contract_version_is_consistent(
+        schema: &serde_json::Value,
+        schema_name: &str,
+        openapi_spec: &serde_json::Value,
+    ) {
+        let schema_version = schema
+            .get("endpoint_catalog_contract_version")
+            .and_then(serde_json::Value::as_str)
+            .expect("schema should expose endpoint_catalog_contract_version");
+        assert!(
+            !schema_version.trim().is_empty(),
+            "{schema_name} endpoint_catalog_contract_version should not be blank",
+        );
+        assert_eq!(
+            schema_version,
+            schema_version.trim(),
+            "{schema_name} endpoint_catalog_contract_version should be trimmed",
+        );
+        assert_eq!(
+            schema_version, ENDPOINT_CATALOG_CONTRACT_VERSION,
+            "{schema_name} endpoint_catalog_contract_version should match server constant",
+        );
+        assert_eq!(
+            openapi_spec
+                .get("x-endpoint-catalog-contract-version")
+                .and_then(serde_json::Value::as_str),
+            Some(schema_version),
+            "{schema_name} endpoint_catalog_contract_version should match openapi extension version",
         );
     }
 
@@ -9534,6 +9578,11 @@ mod tests {
             &openapi_spec,
         );
         assert_endpoint_openapi_stats_are_consistent(&schema, "agent schema", &openapi_spec);
+        assert_endpoint_catalog_contract_version_is_consistent(
+            &schema,
+            "agent schema",
+            &openapi_spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&schema, "agent schema");
         assert_eq!(
             schema
@@ -10442,6 +10491,11 @@ mod tests {
             &openapi_spec,
         );
         assert_endpoint_openapi_stats_are_consistent(&schema, "wizard schema", &openapi_spec);
+        assert_endpoint_catalog_contract_version_is_consistent(
+            &schema,
+            "wizard schema",
+            &openapi_spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&schema, "wizard schema");
         assert_eq!(
             schema
@@ -11054,6 +11108,7 @@ mod tests {
             "agent_ops_idempotency_cache_max_entries",
             "endpoint_catalog_openapi_fingerprint",
             "endpoint_catalog_openapi_stats",
+            "endpoint_catalog_contract_version",
         ];
 
         for key in parity_keys {
@@ -11519,6 +11574,12 @@ mod tests {
             Some(&endpoint_openapi_stats(&spec)),
             "openapi endpoint catalog stats extension should match recomputed stats",
         );
+        assert_eq!(
+            spec.get("x-endpoint-catalog-contract-version")
+                .and_then(serde_json::Value::as_str),
+            Some(ENDPOINT_CATALOG_CONTRACT_VERSION),
+            "openapi spec should expose endpoint catalog contract version extension",
+        );
     }
 
     #[tokio::test]
@@ -11586,6 +11647,11 @@ mod tests {
             &spec,
         );
         assert_endpoint_openapi_stats_are_consistent(&agent_schema, "agent schema", &spec);
+        assert_endpoint_catalog_contract_version_is_consistent(
+            &agent_schema,
+            "agent schema",
+            &spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&agent_schema, "agent schema");
     }
 
@@ -11645,6 +11711,11 @@ mod tests {
             &spec,
         );
         assert_endpoint_openapi_stats_are_consistent(&wizard_schema, "wizard schema", &spec);
+        assert_endpoint_catalog_contract_version_is_consistent(
+            &wizard_schema,
+            "wizard schema",
+            &spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&wizard_schema, "wizard schema");
     }
 
@@ -11720,6 +11791,16 @@ mod tests {
             "wizard schema",
             &openapi_spec,
         );
+        assert_endpoint_catalog_contract_version_is_consistent(
+            &agent_schema,
+            "agent schema",
+            &openapi_spec,
+        );
+        assert_endpoint_catalog_contract_version_is_consistent(
+            &wizard_schema,
+            "wizard schema",
+            &openapi_spec,
+        );
         assert_eq!(
             agent_schema.get("endpoint_catalog_openapi_fingerprint"),
             wizard_schema.get("endpoint_catalog_openapi_fingerprint"),
@@ -11729,6 +11810,11 @@ mod tests {
             agent_schema.get("endpoint_catalog_openapi_stats"),
             wizard_schema.get("endpoint_catalog_openapi_stats"),
             "wizard and agent schemas should advertise identical openapi stats metadata",
+        );
+        assert_eq!(
+            agent_schema.get("endpoint_catalog_contract_version"),
+            wizard_schema.get("endpoint_catalog_contract_version"),
+            "wizard and agent schemas should advertise identical endpoint catalog contract version",
         );
 
         let agent_method_map = agent_endpoint_http_methods
