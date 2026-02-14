@@ -2470,11 +2470,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     // Element not found after all retries - handle error case
     if (this.debug) {
       console.error(
-        `[aiAction] No elements found for instruction: "${instruction}" after ${maxRetries} attempts`
+        `[perform] No elements found for instruction: "${instruction}" after ${maxRetries} attempts`
       );
-      console.error(`[aiAction] Current URL: ${this.safeGetPageUrl(page)}`);
+      console.error(`[perform] Current URL: ${this.safeGetPageUrl(page)}`);
       console.error(
-        `[aiAction] Total elements in final a11y tree: ${result.domState.elements.size}`
+        `[perform] Total elements in final a11y tree: ${result.domState.elements.size}`
       );
 
       // Write debug data to files before throwing error
@@ -2576,7 +2576,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       }
     } catch (debugError) {
       console.error(
-        `[aiAction] Failed to write debug data: ${this.formatHelperDiagnostic(
+        `[perform] Failed to write debug data: ${this.formatHelperDiagnostic(
           debugError
         )}`
       );
@@ -2676,7 +2676,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const actionStart = performance.now();
     const startTime = new Date().toISOString();
     if (this.debug) {
-      console.log(`[aiAction] Instruction: ${normalizedInstruction}`);
+      console.log(`[perform] Instruction: ${normalizedInstruction}`);
     }
 
     const getPage = (): Page => this.resolveActionPageInput(pageOrGetter);
@@ -2734,9 +2734,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       );
 
       if (this.debug) {
-        console.log(`[aiAction] Found element: ${element.elementId}`);
-        console.log(`[aiAction] Method: ${element.method}`);
-        console.log(`[aiAction] Arguments:`, element.arguments);
+        console.log(`[perform] Found element: ${element.elementId}`);
+        console.log(`[perform] Method: ${element.method}`);
+        console.log(`[perform] Arguments:`, element.arguments);
       }
 
       if (!element.method) {

@@ -251,7 +251,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     }
   });
 
-  it("formats non-Error aiAction debug writer failures", async () => {
+  it("formats non-Error perform debug writer failures", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
       debug: true,
@@ -272,7 +272,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
 
       expect(result.status).toBe(TaskStatus.COMPLETED);
       expect(errorSpy).toHaveBeenCalledWith(
-        '[aiAction] Failed to write debug data: {"reason":"debug writer crashed"}'
+        '[perform] Failed to write debug data: {"reason":"debug writer crashed"}'
       );
     } finally {
       errorSpy.mockRestore();
@@ -280,7 +280,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     }
   });
 
-  it("truncates oversized aiAction debug writer diagnostics", async () => {
+  it("truncates oversized perform debug writer diagnostics", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
       debug: true,

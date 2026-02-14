@@ -103,7 +103,7 @@ function createFallbackDomState(message: string): A11yDOMState {
  * 4. Retries on failure (with DOM refresh on each attempt)
  *
  * Used by:
- * - findElementWithRetry (aiAction)
+ * - findElementWithRetry (page.perform / deprecated page.aiAction alias)
  * - actElement action (executeTask agent)
  *
  * @param instruction Natural language instruction (e.g., "click the Login button")
@@ -128,7 +128,7 @@ export async function findElementWithInstruction(
   let lastLlmResponse: { rawText: string; parsed: unknown } | undefined;
   let lastError: unknown;
 
-  // Retry loop with DOM refresh (matches aiAction's findElementWithRetry pattern)
+  // Retry loop with DOM refresh (matches executeSingleAction's findElementWithRetry pattern)
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (debug) {
       if (attempt === 0) {
@@ -213,7 +213,7 @@ export async function findElementWithInstruction(
     if (attempt < maxRetries - 1) {
       if (debug) {
         console.log(
-          `[aiAction] Element not found, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})...`
+          `[perform] Element not found, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})...`
         );
       }
       await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
