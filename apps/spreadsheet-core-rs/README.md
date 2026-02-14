@@ -312,7 +312,7 @@ Performance baseline probe (manual, ignored by default):
 cargo test store::tests::benchmark_large_range_recalculation -- --ignored --nocapture
 ```
 
-This emits a `large_range_recalc_benchmark` JSON line with row count and elapsed milliseconds.
+This emits a `large_range_recalc_benchmark` JSON line with row count plus `upsert_ms`, `recalc_ms`, `total_ms`, and `updated_cells`.
 
 XLSX compatibility regression coverage includes:
 - supported formula roundtrip fixtures (engineering + financial families),

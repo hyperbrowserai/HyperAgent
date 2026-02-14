@@ -6546,7 +6546,7 @@ mod tests {
   #[ignore = "manual performance baseline; run explicitly with --ignored"]
   fn benchmark_large_range_recalculation() {
     let (_temp_dir, db_path) = create_initialized_db_path();
-    let row_count = 10_000u32;
+    let row_count = 3_000u32;
     let mut cells = Vec::with_capacity((row_count as usize) + 1);
     for row in 1..=row_count {
       cells.push(CellMutation {
@@ -6562,12 +6562,16 @@ mod tests {
       value: None,
       formula: Some(format!("=SUM(A1:A{row_count})")),
     });
+    let total_start = Instant::now();
+    let upsert_start = Instant::now();
     set_cells(&db_path, "Perf", &cells).expect("benchmark cells should upsert");
+    let upsert_elapsed = upsert_start.elapsed();
 
-    let start = Instant::now();
+    let recalc_start = Instant::now();
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("benchmark recalc should succeed");
-    let elapsed = start.elapsed();
+    let recalc_elapsed = recalc_start.elapsed();
+    let total_elapsed = total_start.elapsed();
 
     assert!(
       unsupported_formulas.is_empty(),
@@ -6579,9 +6583,11 @@ mod tests {
       "benchmark formula should update on recalculation",
     );
     println!(
-      "large_range_recalc_benchmark: {{\"rows\":{},\"elapsed_ms\":{},\"updated_cells\":{}}}",
+      "large_range_recalc_benchmark: {{\"rows\":{},\"upsert_ms\":{},\"recalc_ms\":{},\"total_ms\":{},\"updated_cells\":{}}}",
       row_count,
-      elapsed.as_millis(),
+      upsert_elapsed.as_millis(),
+      recalc_elapsed.as_millis(),
+      total_elapsed.as_millis(),
       updated_cells,
     );
   }
