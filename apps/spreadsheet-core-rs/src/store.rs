@@ -276,6 +276,10 @@ fn evaluate_formula(
       "MAX" => "MAX",
       "COUNT" => "COUNT",
       "MEDIAN" => "MEDIAN",
+      "STDEV.P" => "STDDEV_POP",
+      "STDEV.S" => "STDDEV_SAMP",
+      "VAR.P" => "VAR_POP",
+      "VAR.S" => "VAR_SAMP",
       "SUMSQ" => "SUM",
       _ => return Ok(None),
     };
@@ -3563,12 +3567,36 @@ mod tests {
         value: None,
         formula: Some("=RANK(A2,A1:A2,1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 140,
+        value: None,
+        formula: Some("=STDEV.P(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 141,
+        value: None,
+        formula: Some("=STDEV.S(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 142,
+        value: None,
+        formula: Some("=VAR.P(A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 143,
+        value: None,
+        formula: Some("=VAR.S(A1:A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 137);
+    assert_eq!(updated_cells, 141);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3582,7 +3610,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 139,
+        end_col: 143,
       },
     )
     .expect("cells should be fetched");
@@ -3796,6 +3824,40 @@ mod tests {
     );
     assert_eq!(by_position(1, 138).evaluated_value.as_deref(), Some("1"));
     assert_eq!(by_position(1, 139).evaluated_value.as_deref(), Some("1"));
+    let stdev_p = by_position(1, 140)
+      .evaluated_value
+      .as_deref()
+      .expect("stdev.p should evaluate")
+      .parse::<f64>()
+      .expect("stdev.p should be numeric");
+    assert!(
+      (stdev_p - 20.0).abs() < 1e-9,
+      "stdev.p should be 20.0, got {stdev_p}",
+    );
+    let stdev_s = by_position(1, 141)
+      .evaluated_value
+      .as_deref()
+      .expect("stdev.s should evaluate")
+      .parse::<f64>()
+      .expect("stdev.s should be numeric");
+    assert!(
+      (stdev_s - 28.284_271_247_461_902).abs() < 1e-9,
+      "stdev.s should be sqrt(800), got {stdev_s}",
+    );
+    let var_p = by_position(1, 142)
+      .evaluated_value
+      .as_deref()
+      .expect("var.p should evaluate")
+      .parse::<f64>()
+      .expect("var.p should be numeric");
+    assert!((var_p - 400.0).abs() < 1e-9, "var.p should be 400, got {var_p}");
+    let var_s = by_position(1, 143)
+      .evaluated_value
+      .as_deref()
+      .expect("var.s should evaluate")
+      .parse::<f64>()
+      .expect("var.s should be numeric");
+    assert!((var_s - 800.0).abs() < 1e-9, "var.s should be 800, got {var_s}");
   }
 
   #[test]
