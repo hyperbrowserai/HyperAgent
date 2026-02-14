@@ -1142,6 +1142,16 @@ pub fn parse_days360_formula(
   Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
 }
 
+pub fn parse_yearfrac_formula(
+  formula: &str,
+) -> Option<(String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "YEARFRAC" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
+}
+
 pub fn parse_datevalue_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "DATEVALUE" && args.len() == 1 {
@@ -1947,7 +1957,7 @@ mod tests {
     parse_abs_formula, parse_concat_formula, parse_textjoin_formula,
     parse_date_formula, parse_edate_formula,
     parse_eomonth_formula, parse_days_formula, parse_days360_formula,
-    parse_datevalue_formula,
+    parse_yearfrac_formula, parse_datevalue_formula,
     parse_timevalue_formula, parse_time_formula, parse_datedif_formula,
     parse_networkdays_formula,
     parse_workday_formula, parse_networkdays_intl_formula, parse_workday_intl_formula,
@@ -2456,6 +2466,11 @@ mod tests {
     assert_eq!(days360_args.0, "A1");
     assert_eq!(days360_args.1, "B1");
     assert_eq!(days360_args.2.as_deref(), Some("TRUE"));
+    let yearfrac_args =
+      parse_yearfrac_formula("=YEARFRAC(A1,B1,1)").expect("yearfrac should parse");
+    assert_eq!(yearfrac_args.0, "A1");
+    assert_eq!(yearfrac_args.1, "B1");
+    assert_eq!(yearfrac_args.2.as_deref(), Some("1"));
     assert_eq!(
       parse_datevalue_formula(r#"=DATEVALUE("2024-02-29")"#).as_deref(),
       Some(r#""2024-02-29""#),

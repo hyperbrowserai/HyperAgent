@@ -21,7 +21,8 @@ use crate::{
     parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
-    parse_days_formula, parse_days360_formula, parse_datevalue_formula, parse_timevalue_formula,
+    parse_days_formula, parse_days360_formula, parse_yearfrac_formula,
+    parse_datevalue_formula, parse_timevalue_formula,
     parse_time_formula, parse_datedif_formula, parse_networkdays_formula,
     parse_workday_formula, parse_networkdays_intl_formula, parse_workday_intl_formula,
     parse_day_formula,
@@ -2436,6 +2437,27 @@ fn evaluate_formula(
     return Ok(Some(days360.to_string()));
   }
 
+  if let Some((start_date_arg, end_date_arg, basis_arg)) = parse_yearfrac_formula(formula) {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let end_date = parse_date_operand(connection, sheet, &end_date_arg)?;
+    let (Some(start_value), Some(end_value)) = (start_date, end_date) else {
+      return Ok(None);
+    };
+    let basis = match basis_arg {
+      Some(raw_basis) => parse_required_integer(connection, sheet, &raw_basis)?,
+      None => 0,
+    };
+    let fraction = match basis {
+      0 => days360_diff(start_value, end_value, false) as f64 / 360.0,
+      1 => actual_actual_yearfrac(start_value, end_value),
+      2 => end_value.signed_duration_since(start_value).num_days() as f64 / 360.0,
+      3 => end_value.signed_duration_since(start_value).num_days() as f64 / 365.0,
+      4 => days360_diff(start_value, end_value, true) as f64 / 360.0,
+      _ => return Ok(None),
+    };
+    return Ok(Some(fraction.to_string()));
+  }
+
   if let Some(date_value_arg) = parse_datevalue_formula(formula) {
     let parsed_date = parse_date_operand(connection, sheet, &date_value_arg)?;
     let Some(date_value) = parsed_date else {
@@ -4044,6 +4066,35 @@ fn is_last_day_of_february(date: NaiveDate) -> bool {
     return false;
   };
   next_day.month() != 2
+}
+
+fn actual_actual_yearfrac(start: NaiveDate, end: NaiveDate) -> f64 {
+  if start == end {
+    return 0.0;
+  }
+  let (from, to, sign) = if start <= end {
+    (start, end, 1.0)
+  } else {
+    (end, start, -1.0)
+  };
+
+  let mut cursor = from;
+  let mut fraction = 0.0;
+  while cursor < to {
+    let next_year_start = NaiveDate::from_ymd_opt(cursor.year() + 1, 1, 1)
+      .unwrap_or(to);
+    let segment_end = next_year_start.min(to);
+    let days_in_segment = segment_end.signed_duration_since(cursor).num_days() as f64;
+    let year_days = if is_leap_year(cursor.year()) { 366.0 } else { 365.0 };
+    fraction += days_in_segment / year_days;
+    cursor = segment_end;
+  }
+
+  fraction * sign
+}
+
+fn is_leap_year(year: i32) -> bool {
+  (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }
 
 fn excel_serial_origin() -> Option<NaiveDate> {
@@ -6273,12 +6324,24 @@ mod tests {
         value: None,
         formula: Some(r#"=IFNA(NA(),"fallback-na")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 246,
+        value: None,
+        formula: Some(r#"=YEARFRAC("2024-01-01","2024-07-01",1)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 247,
+        value: None,
+        formula: Some(r#"=YEARFRAC("2024-01-31","2024-03-31")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 243);
+    assert_eq!(updated_cells, 245);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6292,7 +6355,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 245,
+        end_col: 247,
       },
     )
     .expect("cells should be fetched");
@@ -7239,6 +7302,26 @@ mod tests {
       by_position(1, 245).evaluated_value.as_deref(),
       Some("fallback-na"),
       "ifna should return fallback when lookup result is missing",
+    );
+    let yearfrac_actual = by_position(1, 246)
+      .evaluated_value
+      .as_deref()
+      .expect("yearfrac actual should evaluate")
+      .parse::<f64>()
+      .expect("yearfrac actual should be numeric");
+    assert!(
+      (yearfrac_actual - 0.497_267_759_562_841_5).abs() < 1e-12,
+      "yearfrac with basis 1 should use actual/actual, got {yearfrac_actual}",
+    );
+    let yearfrac_30_360 = by_position(1, 247)
+      .evaluated_value
+      .as_deref()
+      .expect("yearfrac 30/360 should evaluate")
+      .parse::<f64>()
+      .expect("yearfrac 30/360 should be numeric");
+    assert!(
+      (yearfrac_30_360 - 0.166_666_666_666_666_66).abs() < 1e-12,
+      "yearfrac default basis should use US 30/360, got {yearfrac_30_360}",
     );
   }
 
@@ -8845,6 +8928,25 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=DAYS360("bad","2024-03-31")"#.to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_yearfrac_basis_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=YEARFRAC("2024-01-01","2024-07-01",9)"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=YEARFRAC("2024-01-01","2024-07-01",9)"#.to_string()],
     );
   }
 
