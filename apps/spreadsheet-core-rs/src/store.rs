@@ -9,6 +9,7 @@ use crate::{
     parse_columns_formula,
     parse_large_formula, parse_small_formula, parse_rank_formula,
     parse_percentile_inc_formula, parse_quartile_inc_formula,
+    parse_percentile_exc_formula, parse_quartile_exc_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -575,6 +576,34 @@ fn evaluate_formula(
     }
     values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
     let interpolated = interpolate_percentile_from_sorted_values(&values, percentile);
+    return Ok(interpolated.map(|value| value.to_string()));
+  }
+
+  if let Some((start, end, percentile_arg)) = parse_percentile_exc_formula(formula) {
+    let percentile = parse_required_float(connection, sheet, &percentile_arg)?;
+    let mut values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.len() < 2 {
+      return Ok(None);
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let interpolated = interpolate_percentile_exc_from_sorted_values(&values, percentile);
+    return Ok(interpolated.map(|value| value.to_string()));
+  }
+
+  if let Some((start, end, quartile_arg)) = parse_quartile_exc_formula(formula) {
+    let quartile = parse_required_integer(connection, sheet, &quartile_arg)?;
+    let percentile = match quartile {
+      1 => 0.25,
+      2 => 0.5,
+      3 => 0.75,
+      _ => return Ok(None),
+    };
+    let mut values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.len() < 2 {
+      return Ok(None);
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let interpolated = interpolate_percentile_exc_from_sorted_values(&values, percentile);
     return Ok(interpolated.map(|value| value.to_string()));
   }
 
@@ -1780,6 +1809,38 @@ fn interpolate_percentile_from_sorted_values(
   if lower_index >= sorted_values.len() || upper_index >= sorted_values.len() {
     return None;
   }
+  if lower_index == upper_index {
+    return Some(sorted_values[lower_index]);
+  }
+  let fraction = position - lower_index as f64;
+  Some(
+    sorted_values[lower_index]
+      + (sorted_values[upper_index] - sorted_values[lower_index]) * fraction,
+  )
+}
+
+fn interpolate_percentile_exc_from_sorted_values(
+  sorted_values: &[f64],
+  percentile: f64,
+) -> Option<f64> {
+  if sorted_values.len() < 2 {
+    return None;
+  }
+
+  let count = sorted_values.len() as f64;
+  let min_percentile = 1.0 / (count + 1.0);
+  let max_percentile = count / (count + 1.0);
+  if percentile < min_percentile || percentile > max_percentile {
+    return None;
+  }
+
+  let position = percentile * (count + 1.0) - 1.0;
+  let lower_index = position.floor() as usize;
+  let upper_index = position.ceil() as usize;
+  if lower_index >= sorted_values.len() || upper_index >= sorted_values.len() {
+    return None;
+  }
+
   if lower_index == upper_index {
     return Some(sorted_values[lower_index]);
   }
@@ -3787,12 +3848,24 @@ mod tests {
         value: None,
         formula: Some("=PERCENTRANK.EXC(A1:A2,120)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 148,
+        value: None,
+        formula: Some("=PERCENTILE.EXC(A1:A2,0.5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 149,
+        value: None,
+        formula: Some("=QUARTILE.EXC(A1:A2,2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 145);
+    assert_eq!(updated_cells, 147);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3806,7 +3879,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 147,
+        end_col: 149,
       },
     )
     .expect("cells should be fetched");
@@ -4093,6 +4166,26 @@ mod tests {
     assert!(
       (percentrank_exc - (2.0 / 3.0)).abs() < 1e-9,
       "percentrank.exc should be 2/3, got {percentrank_exc}",
+    );
+    let percentile_exc = by_position(1, 148)
+      .evaluated_value
+      .as_deref()
+      .expect("percentile.exc should evaluate")
+      .parse::<f64>()
+      .expect("percentile.exc should be numeric");
+    assert!(
+      (percentile_exc - 100.0).abs() < 1e-9,
+      "percentile.exc should be 100.0, got {percentile_exc}",
+    );
+    let quartile_exc = by_position(1, 149)
+      .evaluated_value
+      .as_deref()
+      .expect("quartile.exc should evaluate")
+      .parse::<f64>()
+      .expect("quartile.exc should be numeric");
+    assert!(
+      (quartile_exc - 100.0).abs() < 1e-9,
+      "quartile.exc should be 100.0, got {quartile_exc}",
     );
   }
 
@@ -4403,6 +4496,18 @@ mod tests {
         value: None,
         formula: Some("=QUARTILE.INC(A1:A2,5)".to_string()),
       },
+      CellMutation {
+        row: 3,
+        col: 2,
+        value: None,
+        formula: Some("=PERCENTILE.EXC(A1:A2,0.9)".to_string()),
+      },
+      CellMutation {
+        row: 4,
+        col: 2,
+        value: None,
+        formula: Some("=QUARTILE.EXC(A1:A2,4)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
@@ -4413,6 +4518,8 @@ mod tests {
       vec![
         "=PERCENTILE.INC(A1:A2,1.5)".to_string(),
         "=QUARTILE.INC(A1:A2,5)".to_string(),
+        "=PERCENTILE.EXC(A1:A2,0.9)".to_string(),
+        "=QUARTILE.EXC(A1:A2,4)".to_string(),
       ],
     );
   }
