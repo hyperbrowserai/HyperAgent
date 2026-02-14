@@ -3493,6 +3493,91 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn should_roundtrip_every_committed_fixture_corpus_via_api_helpers() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+
+    for (fixture_index, fixture_file_name) in workbook_import_fixture_file_names()
+      .iter()
+      .enumerate()
+    {
+      let source_workbook = state
+        .create_workbook(Some(format!(
+          "api-corpus-roundtrip-source-{fixture_index}-{fixture_file_name}"
+        )))
+        .await
+        .expect("source workbook should be created");
+      let source_import_result = import_bytes_into_workbook(
+        &state,
+        source_workbook.id,
+        &workbook_fixture_bytes(fixture_file_name),
+        "api-corpus-roundtrip-source-import",
+      )
+      .await
+      .unwrap_or_else(|error| {
+        panic!(
+          "fixture {fixture_file_name} should import into source workbook: {error:?}"
+        )
+      });
+      assert!(
+        source_import_result.sheets_imported >= 1,
+        "fixture {fixture_file_name} source import should include at least one sheet",
+      );
+
+      let (exported_bytes, _export_response, _export_report_json) =
+        build_export_artifacts(&state, source_workbook.id)
+          .await
+          .unwrap_or_else(|error| {
+            panic!(
+              "fixture {fixture_file_name} should export from source workbook: {error:?}"
+            )
+          });
+      assert!(
+        exported_bytes.len() > 1_000,
+        "fixture {fixture_file_name} export bytes should be non-trivial",
+      );
+
+      let replay_workbook = state
+        .create_workbook(Some(format!(
+          "api-corpus-roundtrip-replay-{fixture_index}-{fixture_file_name}"
+        )))
+        .await
+        .expect("replay workbook should be created");
+      let replay_import_result = import_bytes_into_workbook(
+        &state,
+        replay_workbook.id,
+        exported_bytes.as_slice(),
+        "api-corpus-roundtrip-replay-import",
+      )
+      .await
+      .unwrap_or_else(|error| {
+        panic!(
+          "fixture {fixture_file_name} exported bytes should import into replay workbook: {error:?}"
+        )
+      });
+      assert!(
+        replay_import_result.sheets_imported >= 1,
+        "fixture {fixture_file_name} replay import should include at least one sheet",
+      );
+      assert!(
+        replay_import_result.cells_imported >= 1,
+        "fixture {fixture_file_name} replay import should include at least one cell",
+      );
+      assert!(
+        replay_import_result.formula_cells_imported <= replay_import_result.cells_imported,
+        "fixture {fixture_file_name} replay formula cells should not exceed total cells",
+      );
+      assert_eq!(
+        replay_import_result.formula_cells_imported,
+        replay_import_result.formula_cells_with_cached_values
+          + replay_import_result.formula_cells_without_cached_values,
+        "fixture {fixture_file_name} replay cached/non-cached counts should add up",
+      );
+    }
+  }
+
+  #[tokio::test]
   async fn should_report_normalized_formula_metrics_on_import() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state =

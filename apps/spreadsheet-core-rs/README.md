@@ -320,6 +320,7 @@ Use `cargo test xlsx::tests::should_import_every_committed_fixture_corpus_workbo
 Use `cargo test xlsx::tests::should_roundtrip_every_committed_fixture_corpus_workbook -- --nocapture` for corpus-wide import/export/re-import smoke coverage.
 Use `cargo test api::tests::should_import_every_committed_fixture_corpus_via_api_helper -- --nocapture` for corpus-wide API import + event telemetry smoke coverage.
 Use `cargo test api::tests::should_export_every_committed_fixture_corpus_after_api_import -- --nocapture` for corpus-wide API export header/body/event smoke coverage.
+Use `cargo test api::tests::should_roundtrip_every_committed_fixture_corpus_via_api_helpers -- --nocapture` for corpus-wide API import/export/re-import smoke coverage.
 
 Fixture corpus inventory:
 
