@@ -5213,6 +5213,23 @@ mod tests {
     );
     assert_eq!(
       schema
+        .get("workbook_import_event_shape")
+        .and_then(|value| value.get("payload"))
+        .and_then(|value| value.get("formula_cells_normalized"))
+        .and_then(serde_json::Value::as_str),
+      Some("formula cells normalized during compatibility import processing"),
+    );
+    assert_eq!(
+      schema
+        .get("workbook_event_shapes")
+        .and_then(|value| value.get("workbook.imported"))
+        .and_then(|value| value.get("payload"))
+        .and_then(|value| value.get("formula_cells_normalized"))
+        .and_then(serde_json::Value::as_str),
+      Some("formula cells normalized during compatibility import processing"),
+    );
+    assert_eq!(
+      schema
         .get("workbook_export_response_headers_shape")
         .and_then(|value| value.get("x-export-meta"))
         .and_then(serde_json::Value::as_str),
