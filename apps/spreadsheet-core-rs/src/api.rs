@@ -3592,6 +3592,15 @@ mod tests {
           .any(|warning| warning.contains("not imported")),
         "fixture {fixture_file_name} replay import should include baseline compatibility warning",
       );
+      if replay_import_result.formula_cells_normalized > 0 {
+        assert!(
+          replay_import_result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("formula(s) were normalized")),
+          "fixture {fixture_file_name} replay import should include normalization warning when formulas are normalized",
+        );
+      }
       assert!(
         replay_import_result.formula_cells_normalized
           <= source_import_result.formula_cells_imported,
@@ -3635,6 +3644,28 @@ mod tests {
           .and_then(serde_json::Value::as_u64),
         Some(replay_import_result.formula_cells_normalized as u64),
       );
+      let replay_event_warning_messages = replay_event
+        .payload
+        .get("warnings")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .collect::<Vec<_>>();
+      assert!(
+        replay_event_warning_messages
+          .iter()
+          .any(|warning| warning.contains("not imported")),
+        "fixture {fixture_file_name} replay event should include baseline compatibility warning",
+      );
+      if replay_import_result.formula_cells_normalized > 0 {
+        assert!(
+          replay_event_warning_messages
+            .iter()
+            .any(|warning| warning.contains("formula(s) were normalized")),
+          "fixture {fixture_file_name} replay event should include normalization warning when formulas are normalized",
+        );
+      }
     }
   }
 
