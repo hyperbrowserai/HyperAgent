@@ -2175,6 +2175,56 @@ describe("HyperAgent constructor and task controls", () => {
     expect(internalAgent.executeSingleAction).toHaveBeenCalledTimes(2);
   });
 
+  it("warns once when deprecated hyperPage.aiAction alias is used", async () => {
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => ({
+        on: jest.fn(),
+        off: jest.fn(),
+        pages: () => [page],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+      executeSingleAction: jest.Mock;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+    internalAgent.executeSingleAction = jest.fn().mockResolvedValue({
+      taskId: "task-id",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const [hyperPage] = await agent.getPages();
+      await hyperPage.aiAction("click submit", {
+        maxContextSwitchRetries: 1,
+      });
+      await hyperPage.aiAction("click continue", {
+        maxContextSwitchRetries: 1,
+      });
+
+      expect(internalAgent.executeSingleAction).toHaveBeenCalledTimes(2);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("page.aiAction() is deprecated")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("hyperPage.extract rejects blank task descriptions when provided", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({

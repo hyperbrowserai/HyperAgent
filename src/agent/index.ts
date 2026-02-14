@@ -94,6 +94,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private static readonly MAX_ACTION_CACHE_ENTRIES = 200;
   private static readonly DEFAULT_ACTION_CACHE_CREATED_AT =
     new Date(0).toISOString();
+  private static readonly AIACTION_DEPRECATION_MESSAGE =
+    "[HyperPage] page.aiAction() is deprecated; use page.perform() instead.";
 
   private llm: HyperAgentLLM;
   private tasks: Record<string, TaskState> = {};
@@ -113,6 +115,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private mcpActionTypesByServer: Map<string, Set<string>> = new Map();
   private scopeListenerCleanupByPage: WeakMap<Page, () => void> = new WeakMap();
   private lifecycleGeneration = 0;
+  private hasWarnedAiActionDeprecation = false;
 
   public browser: Browser | null = null;
   public context: BrowserContext | null = null;
@@ -173,6 +176,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   private formatMCPDiagnostic(value: unknown): string {
     return this.formatHelperDiagnostic(value);
+  }
+
+  private warnAiActionDeprecation(): void {
+    if (this.hasWarnedAiActionDeprecation) {
+      return;
+    }
+    this.hasWarnedAiActionDeprecation = true;
+    try {
+      console.warn(HyperAgent.AIACTION_DEPRECATION_MESSAGE);
+    } catch {
+      // no-op
+    }
   }
 
   private readTaskStatus(
@@ -3625,8 +3640,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     hyperPage.perform = (instruction: string, params?: PerformTaskParams) =>
       executeSingleActionWithRetry(instruction, params);
 
-    hyperPage.aiAction = (instruction: string, params?: PerformTaskParams) =>
-      executeSingleActionWithRetry(instruction, params);
+    hyperPage.aiAction = (instruction: string, params?: PerformTaskParams) => {
+      this.warnAiActionDeprecation();
+      return executeSingleActionWithRetry(instruction, params);
+    };
 
     hyperPage.getActionCache = (taskId: string) => this.getActionCache(taskId);
 
