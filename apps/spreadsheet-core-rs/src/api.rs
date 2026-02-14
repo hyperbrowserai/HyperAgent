@@ -7969,6 +7969,27 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("agent_ops_cache_reexecute_request_shape")
+                .and_then(|value| value.get("expected_operations_signature"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional string guard for cached operations payload"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_reexecute_response_shape")
+                .and_then(|value| value.get("generated_request_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("true if server generated request id"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_replay_response_shape")
+                .and_then(|value| value.get("operations"))
+                .and_then(serde_json::Value::as_str),
+            Some("cached operation array for request replay portability"),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_cache_remove_by_prefix_preview_request_shape")
                 .and_then(|value| value.get("sample_limit"))
                 .and_then(serde_json::Value::as_str),
