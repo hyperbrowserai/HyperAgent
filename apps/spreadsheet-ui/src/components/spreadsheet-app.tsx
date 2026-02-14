@@ -1092,11 +1092,15 @@ export function SpreadsheetApp() {
     useState(false);
   const [isCopyingVisibleWizardEndpointKeys, setIsCopyingVisibleWizardEndpointKeys] =
     useState(false);
+  const [isCopyingVisibleWizardEndpointUrls, setIsCopyingVisibleWizardEndpointUrls] =
+    useState(false);
   const [isCopyingAgentEndpointCatalog, setIsCopyingAgentEndpointCatalog] =
     useState(false);
   const [isCopyingVisibleAgentEndpointCatalog, setIsCopyingVisibleAgentEndpointCatalog] =
     useState(false);
   const [isCopyingVisibleAgentEndpointKeys, setIsCopyingVisibleAgentEndpointKeys] =
+    useState(false);
+  const [isCopyingVisibleAgentEndpointUrls, setIsCopyingVisibleAgentEndpointUrls] =
     useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
@@ -3982,6 +3986,29 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyVisibleWizardEndpointUrls() {
+    if (wizardVisibleSchemaEndpointsWithMethods.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleWizardEndpointUrls(true);
+    try {
+      const payload = wizardVisibleSchemaEndpointsWithMethods
+        .map((entry) =>
+          `${entry.methods.length > 0 ? `[${entry.methods.join("|")}] ` : ""}${entry.endpoint}`
+        )
+        .join("\n");
+      await navigator.clipboard.writeText(payload);
+      clearUiError();
+      setNotice(
+        `Copied visible wizard endpoint URLs (${wizardVisibleSchemaEndpointsWithMethods.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible wizard endpoint URLs.");
+    } finally {
+      setIsCopyingVisibleWizardEndpointUrls(false);
+    }
+  }
+
   async function handleCopyAgentEndpointCatalog() {
     if (agentEndpointCatalogPayload.endpoints.length === 0) {
       return;
@@ -4066,6 +4093,29 @@ export function SpreadsheetApp() {
       applyUiError(error, "Failed to copy visible agent endpoint keys.");
     } finally {
       setIsCopyingVisibleAgentEndpointKeys(false);
+    }
+  }
+
+  async function handleCopyVisibleAgentEndpointUrls() {
+    if (agentVisibleSchemaEndpointsWithMethods.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleAgentEndpointUrls(true);
+    try {
+      const payload = agentVisibleSchemaEndpointsWithMethods
+        .map((entry) =>
+          `${entry.methods.length > 0 ? `[${entry.methods.join("|")}] ` : ""}${entry.endpoint}`
+        )
+        .join("\n");
+      await navigator.clipboard.writeText(payload);
+      clearUiError();
+      setNotice(
+        `Copied visible agent endpoint URLs (${agentVisibleSchemaEndpointsWithMethods.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible agent endpoint URLs.");
+    } finally {
+      setIsCopyingVisibleAgentEndpointUrls(false);
     }
   }
 
@@ -5319,6 +5369,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleWizardEndpointKeys
                         ? "Copying..."
                         : "Copy visible keys"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleWizardEndpointUrls}
+                      disabled={isCopyingVisibleWizardEndpointUrls}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleWizardEndpointUrls
+                        ? "Copying..."
+                        : "Copy visible URLs"}
                     </button>
                     <button
                       onClick={handleCopyWizardEndpointCatalog}
@@ -6877,6 +6936,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleAgentEndpointKeys
                         ? "Copying..."
                         : "Copy visible keys"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleAgentEndpointUrls}
+                      disabled={isCopyingVisibleAgentEndpointUrls}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleAgentEndpointUrls
+                        ? "Copying..."
+                        : "Copy visible URLs"}
                     </button>
                     <button
                       onClick={handleCopyAgentEndpointCatalog}
