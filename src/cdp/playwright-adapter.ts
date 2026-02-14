@@ -55,11 +55,36 @@ class PlaywrightSessionAdapter implements CDPSession {
   ): Promise<T> {
     type SendMethod = Parameters<PlaywrightSession["send"]>[0];
     type SendParams = Parameters<PlaywrightSession["send"]>[1];
+    let sendMethod: unknown;
+    try {
+      sendMethod = (this.session as PlaywrightSession & { send?: unknown }).send;
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to read session.send: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
+    if (typeof sendMethod !== "function") {
+      throw new Error("[CDP][PlaywrightAdapter] session.send is unavailable");
+    }
 
-    const result = (this.session.send as unknown as (
-      method: SendMethod,
-      params?: SendParams
-    ) => Promise<unknown>)(method as SendMethod, params as SendParams);
+    let result: unknown;
+    try {
+      result = (
+        sendMethod as (
+          this: PlaywrightSession,
+          method: SendMethod,
+          params?: SendParams
+        ) => Promise<unknown>
+      ).call(this.session, method as SendMethod, params as SendParams);
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to send CDP command (${method}): ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
 
     return result as Promise<T>;
   }

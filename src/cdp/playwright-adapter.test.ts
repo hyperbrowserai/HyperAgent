@@ -281,4 +281,36 @@ describe("playwright adapter error formatting", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("surfaces sanitized diagnostics when session.send getter traps", async () => {
+    const trappedSession = new Proxy(
+      {
+        on: jest.fn(),
+        off: jest.fn(),
+        detach: jest.fn().mockResolvedValue(undefined),
+      },
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "send") {
+            throw new Error(`send\u0000\n${"x".repeat(2_000)}`);
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    ) as unknown as PlaywrightSession;
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(trappedSession),
+      }),
+      once: jest.fn(),
+    } as unknown as Page;
+
+    const client = await getCDPClientForPage(page);
+    const pooled = await client.acquireSession("lifecycle");
+
+    await expect(pooled.send("Runtime.enable")).rejects.toThrow(
+      "[CDP][PlaywrightAdapter] Failed to read session.send"
+    );
+    await expect(pooled.send("Runtime.enable")).rejects.toThrow("[truncated");
+  });
 });
