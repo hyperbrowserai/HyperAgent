@@ -1147,6 +1147,30 @@ pub fn parse_varpa_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
   parse_range_reference(&args[0])
 }
 
+pub fn parse_covariance_formula(
+  formula: &str,
+) -> Option<(String, (u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if (function != "COVARIANCE.P" && function != "COVARIANCE.S") || args.len() != 2 {
+    return None;
+  }
+  let (left_start, left_end) = parse_range_reference(&args[0])?;
+  let (right_start, right_end) = parse_range_reference(&args[1])?;
+  Some((function, left_start, left_end, right_start, right_end))
+}
+
+pub fn parse_correl_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "CORREL" || args.len() != 2 {
+    return None;
+  }
+  let (left_start, left_end) = parse_range_reference(&args[0])?;
+  let (right_start, right_end) = parse_range_reference(&args[1])?;
+  Some((left_start, left_end, right_start, right_end))
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1435,6 +1459,7 @@ mod tests {
     parse_devsq_formula, parse_avedev_formula,
     parse_averagea_formula, parse_stdeva_formula, parse_stdevpa_formula,
     parse_vara_formula, parse_varpa_formula,
+    parse_covariance_formula, parse_correl_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -1912,6 +1937,19 @@ mod tests {
     let varpa = parse_varpa_formula("=VARPA(A1:A5)").expect("varpa should parse");
     assert_eq!(varpa.0, (1, 1));
     assert_eq!(varpa.1, (5, 1));
+    let covariance = parse_covariance_formula("=COVARIANCE.P(A1:A5,B1:B5)")
+      .expect("covariance should parse");
+    assert_eq!(covariance.0, "COVARIANCE.P");
+    assert_eq!(covariance.1, (1, 1));
+    assert_eq!(covariance.2, (5, 1));
+    assert_eq!(covariance.3, (1, 2));
+    assert_eq!(covariance.4, (5, 2));
+    let correl = parse_correl_formula("=CORREL(A1:A5,B1:B5)")
+      .expect("correl should parse");
+    assert_eq!(correl.0, (1, 1));
+    assert_eq!(correl.1, (5, 1));
+    assert_eq!(correl.2, (1, 2));
+    assert_eq!(correl.3, (5, 2));
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");

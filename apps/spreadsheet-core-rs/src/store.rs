@@ -14,6 +14,7 @@ use crate::{
     parse_trimmean_formula, parse_devsq_formula, parse_avedev_formula,
     parse_averagea_formula, parse_stdeva_formula, parse_stdevpa_formula,
     parse_vara_formula, parse_varpa_formula,
+    parse_covariance_formula, parse_correl_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -815,6 +816,84 @@ fn evaluate_formula(
       .sum::<f64>()
       / values.len() as f64;
     return Ok(Some(variance_population.to_string()));
+  }
+
+  if let Some((function, left_start, left_end, right_start, right_end)) =
+    parse_covariance_formula(formula)
+  {
+    let Some(pairs) = collect_numeric_pairs_from_ranges(
+      connection,
+      sheet,
+      left_start,
+      left_end,
+      right_start,
+      right_end,
+    )? else {
+      return Ok(None);
+    };
+    if pairs.is_empty() {
+      return Ok(None);
+    }
+    if function == "COVARIANCE.S" && pairs.len() < 2 {
+      return Ok(None);
+    }
+    let count = pairs.len() as f64;
+    let mean_x = pairs.iter().map(|pair| pair.0).sum::<f64>() / count;
+    let mean_y = pairs.iter().map(|pair| pair.1).sum::<f64>() / count;
+    let covariance_sum = pairs
+      .iter()
+      .map(|pair| (pair.0 - mean_x) * (pair.1 - mean_y))
+      .sum::<f64>();
+    let covariance = if function == "COVARIANCE.P" {
+      covariance_sum / count
+    } else {
+      covariance_sum / (count - 1.0)
+    };
+    return Ok(Some(covariance.to_string()));
+  }
+
+  if let Some((left_start, left_end, right_start, right_end)) =
+    parse_correl_formula(formula)
+  {
+    let Some(pairs) = collect_numeric_pairs_from_ranges(
+      connection,
+      sheet,
+      left_start,
+      left_end,
+      right_start,
+      right_end,
+    )? else {
+      return Ok(None);
+    };
+    if pairs.len() < 2 {
+      return Ok(None);
+    }
+    let count = pairs.len() as f64;
+    let mean_x = pairs.iter().map(|pair| pair.0).sum::<f64>() / count;
+    let mean_y = pairs.iter().map(|pair| pair.1).sum::<f64>() / count;
+    let sum_xy = pairs
+      .iter()
+      .map(|pair| (pair.0 - mean_x) * (pair.1 - mean_y))
+      .sum::<f64>();
+    let sum_xx = pairs
+      .iter()
+      .map(|pair| {
+        let delta = pair.0 - mean_x;
+        delta * delta
+      })
+      .sum::<f64>();
+    let sum_yy = pairs
+      .iter()
+      .map(|pair| {
+        let delta = pair.1 - mean_y;
+        delta * delta
+      })
+      .sum::<f64>();
+    if sum_xx <= 0.0 || sum_yy <= 0.0 {
+      return Ok(None);
+    }
+    let correl = sum_xy / (sum_xx * sum_yy).sqrt();
+    return Ok(Some(correl.to_string()));
   }
 
   if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
@@ -2041,6 +2120,43 @@ fn collect_statisticala_range_values(
   }
 
   Ok(values)
+}
+
+fn collect_numeric_pairs_from_ranges(
+  connection: &Connection,
+  sheet: &str,
+  left_start: (u32, u32),
+  left_end: (u32, u32),
+  right_start: (u32, u32),
+  right_end: (u32, u32),
+) -> Result<Option<Vec<(f64, f64)>>, ApiError> {
+  let left_bounds = normalized_range_bounds(left_start, left_end);
+  let right_bounds = normalized_range_bounds(right_start, right_end);
+  if left_bounds.width != right_bounds.width
+    || left_bounds.height != right_bounds.height
+  {
+    return Ok(None);
+  }
+
+  let mut pairs = Vec::new();
+  for row_offset in 0..left_bounds.height {
+    for col_offset in 0..left_bounds.width {
+      let left_row = left_bounds.start_row + row_offset;
+      let left_col = left_bounds.start_col + col_offset;
+      let right_row = right_bounds.start_row + row_offset;
+      let right_col = right_bounds.start_col + col_offset;
+      let left_value = load_cell_scalar(connection, sheet, left_row, left_col)?;
+      let right_value = load_cell_scalar(connection, sheet, right_row, right_col)?;
+      if let (Ok(left_number), Ok(right_number)) = (
+        left_value.trim().parse::<f64>(),
+        right_value.trim().parse::<f64>(),
+      ) {
+        pairs.push((left_number, right_number));
+      }
+    }
+  }
+
+  Ok(Some(pairs))
 }
 
 fn interpolate_percentile_from_sorted_values(
@@ -4249,12 +4365,30 @@ mod tests {
         value: None,
         formula: Some("=VARPA(E1:E4)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 168,
+        value: None,
+        formula: Some("=COVARIANCE.P(A1:A2,A4:A5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 169,
+        value: None,
+        formula: Some("=COVARIANCE.S(A1:A2,A4:A5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 170,
+        value: None,
+        formula: Some("=CORREL(A1:A2,A4:A5)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 165);
+    assert_eq!(updated_cells, 168);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4268,7 +4402,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 167,
+        end_col: 170,
       },
     )
     .expect("cells should be fetched");
@@ -4726,6 +4860,33 @@ mod tests {
       .parse::<f64>()
       .expect("varpa should be numeric");
     assert!((varpa - 0.1875).abs() < 1e-9, "varpa should be 0.1875, got {varpa}");
+    let covariance_p = by_position(1, 168)
+      .evaluated_value
+      .as_deref()
+      .expect("covariance.p should evaluate")
+      .parse::<f64>()
+      .expect("covariance.p should be numeric");
+    assert!(
+      (covariance_p - 800.0).abs() < 1e-9,
+      "covariance.p should be 800.0, got {covariance_p}",
+    );
+    let covariance_s = by_position(1, 169)
+      .evaluated_value
+      .as_deref()
+      .expect("covariance.s should evaluate")
+      .parse::<f64>()
+      .expect("covariance.s should be numeric");
+    assert!(
+      (covariance_s - 1600.0).abs() < 1e-9,
+      "covariance.s should be 1600.0, got {covariance_s}",
+    );
+    let correl = by_position(1, 170)
+      .evaluated_value
+      .as_deref()
+      .expect("correl should evaluate")
+      .parse::<f64>()
+      .expect("correl should be numeric");
+    assert!((correl - 1.0).abs() < 1e-9, "correl should be 1.0, got {correl}");
   }
 
   #[test]
@@ -5314,6 +5475,96 @@ mod tests {
       unsupported_formulas,
       vec!["=STDEVA(A1:A1)".to_string(), "=VARA(A1:A1)".to_string()],
     );
+  }
+
+  #[test]
+  fn should_leave_mismatched_covariance_and_correl_ranges_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(10)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=COVARIANCE.P(A1:A2,B1:B1)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 3,
+        value: None,
+        formula: Some("=CORREL(A1:A2,B1:B1)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=COVARIANCE.P(A1:A2,B1:B1)".to_string(),
+        "=CORREL(A1:A2,B1:B1)".to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_correl_with_zero_variance_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(10)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: Some(json!(20)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=CORREL(A1:A2,B1:B2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=CORREL(A1:A2,B1:B2)".to_string()]);
   }
 
   #[test]
