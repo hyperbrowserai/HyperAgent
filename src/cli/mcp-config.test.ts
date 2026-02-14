@@ -53,6 +53,30 @@ describe("parseMCPServersConfig", () => {
     );
   });
 
+  it("sanitizes and truncates oversized JSON parse diagnostics", () => {
+    const parseSpy = jest.spyOn(JSON, "parse").mockImplementation(() => {
+      throw new Error(`parse\u0000\n${"x".repeat(10_000)}`);
+    });
+
+    try {
+      expect(() => parseMCPServersConfig('{"servers":[{"command":"npx"}]}')).toThrow(
+        "[truncated"
+      );
+      expect(() => parseMCPServersConfig('{"servers":[{"command":"npx"}]}')).toThrow(
+        /Invalid MCP config JSON:/
+      );
+      try {
+        parseMCPServersConfig('{"servers":[{"command":"npx"}]}');
+      } catch (error) {
+        const message = String(error instanceof Error ? error.message : error);
+        expect(message).not.toContain("\u0000");
+        expect(message).not.toContain("\n");
+      }
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
   it("throws clear message when config input is not a string", () => {
     expect(() => parseMCPServersConfig(42 as unknown as string)).toThrow(
       "Invalid MCP config JSON: config must be a string."
@@ -253,7 +277,7 @@ describe("parseMCPServersConfig", () => {
     expect(() =>
       parseMCPServersConfig('[{"connectionType":"sse\\u0007","command":"npx"}]')
     ).toThrow(
-      'MCP server entry at index 0 has unsupported connectionType "sse\u0007". Supported values are "stdio" and "sse".'
+      'MCP server entry at index 0 has unsupported connectionType "sse". Supported values are "stdio" and "sse".'
     );
 
     expect(() =>
@@ -611,7 +635,7 @@ describe("parseMCPServersConfig", () => {
         '[{"connectionType":"sse","sseUrl":"https://example.com/sse\\u0007"}]'
       )
     ).toThrow(
-      'MCP server entry at index 0 has invalid "sseUrl" value "https://example.com/sse\u0007".'
+      'MCP server entry at index 0 has invalid "sseUrl" value "https://example.com/sse".'
     );
 
     expect(() =>
@@ -747,6 +771,33 @@ describe("loadMCPServersFromFile", () => {
     ).rejects.toThrow(
       'Failed to read MCP config file "/tmp/does-not-exist-mcp-config.json":'
     );
+  });
+
+  it("sanitizes and truncates oversized config read diagnostics", async () => {
+    const statSpy = jest.spyOn(fs.promises, "stat").mockResolvedValue({
+      isFile: () => true,
+      size: 1,
+    } as unknown as fs.Stats);
+    const readFileSpy = jest
+      .spyOn(fs.promises, "readFile")
+      .mockRejectedValue(new Error(`read\u0000\n${"x".repeat(10_000)}`));
+
+    try {
+      await loadMCPServersFromFile("/tmp/mcp-config-test.json")
+        .then(() => {
+          throw new Error("expected loadMCPServersFromFile to reject");
+        })
+        .catch((error) => {
+          const message = String(error instanceof Error ? error.message : error);
+          expect(message).toContain("[truncated");
+          expect(message).not.toContain("\u0000");
+          expect(message).not.toContain("\n");
+          expect(message.length).toBeLessThan(700);
+        });
+    } finally {
+      statSpy.mockRestore();
+      readFileSpy.mockRestore();
+    }
   });
 
   it("throws readable error when config path is not a regular file", async () => {

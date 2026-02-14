@@ -37,13 +37,20 @@ function hasAnyControlChars(value: string): boolean {
 }
 
 function formatMCPConfigDiagnostic(value: unknown): string {
-  const normalized =
-    typeof value === "string" ? value : formatUnknownError(value);
-  if (normalized.length <= MAX_MCP_CONFIG_DIAGNOSTIC_CHARS) {
-    return normalized;
+  const raw = typeof value === "string" ? value : formatUnknownError(value);
+  const normalized = Array.from(raw, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_MCP_CONFIG_DIAGNOSTIC_CHARS) {
+    return fallback;
   }
-  const omitted = normalized.length - MAX_MCP_CONFIG_DIAGNOSTIC_CHARS;
-  return `${normalized.slice(0, MAX_MCP_CONFIG_DIAGNOSTIC_CHARS)}... [truncated ${omitted} chars]`;
+  const omitted = fallback.length - MAX_MCP_CONFIG_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(0, MAX_MCP_CONFIG_DIAGNOSTIC_CHARS)}... [truncated ${omitted} chars]`;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -389,7 +396,7 @@ export function parseMCPServersConfig(rawConfig: string): MCPServerConfig[] {
     parsed = JSON.parse(normalizedConfig);
   } catch (error) {
     throw new Error(
-      `Invalid MCP config JSON: ${formatUnknownError(error)}`
+      `Invalid MCP config JSON: ${formatMCPConfigDiagnostic(error)}`
     );
   }
 
@@ -618,7 +625,9 @@ export async function loadMCPServersFromFile(
     fileContent = await fs.promises.readFile(normalizedFilePath, "utf-8");
   } catch (error) {
     throw new Error(
-      `Failed to read MCP config file "${normalizedFilePath}": ${formatUnknownError(error)}`
+      `Failed to read MCP config file "${normalizedFilePath}": ${formatMCPConfigDiagnostic(
+        error
+      )}`
     );
   }
 
@@ -632,7 +641,9 @@ export async function loadMCPServersFromFile(
     return parseMCPServersConfig(fileContent);
   } catch (error) {
     throw new Error(
-      `Invalid MCP config file "${normalizedFilePath}": ${formatUnknownError(error)}`
+      `Invalid MCP config file "${normalizedFilePath}": ${formatMCPConfigDiagnostic(
+        error
+      )}`
     );
   }
 }
