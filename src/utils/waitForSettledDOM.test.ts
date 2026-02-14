@@ -391,6 +391,61 @@ describe("waitForSettledDOM diagnostics", () => {
     }
   });
 
+  it("falls back to timeout when listener method getter traps", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session } = createSessionWithEvents();
+    const trappedSession = new Proxy(session, {
+      get: (target, prop, receiver) => {
+        if (prop === "on") {
+          throw new Error(`on getter\u0000\n${"x".repeat(10_000)}`);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as CDPSession;
+    const cdpClient: CDPClient = {
+      rootSession: trappedSession,
+      createSession: async () => trappedSession,
+      acquireSession: async () => trappedSession,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 700);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(800);
+      const stats = await waitPromise;
+
+      const attachWarning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      const fallbackWarning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("falling back to timeout-based settle")
+        )?.[0] ?? ""
+      );
+      expect(attachWarning).toContain("[truncated");
+      expect(attachWarning).not.toContain("\u0000");
+      expect(attachWarning).not.toContain("\n");
+      expect(fallbackWarning).toContain("falling back to timeout-based settle");
+      expect(stats.resolvedByTimeout).toBe(true);
+      expect(stats.requestsSeen).toBe(0);
+      expect(stats.peakInflight).toBe(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("formats non-Error listener registration diagnostics deterministically", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     const { session } = createSessionWithEvents({
