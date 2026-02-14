@@ -367,4 +367,50 @@ describe("getElementLocator", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("reads frame metadata with frame receiver binding", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const frameWithReceiverState = {
+      frameUrl: "https://example.com/receiver-frame",
+      frameName: "receiver-frame",
+      url(this: { frameUrl: string }) {
+        return this.frameUrl;
+      },
+      name(this: { frameName: string }) {
+        return this.frameName;
+      },
+    };
+    const page = createPage({
+      frames: jest.fn(() => [frameWithReceiverState]),
+    });
+    toEncodedId.mockReturnValue("1-10");
+    resolveFrameByXPath.mockResolvedValue(null);
+    const frameMap = new Map<number, unknown>([
+      [
+        1,
+        {
+          src: "https://frame.example",
+          name: "frame-name",
+          xpath: "//iframe[1]",
+          parentFrameIndex: 0,
+        },
+      ],
+    ]) as unknown as Map<number, never>;
+
+    try {
+      await expect(
+        getElementLocator("1-10", { "1-10": "//button[1]" }, page, frameMap, true)
+      ).rejects.toThrow("Could not resolve frame for element 1-10");
+
+      const availableFramesLine = String(
+        errorSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Available frames:")
+        )?.[0] ?? ""
+      );
+      expect(availableFramesLine).toContain("https://example.com/receiver-frame");
+      expect(availableFramesLine).toContain("receiver-frame");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

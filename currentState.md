@@ -178,6 +178,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened frame-context listener lifecycle against trap-prone session listener methods:
   - added guarded session listener attach/detach helpers in `frame-context-manager.ts` with sanitized diagnostics,
   - `ensureInitialized`, OOPIF detach wiring, `removeFrame`, and `clear` now tolerate `session.on`/`session.off` getter traps without crashing.
+- Fixed frame-metadata receiver handling in element locator diagnostics:
+  - `safeReadFrameText` now invokes frame `url`/`name` methods with the frame object receiver,
+  - debug payloads now preserve receiver-sensitive frame metadata values instead of falling back to placeholders.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

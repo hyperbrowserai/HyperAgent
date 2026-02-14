@@ -104,7 +104,7 @@ function safeReadFrameText(
     if (typeof method !== "function") {
       return fallback;
     }
-    const value = (method as () => unknown)();
+    const value = (method as (this: unknown) => unknown).call(frame);
     return formatElementLocatorIdentifier(value, fallback);
   } catch {
     return fallback;
