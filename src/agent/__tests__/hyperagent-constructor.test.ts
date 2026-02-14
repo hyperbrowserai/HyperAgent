@@ -313,6 +313,45 @@ describe("HyperAgent constructor and task controls", () => {
     expect(runtimeCtx?.filterAdTrackingFrames).toBe(false);
   });
 
+  it("falls back to agent frame-filter setting for sync executeTask when params getter traps", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id-filter-sync-trap",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id-filter-sync-trap",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      filterAdTrackingFrames: false,
+    });
+    const trappedParams = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "filterAdTrackingFrames") {
+            throw new Error("sync filter option trap");
+          }
+          return undefined;
+        },
+      }
+    ) as TaskParams;
+    const fakePage = {} as unknown as Page;
+    await agent.executeTask("test task", trappedParams, fakePage);
+
+    const runtimeCtx = mockedRunAgentTask.mock.calls[0]?.[0] as {
+      filterAdTrackingFrames?: boolean;
+    };
+    expect(runtimeCtx?.filterAdTrackingFrames).toBe(false);
+  });
+
   it("falls back to agent cdpActions setting when task params cdp getter traps", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockResolvedValue({
@@ -346,6 +385,45 @@ describe("HyperAgent constructor and task controls", () => {
     const fakePage = {} as unknown as Page;
     const task = await agent.executeTaskAsync("test task", trappedParams, fakePage);
     await task.result;
+
+    const runtimeCtx = mockedRunAgentTask.mock.calls[0]?.[0] as {
+      cdpActions?: boolean;
+    };
+    expect(runtimeCtx?.cdpActions).toBe(false);
+  });
+
+  it("falls back to agent cdpActions setting for sync executeTask when params getter traps", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id-cdp-sync-trap",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id-cdp-sync-trap",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const trappedParams = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "cdpActions") {
+            throw new Error("sync cdp option trap");
+          }
+          return undefined;
+        },
+      }
+    ) as TaskParams;
+    const fakePage = {} as unknown as Page;
+    await agent.executeTask("test task", trappedParams, fakePage);
 
     const runtimeCtx = mockedRunAgentTask.mock.calls[0]?.[0] as {
       cdpActions?: boolean;

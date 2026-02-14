@@ -1484,6 +1484,67 @@ describe("runFromActionCache hardening", () => {
     );
   });
 
+  it("falls back to agent filter setting for replay when params getter traps", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+      filterAdTrackingFrames: false,
+    });
+    const perform = jest.fn().mockResolvedValue({
+      taskId: "perform-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "performed via instruction",
+      replayStepMeta: {
+        usedCachedAction: false,
+        fallbackUsed: true,
+        retries: 1,
+      },
+    });
+    const page = {
+      perform,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "click fallback target",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: null,
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+    const trappedParams = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "filterAdTrackingFrames") {
+            throw new Error("replay frame-filter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as import("@/types/agent/types").RunFromActionCacheParams;
+
+    await agent.runFromActionCache(cache, page, trappedParams);
+
+    expect(perform).toHaveBeenCalledWith(
+      "click fallback target",
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
+  });
+
   it("truncates oversized cached-step read diagnostics", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
