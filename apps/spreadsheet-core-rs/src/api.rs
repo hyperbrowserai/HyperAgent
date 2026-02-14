@@ -7365,6 +7365,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_allow_stop_on_error_override_when_reexecuting_cache_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-stop-on-error-override".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-stop-on-error-override".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![
+                    AgentOperation::DuckdbQuery {
+                        sql: "DELETE FROM cells".to_string(),
+                        row_limit: Some(10),
+                    },
+                    AgentOperation::Recalculate,
+                ],
+            }),
+        )
+        .await
+        .expect("source request should succeed and cache operations");
+
+        let reexecute = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-stop-on-error-override".to_string(),
+                new_request_id: Some("reexecute-stop-on-error-false".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(false),
+                expected_operations_signature: None,
+            }),
+        )
+        .await
+        .expect("reexecute with stop_on_error=false should continue after failure")
+        .0;
+
+        assert_eq!(reexecute.response.results.len(), 2);
+        assert_eq!(reexecute.response.results[0].op_type, "duckdb_query");
+        assert!(!reexecute.response.results[0].ok);
+        assert_eq!(reexecute.response.results[1].op_type, "recalculate");
+        assert!(reexecute.response.results[1].ok);
+    }
+
+    #[tokio::test]
     async fn should_reject_blank_new_request_id_when_reexecuting_cache_entry() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
