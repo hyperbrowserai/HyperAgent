@@ -35,6 +35,10 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
       continue;
     };
     let formula_range = workbook.worksheet_formula(sheet_name).ok();
+    let formula_start = formula_range
+      .as_ref()
+      .and_then(|formula_grid| formula_grid.start())
+      .map(|(row, col)| (row as usize, col as usize));
     let (range_start_row, range_start_col) = range.start().unwrap_or((0, 0));
     let mut mutations = Vec::new();
 
@@ -46,7 +50,15 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
         let col_number = col_index as u32 + 1;
         let formula = formula_range
           .as_ref()
-          .and_then(|formula_grid| formula_grid.get((row_offset, col_offset)))
+          .and_then(|formula_grid| {
+            let (formula_start_row, formula_start_col) = formula_start?;
+            if row_index < formula_start_row || col_index < formula_start_col {
+              return None;
+            }
+            let formula_row = row_index - formula_start_row;
+            let formula_col = col_index - formula_start_col;
+            formula_grid.get((formula_row, formula_col))
+          })
           .and_then(|value| normalize_imported_formula(value.to_string().as_str()));
         if formula.is_some() {
           formula_cells_imported += 1;
@@ -303,6 +315,27 @@ mod tests {
       .expect("formula matrix fixture workbook should serialize")
   }
 
+  fn offset_range_fixture_workbook_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let offset_sheet = workbook.add_worksheet();
+    offset_sheet
+      .set_name("Offset")
+      .expect("sheet should be renamed");
+    offset_sheet
+      .write_number(3, 2, 10.0)
+      .expect("first number should write");
+    offset_sheet
+      .write_number(4, 2, 20.0)
+      .expect("second number should write");
+    offset_sheet
+      .write_formula(5, 3, Formula::new("=SUM(C4:C5)").set_result("30"))
+      .expect("sum formula should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("offset range fixture workbook should serialize")
+  }
+
   fn snapshot_map(
     cells: &[crate::models::CellSnapshot],
   ) -> HashMap<String, crate::models::CellSnapshot> {
@@ -495,6 +528,81 @@ mod tests {
         .and_then(|raw_value| raw_value.parse::<f64>().ok())
         .map(|value| value as i64),
       Some(80),
+    );
+  }
+
+  #[tokio::test]
+  async fn should_import_non_a1_range_cells_at_original_coordinates() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("xlsx-offset-range-fixture".to_string()))
+      .await
+      .expect("workbook should be created");
+    let db_path = state
+      .db_path(workbook.id)
+      .await
+      .expect("db path should be accessible");
+
+    let fixture_bytes = offset_range_fixture_workbook_bytes();
+    let import_result =
+      import_xlsx(&db_path, &fixture_bytes).expect("offset fixture should import");
+    assert_eq!(import_result.sheets_imported, 1);
+    assert_eq!(import_result.cells_imported, 3);
+    assert_eq!(import_result.formula_cells_imported, 1);
+
+    let (_, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("offset fixture formulas should recalculate");
+    assert!(
+      unsupported_formulas.is_empty(),
+      "offset fixture formulas should stay supported: {:?}",
+      unsupported_formulas,
+    );
+
+    let offset_snapshot =
+      load_sheet_snapshot(&db_path, "Offset").expect("offset snapshot should load");
+    let offset_map = snapshot_map(&offset_snapshot);
+    let mut offset_addresses = offset_map.keys().cloned().collect::<Vec<_>>();
+    offset_addresses.sort();
+    assert!(
+      offset_map.contains_key("C4"),
+      "expected C4 in imported offset snapshot, found addresses: {:?}",
+      offset_addresses,
+    );
+    assert_eq!(
+      offset_map
+        .get("C4")
+        .and_then(|cell| cell.raw_value.as_deref())
+        .and_then(|raw_value| raw_value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(10),
+      "first numeric value should stay at C4",
+    );
+    assert_eq!(
+      offset_map
+        .get("C5")
+        .and_then(|cell| cell.raw_value.as_deref())
+        .and_then(|raw_value| raw_value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(20),
+      "second numeric value should stay at C5",
+    );
+    assert_eq!(
+      offset_map
+        .get("D6")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=SUM(C4:C5)"),
+      "formula should stay at D6",
+    );
+    assert_eq!(
+      offset_map
+        .get("D6")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(30),
+      "formula at D6 should evaluate with offset coordinates",
     );
   }
 
