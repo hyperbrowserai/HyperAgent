@@ -145,12 +145,34 @@ export interface WaitForSettledOptions {
   filterAdTrackingFrames?: boolean;
 }
 
+function safeReadWaitOptionField(
+  options: unknown,
+  field: keyof WaitForSettledOptions
+): unknown {
+  if (!options || (typeof options !== "object" && typeof options !== "function")) {
+    return undefined;
+  }
+  try {
+    return (options as Record<string, unknown>)[field];
+  } catch {
+    return undefined;
+  }
+}
+
 export async function waitForSettledDOM(
   page: Page,
   timeoutMs: number = DEFAULT_WAIT_TIMEOUT_MS,
   options: WaitForSettledOptions = {}
 ): Promise<WaitForSettledStats> {
   const normalizedTimeoutMs = normalizeWaitTimeoutMs(timeoutMs);
+  const filterAdTrackingFramesOption = safeReadWaitOptionField(
+    options,
+    "filterAdTrackingFrames"
+  );
+  const filterAdTrackingFrames =
+    typeof filterAdTrackingFramesOption === "boolean"
+      ? filterAdTrackingFramesOption
+      : undefined;
   const ctx = page.context() as BrowserContext & {
     _options?: { recordVideo?: unknown };
   };
@@ -183,10 +205,10 @@ export async function waitForSettledDOM(
   }
   if (
     typeof manager.setFrameFilteringEnabled === "function" &&
-    typeof options.filterAdTrackingFrames === "boolean"
+    typeof filterAdTrackingFrames === "boolean"
   ) {
     try {
-      manager.setFrameFilteringEnabled(options.filterAdTrackingFrames);
+      manager.setFrameFilteringEnabled(filterAdTrackingFrames);
     } catch (error) {
       console.warn(
         `[waitForSettledDOM] Failed to configure frame filtering: ${formatWaitDiagnostic(

@@ -1,4 +1,7 @@
-import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
+import {
+  waitForSettledDOM,
+  type WaitForSettledOptions,
+} from "@/utils/waitForSettledDOM";
 import type { CDPClient, CDPSession } from "@/cdp";
 
 jest.mock("@/cdp", () => ({
@@ -295,6 +298,51 @@ describe("waitForSettledDOM diagnostics", () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+
+  it("ignores trap-prone frame-filter option getters", async () => {
+    const { session } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    const setFrameFilteringEnabled = jest.fn();
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+      setFrameFilteringEnabled,
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const trappedOptions = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "filterAdTrackingFrames") {
+            throw new Error("frame-filter option trap");
+          }
+          return undefined;
+        },
+      }
+    ) as WaitForSettledOptions;
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    const waitPromise = waitForSettledDOM(page, 600, trappedOptions);
+    await Promise.resolve();
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(700);
+    const stats = await waitPromise;
+
+    expect(stats.resolvedByTimeout).toBe(false);
+    expect(setFrameFilteringEnabled).not.toHaveBeenCalled();
   });
 
   it("falls back to timeout when network listener registration fails", async () => {
