@@ -10,6 +10,7 @@ use crate::{
     parse_large_formula, parse_small_formula, parse_rank_formula,
     parse_percentile_inc_formula, parse_quartile_inc_formula,
     parse_percentile_exc_formula, parse_quartile_exc_formula,
+    parse_mode_sngl_formula, parse_geomean_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -605,6 +606,56 @@ fn evaluate_formula(
     values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
     let interpolated = interpolate_percentile_exc_from_sorted_values(&values, percentile);
     return Ok(interpolated.map(|value| value.to_string()));
+  }
+
+  if let Some((start, end)) = parse_mode_sngl_formula(formula) {
+    let mut values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut best_count = 0usize;
+    let mut best_value: Option<f64> = None;
+    let mut index = 0usize;
+    while index < values.len() {
+      let current = values[index];
+      let mut count = 1usize;
+      while index + count < values.len()
+        && (values[index + count] - current).abs() < f64::EPSILON
+      {
+        count += 1;
+      }
+      if count > best_count {
+        best_count = count;
+        best_value = Some(current);
+      } else if count == best_count && count > 1 {
+        if let Some(existing_best) = best_value {
+          if current < existing_best {
+            best_value = Some(current);
+          }
+        }
+      }
+      index += count;
+    }
+
+    if best_count < 2 {
+      return Ok(None);
+    }
+    return Ok(best_value.map(|value| value.to_string()));
+  }
+
+  if let Some((start, end)) = parse_geomean_formula(formula) {
+    let values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    if values.iter().any(|value| *value <= 0.0) {
+      return Ok(None);
+    }
+    let ln_sum = values.iter().map(|value| value.ln()).sum::<f64>();
+    let mean = (ln_sum / values.len() as f64).exp();
+    return Ok(Some(mean.to_string()));
   }
 
   if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
@@ -2953,6 +3004,12 @@ mod tests {
         formula: None,
       },
       CellMutation {
+        row: 4,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
         row: 1,
         col: 2,
         value: None,
@@ -3860,12 +3917,24 @@ mod tests {
         value: None,
         formula: Some("=QUARTILE.EXC(A1:A2,2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 150,
+        value: None,
+        formula: Some("=MODE.SNGL(A1:A4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 151,
+        value: None,
+        formula: Some("=GEOMEAN(A1:A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 147);
+    assert_eq!(updated_cells, 149);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3879,7 +3948,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 149,
+        end_col: 151,
       },
     )
     .expect("cells should be fetched");
@@ -4186,6 +4255,17 @@ mod tests {
     assert!(
       (quartile_exc - 100.0).abs() < 1e-9,
       "quartile.exc should be 100.0, got {quartile_exc}",
+    );
+    assert_eq!(by_position(1, 150).evaluated_value.as_deref(), Some("120"));
+    let geomean = by_position(1, 151)
+      .evaluated_value
+      .as_deref()
+      .expect("geomean should evaluate")
+      .parse::<f64>()
+      .expect("geomean should be numeric");
+    assert!(
+      (geomean - 97.979_589_711_327_12).abs() < 1e-9,
+      "geomean should be sqrt(9600), got {geomean}",
     );
   }
 
@@ -4571,6 +4651,66 @@ mod tests {
         "=PERCENTRANK.INC(A1:A2,100,0)".to_string(),
       ],
     );
+  }
+
+  #[test]
+  fn should_leave_mode_without_duplicates_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=MODE.SNGL(A1:A2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=MODE.SNGL(A1:A2)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_geomean_non_positive_input_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(0)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=GEOMEAN(A1:A2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=GEOMEAN(A1:A2)".to_string()]);
   }
 
   #[test]

@@ -1052,6 +1052,22 @@ pub fn parse_quartile_exc_formula(
   Some((start, end, args[1].clone()))
 }
 
+pub fn parse_mode_sngl_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "MODE.SNGL" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_geomean_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "GEOMEAN" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1333,6 +1349,7 @@ mod tests {
     parse_large_formula, parse_small_formula, parse_rank_formula,
     parse_percentile_inc_formula, parse_quartile_inc_formula,
     parse_percentile_exc_formula, parse_quartile_exc_formula,
+    parse_mode_sngl_formula, parse_geomean_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -1751,6 +1768,14 @@ mod tests {
     assert_eq!(quartile_exc.0, (1, 1));
     assert_eq!(quartile_exc.1, (5, 1));
     assert_eq!(quartile_exc.2, "2");
+    let mode =
+      parse_mode_sngl_formula("=MODE.SNGL(A1:A5)").expect("mode should parse");
+    assert_eq!(mode.0, (1, 1));
+    assert_eq!(mode.1, (5, 1));
+    let geomean =
+      parse_geomean_formula("=GEOMEAN(A1:A5)").expect("geomean should parse");
+    assert_eq!(geomean.0, (1, 1));
+    assert_eq!(geomean.1, (5, 1));
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");
