@@ -202,10 +202,11 @@ program
       const onStep = (params: AgentStep) => {
         const action = params.agentOutput.action;
         const output = params.actionOutput;
+        const failureMessage = formatCliError(output.message);
 
         const actionDisplay = output.success
           ? `  └── [${chalk.yellow(action.type)}] ${createdAgent.pprintAction(action as ActionType)}`
-          : `  └── [${chalk.red(action.type)}] ${chalk.red(output.message)}`;
+          : `  └── [${chalk.red(action.type)}] ${chalk.red(failureMessage)}`;
 
         currentSpinner.succeed(
           `[${chalk.yellow("step")}]: ${params.agentOutput.thoughts}\n${actionDisplay}`
