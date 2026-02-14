@@ -218,6 +218,7 @@ export interface AgentSchemaInfo {
   duckdb_query_request_shape?: Record<string, string>;
   duckdb_query_response_shape?: Record<string, string>;
   duckdb_query_validation_error_codes?: string[];
+  agent_ops_response_shape?: Record<string, string>;
   agent_ops_result_error_shape?: Record<string, string>;
   workbook_import_event_shape?: Record<string, unknown>;
   workbook_export_event_shape?: Record<string, unknown>;
