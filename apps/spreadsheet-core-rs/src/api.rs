@@ -7365,6 +7365,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_trim_new_request_id_when_reexecuting_cache_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-trimmed-request-id".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-trimmed-request-id-1".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::Recalculate],
+            }),
+        )
+        .await
+        .expect("source request should succeed");
+
+        let reexecute = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-trimmed-request-id-1".to_string(),
+                new_request_id: Some("  reexecute-trimmed-request-id  ".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+            }),
+        )
+        .await
+        .expect("trimmed request id should be accepted and normalized")
+        .0;
+
+        assert_eq!(
+            reexecute.response.request_id.as_deref(),
+            Some("reexecute-trimmed-request-id"),
+        );
+        assert!(!reexecute.generated_request_id);
+    }
+
+    #[tokio::test]
     async fn should_allow_stop_on_error_override_when_reexecuting_cache_entry() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
