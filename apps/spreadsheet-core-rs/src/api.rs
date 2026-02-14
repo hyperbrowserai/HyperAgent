@@ -6873,6 +6873,12 @@ mod tests {
             Some("replay-me"),
         );
         assert_eq!(replay_response.operations.len(), 1);
+        let expected_signature = operations_signature(&replay_response.operations)
+            .expect("replay operation signature should be computed");
+        assert_eq!(
+            replay_response.cached_response.operations_signature.as_deref(),
+            Some(expected_signature.as_str()),
+        );
     }
 
     #[tokio::test]
@@ -7035,6 +7041,9 @@ mod tests {
         assert!(!reexecute.response.served_from_cache);
         assert_eq!(reexecute.operations_count, 1);
         assert_eq!(reexecute.operations.len(), 1);
+        let expected_signature = operations_signature(&reexecute.operations)
+            .expect("reexecute operation signature should be computed");
+        assert_eq!(reexecute.operations_signature, expected_signature);
 
         let replayed_reexecute = reexecute_agent_ops_cache_entry(
             State(state),
