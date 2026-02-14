@@ -1018,11 +1018,15 @@ export const runAgentTask = async (
       }
 
       // Run single action
-      const action = agentOutput.action;
+      const actionPayload = safeReadRecordField(agentOutput, "action");
       const actionType = normalizeRuntimeActionType(
-        safeReadRecordField(action, "type")
+        safeReadRecordField(actionPayload, "type")
       );
-      const actionParams = safeReadRecordField(action, "params");
+      const actionParams = safeReadRecordField(actionPayload, "params");
+      const action: ActionType = {
+        type: actionType,
+        params: actionParams,
+      };
 
       // Execute the action
       const actionExecStart = performance.now();

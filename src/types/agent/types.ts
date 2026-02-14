@@ -6,7 +6,9 @@ import type { HyperAgentLLM } from "@/llm/types";
 import type { MCPClient } from "@/agent/mcp/client";
 
 export const AgentOutputFn = (
-  actionsSchema: z.ZodUnion<readonly [z.ZodType<any>, ...z.ZodType<any>[]]>
+  actionsSchema: z.ZodUnion<
+    readonly [z.ZodTypeAny, ...z.ZodTypeAny[]]
+  >
 ) =>
   z.object({
     thoughts: z

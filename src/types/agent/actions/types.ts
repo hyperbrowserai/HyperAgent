@@ -31,18 +31,18 @@ export interface ActionOutput {
   success: boolean;
   message: string;
   extract?: object;
-  debug?: any;
+  debug?: unknown;
 }
 
 export type ActionSchemaType = z.ZodObject<{
   type: z.ZodLiteral<string>;
-  params: z.ZodObject<any>;
+  params: z.ZodTypeAny;
 }>;
 
 export type ActionType = z.infer<ActionSchemaType>;
 
 export interface AgentActionDefinition<
-  T extends z.ZodType<any> = z.ZodType<any>,
+  T extends z.ZodTypeAny = z.ZodTypeAny,
 > {
   readonly type: string;
   readonly toolName?: string;
