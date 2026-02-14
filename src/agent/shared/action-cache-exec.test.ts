@@ -303,4 +303,27 @@ describe("action-cache perform helper dispatch", () => {
     ).cachedAction;
     expect(cachedAction?.xpath).not.toContain("\u0000");
   });
+
+  it("forwards filterAdTrackingFrames override from helper options", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+      filterAdTrackingFrames: true,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+
+    await page.performClick("//button[1]", {
+      filterAdTrackingFrames: false,
+    });
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
+  });
 });

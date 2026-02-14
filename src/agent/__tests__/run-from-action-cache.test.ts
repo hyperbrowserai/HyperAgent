@@ -127,6 +127,57 @@ describe("runFromActionCache hardening", () => {
     expect(replay.status).toBe(TaskStatus.COMPLETED);
   });
 
+  it("forwards replay-level filter override to helper dispatch options", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const performClick = jest.fn().mockResolvedValue({
+      taskId: "click-task",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "clicked via helper",
+      replayStepMeta: {
+        usedCachedAction: true,
+        fallbackUsed: false,
+        retries: 1,
+      },
+    });
+    const page = {
+      performClick,
+    } as unknown as import("@/types/agent/types").HyperPage;
+    const cache: ActionCacheOutput = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      steps: [
+        {
+          stepIndex: 0,
+          instruction: "click ad CTA",
+          elementId: "0-1",
+          method: "click",
+          arguments: [],
+          frameIndex: 0,
+          xpath: "//button[1]",
+          actionType: "actElement",
+          success: true,
+          message: "cached",
+        },
+      ],
+    };
+
+    await agent.runFromActionCache(cache, page, {
+      filterAdTrackingFrames: false,
+    });
+
+    expect(performClick).toHaveBeenCalledWith(
+      "//button[1]",
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
+  });
+
   it("fails fast when method cache lacks both xpath and instruction", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
