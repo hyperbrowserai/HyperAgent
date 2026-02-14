@@ -464,6 +464,31 @@ mod tests {
       .expect("unsupported formula fixture workbook should serialize")
   }
 
+  fn mixed_literal_and_prefixed_formula_fixture_workbook_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let mixed_sheet = workbook.add_worksheet();
+    mixed_sheet
+      .set_name("Mixed")
+      .expect("sheet should be renamed");
+    mixed_sheet
+      .write_number(0, 0, 1.0)
+      .expect("seed number should write");
+    mixed_sheet
+      .write_formula(
+        0,
+        1,
+        Formula::new(
+          r#"=IF(A1=1,"_xlfn.keep me",@_XLFN.BITAND(6,3))"#,
+        )
+        .set_result("_xlfn.keep me"),
+      )
+      .expect("mixed literal/prefix formula should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("mixed literal and prefixed formula fixture should serialize")
+  }
+
   fn snapshot_map(
     cells: &[crate::models::CellSnapshot],
   ) -> HashMap<String, crate::models::CellSnapshot> {
@@ -1016,6 +1041,52 @@ mod tests {
         .and_then(|cell| cell.formula.as_deref()),
       Some("=LET(x,A1,x+1)"),
       "roundtrip should keep normalized unsupported formula text",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_preserve_literal_prefix_text_while_normalizing_executable_tokens() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("xlsx-mixed-prefix-literal".to_string()))
+      .await
+      .expect("workbook should be created");
+    let db_path = state
+      .db_path(workbook.id)
+      .await
+      .expect("db path should be accessible");
+
+    let fixture_bytes = mixed_literal_and_prefixed_formula_fixture_workbook_bytes();
+    let import_result =
+      import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
+    assert_eq!(import_result.sheets_imported, 1);
+    assert_eq!(import_result.formula_cells_imported, 1);
+
+    let (_, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should complete");
+    assert!(
+      unsupported_formulas.is_empty(),
+      "formula should remain supported after normalization: {:?}",
+      unsupported_formulas,
+    );
+
+    let snapshot = load_sheet_snapshot(&db_path, "Mixed").expect("snapshot should load");
+    let by_address = snapshot_map(&snapshot);
+    assert_eq!(
+      by_address
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some(r#"=IF(A1=1,"_xlfn.keep me",BITAND(6,3))"#),
+      "quoted literal should remain unchanged while prefixed function token is normalized",
+    );
+    assert_eq!(
+      by_address
+        .get("B1")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some("_xlfn.keep me"),
+      "normalized formula should preserve quoted literal evaluation path",
     );
   }
 }
