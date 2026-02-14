@@ -101,6 +101,30 @@ describe("convertActionsToAnthropicTools", () => {
       "[LLM][SchemaConverter] Invalid action definitions payload: action array trap"
     );
   });
+
+  it("sanitizes and truncates oversized action-array traversal diagnostics", () => {
+    const trappedActions = new Proxy([createAction()], {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.iterator) {
+          throw new Error(`action\u0000\n${"x".repeat(2_000)}`);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    try {
+      convertActionsToAnthropicTools(
+        trappedActions as unknown as AgentActionDefinition[]
+      );
+      throw new Error("expected convertActionsToAnthropicTools to throw");
+    } catch (error) {
+      const message = String(error instanceof Error ? error.message : error);
+      expect(message).toContain("[truncated");
+      expect(message).not.toContain("\u0000");
+      expect(message).not.toContain("\n");
+      expect(message.length).toBeLessThan(700);
+    }
+  });
 });
 
 describe("convertToGeminiResponseSchema", () => {

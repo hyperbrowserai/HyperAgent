@@ -46,6 +46,25 @@ function truncateActionDiagnostic(value: string): string {
   )}... [truncated ${value.length - MAX_ACTION_DIAGNOSTIC_CHARS} chars]`;
 }
 
+function sanitizeActionDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  return Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatActionDiagnostic(value: unknown): string {
+  const normalized = sanitizeActionDiagnostic(formatUnknownError(value));
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  return truncateActionDiagnostic(fallback);
+}
+
 function safeReadActionField(
   action: AgentActionDefinition,
   field: keyof AgentActionDefinition
@@ -53,9 +72,7 @@ function safeReadActionField(
   try {
     return (action as unknown as Record<string, unknown>)[field];
   } catch (error) {
-    return `[Unreadable ${String(field)}: ${truncateActionDiagnostic(
-      formatUnknownError(error)
-    )}]`;
+    return `[Unreadable ${String(field)}: ${formatActionDiagnostic(error)}]`;
   }
 }
 
@@ -65,15 +82,10 @@ function isUnreadableFieldMarker(value: unknown): boolean {
 
 function normalizeActionDescription(value: unknown): string {
   const raw =
-    typeof value === "string" ? value : truncateActionDiagnostic(formatUnknownError(value));
-  const normalized = Array.from(raw)
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      return (code >= 0 && code < 32) || code === 127 ? " " : char;
-    })
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim();
+    typeof value === "string"
+      ? sanitizeActionDiagnostic(value)
+      : formatActionDiagnostic(value);
+  const normalized = sanitizeActionDiagnostic(raw);
   const fallback =
     normalized.length > 0
       ? normalized
@@ -107,9 +119,7 @@ function safeReadActionParamsDescription(actionParams: unknown): unknown {
   try {
     return (actionParams as Record<string, unknown>).description;
   } catch (error) {
-    return `[Unreadable actionParams.description: ${truncateActionDiagnostic(
-      formatUnknownError(error)
-    )}]`;
+    return `[Unreadable actionParams.description: ${formatActionDiagnostic(error)}]`;
   }
 }
 
@@ -158,8 +168,8 @@ export function convertActionsToAnthropicTools(
     actionEntries = Array.from(actions);
   } catch (error) {
     throw new Error(
-      `[LLM][SchemaConverter] Invalid action definitions payload: ${truncateActionDiagnostic(
-        formatUnknownError(error)
+      `[LLM][SchemaConverter] Invalid action definitions payload: ${formatActionDiagnostic(
+        error
       )}`
     );
   }
