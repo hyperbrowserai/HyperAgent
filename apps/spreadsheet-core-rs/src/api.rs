@@ -6385,6 +6385,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_replay_structured_error_fields_for_failed_cached_entry() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-replay-structured-error".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("replay-structured-error".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::DuckdbQuery {
+                    sql: "DELETE FROM cells".to_string(),
+                    row_limit: Some(10),
+                }],
+            }),
+        )
+        .await
+        .expect("initial request should complete with failed operation payload");
+
+        let replay_response = replay_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReplayAgentOpsCacheEntryRequest {
+                request_id: "replay-structured-error".to_string(),
+            }),
+        )
+        .await
+        .expect("replay should succeed")
+        .0;
+
+        let replay_result = replay_response
+            .cached_response
+            .results
+            .first()
+            .expect("replay response should include cached operation result");
+        assert!(!replay_result.ok);
+        assert_eq!(
+            replay_result
+                .data
+                .get("error_code")
+                .and_then(serde_json::Value::as_str),
+            Some("INVALID_QUERY_SQL"),
+        );
+        assert!(
+            replay_result
+                .data
+                .get("error_message")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|message| message.contains("read-only")),
+            "replayed failed operation should preserve structured error details",
+        );
+    }
+
+    #[tokio::test]
     async fn should_reject_missing_cache_entry_replay() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
