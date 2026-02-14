@@ -4,7 +4,7 @@ import {
   isPageActionMethod,
   normalizePageActionMethod,
 } from "@/agent/shared/action-cache-exec";
-import type { AgentDeps, HyperPage } from "@/types/agent/types";
+import type { AgentDeps, HyperPage, PerformOptions } from "@/types/agent/types";
 import type { HyperAgentLLM } from "@/llm/types";
 
 jest.mock("@/agent/shared/run-cached-action", () => ({
@@ -346,6 +346,73 @@ describe("action-cache perform helper dispatch", () => {
     expect(runCachedStep).toHaveBeenCalledWith(
       expect.objectContaining({
         cdpActionsEnabled: true,
+      })
+    );
+  });
+
+  it("falls back to agent defaults when helper options getters trap", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+      filterAdTrackingFrames: false,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+
+    const trappedOptions = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "cdpActions" || prop === "filterAdTrackingFrames") {
+            throw new Error("helper option trap");
+          }
+          return undefined;
+        },
+      }
+    ) as PerformOptions;
+
+    await page.performClick("//button[1]", trappedOptions);
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cdpActionsEnabled: false,
+        filterAdTrackingFrames: false,
+      })
+    );
+  });
+
+  it("uses default maxSteps when helper options maxSteps getter traps", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+      filterAdTrackingFrames: true,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+
+    const trappedOptions = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "maxSteps") {
+            throw new Error("maxSteps trap");
+          }
+          return undefined;
+        },
+      }
+    ) as PerformOptions;
+
+    await page.performClick("//button[1]", trappedOptions);
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxSteps: 3,
       })
     );
   });
