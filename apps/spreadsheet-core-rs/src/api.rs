@@ -3094,6 +3094,36 @@ mod tests {
         store::load_sheet_snapshot,
     };
 
+    fn assert_schema_endpoint_aliases(
+        schema: &serde_json::Value,
+        schema_name: &str,
+        expected_endpoint: &str,
+        require_agent_ops_alias: bool,
+    ) {
+        assert_eq!(
+            schema.get("endpoint"),
+            Some(&json!(expected_endpoint)),
+            "{schema_name} should advertise expected endpoint",
+        );
+        if require_agent_ops_alias {
+            assert_eq!(
+                schema.get("endpoint"),
+                schema.get("agent_ops_endpoint"),
+                "{schema_name} endpoint alias should stay in sync with agent_ops_endpoint",
+            );
+        }
+        assert_eq!(
+            schema.get("health_endpoint"),
+            Some(&json!("/health")),
+            "{schema_name} should advertise /health as health_endpoint",
+        );
+        assert_eq!(
+            schema.get("openapi_endpoint"),
+            Some(&json!("/v1/openapi")),
+            "{schema_name} should advertise /v1/openapi as openapi_endpoint",
+        );
+    }
+
     #[test]
     fn should_keep_supported_formula_list_unique_and_trimmed() {
         let mut seen = std::collections::HashSet::new();
@@ -9264,6 +9294,34 @@ mod tests {
         assert!(
             cache_validation_error_codes.contains(&"CACHE_ENTRY_NOT_FOUND"),
             "wizard schema should advertise cache-entry-not-found validation code",
+        );
+    }
+
+    #[tokio::test]
+    async fn should_keep_schema_endpoint_aliases_in_sync() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("schema-endpoint-aliases".to_string()))
+            .await
+            .expect("workbook should be created");
+        let agent_schema = get_agent_schema(State(state), Path(workbook.id))
+            .await
+            .expect("agent schema should resolve")
+            .0;
+        let wizard_schema = get_agent_wizard_schema().await.0;
+
+        assert_schema_endpoint_aliases(
+            &agent_schema,
+            "agent schema",
+            "/v1/workbooks/{id}/agent/ops",
+            true,
+        );
+        assert_schema_endpoint_aliases(
+            &wizard_schema,
+            "wizard schema",
+            "/v1/agent/wizard/run",
+            false,
         );
     }
 
