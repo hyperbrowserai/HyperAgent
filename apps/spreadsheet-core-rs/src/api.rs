@@ -161,6 +161,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "RATE",
   "IPMT",
   "PPMT",
+  "SLN",
+  "SYD",
   "SIN",
   "COS",
   "TAN",

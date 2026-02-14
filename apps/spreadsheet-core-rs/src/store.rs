@@ -33,6 +33,7 @@ use crate::{
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
     parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
     parse_ipmt_formula, parse_ppmt_formula,
+    parse_sln_formula, parse_syd_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1887,6 +1888,29 @@ fn evaluate_formula(
       None => return Ok(None),
     };
     return Ok(Some(principal_payment.to_string()));
+  }
+
+  if let Some((cost_arg, salvage_arg, life_arg)) = parse_sln_formula(formula) {
+    let cost = parse_required_float(connection, sheet, &cost_arg)?;
+    let salvage = parse_required_float(connection, sheet, &salvage_arg)?;
+    let life = parse_required_float(connection, sheet, &life_arg)?;
+    if life.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    let depreciation = (cost - salvage) / life;
+    return Ok(Some(depreciation.to_string()));
+  }
+
+  if let Some((cost_arg, salvage_arg, life_arg, period_arg)) = parse_syd_formula(formula) {
+    let cost = parse_required_float(connection, sheet, &cost_arg)?;
+    let salvage = parse_required_float(connection, sheet, &salvage_arg)?;
+    let life = parse_required_float(connection, sheet, &life_arg)?;
+    let period = parse_required_float(connection, sheet, &period_arg)?;
+    if life <= 0.0 || period <= 0.0 || period > life {
+      return Ok(None);
+    }
+    let depreciation = ((cost - salvage) * (life - period + 1.0) * 2.0) / (life * (life + 1.0));
+    return Ok(Some(depreciation.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -7109,12 +7133,24 @@ mod tests {
         value: None,
         formula: Some("=PPMT(0.1,1,2,100)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 260,
+        value: None,
+        formula: Some("=SLN(1000,100,9)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 261,
+        value: None,
+        formula: Some("=SYD(1000,100,9,1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 257);
+    assert_eq!(updated_cells, 259);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7128,7 +7164,7 @@ mod tests {
         start_row: 1,
         end_row: 20,
         start_col: 1,
-        end_col: 259,
+        end_col: 261,
       },
     )
     .expect("cells should be fetched");
@@ -8201,6 +8237,16 @@ mod tests {
       (ppmt_value + 47.619_047_619_047_62).abs() < 1e-9,
       "ppmt should compute principal portion of payment, got {ppmt_value}",
     );
+    assert_eq!(
+      by_position(1, 260).evaluated_value.as_deref(),
+      Some("100"),
+      "sln should compute straight-line depreciation",
+    );
+    assert_eq!(
+      by_position(1, 261).evaluated_value.as_deref(),
+      Some("180"),
+      "syd should compute sum-of-years depreciation",
+    );
   }
 
   #[test]
@@ -8553,6 +8599,33 @@ mod tests {
         "=IPMT(0.1,3,2,100)".to_string(),
         "=PPMT(0.1,3,2,100)".to_string(),
       ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_sln_syd_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=SLN(1000,100,0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=SYD(1000,100,9,10)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=SLN(1000,100,0)".to_string(), "=SYD(1000,100,9,10)".to_string()],
     );
   }
 

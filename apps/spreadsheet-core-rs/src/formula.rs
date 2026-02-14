@@ -644,6 +644,27 @@ pub fn parse_ppmt_formula(
   ))
 }
 
+pub fn parse_sln_formula(formula: &str) -> Option<(String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SLN" || args.len() != 3 {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args[2].clone()))
+}
+
+pub fn parse_syd_formula(formula: &str) -> Option<(String, String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SYD" || args.len() != 4 {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+  ))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2132,6 +2153,7 @@ mod tests {
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
     parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
     parse_ipmt_formula, parse_ppmt_formula,
+    parse_sln_formula, parse_syd_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2463,6 +2485,15 @@ mod tests {
     assert_eq!(ppmt_args.3, "D1");
     assert_eq!(ppmt_args.4, None);
     assert_eq!(ppmt_args.5, None);
+    let sln_args = parse_sln_formula("=SLN(A1,B1,C1)").expect("sln should parse");
+    assert_eq!(sln_args.0, "A1");
+    assert_eq!(sln_args.1, "B1");
+    assert_eq!(sln_args.2, "C1");
+    let syd_args = parse_syd_formula("=SYD(A1,B1,C1,D1)").expect("syd should parse");
+    assert_eq!(syd_args.0, "A1");
+    assert_eq!(syd_args.1, "B1");
+    assert_eq!(syd_args.2, "C1");
+    assert_eq!(syd_args.3, "D1");
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),
