@@ -146,7 +146,7 @@ Response includes:
 
 Schema discovery endpoints (`/v1/workbooks/{id}/agent/schema`, `/v1/agent/wizard/schema`) expose these under `signature_error_codes`, `cache_validation_error_codes`, and `formula_capabilities.validation_error_codes`.
 The in-memory request-id idempotency cache keeps up to **256** recent `agent/ops` responses per workbook (oldest entries evict first).
-`/v1/workbooks/{id}/agent/schema` also advertises workbook import/export endpoint metadata (including `x-export-meta` header shape, import formula-metric response fields, formula capability metadata with both summary strings and structured lists, and a workbook event-shape catalog for `workbook.created`, `sheet.added`, `cells.updated`, `formula.recalculated`, `chart.updated`, `workbook.imported`, and `workbook.exported`) for agent discoverability.
+`/v1/workbooks/{id}/agent/schema` also advertises workbook import/export and DuckDB-query endpoint metadata (including `x-export-meta` header shape, import formula-metric response fields, DuckDB query request/response schema + validation codes, formula capability metadata with both summary strings and structured lists, and a workbook event-shape catalog for `workbook.created`, `sheet.added`, `cells.updated`, `formula.recalculated`, `chart.updated`, `workbook.imported`, and `workbook.exported`) for agent discoverability.
 `/v1/agent/wizard/schema` includes run/import response-shape metadata plus formula capability metadata (summary + structured lists + validation error codes) so agent callers can discover wizard import metric fields and supported formula families without trial calls.
 
 Plan-preview helper:
