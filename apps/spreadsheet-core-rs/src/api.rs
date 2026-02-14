@@ -149,6 +149,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "EXP",
   "LOG",
   "LOG10",
+  "DOLLARDE",
+  "DOLLARFR",
   "EFFECT",
   "NOMINAL",
   "NPV",

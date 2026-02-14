@@ -486,6 +486,22 @@ pub fn parse_log_formula(formula: &str) -> Option<(String, Option<String>)> {
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_dollarde_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DOLLARDE" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_dollarfr_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DOLLARFR" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_effect_formula(formula: &str) -> Option<(String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "EFFECT" && args.len() == 2 {
@@ -2268,7 +2284,8 @@ mod tests {
     parse_iseven_formula, parse_isodd_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
-    parse_log_formula, parse_effect_formula, parse_nominal_formula,
+    parse_log_formula, parse_dollarde_formula, parse_dollarfr_formula,
+    parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
     parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
     parse_ipmt_formula, parse_ppmt_formula,
@@ -2543,6 +2560,14 @@ mod tests {
     let log_args = parse_log_formula("=LOG(A1,10)").expect("log should parse");
     assert_eq!(log_args.0, "A1");
     assert_eq!(log_args.1.as_deref(), Some("10"));
+    let dollarde_args =
+      parse_dollarde_formula("=DOLLARDE(A1,16)").expect("dollarde should parse");
+    assert_eq!(dollarde_args.0, "A1");
+    assert_eq!(dollarde_args.1, "16");
+    let dollarfr_args =
+      parse_dollarfr_formula("=DOLLARFR(A1,16)").expect("dollarfr should parse");
+    assert_eq!(dollarfr_args.0, "A1");
+    assert_eq!(dollarfr_args.1, "16");
     let effect_args =
       parse_effect_formula("=EFFECT(A1,B1)").expect("effect should parse");
     assert_eq!(effect_args.0, "A1");

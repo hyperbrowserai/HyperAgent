@@ -29,7 +29,8 @@ use crate::{
     parse_if_formula, parse_ifs_formula, parse_iferror_formula, parse_ifna_formula,
     parse_na_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
-    parse_log_formula, parse_effect_formula, parse_nominal_formula,
+    parse_log_formula, parse_dollarde_formula, parse_dollarfr_formula,
+    parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
     parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
     parse_ipmt_formula, parse_ppmt_formula,
@@ -1663,6 +1664,39 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(value.log(base).to_string()));
+  }
+
+  if let Some((fractional_dollar_arg, fraction_arg)) = parse_dollarde_formula(formula) {
+    let fractional_dollar_raw = resolve_scalar_operand(connection, sheet, &fractional_dollar_arg)?;
+    let fraction_raw = resolve_scalar_operand(connection, sheet, &fraction_arg)?;
+    let fractional_dollar = fractional_dollar_raw.trim().parse::<f64>().unwrap_or_default();
+    let fraction = fraction_raw.trim().parse::<f64>().unwrap_or_default().trunc();
+    if fraction < 1.0 {
+      return Ok(None);
+    }
+    let sign = if fractional_dollar < 0.0 { -1.0 } else { 1.0 };
+    let abs_value = fractional_dollar.abs();
+    let integer_part = abs_value.trunc();
+    let places = decimal_places_from_numeric_text(&fractional_dollar_raw);
+    let numerator = ((abs_value - integer_part) * 10f64.powi(places as i32)).round();
+    let decimal_dollar = sign * (integer_part + (numerator / fraction));
+    return Ok(Some(decimal_dollar.to_string()));
+  }
+
+  if let Some((decimal_dollar_arg, fraction_arg)) = parse_dollarfr_formula(formula) {
+    let decimal_dollar = parse_required_float(connection, sheet, &decimal_dollar_arg)?;
+    let fraction = parse_required_float(connection, sheet, &fraction_arg)?.trunc();
+    if fraction < 1.0 {
+      return Ok(None);
+    }
+    let sign = if decimal_dollar < 0.0 { -1.0 } else { 1.0 };
+    let abs_value = decimal_dollar.abs();
+    let integer_part = abs_value.trunc();
+    let numerator = (abs_value - integer_part) * fraction;
+    let denominator_digits = digit_count_for_positive_integer(fraction as i64);
+    let fractional_component = numerator / 10f64.powi(denominator_digits as i32);
+    let fractional_dollar = sign * (integer_part + fractional_component);
+    return Ok(Some(fractional_dollar.to_string()));
   }
 
   if let Some((nominal_rate_arg, periods_arg)) = parse_effect_formula(formula) {
@@ -5022,6 +5056,31 @@ fn parse_optional_char_count(
   }
 }
 
+fn decimal_places_from_numeric_text(value: &str) -> u32 {
+  let trimmed = value.trim();
+  if trimmed.is_empty() {
+    return 0;
+  }
+  let normalized = trimmed.trim_start_matches('+').trim_start_matches('-');
+  let Some((_, fractional)) = normalized.split_once('.') else {
+    return 0;
+  };
+  let fractional_digits = fractional
+    .split_once('e')
+    .map(|(digits, _)| digits)
+    .or_else(|| fractional.split_once('E').map(|(digits, _)| digits))
+    .unwrap_or(fractional);
+  fractional_digits.len() as u32
+}
+
+fn digit_count_for_positive_integer(value: i64) -> u32 {
+  let normalized = value.abs();
+  if normalized < 10 {
+    return 1;
+  }
+  normalized.to_string().len() as u32
+}
+
 fn parse_required_integer(
   connection: &Connection,
   sheet: &str,
@@ -7665,12 +7724,24 @@ mod tests {
         value: None,
         formula: Some("=XIRR(A22:B22,A21:B21)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 272,
+        value: None,
+        formula: Some("=DOLLARDE(1.02,16)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 273,
+        value: None,
+        formula: Some("=DOLLARFR(1.125,16)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 269);
+    assert_eq!(updated_cells, 271);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7684,7 +7755,7 @@ mod tests {
         start_row: 1,
         end_row: 22,
         start_col: 1,
-        end_col: 271,
+        end_col: 273,
       },
     )
     .expect("cells should be fetched");
@@ -8857,6 +8928,26 @@ mod tests {
       (xirr_value - 0.1).abs() < 1e-9,
       "xirr should solve irregular return rate, got {xirr_value}",
     );
+    let dollarde_value = by_position(1, 272)
+      .evaluated_value
+      .as_deref()
+      .expect("dollarde should evaluate")
+      .parse::<f64>()
+      .expect("dollarde should be numeric");
+    assert!(
+      (dollarde_value - 1.125).abs() < 1e-9,
+      "dollarde should convert fractional dollar notation, got {dollarde_value}",
+    );
+    let dollarfr_value = by_position(1, 273)
+      .evaluated_value
+      .as_deref()
+      .expect("dollarfr should evaluate")
+      .parse::<f64>()
+      .expect("dollarfr should be numeric");
+    assert!(
+      (dollarfr_value - 1.02).abs() < 1e-9,
+      "dollarfr should convert decimal dollar notation, got {dollarfr_value}",
+    );
   }
 
   #[test]
@@ -9435,6 +9526,33 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=XIRR(A1:B1,A2:B2)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_dollarde_dollarfr_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=DOLLARDE(1.02,0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=DOLLARFR(1.125,0)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=DOLLARDE(1.02,0)".to_string(), "=DOLLARFR(1.125,0)".to_string()],
+    );
   }
 
   #[test]
