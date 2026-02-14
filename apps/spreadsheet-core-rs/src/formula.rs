@@ -1346,6 +1346,22 @@ pub fn parse_t_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_base_formula(formula: &str) -> Option<(String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "BASE" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
+}
+
+pub fn parse_decimal_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DECIMAL" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_char_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "CHAR" && args.len() == 1 {
@@ -2314,7 +2330,8 @@ mod tests {
     parse_not_formula, parse_or_formula, parse_xor_formula, parse_right_formula,
     parse_find_formula, parse_mid_formula, parse_rept_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
-    parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
+    parse_value_formula, parse_n_formula, parse_t_formula,
+    parse_base_formula, parse_decimal_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_cell_address,
@@ -2881,6 +2898,14 @@ mod tests {
     );
     assert_eq!(parse_n_formula("=N(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_t_formula("=T(A1)").as_deref(), Some("A1"));
+    let base_args = parse_base_formula("=BASE(A1,16,4)").expect("base should parse");
+    assert_eq!(base_args.0, "A1");
+    assert_eq!(base_args.1, "16");
+    assert_eq!(base_args.2.as_deref(), Some("4"));
+    let decimal_args = parse_decimal_formula(r#"=DECIMAL("FF",16)"#)
+      .expect("decimal should parse");
+    assert_eq!(decimal_args.0, r#""FF""#);
+    assert_eq!(decimal_args.1, "16");
     assert_eq!(parse_char_formula("=CHAR(65)").as_deref(), Some("65"));
     assert_eq!(
       parse_code_formula(r#"=CODE("Apple")"#).as_deref(),

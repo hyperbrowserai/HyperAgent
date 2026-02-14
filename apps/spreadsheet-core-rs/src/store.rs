@@ -71,7 +71,8 @@ use crate::{
     parse_or_formula, parse_rept_formula, parse_right_formula,
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_find_formula,
-    parse_value_formula, parse_n_formula, parse_t_formula, parse_char_formula,
+    parse_value_formula, parse_n_formula, parse_t_formula,
+    parse_base_formula, parse_decimal_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_even_formula, parse_odd_formula,
@@ -1564,6 +1565,53 @@ fn evaluate_formula(
       return Ok(Some(String::new()));
     }
     return Ok(Some(value));
+  }
+
+  if let Some((number_arg, radix_arg, min_length_arg)) = parse_base_formula(formula) {
+    let number = parse_required_float(connection, sheet, &number_arg)?.trunc();
+    let radix = parse_required_integer(connection, sheet, &radix_arg)?;
+    let min_length = match min_length_arg {
+      Some(raw_min_length) => parse_required_integer(connection, sheet, &raw_min_length)?,
+      None => 0,
+    };
+    if number < 0.0 || !(2..=36).contains(&radix) || min_length < 0 {
+      return Ok(None);
+    }
+    let converted = format_radix_u64(number as u64, radix as u32);
+    let padded = if min_length > 0 {
+      format!(
+        "{:0>width$}",
+        converted,
+        width = usize::try_from(min_length).unwrap_or_default(),
+      )
+    } else {
+      converted
+    };
+    return Ok(Some(padded));
+  }
+
+  if let Some((number_text_arg, radix_arg)) = parse_decimal_formula(formula) {
+    let number_text = resolve_scalar_operand(connection, sheet, &number_text_arg)?;
+    let radix = parse_required_integer(connection, sheet, &radix_arg)?;
+    if !(2..=36).contains(&radix) {
+      return Ok(None);
+    }
+    let trimmed = number_text.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+    let (is_negative, digits) = match trimmed.strip_prefix('-') {
+      Some(rest) => (true, rest),
+      None => (false, trimmed),
+    };
+    let parsed = u64::from_str_radix(&digits.to_uppercase(), radix as u32).ok();
+    let Some(unsigned_value) = parsed else {
+      return Ok(None);
+    };
+    if is_negative {
+      return Ok(Some((-i128::from(unsigned_value)).to_string()));
+    }
+    return Ok(Some(unsigned_value.to_string()));
   }
 
   if let Some(char_arg) = parse_char_formula(formula) {
@@ -5081,6 +5129,22 @@ fn digit_count_for_positive_integer(value: i64) -> u32 {
   normalized.to_string().len() as u32
 }
 
+fn format_radix_u64(value: u64, radix: u32) -> String {
+  if value == 0 {
+    return "0".to_string();
+  }
+  let alphabet = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let mut remaining = value;
+  let mut digits: Vec<char> = Vec::new();
+  while remaining > 0 {
+    let remainder = (remaining % u64::from(radix)) as usize;
+    digits.push(alphabet[remainder] as char);
+    remaining /= u64::from(radix);
+  }
+  digits.reverse();
+  digits.into_iter().collect()
+}
+
 fn parse_required_integer(
   connection: &Connection,
   sheet: &str,
@@ -7736,12 +7800,24 @@ mod tests {
         value: None,
         formula: Some("=DOLLARFR(1.125,16)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 274,
+        value: None,
+        formula: Some("=BASE(255,16,4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 275,
+        value: None,
+        formula: Some(r#"=DECIMAL("FF",16)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 271);
+    assert_eq!(updated_cells, 273);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7755,7 +7831,7 @@ mod tests {
         start_row: 1,
         end_row: 22,
         start_col: 1,
-        end_col: 273,
+        end_col: 275,
       },
     )
     .expect("cells should be fetched");
@@ -8948,6 +9024,16 @@ mod tests {
       (dollarfr_value - 1.02).abs() < 1e-9,
       "dollarfr should convert decimal dollar notation, got {dollarfr_value}",
     );
+    assert_eq!(
+      by_position(1, 274).evaluated_value.as_deref(),
+      Some("00FF"),
+      "base should convert decimal to requested radix with left padding",
+    );
+    assert_eq!(
+      by_position(1, 275).evaluated_value.as_deref(),
+      Some("255"),
+      "decimal should convert arbitrary-radix text to decimal number",
+    );
   }
 
   #[test]
@@ -9552,6 +9638,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=DOLLARDE(1.02,0)".to_string(), "=DOLLARFR(1.125,0)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_base_decimal_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=BASE(255,1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(r#"=DECIMAL("FF",1)"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=BASE(255,1)".to_string(), r#"=DECIMAL("FF",1)"#.to_string()],
     );
   }
 

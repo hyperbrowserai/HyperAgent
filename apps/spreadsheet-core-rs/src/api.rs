@@ -229,6 +229,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "VALUE",
   "N",
   "T",
+  "BASE",
+  "DECIMAL",
   "CHAR",
   "CODE",
   "UNICHAR",
