@@ -309,11 +309,16 @@ export interface AgentWizardSchemaInfo {
   scenarios_endpoint?: string;
   scenario_operations_endpoint?: string;
   signature_error_codes?: string[];
+  agent_ops_result_error_shape?: Record<string, string>;
   request_multipart_fields?: string[];
   request_json_fields?: Record<string, string>;
   operations_preview_response_shape?: Record<string, string>;
   run_response_shape?: Record<string, string>;
   import_response_shape?: Record<string, string>;
+  duckdb_query_endpoint?: string;
+  duckdb_query_request_shape?: Record<string, string>;
+  duckdb_query_response_shape?: Record<string, string>;
+  duckdb_query_validation_error_codes?: string[];
   formula_capabilities?: FormulaCapabilitiesSchema;
   presets: AgentPresetInfo[];
   scenarios: AgentScenarioInfo[];

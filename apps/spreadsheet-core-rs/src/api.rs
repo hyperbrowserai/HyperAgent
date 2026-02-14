@@ -796,6 +796,12 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "operations_signature": "sha256 signature over generated operations",
         "operations": "array of operation objects"
       },
+      "signature_error_codes": [
+        "INVALID_SIGNATURE_FORMAT",
+        "OPERATION_SIGNATURE_MISMATCH",
+        "EMPTY_OPERATION_LIST",
+        "REQUEST_ID_CONFLICT"
+      ],
       "run_response_shape": {
         "workbook": "workbook summary",
         "scenario": "scenario name",
@@ -803,6 +809,11 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "request_id": "optional request id",
         "results": "array of operation execution results",
         "import": "optional import summary object (see import_response_shape)"
+      },
+      "agent_ops_result_error_shape": {
+        "error": "string in CODE: message form",
+        "error_code": "stable error code string",
+        "error_message": "human-readable error details"
       },
       "import_response_shape": {
         "sheets_imported": "number of imported sheets",
@@ -821,6 +832,22 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "validation_error_codes": FORMULA_VALIDATION_ERROR_CODES,
         "fallback_behavior": FORMULA_FALLBACK_BEHAVIOR
       },
+      "duckdb_query_endpoint": "/v1/workbooks/{id}/duckdb/query",
+      "duckdb_query_request_shape": {
+        "sql": "required read-only single-statement SQL query (SELECT/WITH)",
+        "row_limit": "optional positive number, default 200, max 1000"
+      },
+      "duckdb_query_response_shape": {
+        "columns": "array of selected column names in query order",
+        "rows": "array of row arrays (values are string or null)",
+        "row_count": "number of returned rows after truncation",
+        "row_limit": "applied row limit",
+        "truncated": "true when additional rows were available beyond row_limit"
+      },
+      "duckdb_query_validation_error_codes": [
+        "INVALID_QUERY_SQL",
+        "INVALID_QUERY_ROW_LIMIT"
+      ],
       "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
       "scenarios": scenario_catalog(),
       "presets": preset_catalog()
@@ -7396,6 +7423,24 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("optional import summary object (see import_response_shape)"),
         );
+        let signature_error_codes = schema
+            .get("signature_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("signature_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<Vec<_>>();
+        assert!(
+            signature_error_codes.contains(&"OPERATION_SIGNATURE_MISMATCH"),
+            "wizard schema should advertise operation-signature mismatch errors",
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_result_error_shape")
+                .and_then(|value| value.get("error_code"))
+                .and_then(serde_json::Value::as_str),
+            Some("stable error code string"),
+        );
         assert_eq!(
             schema
                 .get("import_response_shape")
@@ -7458,6 +7503,41 @@ mod tests {
         assert!(
             formula_validation_error_codes.contains(&"INVALID_FORMULA"),
             "wizard schema should advertise formula validation error codes",
+        );
+        assert_eq!(
+            schema
+                .get("duckdb_query_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/duckdb/query"),
+        );
+        assert_eq!(
+            schema
+                .get("duckdb_query_request_shape")
+                .and_then(|value| value.get("sql"))
+                .and_then(serde_json::Value::as_str),
+            Some("required read-only single-statement SQL query (SELECT/WITH)"),
+        );
+        assert_eq!(
+            schema
+                .get("duckdb_query_response_shape")
+                .and_then(|value| value.get("truncated"))
+                .and_then(serde_json::Value::as_str),
+            Some("true when additional rows were available beyond row_limit"),
+        );
+        let duckdb_query_validation_error_codes = schema
+            .get("duckdb_query_validation_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("duckdb_query_validation_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<Vec<_>>();
+        assert!(
+            duckdb_query_validation_error_codes.contains(&"INVALID_QUERY_SQL"),
+            "wizard schema should advertise read-only query sql validation code",
+        );
+        assert!(
+            duckdb_query_validation_error_codes.contains(&"INVALID_QUERY_ROW_LIMIT"),
+            "wizard schema should advertise query row-limit validation code",
         );
     }
 }
