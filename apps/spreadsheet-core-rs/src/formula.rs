@@ -995,6 +995,19 @@ pub fn parse_small_formula(
   Some((start, end, args[1].clone()))
 }
 
+pub fn parse_rank_formula(
+  formula: &str,
+) -> Option<(String, (u32, u32), (u32, u32), Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if (function != "RANK" && function != "RANK.EQ")
+    || !(args.len() == 2 || args.len() == 3)
+  {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[1])?;
+  Some((args[0].clone(), start, end, args.get(2).cloned()))
+}
+
 pub fn parse_sumproduct_formula(
   formula: &str,
 ) -> Option<Vec<((u32, u32), (u32, u32))>> {
@@ -1251,7 +1264,7 @@ mod tests {
     parse_countifs_formula, parse_sumproduct_formula, parse_sumif_formula,
     parse_sumifs_formula, parse_row_formula, parse_column_formula,
     parse_rows_formula, parse_columns_formula,
-    parse_large_formula, parse_small_formula,
+    parse_large_formula, parse_small_formula, parse_rank_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_rand_formula,
@@ -1636,6 +1649,12 @@ mod tests {
     assert_eq!(small.0, (1, 1));
     assert_eq!(small.1, (5, 1));
     assert_eq!(small.2, "2");
+    let rank =
+      parse_rank_formula("=RANK(A1,A1:A5,0)").expect("rank should parse");
+    assert_eq!(rank.0, "A1");
+    assert_eq!(rank.1, (1, 1));
+    assert_eq!(rank.2, (5, 1));
+    assert_eq!(rank.3.as_deref(), Some("0"));
 
     let sumproduct =
       parse_sumproduct_formula("=SUMPRODUCT(A1:A5,B1:B5)")

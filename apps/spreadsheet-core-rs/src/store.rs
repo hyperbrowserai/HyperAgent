@@ -7,7 +7,7 @@ use crate::{
     parse_counta_formula, parse_countblank_formula, parse_sumproduct_formula,
     parse_row_formula, parse_column_formula, parse_rows_formula,
     parse_columns_formula,
-    parse_large_formula, parse_small_formula,
+    parse_large_formula, parse_small_formula, parse_rank_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
@@ -513,6 +513,41 @@ fn evaluate_formula(
     values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
     let index = usize::try_from(k - 1).unwrap_or(0);
     return Ok(Some(values[index].to_string()));
+  }
+
+  if let Some((number_arg, start, end, order_arg)) = parse_rank_formula(formula) {
+    let number = parse_required_float(connection, sheet, &number_arg)?;
+    let bounds = normalized_range_bounds(start, end);
+    let mut values = Vec::new();
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        let row_index = bounds.start_row + row_offset;
+        let col_index = bounds.start_col + col_offset;
+        let value = load_cell_scalar(connection, sheet, row_index, col_index)?;
+        if let Ok(parsed) = value.trim().parse::<f64>() {
+          values.push(parsed);
+        }
+      }
+    }
+    if values.is_empty() {
+      return Ok(None);
+    }
+    let order = match order_arg {
+      Some(raw_order) => parse_required_integer(connection, sheet, &raw_order)?,
+      None => 0,
+    };
+    let rank = if order == 0 {
+      1 + values
+        .iter()
+        .filter(|candidate| **candidate > number)
+        .count()
+    } else {
+      1 + values
+        .iter()
+        .filter(|candidate| **candidate < number)
+        .count()
+    };
+    return Ok(Some(rank.to_string()));
   }
 
   if let Some(sumif_formula) = parse_sumif_formula(formula) {
@@ -3516,12 +3551,24 @@ mod tests {
         value: None,
         formula: Some("=RANDBETWEEN(1,6)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 138,
+        value: None,
+        formula: Some("=RANK(A1,A1:A2,0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 139,
+        value: None,
+        formula: Some("=RANK(A2,A1:A2,1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 135);
+    assert_eq!(updated_cells, 137);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3535,7 +3582,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 137,
+        end_col: 139,
       },
     )
     .expect("cells should be fetched");
@@ -3747,6 +3794,8 @@ mod tests {
       (1..=6).contains(&randbetween_value),
       "randbetween formula should be within [1, 6]: {randbetween_value}",
     );
+    assert_eq!(by_position(1, 138).evaluated_value.as_deref(), Some("1"));
+    assert_eq!(by_position(1, 139).evaluated_value.as_deref(), Some("1"));
   }
 
   #[test]

@@ -56,6 +56,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "COUNTBLANK",
   "COUNTIF",
   "COUNTIFS",
+  "RANK/RANK.EQ",
   "LARGE",
   "SMALL",
   "PRODUCT",
