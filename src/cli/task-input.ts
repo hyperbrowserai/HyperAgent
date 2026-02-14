@@ -37,6 +37,10 @@ function formatTaskInputDiagnostic(value: string): string {
   )}... [truncated ${sanitized.length - MAX_TASK_INPUT_DIAGNOSTIC_CHARS} chars]`;
 }
 
+function formatTaskInputUnknownDiagnostic(value: unknown): string {
+  return formatTaskInputDiagnostic(formatUnknownError(value)) || "unknown error";
+}
+
 export function normalizeTaskDescription(
   value: string,
   sourceLabel: string
@@ -110,7 +114,9 @@ export async function loadTaskDescriptionFromFile(
     content = await fs.promises.readFile(normalizedFilePath, "utf-8");
   } catch (error) {
     throw new Error(
-      `Failed to read task description file "${safeFilePath}": ${formatUnknownError(error)}`
+      `Failed to read task description file "${safeFilePath}": ${formatTaskInputUnknownDiagnostic(
+        error
+      )}`
     );
   }
 

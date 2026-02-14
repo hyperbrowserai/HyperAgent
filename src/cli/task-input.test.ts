@@ -133,6 +133,33 @@ describe("loadTaskDescriptionFromFile", () => {
     );
   });
 
+  it("sanitizes and truncates oversized read-file diagnostics", async () => {
+    const statSpy = jest.spyOn(fs.promises, "stat").mockResolvedValue({
+      isFile: () => true,
+      size: 1,
+    } as unknown as fs.Stats);
+    const readFileSpy = jest
+      .spyOn(fs.promises, "readFile")
+      .mockRejectedValue(new Error(`read\u0000\n${"x".repeat(10_000)}`));
+
+    try {
+      await loadTaskDescriptionFromFile("/tmp/task-input-test.txt")
+        .then(() => {
+          throw new Error("expected loadTaskDescriptionFromFile to reject");
+        })
+        .catch((error) => {
+          const message = String(error instanceof Error ? error.message : error);
+          expect(message).toContain("[truncated");
+          expect(message).not.toContain("\u0000");
+          expect(message).not.toContain("\n");
+          expect(message.length).toBeLessThan(700);
+        });
+    } finally {
+      statSpy.mockRestore();
+      readFileSpy.mockRestore();
+    }
+  });
+
   it("throws when file path is not a regular file", async () => {
     const tempDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "hyperagent-task-input-")

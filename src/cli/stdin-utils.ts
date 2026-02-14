@@ -1,4 +1,4 @@
-import { formatUnknownError } from "@/utils";
+import { formatCliError } from "@/cli/format-cli-error";
 
 interface RawModeCapableInput {
   isTTY?: boolean;
@@ -16,7 +16,7 @@ export function setRawModeIfSupported(
     input.setRawMode(enabled);
   } catch (error) {
     console.warn(
-      `[CLI] Failed to set raw mode: ${formatUnknownError(error)}`
+      `[CLI] Failed to set raw mode: ${formatCliError(error)}`
     );
   }
 }
