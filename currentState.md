@@ -159,6 +159,10 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Removed stale inline TODO/commented dead code in markdown conversion utility to keep cleanup pass consistent.
 - Replaced remaining TODO-style OOPIF note in a11y DOM extraction with an accurate non-actionable implementation constraint note; `src/` now has no lingering TODO/FIXME/HACK markers.
 - Hardened prompt open-tab summary fallback behavior: when context/tab enumeration is unavailable or trap-prone, prompts now fall back to the current tab line rather than opaque "Open tabs unavailable" text.
+- Hardened OOPIF discovery context reads in `FrameContextManager.captureOOPIFs()`:
+  - guard trap-prone `page.context`, `context.newCDPSession`, `page.frames`, and `page.mainFrame` reads,
+  - short-circuit gracefully when required APIs are unavailable,
+  - emit sanitized diagnostics in debug logs for getter/method trap failures.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

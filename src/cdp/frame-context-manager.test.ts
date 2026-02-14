@@ -326,6 +326,75 @@ describe("FrameContextManager listener bookkeeping", () => {
     await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
   });
 
+  it("captureOOPIFs logs sanitized diagnostics when page context getter traps", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const session = new FakeSession();
+    const page = {
+      get context() {
+        throw new Error(`context\u0000\n${"x".repeat(2_000)}`);
+      },
+    };
+    const manager = new FrameContextManager(
+      createFakeClientWithPage(session, page)
+    );
+    manager.setDebug(true);
+
+    try {
+      await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
+      const diagnostic = String(
+        logSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read page context")
+        )?.[0] ?? ""
+      );
+      expect(diagnostic).toContain("[truncated");
+      expect(diagnostic).not.toContain("\u0000");
+      expect(diagnostic).not.toContain("\n");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("captureOOPIFs logs sanitized diagnostics when newCDPSession getter traps", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const session = new FakeSession();
+    const mainFrame = {
+      url: () => "https://example.com",
+      parentFrame: () => null,
+      name: () => "main",
+      isDetached: () => false,
+    };
+    const context = {};
+    Object.defineProperty(context, "newCDPSession", {
+      get: () => {
+        throw new Error(`new-session\u0000\n${"x".repeat(2_000)}`);
+      },
+      configurable: true,
+    });
+    const page = {
+      context: () => context,
+      frames: () => [mainFrame],
+      mainFrame: () => mainFrame,
+    };
+    const manager = new FrameContextManager(
+      createFakeClientWithPage(session, page)
+    );
+    manager.setDebug(true);
+
+    try {
+      await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
+      const diagnostic = String(
+        logSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read newCDPSession")
+        )?.[0] ?? ""
+      );
+      expect(diagnostic).toContain("[truncated");
+      expect(diagnostic).not.toContain("\u0000");
+      expect(diagnostic).not.toContain("\n");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
   it("captureOOPIFs skips ad/tracking frame session creation by default", async () => {
     const session = new FakeSession();
     const mainFrame = {

@@ -501,13 +501,86 @@ export class FrameContextManager {
 
     // Type cast to Playwright Page - this is safe because we're using PlaywrightCDPClient
     const page = pageUnknown as {
-      context(): { newCDPSession(frame: unknown): Promise<CDPSession> };
-      frames(): Array<PlaywrightFrameHandle>;
-      mainFrame(): unknown;
+      context?: () => unknown;
+      frames?: () => unknown;
+      mainFrame?: () => unknown;
     };
 
-    const context = page.context();
-    const allFrames = page.frames();
+    let contextUnknown: unknown;
+    try {
+      const contextMethod = page.context;
+      if (typeof contextMethod !== "function") {
+        this.log("[FrameContext] Page context() unavailable for OOPIF discovery");
+        return;
+      }
+      contextUnknown = contextMethod.call(page);
+    } catch (error) {
+      this.log(
+        `[FrameContext] Failed to read page context for OOPIF discovery: ${formatFrameContextDiagnostic(
+          error
+        )}`
+      );
+      return;
+    }
+    if (!contextUnknown || typeof contextUnknown !== "object") {
+      this.log("[FrameContext] Page context unavailable for OOPIF discovery");
+      return;
+    }
+
+    let newCDPSessionMethod: unknown;
+    try {
+      newCDPSessionMethod = (
+        contextUnknown as { newCDPSession?: unknown }
+      ).newCDPSession;
+    } catch (error) {
+      this.log(
+        `[FrameContext] Failed to read newCDPSession() for OOPIF discovery: ${formatFrameContextDiagnostic(
+          error
+        )}`
+      );
+      return;
+    }
+    if (typeof newCDPSessionMethod !== "function") {
+      this.log("[FrameContext] newCDPSession() unavailable for OOPIF discovery");
+      return;
+    }
+
+    let allFrames: Array<PlaywrightFrameHandle>;
+    try {
+      const framesMethod = page.frames;
+      if (typeof framesMethod !== "function") {
+        this.log("[FrameContext] page.frames() unavailable for OOPIF discovery");
+        return;
+      }
+      const framesValue = framesMethod.call(page);
+      if (!Array.isArray(framesValue)) {
+        this.log("[FrameContext] page.frames() returned a non-array value");
+        return;
+      }
+      allFrames = framesValue as Array<PlaywrightFrameHandle>;
+    } catch (error) {
+      this.log(
+        `[FrameContext] Failed to read page frames for OOPIF discovery: ${formatFrameContextDiagnostic(
+          error
+        )}`
+      );
+      return;
+    }
+
+    let mainFrame: unknown = null;
+    try {
+      const mainFrameMethod = page.mainFrame;
+      if (typeof mainFrameMethod === "function") {
+        mainFrame = mainFrameMethod.call(page);
+      }
+    } catch (error) {
+      this.log(
+        `[FrameContext] Failed to read main frame for OOPIF discovery: ${formatFrameContextDiagnostic(
+          error
+        )}`
+      );
+      mainFrame = null;
+    }
 
     // Cleanup any previously tracked Playwright frames that are no longer present or detached
     const frameSet = new Set(allFrames);
@@ -520,9 +593,7 @@ export class FrameContextManager {
     }
 
     // Filter frames to process (exclude main frame)
-    const framesToCheck = allFrames.filter(
-      (frame) => frame !== page.mainFrame()
-    );
+    const framesToCheck = allFrames.filter((frame) => frame !== mainFrame);
 
     if (framesToCheck.length === 0) {
       return;
@@ -577,7 +648,11 @@ export class FrameContextManager {
       // Try to create CDP session - if it succeeds, this is an OOPIF
       let oopifSession: CDPSession | null = null;
       try {
-        oopifSession = await context.newCDPSession(frame);
+        oopifSession = await (
+          newCDPSessionMethod as (
+            frameArg: PlaywrightFrameHandle
+          ) => Promise<CDPSession>
+        )(frame);
       } catch {
         // Failed to create session = same-origin frame (already processed via DOM.getDocument)
         this.log(`[FrameContext] Frame ${frameUrl} is same-origin, skipping`);
