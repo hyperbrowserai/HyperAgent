@@ -320,6 +320,36 @@ const ENDPOINT_CATALOG_ISSUE_REASON_KEYS: &[&str] = &[
     "summary_fallback",
     "path_fallback",
 ];
+const ENDPOINT_CATALOG_ISSUE_REASON_DESCRIPTIONS: &[(&str, &str)] = &[
+    (
+        "unmapped_methods",
+        "No OpenAPI-backed HTTP method metadata was found for the endpoint key.",
+    ),
+    (
+        "method_mismatch",
+        "Schema-advertised methods differ from OpenAPI-derived methods.",
+    ),
+    (
+        "summary_mismatch",
+        "Schema-advertised summary differs from OpenAPI-derived summary.",
+    ),
+    (
+        "path_mismatch",
+        "Schema-advertised path differs from derived/normalized endpoint path.",
+    ),
+    (
+        "method_fallback",
+        "Methods are currently sourced from schema or fallback metadata instead of operation metadata.",
+    ),
+    (
+        "summary_fallback",
+        "Summary is currently sourced from schema or fallback metadata instead of operation metadata.",
+    ),
+    (
+        "path_fallback",
+        "Path is currently sourced from schema or fallback metadata instead of operation metadata.",
+    ),
+];
 const AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION: &str =
     "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)";
 
@@ -734,6 +764,14 @@ fn endpoint_openapi_stats(openapi_spec: &serde_json::Value) -> serde_json::Value
       "operation_count": operation_count,
       "summarized_operation_count": summarized_operation_count
     })
+}
+
+fn endpoint_catalog_issue_reason_descriptions_json() -> serde_json::Value {
+    let mut descriptions = serde_json::Map::new();
+    for (reason_key, description) in ENDPOINT_CATALOG_ISSUE_REASON_DESCRIPTIONS {
+        descriptions.insert((*reason_key).to_string(), json!(description));
+    }
+    serde_json::Value::Object(descriptions)
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -1488,6 +1526,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
     let endpoint_openapi_fingerprint = endpoint_openapi_fingerprint(&openapi_spec);
     let endpoint_openapi_stats = endpoint_openapi_stats(&openapi_spec);
+    let endpoint_issue_reason_descriptions = endpoint_catalog_issue_reason_descriptions_json();
     let endpoint_catalog_coverage =
         endpoint_catalog_coverage_from_operations(&schema, &endpoint_openapi_operations);
     let endpoint_catalog_diagnostics =
@@ -1523,6 +1562,10 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         schema_object.insert(
             "endpoint_catalog_issue_reason_keys".to_string(),
             json!(ENDPOINT_CATALOG_ISSUE_REASON_KEYS),
+        );
+        schema_object.insert(
+            "endpoint_catalog_issue_reason_descriptions".to_string(),
+            endpoint_issue_reason_descriptions,
         );
     }
     Json(schema)
@@ -2396,6 +2439,7 @@ async fn get_agent_schema(
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
     let endpoint_openapi_fingerprint = endpoint_openapi_fingerprint(&openapi_spec);
     let endpoint_openapi_stats = endpoint_openapi_stats(&openapi_spec);
+    let endpoint_issue_reason_descriptions = endpoint_catalog_issue_reason_descriptions_json();
     let endpoint_catalog_coverage =
         endpoint_catalog_coverage_from_operations(&schema, &endpoint_openapi_operations);
     let endpoint_catalog_diagnostics =
@@ -2431,6 +2475,10 @@ async fn get_agent_schema(
         schema_object.insert(
             "endpoint_catalog_issue_reason_keys".to_string(),
             json!(ENDPOINT_CATALOG_ISSUE_REASON_KEYS),
+        );
+        schema_object.insert(
+            "endpoint_catalog_issue_reason_descriptions".to_string(),
+            endpoint_issue_reason_descriptions,
         );
     }
     Ok(Json(schema))
@@ -3549,6 +3597,10 @@ async fn openapi() -> Json<serde_json::Value> {
             "x-endpoint-catalog-issue-reason-keys".to_string(),
             json!(ENDPOINT_CATALOG_ISSUE_REASON_KEYS),
         );
+        spec_object.insert(
+            "x-endpoint-catalog-issue-reason-descriptions".to_string(),
+            endpoint_catalog_issue_reason_descriptions_json(),
+        );
     }
     Json(spec)
 }
@@ -3580,9 +3632,9 @@ mod tests {
         validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
         AgentOpsCachePrefixesQuery, AgentOpsCacheStatsQuery,
         AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION, ENDPOINT_CATALOG_CONTRACT_VERSION,
-        ENDPOINT_CATALOG_ISSUE_REASON_KEYS, FORMULA_SUPPORTED_FUNCTION_LIST,
-        FORMULA_UNSUPPORTED_BEHAVIOR_LIST, FORMULA_VALIDATION_ERROR_CODES,
-        MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
+        ENDPOINT_CATALOG_ISSUE_REASON_DESCRIPTIONS, ENDPOINT_CATALOG_ISSUE_REASON_KEYS,
+        FORMULA_SUPPORTED_FUNCTION_LIST, FORMULA_UNSUPPORTED_BEHAVIOR_LIST,
+        FORMULA_VALIDATION_ERROR_CODES, MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
     };
     use crate::{
         error::ApiError,
@@ -4605,6 +4657,48 @@ mod tests {
         );
     }
 
+    fn assert_endpoint_catalog_issue_reason_descriptions_are_consistent(
+        schema: &serde_json::Value,
+        schema_name: &str,
+        openapi_spec: &serde_json::Value,
+    ) {
+        let schema_descriptions = schema
+            .get("endpoint_catalog_issue_reason_descriptions")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_catalog_issue_reason_descriptions");
+        assert_eq!(
+            schema_descriptions.len(),
+            ENDPOINT_CATALOG_ISSUE_REASON_DESCRIPTIONS.len(),
+            "{schema_name} endpoint_catalog_issue_reason_descriptions should match expected entry count",
+        );
+        for (reason_key, reason_description) in ENDPOINT_CATALOG_ISSUE_REASON_DESCRIPTIONS {
+            let description = schema_descriptions
+                .get(*reason_key)
+                .and_then(serde_json::Value::as_str)
+                .expect("schema issue reason descriptions should include each reason key");
+            assert!(
+                !description.trim().is_empty(),
+                "{schema_name} issue reason descriptions should not be blank",
+            );
+            assert_eq!(
+                description.trim(),
+                description,
+                "{schema_name} issue reason descriptions should be trimmed",
+            );
+            assert_eq!(
+                description, *reason_description,
+                "{schema_name} issue reason description should match server constant for key {reason_key}",
+            );
+        }
+        assert_eq!(
+            openapi_spec
+                .get("x-endpoint-catalog-issue-reason-descriptions")
+                .and_then(serde_json::Value::as_object),
+            Some(schema_descriptions),
+            "{schema_name} issue reason descriptions should match openapi extension descriptions",
+        );
+    }
+
     #[test]
     fn should_keep_supported_formula_list_unique_and_trimmed() {
         let mut seen = std::collections::HashSet::new();
@@ -4663,6 +4757,44 @@ mod tests {
                 "endpoint catalog issue reason keys should be unique: {reason_key}",
             );
         }
+    }
+
+    #[test]
+    fn should_keep_endpoint_catalog_issue_reason_descriptions_unique_and_aligned() {
+        let mut seen = std::collections::HashSet::new();
+        for (reason_key, reason_description) in ENDPOINT_CATALOG_ISSUE_REASON_DESCRIPTIONS {
+            assert!(
+                !reason_key.trim().is_empty(),
+                "endpoint catalog issue reason description keys should not be blank",
+            );
+            assert_eq!(
+                reason_key.trim(),
+                *reason_key,
+                "endpoint catalog issue reason description keys should be trimmed",
+            );
+            assert!(
+                seen.insert(*reason_key),
+                "endpoint catalog issue reason description keys should be unique: {reason_key}",
+            );
+            assert!(
+                ENDPOINT_CATALOG_ISSUE_REASON_KEYS.contains(reason_key),
+                "endpoint catalog issue reason description keys should be declared in issue reason keys: {reason_key}",
+            );
+            assert!(
+                !reason_description.trim().is_empty(),
+                "endpoint catalog issue reason descriptions should not be blank",
+            );
+            assert_eq!(
+                reason_description.trim(),
+                *reason_description,
+                "endpoint catalog issue reason descriptions should be trimmed",
+            );
+        }
+        assert_eq!(
+            ENDPOINT_CATALOG_ISSUE_REASON_KEYS.len(),
+            ENDPOINT_CATALOG_ISSUE_REASON_DESCRIPTIONS.len(),
+            "issue reason keys and descriptions should stay in one-to-one sync",
+        );
     }
 
     fn workbook_fixture_bytes(file_name: &str) -> Vec<u8> {
@@ -9684,6 +9816,11 @@ mod tests {
             "agent schema",
             &openapi_spec,
         );
+        assert_endpoint_catalog_issue_reason_descriptions_are_consistent(
+            &schema,
+            "agent schema",
+            &openapi_spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&schema, "agent schema");
         assert_eq!(
             schema
@@ -10598,6 +10735,11 @@ mod tests {
             "wizard schema",
             &openapi_spec,
         );
+        assert_endpoint_catalog_issue_reason_descriptions_are_consistent(
+            &schema,
+            "wizard schema",
+            &openapi_spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&schema, "wizard schema");
         assert_eq!(
             schema
@@ -11212,6 +11354,7 @@ mod tests {
             "endpoint_catalog_openapi_stats",
             "endpoint_catalog_contract_version",
             "endpoint_catalog_issue_reason_keys",
+            "endpoint_catalog_issue_reason_descriptions",
         ];
 
         for key in parity_keys {
@@ -11693,6 +11836,16 @@ mod tests {
             Some(&expected_reason_keys),
             "openapi spec should expose endpoint catalog issue reason extension",
         );
+        let expected_reason_descriptions = ENDPOINT_CATALOG_ISSUE_REASON_DESCRIPTIONS
+            .iter()
+            .map(|(reason_key, description)| ((*reason_key).to_string(), json!(description)))
+            .collect::<serde_json::Map<String, serde_json::Value>>();
+        assert_eq!(
+            spec.get("x-endpoint-catalog-issue-reason-descriptions")
+                .and_then(serde_json::Value::as_object),
+            Some(&expected_reason_descriptions),
+            "openapi spec should expose endpoint catalog issue reason description extension",
+        );
     }
 
     #[tokio::test]
@@ -11766,6 +11919,11 @@ mod tests {
             "agent schema",
             &spec,
         );
+        assert_endpoint_catalog_issue_reason_descriptions_are_consistent(
+            &agent_schema,
+            "agent schema",
+            &spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&agent_schema, "agent schema");
     }
 
@@ -11827,6 +11985,11 @@ mod tests {
             &spec,
         );
         assert_endpoint_catalog_issue_reason_keys_are_consistent(
+            &wizard_schema,
+            "wizard schema",
+            &spec,
+        );
+        assert_endpoint_catalog_issue_reason_descriptions_are_consistent(
             &wizard_schema,
             "wizard schema",
             &spec,
@@ -11921,7 +12084,17 @@ mod tests {
             "agent schema",
             &openapi_spec,
         );
+        assert_endpoint_catalog_issue_reason_descriptions_are_consistent(
+            &agent_schema,
+            "agent schema",
+            &openapi_spec,
+        );
         assert_endpoint_catalog_issue_reason_keys_are_consistent(
+            &wizard_schema,
+            "wizard schema",
+            &openapi_spec,
+        );
+        assert_endpoint_catalog_issue_reason_descriptions_are_consistent(
             &wizard_schema,
             "wizard schema",
             &openapi_spec,
@@ -11945,6 +12118,11 @@ mod tests {
             agent_schema.get("endpoint_catalog_issue_reason_keys"),
             wizard_schema.get("endpoint_catalog_issue_reason_keys"),
             "wizard and agent schemas should advertise identical endpoint catalog issue reason keys",
+        );
+        assert_eq!(
+            agent_schema.get("endpoint_catalog_issue_reason_descriptions"),
+            wizard_schema.get("endpoint_catalog_issue_reason_descriptions"),
+            "wizard and agent schemas should advertise identical endpoint catalog issue reason descriptions",
         );
 
         let agent_method_map = agent_endpoint_http_methods

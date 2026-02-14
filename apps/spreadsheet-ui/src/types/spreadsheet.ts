@@ -251,6 +251,7 @@ export interface AgentSchemaInfo {
   endpoint_catalog_openapi_stats?: EndpointCatalogOpenApiStats;
   endpoint_catalog_contract_version?: string;
   endpoint_catalog_issue_reason_keys?: string[];
+  endpoint_catalog_issue_reason_descriptions?: Record<string, string>;
   request_shape?: Record<string, unknown>;
   agent_ops_request_shape?: Record<string, unknown>;
   workbook_import_endpoint?: string;
@@ -376,6 +377,7 @@ export interface OpenApiSpec {
   };
   "x-endpoint-catalog-contract-version"?: string;
   "x-endpoint-catalog-issue-reason-keys"?: string[];
+  "x-endpoint-catalog-issue-reason-descriptions"?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -396,6 +398,7 @@ export interface AgentWizardSchemaInfo {
   endpoint_catalog_openapi_stats?: EndpointCatalogOpenApiStats;
   endpoint_catalog_contract_version?: string;
   endpoint_catalog_issue_reason_keys?: string[];
+  endpoint_catalog_issue_reason_descriptions?: Record<string, string>;
   json_endpoint?: string;
   presets_endpoint?: string;
   preset_operations_endpoint?: string;

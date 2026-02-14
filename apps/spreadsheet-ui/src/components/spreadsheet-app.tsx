@@ -438,6 +438,13 @@ function getEndpointIssueReasonLabel(reason: EndpointIssueReasonFilter): string 
   return reason.replaceAll("_", " ");
 }
 
+function getEndpointIssueReasonDescription(
+  reason: EndpointIssueReason,
+  descriptions?: Partial<Record<EndpointIssueReason, string>> | null,
+): string | null {
+  return descriptions?.[reason] ?? null;
+}
+
 function filterEndpointCatalogEntries<
   T extends { key: string; endpoint: string; openApiPath: string; summary: string | null },
 >(
@@ -832,6 +839,40 @@ function normalizeEndpointIssueReasonKeys(
     );
   const deduped = Array.from(new Set(normalized));
   return deduped.length > 0 ? deduped : null;
+}
+
+function normalizeEndpointIssueReasonDescriptions(
+  value: unknown,
+): Partial<Record<EndpointIssueReason, string>> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(
+      (entry): entry is [EndpointIssueReason, string] =>
+        ENDPOINT_ISSUE_REASONS.some((reason) => reason === entry[0])
+        && typeof entry[1] === "string"
+        && entry[1].trim().length > 0,
+    )
+    .map(([reason, description]) => [reason, description.trim()] as const);
+  if (entries.length === 0) {
+    return null;
+  }
+  return Object.fromEntries(entries) as Partial<Record<EndpointIssueReason, string>>;
+}
+
+function endpointIssueReasonDescriptionsEqual(
+  left: Partial<Record<EndpointIssueReason, string>> | null,
+  right: Partial<Record<EndpointIssueReason, string>> | null,
+): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  const keys = ENDPOINT_ISSUE_REASONS.filter((reason) => left[reason] || right[reason]);
+  if (keys.length === 0) {
+    return false;
+  }
+  return keys.every((reason) => (left[reason] ?? null) === (right[reason] ?? null));
 }
 
 function normalizeSchemaEndpointCatalogCoverage(
@@ -2140,12 +2181,26 @@ export function SpreadsheetApp() {
       ),
     [wizardSchemaQuery.data?.endpoint_catalog_issue_reason_keys],
   );
+  const wizardSchemaIssueReasonDescriptions = useMemo(
+    () =>
+      normalizeEndpointIssueReasonDescriptions(
+        wizardSchemaQuery.data?.endpoint_catalog_issue_reason_descriptions,
+      ),
+    [wizardSchemaQuery.data?.endpoint_catalog_issue_reason_descriptions],
+  );
   const agentSchemaIssueReasonKeys = useMemo(
     () =>
       normalizeEndpointIssueReasonKeys(
         agentSchemaQuery.data?.endpoint_catalog_issue_reason_keys,
       ),
     [agentSchemaQuery.data?.endpoint_catalog_issue_reason_keys],
+  );
+  const agentSchemaIssueReasonDescriptions = useMemo(
+    () =>
+      normalizeEndpointIssueReasonDescriptions(
+        agentSchemaQuery.data?.endpoint_catalog_issue_reason_descriptions,
+      ),
+    [agentSchemaQuery.data?.endpoint_catalog_issue_reason_descriptions],
   );
   const wizardSchemaEndpoints = useMemo(
     () => collectSchemaEndpointMetadata(wizardSchemaQuery.data, wizardEndpointOpenApiPathsByKey),
@@ -2189,6 +2244,13 @@ export function SpreadsheetApp() {
     () =>
       normalizeEndpointIssueReasonKeys(
         openApiSpecQuery.data?.["x-endpoint-catalog-issue-reason-keys"],
+      ),
+    [openApiSpecQuery.data],
+  );
+  const openApiSpecIssueReasonDescriptions = useMemo(
+    () =>
+      normalizeEndpointIssueReasonDescriptions(
+        openApiSpecQuery.data?.["x-endpoint-catalog-issue-reason-descriptions"],
       ),
     [openApiSpecQuery.data],
   );
@@ -2434,6 +2496,10 @@ export function SpreadsheetApp() {
     wizardSchemaIssueReasonKeys ?? Array.from(ENDPOINT_ISSUE_REASONS);
   const agentEndpointIssueReasonOptions =
     agentSchemaIssueReasonKeys ?? Array.from(ENDPOINT_ISSUE_REASONS);
+  const wizardEndpointIssueReasonDescriptions =
+    wizardSchemaIssueReasonDescriptions ?? openApiSpecIssueReasonDescriptions;
+  const agentEndpointIssueReasonDescriptions =
+    agentSchemaIssueReasonDescriptions ?? openApiSpecIssueReasonDescriptions;
   const hasEndpointCatalogIssueReasonKeysMismatch = Boolean(
     wizardSchemaIssueReasonKeys
     && agentSchemaIssueReasonKeys
@@ -2442,6 +2508,14 @@ export function SpreadsheetApp() {
       || wizardSchemaIssueReasonKeys.some(
         (reason, index) => reason !== agentSchemaIssueReasonKeys[index],
       )
+    ),
+  );
+  const hasEndpointCatalogIssueReasonDescriptionsMismatch = Boolean(
+    wizardSchemaIssueReasonDescriptions
+    && agentSchemaIssueReasonDescriptions
+    && !endpointIssueReasonDescriptionsEqual(
+      wizardSchemaIssueReasonDescriptions,
+      agentSchemaIssueReasonDescriptions,
     ),
   );
   const hasWizardIssueReasonKeysVsOpenApiMismatch = Boolean(
@@ -2454,6 +2528,14 @@ export function SpreadsheetApp() {
       )
     ),
   );
+  const hasWizardIssueReasonDescriptionsVsOpenApiMismatch = Boolean(
+    wizardSchemaIssueReasonDescriptions
+    && openApiSpecIssueReasonDescriptions
+    && !endpointIssueReasonDescriptionsEqual(
+      wizardSchemaIssueReasonDescriptions,
+      openApiSpecIssueReasonDescriptions,
+    ),
+  );
   const hasAgentIssueReasonKeysVsOpenApiMismatch = Boolean(
     agentSchemaIssueReasonKeys
     && openApiSpecIssueReasonKeys
@@ -2462,6 +2544,14 @@ export function SpreadsheetApp() {
       || agentSchemaIssueReasonKeys.some(
         (reason, index) => reason !== openApiSpecIssueReasonKeys[index],
       )
+    ),
+  );
+  const hasAgentIssueReasonDescriptionsVsOpenApiMismatch = Boolean(
+    agentSchemaIssueReasonDescriptions
+    && openApiSpecIssueReasonDescriptions
+    && !endpointIssueReasonDescriptionsEqual(
+      agentSchemaIssueReasonDescriptions,
+      openApiSpecIssueReasonDescriptions,
     ),
   );
   const hasEndpointCatalogFingerprintMismatch = Boolean(
@@ -2500,7 +2590,9 @@ export function SpreadsheetApp() {
     || hasWizardContractVersionVsOpenApiMismatch
     || hasEndpointCatalogContractVersionMismatch
     || hasWizardIssueReasonKeysVsOpenApiMismatch
+    || hasWizardIssueReasonDescriptionsVsOpenApiMismatch
     || hasEndpointCatalogIssueReasonKeysMismatch
+    || hasEndpointCatalogIssueReasonDescriptionsMismatch
     || openApiSpecExtensionStatsDrift?.hasDrift,
   );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
@@ -2574,10 +2666,16 @@ export function SpreadsheetApp() {
         contract_version_mismatch_with_agent_schema: hasEndpointCatalogContractVersionMismatch,
         contract_version_mismatch_with_openapi_spec: hasWizardContractVersionVsOpenApiMismatch,
         issue_reason_keys: wizardSchemaIssueReasonKeys,
+        issue_reason_descriptions: wizardSchemaIssueReasonDescriptions,
         issue_reason_keys_mismatch_with_agent_schema: hasEndpointCatalogIssueReasonKeysMismatch,
+        issue_reason_descriptions_mismatch_with_agent_schema:
+          hasEndpointCatalogIssueReasonDescriptionsMismatch,
         issue_reason_keys_mismatch_with_openapi_spec: hasWizardIssueReasonKeysVsOpenApiMismatch,
+        issue_reason_descriptions_mismatch_with_openapi_spec:
+          hasWizardIssueReasonDescriptionsVsOpenApiMismatch,
         openapi_spec_contract_version: openApiSpecContractVersion,
         openapi_spec_issue_reason_keys: openApiSpecIssueReasonKeys,
+        openapi_spec_issue_reason_descriptions: openApiSpecIssueReasonDescriptions,
         openapi_spec_fingerprint: openApiSpecFingerprint,
         openapi_spec_stats: openApiSpecExtensionStats,
         openapi_spec_stats_drift: openApiSpecExtensionStatsDrift,
@@ -2643,12 +2741,15 @@ export function SpreadsheetApp() {
       hasWizardEndpointCatalogDrift,
       hasWizardSchemaEndpointMetadata,
       hasEndpointCatalogContractVersionMismatch,
+      hasEndpointCatalogIssueReasonDescriptionsMismatch,
       hasEndpointCatalogIssueReasonKeysMismatch,
       hasEndpointCatalogFingerprintMismatch,
       hasWizardContractVersionVsOpenApiMismatch,
       hasWizardFingerprintVsOpenApiMismatch,
+      hasWizardIssueReasonDescriptionsVsOpenApiMismatch,
       hasWizardIssueReasonKeysVsOpenApiMismatch,
       openApiSpecContractVersion,
+      openApiSpecIssueReasonDescriptions,
       openApiSpecIssueReasonKeys,
       openApiSpecExtensionStats,
       openApiSpecExtensionStatsDrift,
@@ -2656,6 +2757,7 @@ export function SpreadsheetApp() {
       wizardOpenApiStatsDrift,
       wizardEndpointCatalogContractVersion,
       wizardEndpointCatalogOpenApiFingerprint,
+      wizardSchemaIssueReasonDescriptions,
       wizardSchemaIssueReasonKeys,
       wizardSchemaEndpointCoverage,
       wizardSchemaEndpointDiagnostics,
@@ -3155,7 +3257,9 @@ export function SpreadsheetApp() {
     || hasAgentContractVersionVsOpenApiMismatch
     || hasEndpointCatalogContractVersionMismatch
     || hasAgentIssueReasonKeysVsOpenApiMismatch
+    || hasAgentIssueReasonDescriptionsVsOpenApiMismatch
     || hasEndpointCatalogIssueReasonKeysMismatch
+    || hasEndpointCatalogIssueReasonDescriptionsMismatch
     || openApiSpecExtensionStatsDrift?.hasDrift,
   );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
@@ -3229,10 +3333,16 @@ export function SpreadsheetApp() {
         contract_version_mismatch_with_wizard_schema: hasEndpointCatalogContractVersionMismatch,
         contract_version_mismatch_with_openapi_spec: hasAgentContractVersionVsOpenApiMismatch,
         issue_reason_keys: agentSchemaIssueReasonKeys,
+        issue_reason_descriptions: agentSchemaIssueReasonDescriptions,
         issue_reason_keys_mismatch_with_wizard_schema: hasEndpointCatalogIssueReasonKeysMismatch,
+        issue_reason_descriptions_mismatch_with_wizard_schema:
+          hasEndpointCatalogIssueReasonDescriptionsMismatch,
         issue_reason_keys_mismatch_with_openapi_spec: hasAgentIssueReasonKeysVsOpenApiMismatch,
+        issue_reason_descriptions_mismatch_with_openapi_spec:
+          hasAgentIssueReasonDescriptionsVsOpenApiMismatch,
         openapi_spec_contract_version: openApiSpecContractVersion,
         openapi_spec_issue_reason_keys: openApiSpecIssueReasonKeys,
+        openapi_spec_issue_reason_descriptions: openApiSpecIssueReasonDescriptions,
         openapi_spec_fingerprint: openApiSpecFingerprint,
         openapi_spec_stats: openApiSpecExtensionStats,
         openapi_spec_stats_drift: openApiSpecExtensionStatsDrift,
@@ -3302,11 +3412,14 @@ export function SpreadsheetApp() {
       agentOpenApiStatsDrift,
       agentSchemaEndpointOpenApiStats,
       hasAgentContractVersionVsOpenApiMismatch,
+      hasAgentIssueReasonDescriptionsVsOpenApiMismatch,
       hasAgentFingerprintVsOpenApiMismatch,
       hasEndpointCatalogContractVersionMismatch,
+      hasEndpointCatalogIssueReasonDescriptionsMismatch,
       hasEndpointCatalogIssueReasonKeysMismatch,
       hasEndpointCatalogFingerprintMismatch,
       openApiSpecContractVersion,
+      openApiSpecIssueReasonDescriptions,
       openApiSpecIssueReasonKeys,
       openApiSpecExtensionStats,
       openApiSpecExtensionStatsDrift,
@@ -3314,6 +3427,7 @@ export function SpreadsheetApp() {
       agentSchemaEndpointCoverage,
       agentSchemaEndpointDiagnostics,
       agentSchemaEndpointsWithMethods,
+      agentSchemaIssueReasonDescriptions,
       hasAgentIssueReasonKeysVsOpenApiMismatch,
       agentSchemaIssueReasonKeys,
     ],
@@ -6224,7 +6338,16 @@ export function SpreadsheetApp() {
                       >
                         <option value="all_reasons">all reasons</option>
                         {wizardEndpointIssueReasonOptions.map((reason) => (
-                          <option key={reason} value={reason}>
+                          <option
+                            key={reason}
+                            value={reason}
+                            title={
+                              getEndpointIssueReasonDescription(
+                                reason,
+                                wizardEndpointIssueReasonDescriptions,
+                              ) ?? undefined
+                            }
+                          >
                             {getEndpointIssueReasonLabel(reason)}
                           </option>
                         ))}
@@ -6316,6 +6439,12 @@ export function SpreadsheetApp() {
                               : "border-amber-700/60 text-amber-200 hover:bg-amber-500/10"
                           }`}
                           disabled={wizardEndpointIssueReasonCounts[reason] === 0}
+                          title={
+                            getEndpointIssueReasonDescription(
+                              reason,
+                              wizardEndpointIssueReasonDescriptions,
+                            ) ?? undefined
+                          }
                         >
                           {getEndpointIssueReasonLabel(reason)} ({wizardEndpointIssueReasonCounts[reason]})
                         </button>
@@ -6759,6 +6888,15 @@ export function SpreadsheetApp() {
                     endpoint catalog issue reason keys match agent schema.
                   </p>
                 ) : null}
+                {hasEndpointCatalogIssueReasonDescriptionsMismatch ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    endpoint catalog issue reason descriptions mismatch between wizard and agent schemas.
+                  </p>
+                ) : wizardSchemaIssueReasonDescriptions ? (
+                  <p className="mt-1 text-[11px] text-emerald-300">
+                    endpoint catalog issue reason descriptions match agent schema.
+                  </p>
+                ) : null}
                 {hasWizardIssueReasonKeysVsOpenApiMismatch ? (
                   <p className="mt-1 text-[11px] text-rose-300">
                     endpoint catalog issue reason keys mismatch between wizard schema and /v1/openapi extension.
@@ -6768,6 +6906,19 @@ export function SpreadsheetApp() {
                     ? (
                       <p className="mt-1 text-[11px] text-emerald-300">
                         endpoint catalog issue reason keys match /v1/openapi extension.
+                      </p>
+                    )
+                    : null
+                )}
+                {hasWizardIssueReasonDescriptionsVsOpenApiMismatch ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    endpoint catalog issue reason descriptions mismatch between wizard schema and /v1/openapi extension.
+                  </p>
+                ) : (
+                  wizardSchemaIssueReasonDescriptions && openApiSpecIssueReasonDescriptions
+                    ? (
+                      <p className="mt-1 text-[11px] text-emerald-300">
+                        endpoint catalog issue reason descriptions match /v1/openapi extension.
                       </p>
                     )
                     : null
@@ -8002,7 +8153,16 @@ export function SpreadsheetApp() {
                       >
                         <option value="all_reasons">all reasons</option>
                         {agentEndpointIssueReasonOptions.map((reason) => (
-                          <option key={reason} value={reason}>
+                          <option
+                            key={reason}
+                            value={reason}
+                            title={
+                              getEndpointIssueReasonDescription(
+                                reason,
+                                agentEndpointIssueReasonDescriptions,
+                              ) ?? undefined
+                            }
+                          >
                             {getEndpointIssueReasonLabel(reason)}
                           </option>
                         ))}
@@ -8094,6 +8254,12 @@ export function SpreadsheetApp() {
                               : "border-amber-700/60 text-amber-200 hover:bg-amber-500/10"
                           }`}
                           disabled={agentEndpointIssueReasonCounts[reason] === 0}
+                          title={
+                            getEndpointIssueReasonDescription(
+                              reason,
+                              agentEndpointIssueReasonDescriptions,
+                            ) ?? undefined
+                          }
                         >
                           {getEndpointIssueReasonLabel(reason)} ({agentEndpointIssueReasonCounts[reason]})
                         </button>
@@ -8537,6 +8703,15 @@ export function SpreadsheetApp() {
                     endpoint catalog issue reason keys match wizard schema.
                   </p>
                 ) : null}
+                {hasEndpointCatalogIssueReasonDescriptionsMismatch ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    endpoint catalog issue reason descriptions mismatch between wizard and agent schemas.
+                  </p>
+                ) : agentSchemaIssueReasonDescriptions ? (
+                  <p className="mt-1 text-xs text-emerald-300">
+                    endpoint catalog issue reason descriptions match wizard schema.
+                  </p>
+                ) : null}
                 {hasAgentIssueReasonKeysVsOpenApiMismatch ? (
                   <p className="mt-1 text-xs text-rose-300">
                     endpoint catalog issue reason keys mismatch between agent schema and /v1/openapi extension.
@@ -8546,6 +8721,19 @@ export function SpreadsheetApp() {
                     ? (
                       <p className="mt-1 text-xs text-emerald-300">
                         endpoint catalog issue reason keys match /v1/openapi extension.
+                      </p>
+                    )
+                    : null
+                )}
+                {hasAgentIssueReasonDescriptionsVsOpenApiMismatch ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    endpoint catalog issue reason descriptions mismatch between agent schema and /v1/openapi extension.
+                  </p>
+                ) : (
+                  agentSchemaIssueReasonDescriptions && openApiSpecIssueReasonDescriptions
+                    ? (
+                      <p className="mt-1 text-xs text-emerald-300">
+                        endpoint catalog issue reason descriptions match /v1/openapi extension.
                       </p>
                     )
                     : null
