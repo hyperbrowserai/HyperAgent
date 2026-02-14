@@ -117,6 +117,34 @@ async function collectExecutionContexts(
 
   const targetFrames = frameIds ? new Set(frameIds) : undefined;
   const contexts = new Map<string, number>();
+  const readSessionMethod = (
+    methodName: "on" | "off"
+  ): ((
+    event: string,
+    listener: (event: Protocol.Runtime.ExecutionContextCreatedEvent) => void
+  ) => void) | null => {
+    try {
+      const method = (session as CDPSession & { [key: string]: unknown })[
+        methodName
+      ];
+      if (typeof method !== "function") {
+        return null;
+      }
+      return method as (
+        event: string,
+        listener: (event: Protocol.Runtime.ExecutionContextCreatedEvent) => void
+      ) => void;
+    } catch (error) {
+      if (debug) {
+        console.warn(
+          `[A11y] Failed to read Runtime.executionContextCreated listener method: ${formatA11yDiagnostic(
+            error
+          )}`
+        );
+      }
+      return null;
+    }
+  };
 
   let finishWait: (() => void) | undefined;
   let finished = false;
@@ -164,7 +192,20 @@ async function collectExecutionContexts(
     }
   };
 
-  session.on("Runtime.executionContextCreated", handler);
+  const onMethod = readSessionMethod("on");
+  if (onMethod) {
+    try {
+      onMethod.call(session, "Runtime.executionContextCreated", handler);
+    } catch (error) {
+      if (debug) {
+        console.warn(
+          `[A11y] Failed to attach Runtime.executionContextCreated listener: ${formatA11yDiagnostic(
+            error
+          )}`
+        );
+      }
+    }
+  }
   try {
     await session.send("Runtime.enable").catch((error) => {
       if (debug) {
@@ -176,7 +217,20 @@ async function collectExecutionContexts(
     });
     await waitPromise;
   } finally {
-    session.off?.("Runtime.executionContextCreated", handler);
+    const offMethod = readSessionMethod("off");
+    if (offMethod) {
+      try {
+        offMethod.call(session, "Runtime.executionContextCreated", handler);
+      } catch (error) {
+        if (debug) {
+          console.warn(
+            `[A11y] Failed to detach Runtime.executionContextCreated listener: ${formatA11yDiagnostic(
+              error
+            )}`
+          );
+        }
+      }
+    }
   }
 
   return contexts;

@@ -3,11 +3,16 @@ import { getA11yDOM } from "@/context-providers/a11y-dom";
 
 const getCDPClientMock = jest.fn();
 const getOrCreateFrameContextManagerMock = jest.fn();
+const buildBackendIdMapsMock = jest.fn();
 
 jest.mock("@/cdp", () => ({
   getCDPClient: (...args: unknown[]) => getCDPClientMock(...args),
   getOrCreateFrameContextManager: (...args: unknown[]) =>
     getOrCreateFrameContextManagerMock(...args),
+}));
+
+jest.mock("./build-maps", () => ({
+  buildBackendIdMaps: (...args: unknown[]) => buildBackendIdMapsMock(...args),
 }));
 
 const getDebugOptionsMock = jest.fn(() => ({
@@ -24,6 +29,7 @@ describe("getA11yDOM error formatting", () => {
     getCDPClientMock.mockReset();
     getOrCreateFrameContextManagerMock.mockReset();
     getDebugOptionsMock.mockReset();
+    buildBackendIdMapsMock.mockReset();
     getDebugOptionsMock.mockReturnValue({
       enabled: false,
       profileDomCapture: false,
@@ -252,6 +258,74 @@ describe("getA11yDOM error formatting", () => {
       expect(result.domState).toBe("Error: Could not extract accessibility tree");
       expect(setFrameFilteringEnabled).not.toHaveBeenCalled();
     } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("continues when runtime listener method getter traps during context collection", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = {
+      evaluate: jest.fn().mockResolvedValue(undefined),
+      url: jest.fn(() => "https://example.com"),
+    } as unknown as Page;
+    const session = {
+      id: "session-1",
+      send: jest.fn(async (method: string) => {
+        if (method === "Accessibility.getFullAXTree") {
+          throw new Error("stop after context collection");
+        }
+        return {};
+      }),
+      get on() {
+        throw new Error(`listener-on\u0000\n${"x".repeat(2_000)}`);
+      },
+      off: jest.fn(),
+    };
+    getCDPClientMock.mockResolvedValue({
+      acquireSession: jest.fn().mockResolvedValue(session),
+    });
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest.fn(),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+      captureOOPIFs: jest.fn().mockResolvedValue(undefined),
+      setFrameFilteringEnabled: jest.fn(),
+    });
+    buildBackendIdMapsMock.mockResolvedValue({
+      frameMap: new Map([
+        [
+          1,
+          {
+            frameIndex: 1,
+            siblingPosition: 0,
+            src: "https://example.com/frame",
+            xpath: "//iframe[1]",
+            parentFrameIndex: 0,
+            frameId: "frame-1",
+          },
+        ],
+      ]),
+      backendNodeMap: {},
+      xpathMap: {},
+      frameMetadataMap: new Map(),
+      frameTree: new Map(),
+    });
+
+    try {
+      const result = await getA11yDOM(page, true);
+      expect(result.domState).toBe("Error: Could not extract accessibility tree");
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes(
+            "Failed to read Runtime.executionContextCreated listener method"
+          )
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
       errorSpy.mockRestore();
     }
   });
