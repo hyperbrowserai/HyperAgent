@@ -495,13 +495,14 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   }
 
   private readErrorEmitterMethodOrThrow(
-    methodName: "on" | "off" | "removeListener"
+    methodName: "on" | "addListener" | "off" | "removeListener"
   ): (this: ErrorEmitter, eventName: string, listener: (error: Error) => void) => void {
     let method: unknown;
     try {
       method = (
         this.errorEmitter as ErrorEmitter & {
           on?: unknown;
+          addListener?: unknown;
           off?: unknown;
           removeListener?: unknown;
         }
@@ -521,6 +522,27 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       eventName: string,
       listener: (error: Error) => void
     ) => void;
+  }
+
+  private attachTaskErrorListener(listener: (error: Error) => void): void {
+    let lastError: unknown;
+    const attachMethodNames: Array<"on" | "addListener"> = [
+      "on",
+      "addListener",
+    ];
+    for (const methodName of attachMethodNames) {
+      try {
+        const attachMethod = this.readErrorEmitterMethodOrThrow(methodName);
+        attachMethod.call(this.errorEmitter, "error", listener);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw (
+      lastError ??
+      new Error("errorEmitter listener registration methods are unavailable")
+    );
   }
 
   private detachTaskErrorListener(listener: (error: Error) => void): void {
@@ -1817,8 +1839,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     let listenerAttached = false;
     try {
-      const onMethod = this.readErrorEmitterMethodOrThrow("on");
-      onMethod.call(this.errorEmitter, "error", onTaskError);
+      this.attachTaskErrorListener(onTaskError);
       listenerAttached = true;
       this.taskErrorForwarders.set(taskId, onTaskError);
     } catch (error) {

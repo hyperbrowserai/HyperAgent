@@ -1072,7 +1072,81 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
-  it("continues async task execution when errorEmitter.on getter traps", async () => {
+  it("falls back to addListener when errorEmitter.on getter traps during task registration", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    let resolveTask!: (value: AgentTaskOutput) => void;
+    mockedRunAgentTask.mockImplementation(
+      () =>
+        new Promise<AgentTaskOutput>((resolve) => {
+          resolveTask = resolve;
+        })
+    );
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      errorEmitter: {
+        listenerCount: (event: string) => number;
+      };
+      taskErrorForwarders: Map<string, (error: Error) => void>;
+    };
+    const baseEmitter = internalAgent.errorEmitter;
+    internalAgent.errorEmitter = new Proxy(baseEmitter as object, {
+      get: (target, property, receiver) => {
+        if (property === "on") {
+          throw new Error("errorEmitter on getter trap");
+        }
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    }) as unknown as typeof internalAgent.errorEmitter;
+
+    const fakePage = {} as unknown as Page;
+    try {
+      const task = await agent.executeTaskAsync(
+        "on getter fallback task",
+        undefined,
+        fakePage
+      );
+      expect(internalAgent.errorEmitter.listenerCount("error")).toBeGreaterThan(0);
+
+      resolveTask({
+        taskId: task.id,
+        status: TaskStatus.COMPLETED,
+        steps: [],
+        output: "done",
+        actionCache: {
+          taskId: task.id,
+          createdAt: new Date().toISOString(),
+          status: TaskStatus.COMPLETED,
+          steps: [],
+        },
+      });
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.COMPLETED,
+      });
+      await Promise.resolve();
+      expect(internalAgent.taskErrorForwarders.size).toBe(0);
+      expect(internalAgent.errorEmitter.listenerCount("error")).toBe(0);
+      expect(
+        warnSpy.mock.calls.some((call) =>
+          String(call[0] ?? "").includes(
+            "Failed to register task-scoped error listener"
+          )
+        )
+      ).toBe(false);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("continues async task execution when errorEmitter.on/addListener getters trap", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockImplementation(async (_, state) => ({
       taskId: state.id,
@@ -1101,7 +1175,7 @@ describe("HyperAgent constructor and task controls", () => {
     const baseEmitter = internalAgent.errorEmitter;
     internalAgent.errorEmitter = new Proxy(baseEmitter as object, {
       get: (target, property, receiver) => {
-        if (property === "on") {
+        if (property === "on" || property === "addListener") {
           throw new Error(`errorEmitter on trap\u0000\n${"x".repeat(10_000)}`);
         }
         const value = Reflect.get(target, property, receiver);

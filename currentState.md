@@ -212,6 +212,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened task error-forwarder listener detach fallback:
   - `HyperAgent` now falls back to `errorEmitter.removeListener` when `errorEmitter.off` is unavailable/trap-prone during task-forwarder cleanup.
   - Added regression coverage proving settled task cleanup still detaches listeners when `off` getter traps.
+- Hardened task error-forwarder listener attach fallback:
+  - `HyperAgent` now falls back to `errorEmitter.addListener` when `errorEmitter.on` is unavailable/trap-prone during task-forwarder registration.
+  - Added regression coverage proving in-flight listener wiring still succeeds when `on` getter traps, plus retained warning-path coverage when both `on` and `addListener` getters trap.
 - Refreshed remaining staged-flow wording in the CDP deep dive around OOPIF discovery to describe current execution-context sync progression without stale "Need Phase 4" phrasing.
 - Hardened CDP command dispatch in Playwright session adapter:
   - `PlaywrightSessionAdapter.send()` now guards trap-prone `session.send` method reads and wraps sync send failures with sanitized/diagnostic context.
