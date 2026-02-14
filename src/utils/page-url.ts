@@ -1,5 +1,24 @@
 const DEFAULT_PAGE_URL_FALLBACK = "about:blank";
 
+type NormalizePageUrlOptions = {
+  fallback?: string;
+  maxChars?: number;
+};
+
+function safeReadOptionField(
+  options: unknown,
+  field: keyof NormalizePageUrlOptions
+): unknown {
+  if (!options || (typeof options !== "object" && typeof options !== "function")) {
+    return undefined;
+  }
+  try {
+    return (options as Record<string, unknown>)[field];
+  } catch {
+    return undefined;
+  }
+}
+
 function sanitizePageUrlText(value: string): string {
   if (value.length === 0) {
     return value;
@@ -23,14 +42,12 @@ function truncatePageUrl(value: string, maxChars: number): string {
 
 export function normalizePageUrl(
   value: unknown,
-  options?: {
-    fallback?: string;
-    maxChars?: number;
-  }
+  options?: NormalizePageUrlOptions
 ): string {
+  const fallbackOption = safeReadOptionField(options, "fallback");
   const fallbackCandidate =
-    typeof options?.fallback === "string"
-      ? sanitizePageUrlText(options.fallback)
+    typeof fallbackOption === "string"
+      ? sanitizePageUrlText(fallbackOption)
       : DEFAULT_PAGE_URL_FALLBACK;
   const fallback =
     fallbackCandidate.length > 0 ? fallbackCandidate : DEFAULT_PAGE_URL_FALLBACK;
@@ -41,7 +58,7 @@ export function normalizePageUrl(
   if (normalized.length === 0) {
     return fallback;
   }
-  const maxChars = options?.maxChars;
+  const maxChars = safeReadOptionField(options, "maxChars");
   if (
     typeof maxChars !== "number" ||
     !Number.isFinite(maxChars) ||

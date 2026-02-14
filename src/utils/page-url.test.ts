@@ -34,4 +34,37 @@ describe("normalizePageUrl", () => {
     expect(normalized).toContain("[truncated");
     expect(normalized.length).toBeGreaterThan(40);
   });
+
+  it("does not throw when options getters trap", () => {
+    const trappedOptions = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "fallback" || prop === "maxChars") {
+            throw new Error("option trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    expect(() =>
+      normalizePageUrl(
+        "https://example.com/path",
+        trappedOptions as unknown as Parameters<typeof normalizePageUrl>[1]
+      )
+    ).not.toThrow();
+    expect(
+      normalizePageUrl(
+        "https://example.com/path",
+        trappedOptions as unknown as Parameters<typeof normalizePageUrl>[1]
+      )
+    ).toBe("https://example.com/path");
+    expect(
+      normalizePageUrl(
+        undefined,
+        trappedOptions as unknown as Parameters<typeof normalizePageUrl>[1]
+      )
+    ).toBe("about:blank");
+  });
 });

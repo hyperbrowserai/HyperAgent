@@ -145,6 +145,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Refined CDP frame-filter URL normalization to correctly handle scheme-less `host:port` URLs (without misclassifying them as custom schemes), preserving ad-domain detection coverage in those cases.
 - Tightened frame-filter query-signal policy so tracking query parameters are treated as strong signals only for parseable URL contexts, preventing path-only query strings from being over-filtered.
 - Hardened global debug-option storage by normalizing option payloads to plain boolean fields at set-time, preventing trap-prone debug option getters from leaking into runtime reads.
+- Hardened page-URL normalization option reads (fallback/maxChars) against trap-prone option objects, ensuring deterministic URL fallback/truncation behavior under malformed option payloads.
 - Hardened prompt base-message materialization with trap-safe array reads so malformed/trap-prone seed message arrays no longer crash message assembly and readable entries are preserved.
 - Hardened constructor custom-action ingestion with trap-safe array reads so unreadable custom-action entries are skipped while valid entries continue to register.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
