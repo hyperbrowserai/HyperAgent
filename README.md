@@ -583,6 +583,8 @@ HyperAgent integrates seamlessly with Playwright, so you can still use familiar 
 - **Deep Iframe Support**: Tracking across nested and cross-origin iframes (OOPIFs)
 - **Exact Coordinates**: Actions use precise CDP coordinates for reliability
 
+Frame filtering normalizes protocol-relative and scheme-less iframe URLs for host-based matching, while intentionally avoiding host-based ad matches for path-only URLs.
+
 Keep in mind that CDP is still experimental, and stability is not guaranteed. If you'd like the agent to use Playwright's native locators/actions instead, set `cdpActions: false` when you create the agent and it will fall back automatically.
 If you need to inspect ad/tracking iframes for a specific workflow, keep CDP enabled and set `filterAdTrackingFrames: false` in `new HyperAgent({ ... })`.
 You can also override this per invocation using `page.ai(..., { filterAdTrackingFrames: false })` or `page.perform(..., { filterAdTrackingFrames: false })`.
