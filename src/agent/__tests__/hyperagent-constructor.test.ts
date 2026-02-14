@@ -134,6 +134,19 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("throws readable error for malformed llm payloads", () => {
+    expect(
+      () =>
+        new HyperAgent({
+          llm: {
+            invoke: async () => ({ role: "assistant", content: "ok" }),
+          } as unknown as HyperAgentLLM,
+        })
+    ).toThrow(
+      "Invalid llm configuration: expected provider config or HyperAgentLLM client"
+    );
+  });
+
   it("continues constructor when customActions length getter traps", () => {
     const trappedCustomActions = new Proxy(
       [
