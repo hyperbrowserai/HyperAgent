@@ -6759,6 +6759,17 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("required read-only single-statement SQL query (SELECT/WITH)"),
         );
+        assert!(
+            schema
+                .get("request_shape")
+                .and_then(|value| value.get("operations (non-empty array)"))
+                .and_then(serde_json::Value::as_array)
+                .and_then(|entries| entries.first())
+                .and_then(|value| value.get("op_type"))
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|value| value.contains("duckdb_query")),
+            "request-shape op_type list should include duckdb_query",
+        );
         assert_eq!(
             schema
                 .get("agent_ops_result_error_shape")
