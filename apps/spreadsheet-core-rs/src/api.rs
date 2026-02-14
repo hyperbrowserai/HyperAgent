@@ -7345,10 +7345,38 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("agent_ops_cache_remove_by_prefix_preview_request_shape")
+                .and_then(|value| value.get("sample_limit"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional number (default 20, min 1, max 100)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_remove_stale_request_shape")
+                .and_then(|value| value.get("sample_limit"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional number (default 20, min 1, max 100)"),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_cache_remove_stale_response_shape")
                 .and_then(|value| value.get("request_id_prefix"))
                 .and_then(serde_json::Value::as_str),
             Some("echoed filter prefix when provided"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_remove_by_prefix_preview_response_shape")
+                .and_then(|value| value.get("sample_limit"))
+                .and_then(serde_json::Value::as_str),
+            Some("max sample request ids returned"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_remove_stale_response_shape")
+                .and_then(|value| value.get("sample_limit"))
+                .and_then(serde_json::Value::as_str),
+            Some("applied sample size"),
         );
         assert_eq!(
             schema
