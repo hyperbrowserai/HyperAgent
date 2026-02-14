@@ -494,6 +494,7 @@ mod tests {
       COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
       COMPAT_FORMULA_MATRIX_FILE_NAME,
       COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
+      COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
       COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
       COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
@@ -509,13 +510,14 @@ mod tests {
   use std::{collections::HashMap, fs, path::PathBuf};
   use tempfile::tempdir;
 
-  fn fixture_corpus_file_names() -> [&'static str; 12] {
+  fn fixture_corpus_file_names() -> [&'static str; 13] {
     [
       COMPAT_BASELINE_FILE_NAME,
       COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
       COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
       COMPAT_FORMULA_MATRIX_FILE_NAME,
       COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
+      COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
       COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
       COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
@@ -1123,6 +1125,67 @@ mod tests {
         .map(|value| value as i64),
       Some(2),
       "formula-only sheet should evaluate after recalc",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_import_formula_only_offset_normalized_without_cached_scalar_values() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("xlsx-formula-only-offset-normalized-fixture".to_string()))
+      .await
+      .expect("workbook should be created");
+    let db_path = state
+      .db_path(workbook.id)
+      .await
+      .expect("db path should be accessible");
+
+    let fixture_bytes =
+      file_fixture_bytes(COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME);
+    let import_result = import_xlsx(&db_path, &fixture_bytes)
+      .expect("formula-only offset normalized fixture should import");
+    assert_eq!(import_result.sheets_imported, 1);
+    assert_eq!(import_result.cells_imported, 1);
+    assert_eq!(import_result.formula_cells_imported, 1);
+    assert_eq!(import_result.formula_cells_with_cached_values, 0);
+    assert_eq!(import_result.formula_cells_without_cached_values, 1);
+    assert_eq!(import_result.formula_cells_normalized, 1);
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("1 formula(s) were normalized")),
+      "formula-only offset fixture should emit normalization warning telemetry",
+    );
+
+    let (_, unsupported_formulas) = recalculate_formulas(&db_path)
+      .expect("formula-only offset fixture should recalculate");
+    assert!(
+      unsupported_formulas.is_empty(),
+      "formula-only offset fixture should remain supported: {:?}",
+      unsupported_formulas,
+    );
+
+    let snapshot = load_sheet_snapshot(&db_path, "FormulaOnlyOffset")
+      .expect("snapshot should load");
+    let by_address = snapshot_map(&snapshot);
+    assert_eq!(
+      by_address
+        .get("D7")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=DELTA(1,1)"),
+      "formula should normalize and stay at D7",
+    );
+    assert_eq!(
+      by_address
+        .get("D7")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(1),
+      "formula-only offset fixture should evaluate after recalc",
     );
   }
 
