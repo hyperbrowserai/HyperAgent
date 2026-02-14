@@ -36,6 +36,7 @@ import {
   removeAgentOpsCacheEntry,
   removeAgentOpsCacheEntriesByPrefix,
   removeStaleAgentOpsCacheEntries,
+  runDuckdbQuery,
   runAgentOps,
   runAgentPreset,
   runAgentScenario,
@@ -49,6 +50,7 @@ import { useWorkbookStore } from "@/store/workbook-store";
 import {
   AgentOpsCacheEntryDetailResponse,
   AgentWizardImportResult,
+  DuckdbQueryResponse,
   ExportCompatibilityReport,
   AgentOperationPreview,
   AgentOperationResult,
@@ -296,6 +298,14 @@ export function SpreadsheetApp() {
   const [uiError, setUiError] = useState<string | null>(null);
   const [uiErrorCode, setUiErrorCode] = useState<string | null>(null);
   const [uiNotice, setUiNotice] = useState<string | null>(null);
+  const [duckdbQuerySql, setDuckdbQuerySql] = useState(
+    "SELECT sheet, row_index, col_index, raw_value, formula, evaluated_value FROM cells ORDER BY row_index, col_index",
+  );
+  const [duckdbQueryRowLimit, setDuckdbQueryRowLimit] = useState("200");
+  const [isRunningDuckdbQuery, setIsRunningDuckdbQuery] = useState(false);
+  const [duckdbQueryResult, setDuckdbQueryResult] = useState<DuckdbQueryResponse | null>(
+    null,
+  );
   const [lastAgentRequestId, setLastAgentRequestId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
   const [lastScenario, setLastScenario] = useState<string | null>(null);
@@ -377,6 +387,12 @@ export function SpreadsheetApp() {
   const normalizedCacheEntriesMaxAgeSeconds = parsePositiveIntegerInput(
     cacheEntriesMaxAgeSeconds,
   );
+  const normalizedDuckdbQueryRowLimit = parsePositiveIntegerInput(
+    duckdbQueryRowLimit,
+  );
+  const hasInvalidDuckdbQueryRowLimitInput =
+    duckdbQueryRowLimit.trim().length > 0
+    && typeof normalizedDuckdbQueryRowLimit !== "number";
   const hasInvalidCacheEntriesMaxAgeInput =
     cacheEntriesMaxAgeSeconds.trim().length > 0
     && typeof normalizedCacheEntriesMaxAgeSeconds !== "number";
@@ -441,6 +457,7 @@ export function SpreadsheetApp() {
       setLastExecutedOperations([]);
       setLastAgentOps([]);
       setLastWizardImportSummary(null);
+      setDuckdbQueryResult(null);
     },
     onError: (error) => {
       applyUiError(error, "Failed to create workbook.");
@@ -465,6 +482,7 @@ export function SpreadsheetApp() {
       setLastExecutedOperations([]);
       setLastAgentOps([]);
       setLastWizardImportSummary(importSummary);
+      setDuckdbQueryResult(null);
       queryClient.invalidateQueries({ queryKey: ["cells", importedWorkbook.id] });
     },
     onError: (error) => {
@@ -2282,6 +2300,46 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleRunDuckdbQuery() {
+    if (!workbook) {
+      return;
+    }
+    const normalizedSql = duckdbQuerySql.trim();
+    if (!normalizedSql) {
+      setUiError("DuckDB query SQL cannot be blank.");
+      setUiErrorCode("INVALID_QUERY_SQL");
+      return;
+    }
+    if (hasInvalidDuckdbQueryRowLimitInput) {
+      setUiError("DuckDB row limit must be a positive integer.");
+      setUiErrorCode("INVALID_QUERY_ROW_LIMIT");
+      return;
+    }
+    setIsRunningDuckdbQuery(true);
+    try {
+      clearUiError();
+      const response = await runDuckdbQuery(
+        workbook.id,
+        normalizedSql,
+        normalizedDuckdbQueryRowLimit,
+      );
+      setDuckdbQueryResult(response);
+      setNotice(
+        `DuckDB query returned ${response.row_count} row${
+          response.row_count === 1 ? "" : "s"
+        }${
+          response.truncated
+            ? ` (truncated to ${response.row_limit})`
+            : ""
+        }.`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to execute DuckDB query.");
+    } finally {
+      setIsRunningDuckdbQuery(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -2316,6 +2374,7 @@ export function SpreadsheetApp() {
         ? toLatestImportSummary(response.import)
         : null;
       setLastWizardImportSummary(latestImportSummary);
+      setDuckdbQueryResult(null);
       setNotice(
         latestImportSummary
           ? `Wizard scenario ${response.scenario} completed for ${response.workbook.name} (${formatLatestImportSummary(latestImportSummary)}).`
@@ -2531,6 +2590,100 @@ export function SpreadsheetApp() {
                 {isCreatingSheet ? "Adding..." : "Add Sheet"}
               </button>
             </div>
+          </div>
+          <div className="mt-3 rounded-md border border-slate-800 bg-slate-950/60 p-2">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-300">
+                DuckDB Query (read-only)
+              </p>
+              <span className="text-[11px] text-slate-500">
+                SELECT/WITH only · response values returned as string/null
+              </span>
+            </div>
+            <textarea
+              value={duckdbQuerySql}
+              onChange={(event) => setDuckdbQuerySql(event.target.value)}
+              className="mb-2 h-20 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs text-slate-200 outline-none focus:border-cyan-400"
+              spellCheck={false}
+              placeholder="SELECT sheet, row_index, col_index, raw_value, formula, evaluated_value FROM cells ORDER BY row_index, col_index"
+            />
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1 text-[11px] text-slate-400">
+                row limit
+                <input
+                  value={duckdbQueryRowLimit}
+                  onChange={(event) => setDuckdbQueryRowLimit(event.target.value)}
+                  className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-cyan-400"
+                  placeholder="200"
+                />
+              </label>
+              <button
+                onClick={handleRunDuckdbQuery}
+                disabled={!workbook || isRunningDuckdbQuery || hasInvalidDuckdbQueryRowLimitInput}
+                className="rounded bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-500 disabled:opacity-40"
+              >
+                {isRunningDuckdbQuery ? "Running query..." : "Run Query"}
+              </button>
+              <button
+                onClick={() => setDuckdbQueryResult(null)}
+                disabled={!duckdbQueryResult}
+                className="rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+              >
+                Clear Result
+              </button>
+            </div>
+            {hasInvalidDuckdbQueryRowLimitInput ? (
+              <p className="mb-2 text-[10px] text-rose-300">
+                row limit must be a positive integer.
+              </p>
+            ) : null}
+            {duckdbQueryResult ? (
+              <div className="rounded border border-slate-800 bg-slate-900/70 p-2">
+                <p className="mb-2 text-[11px] text-slate-500">
+                  rows: {duckdbQueryResult.row_count} / limit {duckdbQueryResult.row_limit}
+                  {duckdbQueryResult.truncated ? " (truncated)" : ""}
+                </p>
+                {duckdbQueryResult.columns.length > 0 ? (
+                  <div className="max-h-44 overflow-auto rounded border border-slate-800">
+                    <table className="min-w-full border-collapse text-[11px]">
+                      <thead className="bg-slate-900/90 text-slate-400">
+                        <tr>
+                          {duckdbQueryResult.columns.map((columnName, columnIndex) => (
+                            <th
+                              key={`duckdb-column-${columnIndex}-${columnName}`}
+                              className="border-b border-slate-800 px-2 py-1 text-left font-medium"
+                            >
+                              {columnName}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {duckdbQueryResult.rows.map((rowValues, rowIndex) => (
+                          <tr
+                            key={`duckdb-row-${rowIndex}`}
+                            className="border-b border-slate-900/60 text-slate-200"
+                          >
+                            {rowValues.map((value, columnIndex) => (
+                              <td
+                                key={`duckdb-cell-${rowIndex}-${columnIndex}`}
+                                className="px-2 py-1 font-mono"
+                              >
+                                {value ?? "∅"}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500">
+                    Query returned no columns.
+                  </p>
+                )}
+              </div>
+            ) : null}
           </div>
           <div className="mt-3 rounded-md border border-slate-800 bg-slate-950/60 p-2">
             <div className="mb-2 flex items-center justify-between">

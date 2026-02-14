@@ -23,6 +23,7 @@ import {
   AgentWizardRunResponse,
   ExportCompatibilityReport,
   ExportWorkbookResponse,
+  DuckdbQueryResponse,
   ImportWorkbookResponse,
   CellSnapshot,
   ChartSpec,
@@ -174,6 +175,26 @@ export async function setCellBatch(
       }),
     }),
   );
+}
+
+export async function runDuckdbQuery(
+  workbookId: string,
+  sql: string,
+  rowLimit?: number,
+): Promise<DuckdbQueryResponse> {
+  const normalizedRowLimit = normalizePositiveInteger(rowLimit);
+  const response = await fetch(
+    `${API_BASE_URL}/v1/workbooks/${workbookId}/duckdb/query`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sql,
+        row_limit: normalizedRowLimit,
+      }),
+    },
+  );
+  return parseJsonResponse<DuckdbQueryResponse>(response);
 }
 
 interface AgentOpsRequest {

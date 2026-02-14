@@ -284,6 +284,14 @@ export interface ExportWorkbookResponse {
   compatibility_report: ExportCompatibilityReport | null;
 }
 
+export interface DuckdbQueryResponse {
+  columns: string[];
+  rows: Array<Array<string | null>>;
+  row_count: number;
+  row_limit: number;
+  truncated: boolean;
+}
+
 export interface AgentWizardSchemaInfo {
   endpoint: string;
   json_endpoint?: string;
