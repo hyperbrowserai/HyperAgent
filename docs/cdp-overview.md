@@ -38,6 +38,11 @@ The same setting is propagated through:
 - cached replay + special replay actions,
 - DOM settle/wait paths (`waitForSettledDOM`).
 
+Frame-filter URL matching behavior notes:
+- protocol-relative (`//host/path`) and scheme-less host URLs (`host/path`, `host:port/path`) are normalized for host-based matching.
+- path-only inputs (for example `/widget?prebid=1`) are intentionally not treated as host-based ad-domain matches.
+- weak same-site signals are tolerated, while strong tracking/ad signals still filter aggressively.
+
 ## Runtime CDP Toggle Policy (Current Behavior)
 
 CDP execution is enabled by default and configurable at both agent and per-call scope.
