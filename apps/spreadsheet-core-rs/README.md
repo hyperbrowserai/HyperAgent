@@ -171,6 +171,7 @@ Supported `op_type` values:
 - `create_sheet`
 - `set_cells`
 - `get_cells`
+- `duckdb_query` (`sql` required read-only `SELECT`/`WITH`; optional `row_limit`)
 - `recalculate`
 - `upsert_chart`
 - `export_workbook` (`include_file_base64` optional, default `true`)

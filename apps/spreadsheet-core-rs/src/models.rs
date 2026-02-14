@@ -404,6 +404,10 @@ pub enum AgentOperation {
         sheet: String,
         range: CellRange,
     },
+    DuckdbQuery {
+        sql: String,
+        row_limit: Option<u32>,
+    },
     Recalculate,
     UpsertChart {
         chart: ChartSpec,

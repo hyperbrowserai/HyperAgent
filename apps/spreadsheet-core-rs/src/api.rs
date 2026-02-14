@@ -1298,7 +1298,7 @@ async fn get_agent_schema(
         "expected_operations_signature": "optional string for payload integrity checks",
         "operations (non-empty array)": [
           {
-            "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | recalculate | upsert_chart | export_workbook",
+          "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
             "payload": "operation-specific object"
           }
         ]
@@ -1313,6 +1313,10 @@ async fn get_agent_schema(
           "sheet": "string",
           "range": { "start_row": 1, "end_row": 50, "start_col": 1, "end_col": 12 }
         },
+      "duckdb_query": {
+        "sql": "required read-only single-statement SQL query (SELECT/WITH)",
+        "row_limit": "optional positive number, default 200, max 1000"
+      },
         "upsert_chart": {
           "chart": {
             "id": "string",
@@ -1754,6 +1758,22 @@ async fn execute_agent_operations(
           Err(error) => Err(error),
         };
         ("get_cells".to_string(), outcome)
+      }
+      AgentOperation::DuckdbQuery { sql, row_limit } => {
+        let outcome = match state.db_path(workbook_id).await {
+          Ok(db_path) => run_duckdb_query(&db_path, sql.as_str(), row_limit)
+            .map(|query_response| {
+              json!({
+                "columns": query_response.columns,
+                "rows": query_response.rows,
+                "row_count": query_response.row_count,
+                "row_limit": query_response.row_limit,
+                "truncated": query_response.truncated
+              })
+            }),
+          Err(error) => Err(error),
+        };
+        ("duckdb_query".to_string(), outcome)
       }
       AgentOperation::Recalculate => (
         "recalculate".to_string(),
@@ -2714,7 +2734,7 @@ async fn openapi() -> Json<serde_json::Value> {
         "/v1/workbooks/{id}": {"get": {"summary": "Get workbook"}},
         "/v1/workbooks/{id}/sheets": {"get": {"summary": "List sheets"}, "post": {"summary": "Create sheet"}},
         "/v1/workbooks/{id}/cells/set-batch": {"post": {"summary": "Batch set cells"}},
-        "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports create_sheet/export_workbook ops)"}},
+      "/v1/workbooks/{id}/agent/ops": {"post": {"summary": "AI-friendly multi-operation endpoint (supports create_sheet/duckdb_query/export_workbook ops)"}},
         "/v1/workbooks/{id}/agent/ops/preview": {"post": {"summary": "Preview and sign a provided agent operation plan without execution"}},
         "/v1/workbooks/{id}/agent/ops/cache": {"get": {"summary": "Inspect request-id idempotency cache status for agent ops"}},
         "/v1/workbooks/{id}/agent/ops/cache/entries": {"get": {"summary": "List recent request-id idempotency cache entries for agent ops"}},
@@ -3160,6 +3180,106 @@ mod tests {
             evaluated_numeric_value,
             Some(10.0),
             "evaluated value should be surfaced in query output",
+        );
+    }
+
+    #[tokio::test]
+    async fn should_execute_duckdb_query_operation_via_agent_ops() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("agent-ops-duckdb-query".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let response = agent_ops(
+            State(state),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("ops-duckdb-query".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![
+                    AgentOperation::SetCells {
+                        sheet: "Sheet1".to_string(),
+                        cells: vec![CellMutation {
+                            row: 1,
+                            col: 1,
+                            value: Some(json!(42)),
+                            formula: None,
+                        }],
+                    },
+                    AgentOperation::DuckdbQuery {
+                        sql: "SELECT row_index, col_index, raw_value FROM cells ORDER BY row_index, col_index".to_string(),
+                        row_limit: Some(10),
+                    },
+                ],
+            }),
+        )
+        .await
+        .expect("agent ops should succeed")
+        .0;
+
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.results[1].op_type, "duckdb_query");
+        assert!(response.results[1].ok);
+        assert_eq!(
+            response.results[1]
+                .data
+                .get("row_count")
+                .and_then(serde_json::Value::as_u64),
+            Some(1),
+        );
+        let rows = response.results[1]
+            .data
+            .get("rows")
+            .and_then(serde_json::Value::as_array)
+            .expect("duckdb query operation should include rows");
+        assert_eq!(rows.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn should_report_duckdb_query_validation_error_in_agent_ops() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("agent-ops-duckdb-query-invalid".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let response = agent_ops(
+            State(state),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("ops-duckdb-query-invalid".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![
+                    AgentOperation::DuckdbQuery {
+                        sql: "DELETE FROM cells".to_string(),
+                        row_limit: Some(10),
+                    },
+                    AgentOperation::Recalculate,
+                ],
+            }),
+        )
+        .await
+        .expect("agent ops should return result payload")
+        .0;
+
+        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.results[0].op_type, "duckdb_query");
+        assert!(!response.results[0].ok);
+        let error_text = response.results[0]
+            .data
+            .get("error")
+            .and_then(serde_json::Value::as_str)
+            .expect("failed operation should include error string");
+        assert!(
+            error_text.contains("INVALID_QUERY_SQL"),
+            "agent ops error should preserve validation code context",
         );
     }
 
@@ -6269,6 +6389,14 @@ mod tests {
             .expect("schema should resolve")
             .0;
 
+        assert_eq!(
+            schema
+                .get("operation_payloads")
+                .and_then(|value| value.get("duckdb_query"))
+                .and_then(|value| value.get("sql"))
+                .and_then(serde_json::Value::as_str),
+            Some("required read-only single-statement SQL query (SELECT/WITH)"),
+        );
         assert_eq!(
       schema
         .get("agent_ops_cache_stats_endpoint")
