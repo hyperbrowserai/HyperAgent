@@ -237,6 +237,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "DAY",
   "WEEKDAY",
   "WEEKNUM",
+  "ISOWEEKNUM",
   "ROW",
   "COLUMN",
   "ROWS",

@@ -75,7 +75,7 @@ use crate::{
     parse_false_formula, parse_upper_formula,
     parse_vlookup_formula,
     parse_xlookup_formula, parse_year_formula, parse_weekday_formula,
-    parse_weeknum_formula, ConditionalAggregateFormula,
+    parse_weeknum_formula, parse_isoweeknum_formula, ConditionalAggregateFormula,
     HLookupFormula, IndexFormula, MatchFormula, MultiCriteriaAggregateFormula,
     VLookupFormula, XLookupFormula,
   },
@@ -2562,6 +2562,14 @@ fn evaluate_formula(
     };
     let week_number = ((date_value.ordinal() + day_offset - 1) / 7) + 1;
     return Ok(Some(week_number.to_string()));
+  }
+
+  if let Some(date_arg) = parse_isoweeknum_formula(formula) {
+    let date = parse_date_operand(connection, sheet, &date_arg)?;
+    let Some(date_value) = date else {
+      return Ok(Some(String::new()));
+    };
+    return Ok(Some(date_value.iso_week().week().to_string()));
   }
 
   if let Some(hour_arg) = parse_hour_formula(formula) {
@@ -6059,12 +6067,18 @@ mod tests {
           r#"=WORKDAY.INTL("2024-03-04",-1,"0000011","2024-03-01")"#.to_string(),
         ),
       },
+      CellMutation {
+        row: 1,
+        col: 236,
+        value: None,
+        formula: Some(r#"=ISOWEEKNUM("2024-01-04")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 233);
+    assert_eq!(updated_cells, 234);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6078,7 +6092,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 235,
+        end_col: 236,
       },
     )
     .expect("cells should be fetched");
@@ -6970,6 +6984,11 @@ mod tests {
       by_position(1, 235).evaluated_value.as_deref(),
       Some("2024-02-29"),
       "workday.intl should use weekend mask and holidays for reverse shifts",
+    );
+    assert_eq!(
+      by_position(1, 236).evaluated_value.as_deref(),
+      Some("1"),
+      "isoweeknum should return ISO week numbers",
     );
   }
 

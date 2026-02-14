@@ -1217,6 +1217,14 @@ pub fn parse_weeknum_formula(
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_isoweeknum_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ISOWEEKNUM" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_hour_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "HOUR" && args.len() == 1 {
@@ -1954,7 +1962,7 @@ mod tests {
     parse_false_formula, parse_pi_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
     parse_year_formula,
-    parse_weekday_formula, parse_weeknum_formula,
+    parse_weekday_formula, parse_weeknum_formula, parse_isoweeknum_formula,
     parse_upper_formula, parse_trim_formula,
   };
 
@@ -2434,6 +2442,10 @@ mod tests {
       parse_weeknum_formula("=WEEKNUM(A1,2)").expect("weeknum should parse");
     assert_eq!(weeknum.0, "A1");
     assert_eq!(weeknum.1.as_deref(), Some("2"));
+    assert_eq!(
+      parse_isoweeknum_formula("=ISOWEEKNUM(A1)").as_deref(),
+      Some("A1"),
+    );
     assert_eq!(parse_hour_formula("=HOUR(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_minute_formula("=MINUTE(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_second_formula("=SECOND(A1)").as_deref(), Some("A1"));
