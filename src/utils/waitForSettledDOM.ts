@@ -87,8 +87,33 @@ function attachSessionListener<TPayload extends unknown[]>(
   event: string,
   handler: (...payload: TPayload) => void
 ): boolean {
+  let onMethod: unknown;
   try {
-    session.on(event, handler);
+    onMethod = (session as unknown as { on?: unknown }).on;
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to attach listener ${formatWaitIdentifier(
+        event
+      )}: ${formatWaitDiagnostic(error)}`
+    );
+    return false;
+  }
+  if (typeof onMethod !== "function") {
+    console.warn(
+      `[waitForSettledDOM] Failed to attach listener ${formatWaitIdentifier(
+        event
+      )}: listener method unavailable`
+    );
+    return false;
+  }
+  try {
+    (
+      onMethod as (
+        this: CDPSession,
+        event: string,
+        handler: (...payload: unknown[]) => void
+      ) => void
+    ).call(session, event, handler as (...payload: unknown[]) => void);
     return true;
   } catch (error) {
     console.warn(
@@ -105,11 +130,28 @@ function detachSessionListener<TPayload extends unknown[]>(
   event: string,
   handler: (...payload: TPayload) => void
 ): void {
-  if (!session.off) {
+  let offMethod: unknown;
+  try {
+    offMethod = (session as unknown as { off?: unknown }).off;
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to detach listener ${formatWaitIdentifier(
+        event
+      )}: ${formatWaitDiagnostic(error)}`
+    );
+    return;
+  }
+  if (typeof offMethod !== "function") {
     return;
   }
   try {
-    session.off(event, handler);
+    (
+      offMethod as (
+        this: CDPSession,
+        event: string,
+        handler: (...payload: unknown[]) => void
+      ) => void
+    ).call(session, event, handler as (...payload: unknown[]) => void);
   } catch (error) {
     console.warn(
       `[waitForSettledDOM] Failed to detach listener ${formatWaitIdentifier(
