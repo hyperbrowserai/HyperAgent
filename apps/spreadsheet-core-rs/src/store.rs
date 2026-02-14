@@ -30,6 +30,7 @@ use crate::{
     parse_na_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
+    parse_npv_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1674,6 +1675,23 @@ fn evaluate_formula(
     }
     let nominal_rate = periods * ((1.0 + effective_rate).powf(1.0 / periods) - 1.0);
     return Ok(Some(nominal_rate.to_string()));
+  }
+
+  if let Some((rate_arg, value_args)) = parse_npv_formula(formula) {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    if (rate + 1.0).abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    let mut period_index: i32 = 1;
+    let mut npv = 0.0f64;
+    for operand in value_args {
+      let values = resolve_numeric_values_for_operand(connection, sheet, &operand)?;
+      for value in values {
+        npv += value / (1.0 + rate).powi(period_index);
+        period_index += 1;
+      }
+    }
+    return Ok(Some(npv.to_string()));
   }
 
   if let Some(fact_arg) = parse_fact_formula(formula) {
@@ -3714,6 +3732,38 @@ fn resolve_textjoin_argument_values(
     return Ok(values);
   }
   Ok(vec![resolve_scalar_operand(connection, sheet, operand)?])
+}
+
+fn resolve_numeric_values_for_operand(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<Vec<f64>, ApiError> {
+  if let Some((start, end)) = parse_operand_range_bounds(operand) {
+    let bounds = normalized_range_bounds(start, end);
+    let mut values = Vec::new();
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        let raw_value = load_cell_scalar(
+          connection,
+          sheet,
+          bounds.start_row + row_offset,
+          bounds.start_col + col_offset,
+        )?;
+        if let Ok(parsed) = raw_value.trim().parse::<f64>() {
+          values.push(parsed);
+        }
+      }
+    }
+    return Ok(values);
+  }
+
+  let raw_value = resolve_scalar_operand(connection, sheet, operand)?;
+  Ok(raw_value
+    .trim()
+    .parse::<f64>()
+    .map(|parsed| vec![parsed])
+    .unwrap_or_default())
 }
 
 fn parse_operand_range_bounds(operand: &str) -> Option<((u32, u32), (u32, u32))> {
@@ -6369,12 +6419,18 @@ mod tests {
         value: None,
         formula: Some("=NOMINAL(0.12682503013196977,12)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 250,
+        value: None,
+        formula: Some("=NPV(0.1,100,110)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 247);
+    assert_eq!(updated_cells, 248);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6388,7 +6444,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 249,
+        end_col: 250,
       },
     )
     .expect("cells should be fetched");
@@ -7376,6 +7432,16 @@ mod tests {
       (nominal_rate - 0.12).abs() < 1e-12,
       "nominal should invert effective annual rate, got {nominal_rate}",
     );
+    let npv_value = by_position(1, 250)
+      .evaluated_value
+      .as_deref()
+      .expect("npv should evaluate")
+      .parse::<f64>()
+      .expect("npv should be numeric");
+    assert!(
+      (npv_value - 181.818_181_818_181_8).abs() < 1e-12,
+      "npv should discount future cash flows, got {npv_value}",
+    );
   }
 
   #[test]
@@ -7583,6 +7649,22 @@ mod tests {
       unsupported_formulas,
       vec!["=EFFECT(0.1,0)".to_string(), "=NOMINAL(-1,12)".to_string()],
     );
+  }
+
+  #[test]
+  fn should_leave_invalid_npv_rate_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=NPV(-1,100,110)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=NPV(-1,100,110)".to_string()]);
   }
 
   #[test]

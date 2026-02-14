@@ -502,6 +502,14 @@ pub fn parse_nominal_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_npv_formula(formula: &str) -> Option<(String, Vec<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "NPV" || args.len() < 2 {
+    return None;
+  }
+  Some((args[0].clone(), args[1..].to_vec()))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -1987,6 +1995,7 @@ mod tests {
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
+    parse_npv_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2260,6 +2269,9 @@ mod tests {
       parse_nominal_formula("=NOMINAL(A1,B1)").expect("nominal should parse");
     assert_eq!(nominal_args.0, "A1");
     assert_eq!(nominal_args.1, "B1");
+    let npv_args = parse_npv_formula("=NPV(A1,B1,C1:C2)").expect("npv should parse");
+    assert_eq!(npv_args.0, "A1");
+    assert_eq!(npv_args.1, vec!["B1", "C1:C2"]);
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),
