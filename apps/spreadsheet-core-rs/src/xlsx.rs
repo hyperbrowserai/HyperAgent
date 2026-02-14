@@ -5,7 +5,7 @@ use crate::{
 };
 use calamine::{open_workbook_auto, Data, Reader};
 use rust_xlsxwriter::{Chart, ChartType as XlsxChartType, Formula, Workbook};
-use std::{io::Write, path::PathBuf};
+use std::{collections::BTreeSet, io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 
 #[derive(Debug, Clone)]
@@ -37,64 +37,81 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
       continue;
     };
     let formula_range = workbook.worksheet_formula(sheet_name).ok();
+    let (range_start_row, range_start_col) = range.start().unwrap_or((0, 0));
     let formula_start = formula_range
       .as_ref()
       .and_then(|formula_grid| formula_grid.start())
       .map(|(row, col)| (row as usize, col as usize));
-    let (range_start_row, range_start_col) = range.start().unwrap_or((0, 0));
+    let mut coordinates = BTreeSet::<(usize, usize)>::new();
+    for (relative_row, relative_col, _) in range.used_cells() {
+      coordinates.insert((
+        range_start_row as usize + relative_row,
+        range_start_col as usize + relative_col,
+      ));
+    }
+    if let Some(formula_grid) = formula_range.as_ref() {
+      if let Some((formula_start_row, formula_start_col)) = formula_start {
+        for (relative_row, relative_col, formula_text) in formula_grid.used_cells() {
+          if formula_text.trim().is_empty() {
+            continue;
+          }
+          coordinates.insert((
+            formula_start_row + relative_row,
+            formula_start_col + relative_col,
+          ));
+        }
+      }
+    }
     let mut mutations = Vec::new();
 
-    for (row_offset, row) in range.rows().enumerate() {
-      for (col_offset, cell_value) in row.iter().enumerate() {
-        let row_index = range_start_row as usize + row_offset;
-        let col_index = range_start_col as usize + col_offset;
-        let row_number = row_index as u32 + 1;
-        let col_number = col_index as u32 + 1;
-        let formula = formula_range
-          .as_ref()
-          .and_then(|formula_grid| {
-            let (formula_start_row, formula_start_col) = formula_start?;
-            if row_index < formula_start_row || col_index < formula_start_col {
-              return None;
-            }
-            let formula_row = row_index - formula_start_row;
-            let formula_col = col_index - formula_start_col;
-            formula_grid.get((formula_row, formula_col))
-          })
-          .and_then(|value| {
-            let original_formula = value.to_string();
-            let normalized_formula =
-              normalize_imported_formula(original_formula.as_str())?;
-            if is_formula_normalized_for_compatibility(
-              original_formula.as_str(),
-              normalized_formula.as_str(),
-            ) {
-              normalized_formula_cells += 1;
-            }
-            Some(normalized_formula)
-          });
-        if formula.is_some() {
-          formula_cells_imported += 1;
-        }
-
-        if let Some(value) = map_data_to_json(cell_value) {
-          if formula.is_some() {
-            formula_cells_with_cached_values += 1;
+    for (row_index, col_index) in coordinates {
+      let row_number = row_index as u32 + 1;
+      let col_number = col_index as u32 + 1;
+      let formula = formula_range
+        .as_ref()
+        .and_then(|formula_grid| {
+          let (formula_start_row, formula_start_col) = formula_start?;
+          if row_index < formula_start_row || col_index < formula_start_col {
+            return None;
           }
-          mutations.push(CellMutation {
-            row: row_number,
-            col: col_number,
-            value: Some(value),
-            formula,
-          });
-        } else if formula.is_some() {
-          mutations.push(CellMutation {
-            row: row_number,
-            col: col_number,
-            value: None,
-            formula,
-          });
+          let formula_row = row_index - formula_start_row;
+          let formula_col = col_index - formula_start_col;
+          formula_grid.get((formula_row, formula_col))
+        })
+        .and_then(|value| {
+          let original_formula = value.to_string();
+          let normalized_formula =
+            normalize_imported_formula(original_formula.as_str())?;
+          if is_formula_normalized_for_compatibility(
+            original_formula.as_str(),
+            normalized_formula.as_str(),
+          ) {
+            normalized_formula_cells += 1;
+          }
+          Some(normalized_formula)
+        });
+      if formula.is_some() {
+        formula_cells_imported += 1;
+      }
+
+      let cell_value = range.get_value((row_index as u32, col_index as u32));
+      if let Some(value) = cell_value.and_then(map_data_to_json) {
+        if formula.is_some() {
+          formula_cells_with_cached_values += 1;
         }
+        mutations.push(CellMutation {
+          row: row_number,
+          col: col_number,
+          value: Some(value),
+          formula,
+        });
+      } else if formula.is_some() {
+        mutations.push(CellMutation {
+          row: row_number,
+          col: col_number,
+          value: None,
+          formula,
+        });
       }
     }
 
@@ -476,6 +493,7 @@ mod tests {
       COMPAT_FORMULA_MATRIX_FILE_NAME,
       COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
       COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
+      COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
       COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
       COMPAT_OFFSET_RANGE_FILE_NAME, COMPAT_PREFIX_OPERATOR_FILE_NAME,
@@ -489,11 +507,12 @@ mod tests {
   use std::{collections::HashMap, fs, path::PathBuf};
   use tempfile::tempdir;
 
-  fn fixture_corpus_file_names() -> [&'static str; 9] {
+  fn fixture_corpus_file_names() -> [&'static str; 10] {
     [
       COMPAT_BASELINE_FILE_NAME,
       COMPAT_FORMULA_MATRIX_FILE_NAME,
       COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
+      COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
       COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
       COMPAT_OFFSET_RANGE_FILE_NAME,
@@ -955,6 +974,49 @@ mod tests {
         .map(|value| value as i64),
       Some(10),
       "formula with default cached value should evaluate after recalc",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_import_formula_cells_without_cached_scalar_values() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("xlsx-error-cached-formula-fixture".to_string()))
+      .await
+      .expect("workbook should be created");
+    let db_path = state
+      .db_path(workbook.id)
+      .await
+      .expect("db path should be accessible");
+
+    let fixture_bytes =
+      file_fixture_bytes(COMPAT_ERROR_CACHED_FORMULA_FILE_NAME);
+    let import_result = import_xlsx(&db_path, &fixture_bytes)
+      .expect("error-cached formula fixture should import");
+    assert_eq!(import_result.sheets_imported, 1);
+    assert_eq!(import_result.cells_imported, 3);
+    assert_eq!(import_result.formula_cells_imported, 1);
+    assert_eq!(import_result.formula_cells_with_cached_values, 0);
+    assert_eq!(import_result.formula_cells_without_cached_values, 1);
+    assert_eq!(import_result.formula_cells_normalized, 0);
+
+    let snapshot = load_sheet_snapshot(&db_path, "ErrorCache")
+      .expect("snapshot should load");
+    let by_address = snapshot_map(&snapshot);
+    assert_eq!(
+      by_address
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=A1/A2"),
+    );
+    assert_eq!(
+      by_address
+        .get("B1")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      None,
+      "formula without cached scalar value should remain unevaluated until recalc",
     );
   }
 

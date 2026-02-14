@@ -1,5 +1,10 @@
 use rust_xlsxwriter::{DocProperties, ExcelDateTime, Formula, Workbook, XlsxError};
-use std::{fs, path::Path};
+use std::{
+  fs,
+  io::{Cursor, Read, Write},
+  path::Path,
+};
+use zip::{read::ZipArchive, write::SimpleFileOptions, ZipWriter};
 
 pub const COMPAT_BASELINE_FILE_NAME: &str = "compat_baseline.xlsx";
 pub const COMPAT_NORMALIZATION_SINGLE_FILE_NAME: &str =
@@ -15,9 +20,11 @@ pub const COMPAT_PREFIX_OPERATOR_FILE_NAME: &str =
 pub const COMPAT_FORMULA_MATRIX_FILE_NAME: &str = "compat_formula_matrix.xlsx";
 pub const COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME: &str =
   "compat_default_cached_formula.xlsx";
+pub const COMPAT_ERROR_CACHED_FORMULA_FILE_NAME: &str =
+  "compat_error_cached_formula.xlsx";
 
 pub fn generate_fixture_corpus(
-) -> Result<Vec<(&'static str, Vec<u8>)>, XlsxError> {
+) -> Result<Vec<(&'static str, Vec<u8>)>, Box<dyn std::error::Error>> {
   Ok(vec![
     (
       COMPAT_BASELINE_FILE_NAME,
@@ -54,6 +61,10 @@ pub fn generate_fixture_corpus(
     (
       COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
       build_compat_default_cached_formula_fixture_bytes()?,
+    ),
+    (
+      COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
+      build_compat_error_cached_formula_fixture_bytes()?,
     ),
   ])
 }
@@ -216,6 +227,77 @@ fn build_compat_default_cached_formula_fixture_bytes() -> Result<Vec<u8>, XlsxEr
   sheet.write_formula(0, 1, Formula::new("=SUM(A1:A2)"))?;
 
   workbook.save_to_buffer()
+}
+
+fn build_compat_error_cached_formula_fixture_bytes(
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let sheet = workbook.add_worksheet();
+  sheet.set_name("ErrorCache")?;
+  sheet.write_number(0, 0, 5.0)?;
+  sheet.write_number(1, 0, 0.0)?;
+  sheet.write_formula(0, 1, Formula::new("=A1/A2"))?;
+
+  let bytes = workbook.save_to_buffer()?;
+  strip_formula_cached_value_from_cell(
+    &bytes,
+    "xl/worksheets/sheet1.xml",
+    "B1",
+  )
+}
+
+fn strip_formula_cached_value_from_cell(
+  workbook_bytes: &[u8],
+  worksheet_path: &str,
+  cell_reference: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+  let mut archive = ZipArchive::new(Cursor::new(workbook_bytes))?;
+  let mut zip_writer = ZipWriter::new(Cursor::new(Vec::<u8>::new()));
+  let mut did_strip_cached_value = false;
+
+  for index in 0..archive.len() {
+    let mut entry = archive.by_index(index)?;
+    let entry_name = entry.name().to_string();
+    let entry_options: SimpleFileOptions = entry.options();
+
+    if entry.is_dir() {
+      zip_writer.add_directory(entry_name, entry_options)?;
+      continue;
+    }
+
+    let mut entry_bytes = Vec::new();
+    entry.read_to_end(&mut entry_bytes)?;
+    zip_writer.start_file(entry_name.clone(), entry_options)?;
+
+    if entry_name == worksheet_path {
+      let worksheet_xml = String::from_utf8(entry_bytes)?;
+      let search_pattern = format!(
+        r#"<c r="{cell_reference}"><f>([^<]*)</f><v>[^<]*</v></c>"#
+      );
+      let replacement_pattern =
+        format!(r#"<c r="{cell_reference}"><f>$1</f></c>"#);
+      let formula_cache_regex = regex::Regex::new(search_pattern.as_str())?;
+      let rewritten_xml = formula_cache_regex
+        .replace(worksheet_xml.as_str(), replacement_pattern.as_str())
+        .to_string();
+      did_strip_cached_value = rewritten_xml != worksheet_xml;
+      zip_writer.write_all(rewritten_xml.as_bytes())?;
+      continue;
+    }
+
+    zip_writer.write_all(entry_bytes.as_slice())?;
+  }
+
+  if !did_strip_cached_value {
+    return Err(format!(
+      "expected to strip cached formula value from {worksheet_path} at {cell_reference}",
+    )
+    .into());
+  }
+
+  let cursor = zip_writer.finish()?;
+  Ok(cursor.into_inner())
 }
 
 fn apply_deterministic_fixture_properties(
