@@ -1180,6 +1180,62 @@ export function SpreadsheetApp() {
       ),
     [agentSchemaQuery.data?.agent_ops_cache_remove_stale_response_shape],
   );
+  const agentCacheStatsQueryFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_stats_query_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_stats_query_shape],
+  );
+  const agentCacheEntriesQueryFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_entries_query_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_entries_query_shape],
+  );
+  const agentCachePrefixesQueryFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_prefixes_query_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_prefixes_query_shape],
+  );
+  const agentCacheStatsResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_stats_response_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_stats_response_shape],
+  );
+  const agentCacheEntriesResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_entries_response_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_entries_response_shape],
+  );
+  const agentCachePrefixesResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_prefixes_response_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_prefixes_response_shape],
+  );
+  const agentCacheEntryDetailResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_entry_detail_response_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_entry_detail_response_shape],
+  );
+  const agentCacheClearResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_cache_clear_response_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_cache_clear_response_shape],
+  );
   const agentFormulaCapabilityFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.formula_capabilities),
     [agentSchemaQuery.data?.formula_capabilities],
@@ -4088,6 +4144,70 @@ export function SpreadsheetApp() {
                 cache clear endpoint:{" "}
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.agent_ops_cache_clear_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheStatsQueryFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache stats query shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheStatsQueryFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheEntriesQueryFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache entries query shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheEntriesQueryFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCachePrefixesQueryFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache prefixes query shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCachePrefixesQueryFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheStatsResponseFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache stats response shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheStatsResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheEntriesResponseFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache entries response shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheEntriesResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCachePrefixesResponseFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache prefixes response shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCachePrefixesResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheEntryDetailResponseFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache entry detail response shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheEntryDetailResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentCacheClearResponseFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                cache clear response shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentCacheClearResponseFields)}
                 </span>
               </p>
             ) : null}

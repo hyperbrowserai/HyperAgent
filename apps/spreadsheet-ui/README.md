@@ -55,6 +55,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard and agent integration panels display discovered signature error-code lists from schema endpoints
 - Agent integration panel displays discovered request-id idempotency cache size metadata
 - Agent integration panel displays discovered cache stats/clear endpoint metadata from schema
+- Agent integration panel now also displays cache stats/entries/prefixes query-shape metadata and stats/entries/prefixes/detail/clear response-shape metadata from schema
 - Agent integration panel displays discovered cache cleanup request/response shapes (remove, remove-by-prefix, remove-by-prefix preview, remove-stale) from schema
 - Agent integration panel also displays discovered cache replay/reexecute request/response shapes from schema
 - Agent integration panel displays discovered workbook import/export endpoint metadata from schema

@@ -229,6 +229,9 @@ export interface AgentSchemaInfo {
   agent_ops_cache_entry_detail_endpoint?: string;
   agent_ops_cache_prefixes_endpoint?: string;
   agent_ops_cache_clear_endpoint?: string;
+  agent_ops_cache_stats_query_shape?: Record<string, string>;
+  agent_ops_cache_entries_query_shape?: Record<string, string>;
+  agent_ops_cache_prefixes_query_shape?: Record<string, string>;
   agent_ops_cache_replay_endpoint?: string;
   agent_ops_cache_reexecute_endpoint?: string;
   agent_ops_cache_remove_endpoint?: string;
@@ -247,6 +250,11 @@ export interface AgentSchemaInfo {
   agent_ops_cache_remove_by_prefix_preview_response_shape?: Record<string, string>;
   agent_ops_cache_remove_stale_request_shape?: Record<string, string>;
   agent_ops_cache_remove_stale_response_shape?: Record<string, string>;
+  agent_ops_cache_stats_response_shape?: Record<string, string>;
+  agent_ops_cache_entries_response_shape?: Record<string, string | Record<string, string>>;
+  agent_ops_cache_prefixes_response_shape?: Record<string, string | Record<string, string>>;
+  agent_ops_cache_entry_detail_response_shape?: Record<string, string>;
+  agent_ops_cache_clear_response_shape?: Record<string, string>;
   agent_ops_idempotency_cache_max_entries?: number;
   agent_ops_preview_request_shape?: Record<string, string>;
   agent_ops_preview_response_shape?: Record<string, string>;
