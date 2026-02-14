@@ -93,24 +93,74 @@ class PlaywrightSessionAdapter implements CDPSession {
     event: string,
     handler: (...payload: TPayload) => void
   ): void {
-    this.session.on(
-      event as Parameters<PlaywrightSession["on"]>[0],
-      handler as unknown as Parameters<PlaywrightSession["on"]>[1]
-    );
+    let onMethod: unknown;
+    try {
+      onMethod = (this.session as PlaywrightSession & { on?: unknown }).on;
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to read session.on: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
+    if (typeof onMethod !== "function") {
+      throw new Error("[CDP][PlaywrightAdapter] session.on is unavailable");
+    }
+    try {
+      (
+        onMethod as (
+          this: PlaywrightSession,
+          event: Parameters<PlaywrightSession["on"]>[0],
+          handler: Parameters<PlaywrightSession["on"]>[1]
+        ) => void
+      ).call(
+        this.session,
+        event as Parameters<PlaywrightSession["on"]>[0],
+        handler as unknown as Parameters<PlaywrightSession["on"]>[1]
+      );
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to register listener (${event}): ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
   }
 
   off<TPayload extends unknown[]>(
     event: string,
     handler: (...payload: TPayload) => void
   ): void {
-    const off = (this.session as PlaywrightSession & {
-      off?: PlaywrightSession["off"];
-    }).off;
-    if (off) {
-      off.call(
+    let offMethod: unknown;
+    try {
+      offMethod = (this.session as PlaywrightSession & { off?: unknown }).off;
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to read session.off: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
+    if (typeof offMethod !== "function") {
+      return;
+    }
+    try {
+      (
+        offMethod as (
+          this: PlaywrightSession,
+          event: Parameters<PlaywrightSession["off"]>[0],
+          handler: Parameters<PlaywrightSession["off"]>[1]
+        ) => void
+      ).call(
         this.session,
         event as Parameters<PlaywrightSession["off"]>[0],
         handler as unknown as Parameters<PlaywrightSession["off"]>[1]
+      );
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to remove listener (${event}): ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
       );
     }
   }
