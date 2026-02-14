@@ -3657,6 +3657,16 @@ mod tests {
         .flatten()
         .filter_map(serde_json::Value::as_str)
         .collect::<Vec<_>>();
+      let replay_warning_messages = replay_import_result
+        .warnings
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+      assert_eq!(
+        replay_event_warning_messages,
+        replay_warning_messages,
+        "fixture {fixture_file_name} replay event warnings should match replay response warnings",
+      );
       assert!(
         replay_event_warning_messages
           .iter()
