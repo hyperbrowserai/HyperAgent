@@ -63,6 +63,10 @@ Server defaults to `http://localhost:8787`.
 - `GET /v1/workbooks/{id}/events`
 - `GET /v1/openapi`
 
+`POST /v1/workbooks/{id}/cells/set-batch` notes:
+- Formula inputs are trimmed before storage and normalized to start with `=`.
+- Blank/whitespace-only formula inputs are rejected with `BAD_REQUEST`.
+
 `POST /v1/workbooks/import` returns:
 - `workbook`
 - `import.sheets_imported`
