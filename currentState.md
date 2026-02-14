@@ -184,6 +184,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened pooled CDP listener wiring in Playwright adapter:
   - pooled-session detach listener attach/detach now uses guarded method resolution with sanitized diagnostics,
   - adapter disposal now guards pooled cleanup callbacks so listener-cleanup traps cannot abort disposal.
+- Tightened FrameContextManager listener bookkeeping:
+  - session listeners are now recorded only when registration succeeds,
+  - avoids stale listener bookkeeping entries when `session.on` registration traps/fails, reducing noisy/double cleanup warnings.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

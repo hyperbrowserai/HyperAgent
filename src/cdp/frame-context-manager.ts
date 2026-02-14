@@ -841,37 +841,45 @@ export class FrameContextManager {
       this.handlePageFrameNavigated(event);
     };
 
-    this.attachSessionListener(
-      session,
-      "Page.frameAttached",
-      attachedHandler as (...args: unknown[]) => void
-    );
-    this.attachSessionListener(
-      session,
-      "Page.frameDetached",
-      detachedHandler as (...args: unknown[]) => void
-    );
-    this.attachSessionListener(
-      session,
-      "Page.frameNavigated",
-      navigatedHandler as (...args: unknown[]) => void
-    );
-
-    this.addSessionListener(
-      session,
-      "Page.frameAttached",
-      attachedHandler as (...args: unknown[]) => void
-    );
-    this.addSessionListener(
-      session,
-      "Page.frameDetached",
-      detachedHandler as (...args: unknown[]) => void
-    );
-    this.addSessionListener(
-      session,
-      "Page.frameNavigated",
-      navigatedHandler as (...args: unknown[]) => void
-    );
+    if (
+      this.attachSessionListener(
+        session,
+        "Page.frameAttached",
+        attachedHandler as (...args: unknown[]) => void
+      )
+    ) {
+      this.addSessionListener(
+        session,
+        "Page.frameAttached",
+        attachedHandler as (...args: unknown[]) => void
+      );
+    }
+    if (
+      this.attachSessionListener(
+        session,
+        "Page.frameDetached",
+        detachedHandler as (...args: unknown[]) => void
+      )
+    ) {
+      this.addSessionListener(
+        session,
+        "Page.frameDetached",
+        detachedHandler as (...args: unknown[]) => void
+      );
+    }
+    if (
+      this.attachSessionListener(
+        session,
+        "Page.frameNavigated",
+        navigatedHandler as (...args: unknown[]) => void
+      )
+    ) {
+      this.addSessionListener(
+        session,
+        "Page.frameNavigated",
+        navigatedHandler as (...args: unknown[]) => void
+      );
+    }
   }
 
   private async handlePageFrameAttached(
@@ -989,37 +997,45 @@ export class FrameContextManager {
       }
     };
 
-    this.attachSessionListener(
-      session,
-      "Runtime.executionContextCreated",
-      createdHandler as (...args: unknown[]) => void
-    );
-    this.attachSessionListener(
-      session,
-      "Runtime.executionContextDestroyed",
-      destroyedHandler as (...args: unknown[]) => void
-    );
-    this.attachSessionListener(
-      session,
-      "Runtime.executionContextsCleared",
-      clearedHandler as (...args: unknown[]) => void
-    );
-
-    this.addSessionListener(
-      session,
-      "Runtime.executionContextCreated",
-      createdHandler as (...args: unknown[]) => void
-    );
-    this.addSessionListener(
-      session,
-      "Runtime.executionContextDestroyed",
-      destroyedHandler as (...args: unknown[]) => void
-    );
-    this.addSessionListener(
-      session,
-      "Runtime.executionContextsCleared",
-      clearedHandler as (...args: unknown[]) => void
-    );
+    if (
+      this.attachSessionListener(
+        session,
+        "Runtime.executionContextCreated",
+        createdHandler as (...args: unknown[]) => void
+      )
+    ) {
+      this.addSessionListener(
+        session,
+        "Runtime.executionContextCreated",
+        createdHandler as (...args: unknown[]) => void
+      );
+    }
+    if (
+      this.attachSessionListener(
+        session,
+        "Runtime.executionContextDestroyed",
+        destroyedHandler as (...args: unknown[]) => void
+      )
+    ) {
+      this.addSessionListener(
+        session,
+        "Runtime.executionContextDestroyed",
+        destroyedHandler as (...args: unknown[]) => void
+      );
+    }
+    if (
+      this.attachSessionListener(
+        session,
+        "Runtime.executionContextsCleared",
+        clearedHandler as (...args: unknown[]) => void
+      )
+    ) {
+      this.addSessionListener(
+        session,
+        "Runtime.executionContextsCleared",
+        clearedHandler as (...args: unknown[]) => void
+      );
+    }
 
     session.send("Runtime.enable").catch((error) => {
       console.warn(

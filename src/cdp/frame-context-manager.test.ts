@@ -220,6 +220,7 @@ describe("FrameContextManager listener bookkeeping", () => {
 
     try {
       await expect(manager.ensureInitialized()).resolves.toBeUndefined();
+      expect(() => manager.clear()).not.toThrow();
       const warning = String(
         warnSpy.mock.calls.find((call) =>
           String(call[0] ?? "").includes("Failed to read session.on")
@@ -228,6 +229,11 @@ describe("FrameContextManager listener bookkeeping", () => {
       expect(warning).toContain("[truncated");
       expect(warning).not.toContain("\u0000");
       expect(warning).not.toContain("\n");
+      expect(
+        warnSpy.mock.calls.some((call) =>
+          String(call[0] ?? "").includes("Failed to read session.off")
+        )
+      ).toBe(false);
     } finally {
       warnSpy.mockRestore();
     }
