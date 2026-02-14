@@ -2998,7 +2998,8 @@ mod tests {
     .expect_err("blank formulas should be rejected");
 
     match error {
-      crate::error::ApiError::BadRequest(message) => {
+      crate::error::ApiError::BadRequestWithCode { code, message } => {
+        assert_eq!(code, "INVALID_FORMULA");
         assert_eq!(message, "Formula values cannot be blank.");
       }
       other => panic!("expected bad request for blank formula, got {other:?}"),

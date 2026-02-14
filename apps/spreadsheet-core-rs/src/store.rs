@@ -6293,7 +6293,8 @@ fn normalize_cell_payload(
   if let Some(formula) = &cell.formula {
     let trimmed_formula = formula.trim();
     if trimmed_formula.is_empty() {
-      return Err(ApiError::BadRequest(
+      return Err(ApiError::bad_request_with_code(
+        "INVALID_FORMULA",
         "Formula values cannot be blank.".to_string(),
       ));
     }
@@ -6436,11 +6437,17 @@ mod tests {
     let error =
       set_cells(&db_path, "Sheet1", &cells).expect_err("blank formula should fail");
     match error {
-      ApiError::BadRequest(message) => assert_eq!(
-        message,
-        "Formula values cannot be blank.",
-        "blank formula should return descriptive validation error",
-      ),
+      ApiError::BadRequestWithCode { code, message } => {
+        assert_eq!(
+          code, "INVALID_FORMULA",
+          "blank formula should return specific validation code",
+        );
+        assert_eq!(
+          message,
+          "Formula values cannot be blank.",
+          "blank formula should return descriptive validation error",
+        );
+      }
       other => panic!("expected bad request for blank formula, got {other:?}"),
     }
   }

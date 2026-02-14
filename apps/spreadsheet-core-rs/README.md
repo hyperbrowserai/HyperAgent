@@ -65,7 +65,7 @@ Server defaults to `http://localhost:8787`.
 
 `POST /v1/workbooks/{id}/cells/set-batch` notes:
 - Formula inputs are trimmed before storage and normalized to start with `=`.
-- Blank/whitespace-only formula inputs are rejected with `BAD_REQUEST`.
+- Blank/whitespace-only formula inputs are rejected with `INVALID_FORMULA`.
 
 `POST /v1/workbooks/import` returns:
 - `workbook`
