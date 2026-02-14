@@ -400,4 +400,76 @@ describe("getA11yDOM error formatting", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("continues when sync frame-manager debug setter traps", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = {
+      evaluate: jest.fn().mockResolvedValue(undefined),
+      url: jest.fn(() => "https://example.com"),
+    } as unknown as Page;
+    const session = {
+      id: "session-1",
+      send: jest.fn(async (method: string) => {
+        if (method === "Accessibility.getFullAXTree") {
+          return { nodes: [] };
+        }
+        if (method === "Page.getFrameTree") {
+          throw new Error("frame tree unavailable");
+        }
+        return {};
+      }),
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+    getCDPClientMock.mockResolvedValue({
+      rootSession: session,
+      acquireSession: jest.fn().mockResolvedValue(session),
+    });
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest
+        .fn()
+        .mockImplementationOnce(() => undefined)
+        .mockImplementation(() => {
+          throw new Error(`sync-debug\u0000\n${"x".repeat(2_000)}`);
+        }),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+      captureOOPIFs: jest.fn().mockResolvedValue(undefined),
+      setFrameFilteringEnabled: jest.fn(),
+      getOOPIFs: jest.fn(() => []),
+      getFrameIndex: jest.fn(),
+      getFrameSession: jest.fn(),
+      getExecutionContextId: jest.fn(),
+      getFrameIdByIndex: jest.fn(),
+      getFrameByBackendNodeId: jest.fn(),
+      setFrameSession: jest.fn(),
+      upsertFrame: jest.fn(),
+      assignFrameIndex: jest.fn(),
+    });
+    buildBackendIdMapsMock.mockResolvedValue({
+      frameMap: new Map(),
+      backendNodeMap: {},
+      xpathMap: {},
+      frameMetadataMap: new Map(),
+      frameTree: new Map(),
+    });
+
+    try {
+      const result = await getA11yDOM(page, true);
+      expect(result.domState).toBe("Error: Could not extract accessibility tree");
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to configure sync debug mode")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
 });

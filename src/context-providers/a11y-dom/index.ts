@@ -364,7 +364,17 @@ async function syncFrameContextManager({
   rootSession,
   debug,
 }: SyncFrameContextOptions): Promise<void> {
-  manager.setDebug(debug);
+  try {
+    manager.setDebug(debug);
+  } catch (error) {
+    if (debug) {
+      console.warn(
+        `[FrameContext] Failed to configure sync debug mode: ${formatA11yDiagnostic(
+          error
+        )}`
+      );
+    }
+  }
 
   const { frameTree } =
     await rootSession.send<Protocol.Page.GetFrameTreeResponse>(
