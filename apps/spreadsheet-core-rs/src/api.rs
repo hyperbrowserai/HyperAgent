@@ -51,6 +51,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "AVERAGE",
   "MIN",
   "MAX",
+  "MINA",
+  "MAXA",
   "STDEV",
   "STDEVP",
   "STDEV.P",

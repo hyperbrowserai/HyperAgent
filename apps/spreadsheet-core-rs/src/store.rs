@@ -12,7 +12,8 @@ use crate::{
     parse_percentile_exc_formula, parse_quartile_exc_formula,
     parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
     parse_trimmean_formula, parse_devsq_formula, parse_avedev_formula,
-    parse_averagea_formula, parse_stdeva_formula, parse_stdevpa_formula,
+    parse_averagea_formula, parse_mina_formula, parse_maxa_formula,
+    parse_stdeva_formula, parse_stdevpa_formula,
     parse_vara_formula, parse_varpa_formula,
     parse_covariance_formula, parse_correl_formula,
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
@@ -801,6 +802,18 @@ fn evaluate_formula(
     }
     let average = values.iter().sum::<f64>() / values.len() as f64;
     return Ok(Some(average.to_string()));
+  }
+
+  if let Some((start, end)) = parse_mina_formula(formula) {
+    let values = collect_statisticala_range_values(connection, sheet, start, end)?;
+    let minimum = values.iter().copied().reduce(f64::min);
+    return Ok(minimum.map(|value| value.to_string()));
+  }
+
+  if let Some((start, end)) = parse_maxa_formula(formula) {
+    let values = collect_statisticala_range_values(connection, sheet, start, end)?;
+    let maximum = values.iter().copied().reduce(f64::max);
+    return Ok(maximum.map(|value| value.to_string()));
   }
 
   if let Some((start, end)) = parse_stdeva_formula(formula) {
@@ -8334,12 +8347,42 @@ mod tests {
         value: None,
         formula: Some("=SUMA(A24:C24)".to_string()),
       },
+      CellMutation {
+        row: 25,
+        col: 1,
+        value: Some(json!(true)),
+        formula: None,
+      },
+      CellMutation {
+        row: 25,
+        col: 2,
+        value: Some(json!("text")),
+        formula: None,
+      },
+      CellMutation {
+        row: 25,
+        col: 3,
+        value: Some(json!(-2)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 295,
+        value: None,
+        formula: Some("=MINA(A25:C25)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 296,
+        value: None,
+        formula: Some("=MAXA(A25:C25)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 292);
+    assert_eq!(updated_cells, 294);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -8351,9 +8394,9 @@ mod tests {
       "Sheet1",
       &CellRange {
         start_row: 1,
-        end_row: 24,
+        end_row: 25,
         start_col: 1,
-        end_col: 294,
+        end_col: 296,
       },
     )
     .expect("cells should be fetched");
@@ -9651,6 +9694,16 @@ mod tests {
       Some("3"),
       "suma should include logical/text coercions in additive total",
     );
+    assert_eq!(
+      by_position(1, 295).evaluated_value.as_deref(),
+      Some("-2"),
+      "mina should include logical/text coercions and return minimum",
+    );
+    assert_eq!(
+      by_position(1, 296).evaluated_value.as_deref(),
+      Some("1"),
+      "maxa should include logical/text coercions and return maximum",
+    );
   }
 
   #[test]
@@ -10886,6 +10939,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=DEVSQ(A1:A2)".to_string(), "=AVEDEV(A1:A2)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_mina_and_maxa_without_values_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=MINA(A1:A1)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=MAXA(A1:A1)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=MINA(A1:A1)".to_string(), "=MAXA(A1:A1)".to_string()],
     );
   }
 

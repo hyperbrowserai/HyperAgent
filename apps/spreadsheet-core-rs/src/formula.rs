@@ -2006,6 +2006,22 @@ pub fn parse_averagea_formula(formula: &str) -> Option<((u32, u32), (u32, u32))>
   parse_range_reference(&args[0])
 }
 
+pub fn parse_mina_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "MINA" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_maxa_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "MAXA" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
 pub fn parse_stdeva_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "STDEVA" || args.len() != 1 {
@@ -2508,7 +2524,8 @@ mod tests {
     parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
     parse_trimmean_formula,
     parse_devsq_formula, parse_avedev_formula,
-    parse_averagea_formula, parse_stdeva_formula, parse_stdevpa_formula,
+    parse_averagea_formula, parse_mina_formula, parse_maxa_formula,
+    parse_stdeva_formula, parse_stdevpa_formula,
     parse_vara_formula, parse_varpa_formula,
     parse_covariance_formula, parse_correl_formula,
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
@@ -3357,6 +3374,12 @@ mod tests {
       parse_averagea_formula("=AVERAGEA(A1:A5)").expect("averagea should parse");
     assert_eq!(averagea.0, (1, 1));
     assert_eq!(averagea.1, (5, 1));
+    let mina = parse_mina_formula("=MINA(A1:A5)").expect("mina should parse");
+    assert_eq!(mina.0, (1, 1));
+    assert_eq!(mina.1, (5, 1));
+    let maxa = parse_maxa_formula("=MAXA(A1:A5)").expect("maxa should parse");
+    assert_eq!(maxa.0, (1, 1));
+    assert_eq!(maxa.1, (5, 1));
     let stdeva =
       parse_stdeva_formula("=STDEVA(A1:A5)").expect("stdeva should parse");
     assert_eq!(stdeva.0, (1, 1));
