@@ -30,7 +30,9 @@ export const WaitActionDefinition: AgentActionDefinition = {
     const reason = normalizeActionText(action?.reason, "waiting for page stability");
     try {
       // Wait for DOM to settle (page to finish loading/transitioning)
-      await waitForSettledDOM(ctx.page);
+      await waitForSettledDOM(ctx.page, undefined, {
+        filterAdTrackingFrames: ctx.filterAdTrackingFrames,
+      });
 
       // Additional brief wait to allow any animations/transitions to complete
       await new Promise((resolve) => setTimeout(resolve, WAIT_POST_SETTLE_DELAY_MS));

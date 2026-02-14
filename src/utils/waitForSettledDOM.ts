@@ -141,9 +141,14 @@ export interface WaitForSettledStats {
   forcedDrops: number;
 }
 
+export interface WaitForSettledOptions {
+  filterAdTrackingFrames?: boolean;
+}
+
 export async function waitForSettledDOM(
   page: Page,
-  timeoutMs: number = DEFAULT_WAIT_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_WAIT_TIMEOUT_MS,
+  options: WaitForSettledOptions = {}
 ): Promise<WaitForSettledStats> {
   const normalizedTimeoutMs = normalizeWaitTimeoutMs(timeoutMs);
   const ctx = page.context() as BrowserContext & {
@@ -168,6 +173,12 @@ export async function waitForSettledDOM(
   const cdpClient = await getCDPClient(page);
   const manager = getOrCreateFrameContextManager(cdpClient);
   manager.setDebug(traceWait);
+  if (
+    typeof manager.setFrameFilteringEnabled === "function" &&
+    typeof options.filterAdTrackingFrames === "boolean"
+  ) {
+    manager.setFrameFilteringEnabled(options.filterAdTrackingFrames);
+  }
 
   const lifecycleSession = await cdpClient.acquireSession("lifecycle");
 

@@ -514,6 +514,7 @@ const runAction = async (
     mcpClient: ctx.mcpClient || undefined,
     variables: getContextVariables(ctx),
     cdpActions: ctx.cdpActions,
+    filterAdTrackingFrames: ctx.filterAdTrackingFrames,
     invalidateDomCache: () => markDomSnapshotDirty(page),
   };
 
@@ -763,7 +764,9 @@ export const runAgentTask = async (
       try {
         const domFetchStart = performance.now();
 
-        await waitForSettledDOM(page);
+        await waitForSettledDOM(page, undefined, {
+          filterAdTrackingFrames: ctx.filterAdTrackingFrames,
+        });
         domState = await captureDOMState(page, {
           useCache: useDomCache,
           debug: ctx.debug,
@@ -1242,7 +1245,11 @@ export const runAgentTask = async (
       }
 
       // Wait for DOM to settle after action
-      const waitStats = normalizeWaitStats(await waitForSettledDOM(page));
+      const waitStats = normalizeWaitStats(
+        await waitForSettledDOM(page, undefined, {
+          filterAdTrackingFrames: ctx.filterAdTrackingFrames,
+        })
+      );
       stepMetrics.waitForSettledMs = Math.round(waitStats.durationMs);
       stepMetrics.waitForSettled = {
         totalMs: Math.round(waitStats.durationMs),

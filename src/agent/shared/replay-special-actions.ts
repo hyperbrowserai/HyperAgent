@@ -12,6 +12,7 @@ interface ReplaySpecialActionInput {
   actionParams?: Record<string, unknown>;
   page: Page;
   retries?: number;
+  filterAdTrackingFrames?: boolean;
 }
 
 const MAX_REPLAY_WAIT_MS = 120_000;
@@ -212,6 +213,7 @@ export async function executeReplaySpecialAction(
   let instruction: unknown;
   let page: unknown;
   let retries: unknown;
+  let filterAdTrackingFrames: unknown;
   try {
     taskId = params.taskId;
     actionType = params.actionType;
@@ -220,6 +222,7 @@ export async function executeReplaySpecialAction(
     instruction = params.instruction;
     page = params.page;
     retries = params.retries;
+    filterAdTrackingFrames = params.filterAdTrackingFrames;
   } catch (error) {
     return {
       taskId: "unknown-replay-task",
@@ -238,6 +241,10 @@ export async function executeReplaySpecialAction(
   const normalizedRetries = normalizeRetryCount(retries);
   const normalizedInstruction = asString(instruction);
   const replayPage = page as Page;
+  const normalizedFilterAdTrackingFrames =
+    typeof filterAdTrackingFrames === "boolean"
+      ? filterAdTrackingFrames
+      : undefined;
 
   if (!normalizedActionType) {
     return null;
@@ -258,7 +265,9 @@ export async function executeReplaySpecialAction(
       };
     }
     await replayPage.goto(url, { waitUntil: "domcontentloaded" });
-    await waitForSettledDOM(replayPage);
+    await waitForSettledDOM(replayPage, undefined, {
+      filterAdTrackingFrames: normalizedFilterAdTrackingFrames,
+    });
     markDomSnapshotDirty(replayPage);
     return {
       taskId: normalizedTaskId,
@@ -281,7 +290,9 @@ export async function executeReplaySpecialAction(
 
   if (normalizedActionType === "refreshPage") {
     await replayPage.reload({ waitUntil: "domcontentloaded" });
-    await waitForSettledDOM(replayPage);
+    await waitForSettledDOM(replayPage, undefined, {
+      filterAdTrackingFrames: normalizedFilterAdTrackingFrames,
+    });
     markDomSnapshotDirty(replayPage);
     return {
       taskId: normalizedTaskId,
@@ -394,7 +405,9 @@ export async function executeReplaySpecialAction(
       waitUntil,
       options
     );
-    await waitForSettledDOM(replayPage).catch(() => undefined);
+    await waitForSettledDOM(replayPage, undefined, {
+      filterAdTrackingFrames: normalizedFilterAdTrackingFrames,
+    }).catch(() => undefined);
     markDomSnapshotDirty(replayPage);
     return {
       taskId: normalizedTaskId,

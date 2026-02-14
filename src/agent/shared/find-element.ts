@@ -168,7 +168,9 @@ export async function findElementWithInstruction(
     }
 
     try {
-      await waitForSettledDOM(page).catch(() => undefined);
+      await waitForSettledDOM(page, undefined, {
+        filterAdTrackingFrames: options.filterAdTrackingFrames,
+      }).catch(() => undefined);
       // Fetch FRESH a11y tree using the robust shared utility
       // captureDOMState handles DOM settling and retries for bad snapshots internally for this *single* capture attempt
       // We still need our outer loop for retrying the *finding* logic (e.g. if the LLM can't find the element)

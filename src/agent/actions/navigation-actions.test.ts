@@ -100,10 +100,34 @@ describe("navigation and wait actions", () => {
     await jest.advanceTimersByTimeAsync(1_000);
     const result = await runPromise;
 
-    expect(waitForSettledDOM).toHaveBeenCalledWith(ctx.page);
+    expect(waitForSettledDOM).toHaveBeenCalledWith(
+      ctx.page,
+      undefined,
+      expect.objectContaining({
+        filterAdTrackingFrames: undefined,
+      })
+    );
     expect(result.success).toBe(true);
     expect(result.message).toContain("waiting for content to appear");
     expect(ctx.invalidateDomCache).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards frame-filter option to wait action settle helper", async () => {
+    const ctx = createContext({
+      filterAdTrackingFrames: false,
+    });
+
+    await WaitActionDefinition.run(ctx, {
+      reason: "checking embedded ad iframe",
+    });
+
+    expect(waitForSettledDOM).toHaveBeenCalledWith(
+      ctx.page,
+      undefined,
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
   });
 
   it("returns failure when waitForSettledDOM fails", async () => {

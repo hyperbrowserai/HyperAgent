@@ -50,10 +50,36 @@ describe("executeReplaySpecialAction", () => {
     expect(page.goto).toHaveBeenCalledWith("https://example.com", {
       waitUntil: "domcontentloaded",
     });
-    expect(waitForSettledDOM).toHaveBeenCalledWith(page);
+    expect(waitForSettledDOM).toHaveBeenCalledWith(
+      page,
+      undefined,
+      expect.objectContaining({
+        filterAdTrackingFrames: undefined,
+      })
+    );
     expect(markDomSnapshotDirty).toHaveBeenCalledWith(page);
     expect(result?.status).toBe("completed");
     expect(result?.replayStepMeta?.retries).toBe(1);
+  });
+
+  it("forwards frame-filter option to waitForSettledDOM during special replay", async () => {
+    const page = createPage();
+
+    await executeReplaySpecialAction({
+      taskId: "task-filter-option",
+      actionType: "goToUrl",
+      actionParams: { url: "https://example.com" },
+      filterAdTrackingFrames: false,
+      page: page as unknown as Page,
+    });
+
+    expect(waitForSettledDOM).toHaveBeenCalledWith(
+      page,
+      undefined,
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
   });
 
   it("fails goToUrl replay when url is empty after trimming", async () => {
@@ -172,7 +198,13 @@ describe("executeReplaySpecialAction", () => {
     expect(page.waitForLoadState).toHaveBeenCalledWith("networkidle", {
       timeout: 2500,
     });
-    expect(waitForSettledDOM).toHaveBeenCalledWith(page);
+    expect(waitForSettledDOM).toHaveBeenCalledWith(
+      page,
+      undefined,
+      expect.objectContaining({
+        filterAdTrackingFrames: undefined,
+      })
+    );
     expect(markDomSnapshotDirty).toHaveBeenCalledWith(page);
     expect(result?.status).toBe("completed");
     expect(result?.output).toBe("Waited for load state: networkidle");

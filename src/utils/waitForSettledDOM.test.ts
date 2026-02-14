@@ -215,6 +215,40 @@ describe("waitForSettledDOM diagnostics", () => {
     expect(stats.forcedDrops).toBe(0);
   });
 
+  it("applies frame filtering option when provided", async () => {
+    const { session } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    const setFrameFilteringEnabled = jest.fn();
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+      setFrameFilteringEnabled,
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    const waitPromise = waitForSettledDOM(page, 600, {
+      filterAdTrackingFrames: false,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(700);
+    await waitPromise;
+
+    expect(setFrameFilteringEnabled).toHaveBeenCalledWith(false);
+  });
+
   it("falls back to timeout when network listener registration fails", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     const { session } = createSessionWithEvents({

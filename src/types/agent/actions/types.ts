@@ -16,6 +16,7 @@ export interface ActionContext {
   mcpClient?: MCPClient;
   debug?: boolean;
   cdpActions?: boolean;
+  filterAdTrackingFrames?: boolean;
   invalidateDomCache: () => void;
   cdp?: {
     resolveElement: typeof import("@/cdp").resolveElement;

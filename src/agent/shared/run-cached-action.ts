@@ -351,6 +351,7 @@ export async function runCachedStep(
     actionParams: normalizedCachedAction.actionParams,
     page,
     retries: 1,
+    filterAdTrackingFrames,
   }).catch((error) => {
     const message = formatCachedActionDiagnostic(error);
     return {
@@ -431,7 +432,9 @@ export async function runCachedStep(
       }
       // will fall through to fallback/final failure below
     } else {
-      await waitForSettledDOM(page);
+      await waitForSettledDOM(page, undefined, {
+        filterAdTrackingFrames,
+      });
       markDomSnapshotDirty(page);
       lastError = null;
       return {
@@ -553,7 +556,9 @@ async function runCachedAttempt(args: {
     }
   );
 
-  await waitForSettledDOM(page);
+  await waitForSettledDOM(page, undefined, {
+    filterAdTrackingFrames,
+  });
   const domState = await captureDOMState(page, {
     useCache: false,
     debug,
@@ -574,6 +579,7 @@ async function runCachedAttempt(args: {
     llm,
     debug,
     cdpActions: cdpActionsEnabled !== false,
+    filterAdTrackingFrames,
     cdp: {
       client: cdpClient,
       frameContextManager,

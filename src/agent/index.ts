@@ -2849,6 +2849,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         debug: this.debug,
         // Only provide CDP if enabled
         cdpActions: this.cdpActionsEnabled,
+        filterAdTrackingFrames: this.filterAdTrackingFrames,
         cdp: this.cdpActionsEnabled
           ? {
               client: cdpClient,
@@ -2881,7 +2882,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       // Wait for DOM to settle after action
       const waitStart = performance.now();
-      await waitForSettledDOM(initialPage);
+      await waitForSettledDOM(initialPage, undefined, {
+        filterAdTrackingFrames: this.filterAdTrackingFrames,
+      });
       markDomSnapshotDirty(initialPage);
       logPerf(
         this.debug,
