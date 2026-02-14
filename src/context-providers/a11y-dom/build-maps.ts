@@ -13,6 +13,27 @@ import {
 import { createEncodedId } from "./utils";
 import { formatUnknownError } from "@/utils";
 
+const MAX_BUILD_MAPS_DIAGNOSTIC_CHARS = 400;
+
+function formatBuildMapsDiagnostic(error: unknown): string {
+  const normalized = Array.from(formatUnknownError(error), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_BUILD_MAPS_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_BUILD_MAPS_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_BUILD_MAPS_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
+
 async function annotateIframeBoundingBoxes(
   session: CDPSession,
   frameMap: Map<number, IframeInfo>,
@@ -364,7 +385,7 @@ export async function buildBackendIdMaps(
     };
   } catch (error) {
     console.error(
-      `Error building backend ID maps: ${formatUnknownError(error)}`
+      `Error building backend ID maps: ${formatBuildMapsDiagnostic(error)}`
     );
     return {
       tagNameMap: {},
