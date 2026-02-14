@@ -138,6 +138,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened constructor config reads for `cdpActions` and `filterAdTrackingFrames` using trap-safe field access/fallback defaults, preventing initialization crashes from trap-prone config objects.
 - Expanded cached-action helper regression coverage to validate trap-safe option access (`cdpActions`, `filterAdTrackingFrames`, `maxSteps`) with deterministic fallback to agent/default settings.
 - Hardened constructor-wide config ingestion (LLM/provider/debug/options/custom-actions/local/hyper configs) with trap-safe reads and sane defaults so malformed/trap-prone config objects no longer crash initialization.
+- Hardened open-tab prompt materialization with trap-safe tab-array reads so unreadable tab entries are skipped and summarized instead of collapsing to unavailable output.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.

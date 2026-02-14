@@ -256,6 +256,22 @@ function materializeSafeSteps(steps: AgentStep[]): AgentStep[] {
   return normalizedSteps;
 }
 
+function materializeSafePages(pages: unknown): Array<{ openPage: Page; index: number }> {
+  const total = safeArrayLength(pages);
+  if (total === 0) {
+    return [];
+  }
+
+  const normalizedPages: Array<{ openPage: Page; index: number }> = [];
+  for (let index = 0; index < total; index += 1) {
+    const openPage = safeReadArrayItem<Page>(pages, index);
+    if (typeof openPage !== "undefined") {
+      normalizedPages.push({ openPage, index });
+    }
+  }
+  return normalizedPages;
+}
+
 function normalizeStepText(value: unknown, fallback: string): string {
   if (typeof value === "string") {
     return truncatePromptText(value);
@@ -367,7 +383,10 @@ function normalizeScrollInfo(value: unknown): [number, number] {
 function getOpenTabsSummary(page: Page): string {
   try {
     const pages = page.context().pages();
-    const pageEntries = pages.map((openPage, index) => ({ openPage, index }));
+    const pageEntries = materializeSafePages(pages);
+    if (pageEntries.length === 0) {
+      return "No open tabs";
+    }
     let visibleEntries = pageEntries.slice(0, MAX_OPEN_TAB_ENTRIES);
     const currentEntry = pageEntries.find((entry) => entry.openPage === page);
     if (
@@ -382,7 +401,7 @@ function getOpenTabsSummary(page: Page): string {
     }
 
     const visibleIndexSet = new Set(visibleEntries.map((entry) => entry.index));
-    const hiddenCount = Math.max(0, pages.length - visibleIndexSet.size);
+    const hiddenCount = Math.max(0, safeArrayLength(pages) - visibleIndexSet.size);
     const tabLines = visibleEntries.map(({ openPage, index }) => {
       const currentMarker = openPage === page ? " (current)" : "";
       const tabUrl = (() => {

@@ -498,6 +498,50 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("[1] about:blank (url unavailable)");
   });
 
+  it("keeps open-tab summary when a tab entry getter traps", async () => {
+    const currentTab = { url: () => "https://example.com/current" };
+    const pages = new Proxy([{}, currentTab], {
+      get: (target, prop, receiver) => {
+        if (prop === "0") {
+          throw new Error("tab entry trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const page = {
+      url: () => "https://example.com/current",
+      context: () =>
+        ({
+          pages: () => pages,
+        } as unknown as ReturnType<Page["context"]>),
+    } as unknown as Page;
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[1] https://example.com/current");
+    expect(joined).toContain("... 1 more tabs omitted");
+    expect(joined).not.toContain("Open tabs unavailable");
+  });
+
   it("truncates oversized tab URLs in open-tab summary", async () => {
     const longUrl = `https://example.com/${"x".repeat(2000)}`;
     const page = createFakePage(longUrl, [longUrl]);
