@@ -12,6 +12,7 @@ import { captureDOMState } from "./dom-capture";
 import type { A11yDOMState } from "@/context-providers/a11y-dom/types";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 import { formatUnknownError, normalizePageUrl } from "@/utils";
+import { getCDPClient, getOrCreateFrameContextManager } from "@/cdp";
 
 export interface FindElementOptions {
   /**
@@ -28,6 +29,12 @@ export interface FindElementOptions {
    * Enable debug logging
    */
   debug?: boolean;
+
+  /**
+   * Enable/disable ad and tracking iframe filtering during frame discovery.
+   * Defaults to true when unspecified.
+   */
+  filterAdTrackingFrames?: boolean;
 }
 
 export interface FindElementResult {
@@ -96,6 +103,24 @@ function createFallbackDomState(message: string): A11yDOMState {
   };
 }
 
+async function configureFrameFiltering(
+  page: Page,
+  filterAdTrackingFrames: boolean | undefined
+): Promise<void> {
+  if (typeof filterAdTrackingFrames !== "boolean") {
+    return;
+  }
+  try {
+    const cdpClient = await getCDPClient(page);
+    const frameManager = getOrCreateFrameContextManager(cdpClient);
+    if (typeof frameManager.setFrameFilteringEnabled === "function") {
+      frameManager.setFrameFilteringEnabled(filterAdTrackingFrames);
+    }
+  } catch {
+    // Ignore frame-filter setup failures and proceed with default behavior.
+  }
+}
+
 /**
  * Find an element via natural language instruction with retry logic
  *
@@ -125,6 +150,7 @@ export async function findElementWithInstruction(
   const maxRetries = normalizeMaxRetries(options.maxRetries);
   const retryDelayMs = normalizeRetryDelayMs(options.retryDelayMs);
   const debug = options.debug === true;
+  await configureFrameFiltering(page, options.filterAdTrackingFrames);
 
   let lastDomState: A11yDOMState | null = null;
   let lastElementMap: Map<string, AccessibilityNode> | null = null;

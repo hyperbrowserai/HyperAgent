@@ -116,6 +116,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Sanitized control characters in prompt-builder task/step/DOM payload serialization before truncation to keep LLM context inputs clean under malformed runtime values.
 - Tightened agent-loop action/output typing by normalizing parsed structured outputs into explicit `AgentOutput`/`ActionType` shapes before runtime dispatch and cache recording.
 - Removed direct `as any` casts in OpenAI/Anthropic/DeepSeek/Gemini provider request payload assembly in favor of SDK-derived parameter field typing.
+- Added `filterAdTrackingFrames` configuration in `HyperAgent` so CDP frame discovery can optionally include ad/tracking iframes for workflows that require them.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.

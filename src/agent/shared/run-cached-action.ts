@@ -32,6 +32,7 @@ export interface RunCachedStepParams {
   variables: Array<{ key: string; value: string; description: string }>;
   preferScriptBoundingBox?: boolean;
   cdpActionsEnabled?: boolean;
+  filterAdTrackingFrames?: boolean;
   performFallback?: (instruction: string) => Promise<TaskOutput>;
 }
 
@@ -311,6 +312,7 @@ export async function runCachedStep(
     variables,
     preferScriptBoundingBox,
     cdpActionsEnabled,
+    filterAdTrackingFrames,
   } = params;
 
   const taskId = uuidv4();
@@ -411,6 +413,7 @@ export async function runCachedStep(
       variables,
       preferScriptBoundingBox,
       cdpActionsEnabled,
+      filterAdTrackingFrames,
     }).catch((err) => {
       lastError = err;
       return null;
@@ -526,6 +529,7 @@ async function runCachedAttempt(args: {
   variables: Array<{ key: string; value: string; description: string }>;
   preferScriptBoundingBox?: boolean;
   cdpActionsEnabled?: boolean;
+  filterAdTrackingFrames?: boolean;
 }): Promise<{ success: boolean; message: string }> {
   const {
     page,
@@ -538,7 +542,16 @@ async function runCachedAttempt(args: {
     variables,
     preferScriptBoundingBox,
     cdpActionsEnabled,
+    filterAdTrackingFrames,
   } = args;
+
+  const { cdpClient, frameContextManager } = await initializeRuntimeContext(
+    page,
+    debug,
+    {
+      filterAdTrackingFrames,
+    }
+  );
 
   await waitForSettledDOM(page);
   const domState = await captureDOMState(page, {
@@ -546,11 +559,6 @@ async function runCachedAttempt(args: {
     debug,
     enableVisualMode: false,
   });
-
-  const { cdpClient, frameContextManager } = await initializeRuntimeContext(
-    page,
-    debug
-  );
   const resolved = await resolveXPathWithCDP({
     xpath: cachedAction.xpath!,
     frameIndex: cachedAction.frameIndex ?? 0,

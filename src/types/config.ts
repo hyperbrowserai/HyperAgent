@@ -94,6 +94,11 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
    * Configuration for agent actions
    */
   cdpActions?: boolean;
+  /**
+   * Enable/disable heuristic filtering of likely ad/tracking iframes during
+   * CDP frame discovery. Defaults to true.
+   */
+  filterAdTrackingFrames?: boolean;
   debugOptions?: {
     cdpSessions?: boolean;
     traceWait?: boolean;

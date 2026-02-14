@@ -12,6 +12,10 @@ export interface RuntimeContext {
   frameContextManager: FrameContextManager;
 }
 
+export interface RuntimeContextOptions {
+  filterAdTrackingFrames?: boolean;
+}
+
 const MAX_RUNTIME_CONTEXT_DIAGNOSTIC_CHARS = 400;
 
 function formatRuntimeContextDiagnostic(value: unknown): string {
@@ -39,7 +43,8 @@ function formatRuntimeContextDiagnostic(value: unknown): string {
  */
 export async function initializeRuntimeContext(
   page: Page,
-  debug: boolean = false
+  debug: boolean = false,
+  options: RuntimeContextOptions = {}
 ): Promise<RuntimeContext> {
   if (!page || typeof page !== "object") {
     throw new Error("[FrameContext] Invalid page instance for runtime initialization");
@@ -79,6 +84,14 @@ export async function initializeRuntimeContext(
   try {
     if (typeof frameContextManager.setDebug === "function") {
       frameContextManager.setDebug(debug);
+    }
+    if (
+      typeof frameContextManager.setFrameFilteringEnabled === "function" &&
+      typeof options.filterAdTrackingFrames === "boolean"
+    ) {
+      frameContextManager.setFrameFilteringEnabled(
+        options.filterAdTrackingFrames
+      );
     }
     await frameContextManager.ensureInitialized();
   } catch (error) {

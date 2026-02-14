@@ -193,6 +193,7 @@ export interface AgentDeps {
   mcpClient?: MCPClient;
   variables: Array<{ key: string; value: string; description: string }>;
   cdpActionsEnabled?: boolean;
+  filterAdTrackingFrames?: boolean;
 }
 export interface HyperVariable {
   key: string;

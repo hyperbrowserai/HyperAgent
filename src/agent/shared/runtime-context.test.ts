@@ -35,6 +35,27 @@ describe("initializeRuntimeContext", () => {
     expect(frameContextManager.ensureInitialized).toHaveBeenCalledTimes(1);
   });
 
+  it("applies frame filtering option when provided", async () => {
+    const page = {} as unknown as Page;
+    const cdpClient = { id: "client-filter" };
+    const frameContextManager = {
+      setDebug: jest.fn(),
+      setFrameFilteringEnabled: jest.fn(),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+    };
+    getCDPClientMock.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManagerMock.mockReturnValue(frameContextManager);
+
+    await initializeRuntimeContext(page, false, {
+      filterAdTrackingFrames: false,
+    });
+
+    expect(frameContextManager.setFrameFilteringEnabled).toHaveBeenCalledWith(
+      false
+    );
+    expect(frameContextManager.ensureInitialized).toHaveBeenCalledTimes(1);
+  });
+
   it("initializes even when setDebug is unavailable", async () => {
     const page = {} as unknown as Page;
     const cdpClient = { id: "client-2" };

@@ -153,6 +153,7 @@ export class FrameContextManager {
   private initialized = false;
   private initializingPromise: Promise<void> | null = null;
   private debugLogs = false;
+  private filterAdTrackingFrames = true;
 
   constructor(private readonly client: CDPClient) {}
 
@@ -168,6 +169,10 @@ export class FrameContextManager {
 
   setDebug(debug?: boolean): void {
     this.debugLogs = !!debug;
+  }
+
+  setFrameFilteringEnabled(enabled?: boolean): void {
+    this.filterAdTrackingFrames = enabled !== false;
   }
 
   private log(message: string): void {
@@ -558,6 +563,7 @@ export class FrameContextManager {
 
       // Filter ad/tracking frames before attempting CDP session creation
       if (
+        this.filterAdTrackingFrames &&
         isAdOrTrackingFrame({
           url: frameUrl,
           name: frameName,

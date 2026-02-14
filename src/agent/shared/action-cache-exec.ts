@@ -245,6 +245,7 @@ function runCachedAction(
     variables: agent.variables ?? [],
     preferScriptBoundingBox: agent.debug,
     cdpActionsEnabled: agent.cdpActionsEnabled,
+    filterAdTrackingFrames: agent.filterAdTrackingFrames,
     performFallback: normalizedPerformInstruction
       ? (instr) => page.perform(instr)
       : undefined,

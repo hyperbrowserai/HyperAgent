@@ -139,6 +139,30 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       expect.objectContaining({
         maxRetries: 7,
         retryDelayMs: 42,
+        filterAdTrackingFrames: true,
+      })
+    );
+  });
+
+  it("passes filterAdTrackingFrames=false to findElementWithInstruction when configured", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+      filterAdTrackingFrames: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+
+    await agent.executeSingleAction("click login", page);
+
+    expect(findElementWithInstruction).toHaveBeenCalledWith(
+      "click login",
+      page,
+      expect.any(Object),
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
       })
     );
   });

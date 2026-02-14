@@ -326,6 +326,69 @@ describe("FrameContextManager listener bookkeeping", () => {
     await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
   });
 
+  it("captureOOPIFs skips ad/tracking frame session creation by default", async () => {
+    const session = new FakeSession();
+    const mainFrame = {
+      url: () => "https://example.com",
+      parentFrame: () => null,
+      name: () => "main",
+      isDetached: () => false,
+    };
+    const adFrame = {
+      url: () => "https://ad.doubleclick.net/pagead/ads?gdfp_req=1",
+      parentFrame: () => mainFrame,
+      name: () => "ad-frame",
+      isDetached: () => false,
+    };
+    const newCDPSession = jest.fn().mockRejectedValue(new Error("same origin frame"));
+    const page = {
+      context: () => ({
+        newCDPSession,
+      }),
+      frames: () => [mainFrame, adFrame],
+      mainFrame: () => mainFrame,
+    };
+
+    const manager = new FrameContextManager(
+      createFakeClientWithPage(session, page)
+    );
+
+    await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
+    expect(newCDPSession).not.toHaveBeenCalled();
+  });
+
+  it("captureOOPIFs allows ad/tracking frame session creation when filtering is disabled", async () => {
+    const session = new FakeSession();
+    const mainFrame = {
+      url: () => "https://example.com",
+      parentFrame: () => null,
+      name: () => "main",
+      isDetached: () => false,
+    };
+    const adFrame = {
+      url: () => "https://ad.doubleclick.net/pagead/ads?gdfp_req=1",
+      parentFrame: () => mainFrame,
+      name: () => "ad-frame",
+      isDetached: () => false,
+    };
+    const newCDPSession = jest.fn().mockRejectedValue(new Error("same origin frame"));
+    const page = {
+      context: () => ({
+        newCDPSession,
+      }),
+      frames: () => [mainFrame, adFrame],
+      mainFrame: () => mainFrame,
+    };
+
+    const manager = new FrameContextManager(
+      createFakeClientWithPage(session, page)
+    );
+    manager.setFrameFilteringEnabled(false);
+
+    await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
+    expect(newCDPSession).toHaveBeenCalledWith(adFrame);
+  });
+
   it("captureOOPIFs keeps cached records when frame metadata getters trap", async () => {
     const session = new FakeSession();
     const mainFrame = {

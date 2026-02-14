@@ -112,6 +112,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
   private cdpActionsEnabled: boolean;
+  private filterAdTrackingFrames = true;
   private actionCacheByTaskId: Record<string, ActionCacheOutput> = {};
   private actionCacheTaskOrder: string[] = [];
   private taskResults: Record<string, Promise<AgentTaskOutput>> = {};
@@ -1163,6 +1164,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     this.cdpActionsEnabled = params.cdpActions ?? true;
+    this.filterAdTrackingFrames = params.filterAdTrackingFrames !== false;
     this.errorEmitter = new ErrorEmitter();
   }
 
@@ -1726,6 +1728,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           cdpActions: this.cdpActionsEnabled,
+          filterAdTrackingFrames: this.filterAdTrackingFrames,
           activePage: async () => activeTaskPage,
         },
         taskState,
@@ -1883,6 +1886,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           mcpClient: this.mcpClient,
           variables: this._variables,
           cdpActions: this.cdpActionsEnabled,
+          filterAdTrackingFrames: this.filterAdTrackingFrames,
           activePage: async () => activeTaskPage,
         },
         taskState,
@@ -2509,6 +2513,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         maxRetries,
         retryDelayMs,
         debug: this.debug,
+        filterAdTrackingFrames: this.filterAdTrackingFrames,
       }
     );
 
@@ -2819,7 +2824,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       // Use shared runtime context
       const { cdpClient, frameContextManager } = await initializeRuntimeContext(
         initialPage,
-        this.debug
+        this.debug,
+        {
+          filterAdTrackingFrames: this.filterAdTrackingFrames,
+        }
       );
 
       // Check context switch again before action
@@ -3711,6 +3719,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       mcpClient: this.mcpClient,
       variables: this.getVariableValues(),
       cdpActionsEnabled: this.cdpActionsEnabled,
+      filterAdTrackingFrames: this.filterAdTrackingFrames,
     };
     attachCachedActionHelpers(deps, hyperPage);
 

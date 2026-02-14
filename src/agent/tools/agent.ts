@@ -536,7 +536,10 @@ const runAction = async (
     try {
       const { cdpClient, frameContextManager } = await initializeRuntimeContext(
         page,
-        ctx.debug
+        ctx.debug,
+        {
+          filterAdTrackingFrames: ctx.filterAdTrackingFrames,
+        }
       );
       actionCtx.cdp = {
         resolveElement,
@@ -691,7 +694,9 @@ export const runAgentTask = async (
     // Initialize context at the start of the task
     let runtimeContextReady = true;
     try {
-      await initializeRuntimeContext(page, ctx.debug);
+      await initializeRuntimeContext(page, ctx.debug, {
+        filterAdTrackingFrames: ctx.filterAdTrackingFrames,
+      });
     } catch (error) {
       runtimeContextReady = false;
       const initError = `Failed to initialize runtime context: ${normalizeRuntimeActionMessage(
@@ -716,7 +721,9 @@ export const runAgentTask = async (
           page = newPage;
           setupDomListeners(page);
           try {
-            await initializeRuntimeContext(page, ctx.debug);
+            await initializeRuntimeContext(page, ctx.debug, {
+              filterAdTrackingFrames: ctx.filterAdTrackingFrames,
+            });
           } catch (error) {
             const switchError = `Failed to initialize runtime context for switched page: ${normalizeRuntimeActionMessage(
               error

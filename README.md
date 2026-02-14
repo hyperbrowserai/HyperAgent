@@ -572,6 +572,7 @@ HyperAgent integrates seamlessly with Playwright, so you can still use familiar 
 - **Exact Coordinates**: Actions use precise CDP coordinates for reliability
 
 Keep in mind that CDP is still experimental, and stability is not guaranteed. If you'd like the agent to use Playwright's native locators/actions instead, set `cdpActions: false` when you create the agent and it will fall back automatically.
+If you need to inspect ad/tracking iframes for a specific workflow, keep CDP enabled and set `filterAdTrackingFrames: false` in `new HyperAgent({ ... })`.
 
 The CDP layer is still evolving—expect rapid polish (and the occasional sharp edge). If you hit something quirky you can toggle CDP off for that workflow and drop us a bug report.
 

@@ -13,6 +13,7 @@ export interface AgentCtx {
   tokenLimit: number;
   llm: HyperAgentLLM;
   cdpActions?: boolean;
+  filterAdTrackingFrames?: boolean;
   schemaErrors?: Array<{
     stepIndex: number;
     error: string;
