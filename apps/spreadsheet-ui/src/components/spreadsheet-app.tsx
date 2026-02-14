@@ -445,6 +445,17 @@ function getEndpointIssueReasonDescription(
   return descriptions?.[reason] ?? null;
 }
 
+function buildEndpointIssueReasonGlossary(
+  reasonKeys: EndpointIssueReason[],
+  descriptions?: Partial<Record<EndpointIssueReason, string>> | null,
+): Array<{ key: EndpointIssueReason; label: string; description: string | null }> {
+  return reasonKeys.map((reason) => ({
+    key: reason,
+    label: getEndpointIssueReasonLabel(reason),
+    description: getEndpointIssueReasonDescription(reason, descriptions),
+  }));
+}
+
 function filterEndpointCatalogEntries<
   T extends { key: string; endpoint: string; openApiPath: string; summary: string | null },
 >(
@@ -1308,6 +1319,8 @@ export function SpreadsheetApp() {
     useState(false);
   const [isCopyingVisibleWizardIssueReasonCounts, setIsCopyingVisibleWizardIssueReasonCounts] =
     useState(false);
+  const [isCopyingWizardIssueReasonGlossary, setIsCopyingWizardIssueReasonGlossary] =
+    useState(false);
   const [isCopyingVisibleWizardIssueSummaries, setIsCopyingVisibleWizardIssueSummaries] =
     useState(false);
   const [isCopyingVisibleWizardIssuePaths, setIsCopyingVisibleWizardIssuePaths] =
@@ -1335,6 +1348,8 @@ export function SpreadsheetApp() {
   const [isCopyingVisibleAgentIssueUrls, setIsCopyingVisibleAgentIssueUrls] =
     useState(false);
   const [isCopyingVisibleAgentIssueReasonCounts, setIsCopyingVisibleAgentIssueReasonCounts] =
+    useState(false);
+  const [isCopyingAgentIssueReasonGlossary, setIsCopyingAgentIssueReasonGlossary] =
     useState(false);
   const [isCopyingVisibleAgentIssueSummaries, setIsCopyingVisibleAgentIssueSummaries] =
     useState(false);
@@ -2846,6 +2861,39 @@ export function SpreadsheetApp() {
       ),
     [wizardVisibleEndpointIssueReportPayload],
   );
+  const wizardIssueReasonGlossaryPayload = useMemo(
+    () => ({
+      schema: "wizard",
+      issue_reason_filter: wizardEndpointCatalogIssueReasonFilter,
+      reason_keys: wizardEndpointIssueReasonOptions,
+      reason_glossary: buildEndpointIssueReasonGlossary(
+        wizardEndpointIssueReasonOptions,
+        wizardEndpointIssueReasonDescriptions,
+      ),
+      reason_descriptions_source: wizardSchemaIssueReasonDescriptions
+        ? "schema"
+        : openApiSpecIssueReasonDescriptions
+          ? "openapi_extension"
+          : "local_defaults",
+      reason_keys_mismatch_with_agent_schema: hasEndpointCatalogIssueReasonKeysMismatch,
+      reason_keys_mismatch_with_openapi_spec: hasWizardIssueReasonKeysVsOpenApiMismatch,
+      reason_descriptions_mismatch_with_agent_schema:
+        hasEndpointCatalogIssueReasonDescriptionsMismatch,
+      reason_descriptions_mismatch_with_openapi_spec:
+        hasWizardIssueReasonDescriptionsVsOpenApiMismatch,
+    }),
+    [
+      hasEndpointCatalogIssueReasonDescriptionsMismatch,
+      hasEndpointCatalogIssueReasonKeysMismatch,
+      hasWizardIssueReasonDescriptionsVsOpenApiMismatch,
+      hasWizardIssueReasonKeysVsOpenApiMismatch,
+      openApiSpecIssueReasonDescriptions,
+      wizardEndpointCatalogIssueReasonFilter,
+      wizardEndpointIssueReasonDescriptions,
+      wizardEndpointIssueReasonOptions,
+      wizardSchemaIssueReasonDescriptions,
+    ],
+  );
   const wizardVisibleEndpointKeys = useMemo(
     () => wizardVisibleSchemaEndpointsWithMethods.map((entry) => entry.key),
     [wizardVisibleSchemaEndpointsWithMethods],
@@ -3512,6 +3560,39 @@ export function SpreadsheetApp() {
         agentVisibleEndpointIssueReportPayload.issue_reason_counts_visible,
       ),
     [agentVisibleEndpointIssueReportPayload],
+  );
+  const agentIssueReasonGlossaryPayload = useMemo(
+    () => ({
+      schema: "agent",
+      issue_reason_filter: agentEndpointCatalogIssueReasonFilter,
+      reason_keys: agentEndpointIssueReasonOptions,
+      reason_glossary: buildEndpointIssueReasonGlossary(
+        agentEndpointIssueReasonOptions,
+        agentEndpointIssueReasonDescriptions,
+      ),
+      reason_descriptions_source: agentSchemaIssueReasonDescriptions
+        ? "schema"
+        : openApiSpecIssueReasonDescriptions
+          ? "openapi_extension"
+          : "local_defaults",
+      reason_keys_mismatch_with_wizard_schema: hasEndpointCatalogIssueReasonKeysMismatch,
+      reason_keys_mismatch_with_openapi_spec: hasAgentIssueReasonKeysVsOpenApiMismatch,
+      reason_descriptions_mismatch_with_wizard_schema:
+        hasEndpointCatalogIssueReasonDescriptionsMismatch,
+      reason_descriptions_mismatch_with_openapi_spec:
+        hasAgentIssueReasonDescriptionsVsOpenApiMismatch,
+    }),
+    [
+      agentEndpointCatalogIssueReasonFilter,
+      agentEndpointIssueReasonDescriptions,
+      agentEndpointIssueReasonOptions,
+      agentSchemaIssueReasonDescriptions,
+      hasAgentIssueReasonDescriptionsVsOpenApiMismatch,
+      hasAgentIssueReasonKeysVsOpenApiMismatch,
+      hasEndpointCatalogIssueReasonDescriptionsMismatch,
+      hasEndpointCatalogIssueReasonKeysMismatch,
+      openApiSpecIssueReasonDescriptions,
+    ],
   );
   const agentVisibleEndpointKeys = useMemo(
     () => agentVisibleSchemaEndpointsWithMethods.map((entry) => entry.key),
@@ -4741,6 +4822,21 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyWizardIssueReasonGlossary() {
+    setIsCopyingWizardIssueReasonGlossary(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(wizardIssueReasonGlossaryPayload, null, 2),
+      );
+      clearUiError();
+      setNotice("Copied wizard issue reason glossary metadata.");
+    } catch (error) {
+      applyUiError(error, "Failed to copy wizard issue reason glossary metadata.");
+    } finally {
+      setIsCopyingWizardIssueReasonGlossary(false);
+    }
+  }
+
   async function handleCopyVisibleWizardIssueSummaries() {
     if (wizardVisibleEndpointIssueReportPayload.issue_entries.length === 0) {
       return;
@@ -5100,6 +5196,21 @@ export function SpreadsheetApp() {
       applyUiError(error, "Failed to copy visible agent issue reason counts.");
     } finally {
       setIsCopyingVisibleAgentIssueReasonCounts(false);
+    }
+  }
+
+  async function handleCopyAgentIssueReasonGlossary() {
+    setIsCopyingAgentIssueReasonGlossary(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(agentIssueReasonGlossaryPayload, null, 2),
+      );
+      clearUiError();
+      setNotice("Copied agent issue reason glossary metadata.");
+    } catch (error) {
+      applyUiError(error, "Failed to copy agent issue reason glossary metadata.");
+    } finally {
+      setIsCopyingAgentIssueReasonGlossary(false);
     }
   }
 
@@ -6588,6 +6699,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleWizardIssueReasonCounts
                         ? "Copying..."
                         : "Copy visible issue reasons"}
+                    </button>
+                    <button
+                      onClick={handleCopyWizardIssueReasonGlossary}
+                      disabled={isCopyingWizardIssueReasonGlossary}
+                      className="rounded border border-amber-600/60 px-2 py-0.5 text-[10px] text-amber-200 hover:bg-amber-500/10 disabled:opacity-40"
+                    >
+                      {isCopyingWizardIssueReasonGlossary
+                        ? "Copying..."
+                        : "Copy issue reason glossary"}
                     </button>
                     <button
                       onClick={handleCopyVisibleWizardIssueSummaries}
@@ -8403,6 +8523,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleAgentIssueReasonCounts
                         ? "Copying..."
                         : "Copy visible issue reasons"}
+                    </button>
+                    <button
+                      onClick={handleCopyAgentIssueReasonGlossary}
+                      disabled={isCopyingAgentIssueReasonGlossary}
+                      className="rounded border border-amber-600/60 px-2 py-0.5 text-[10px] text-amber-200 hover:bg-amber-500/10 disabled:opacity-40"
+                    >
+                      {isCopyingAgentIssueReasonGlossary
+                        ? "Copying..."
+                        : "Copy issue reason glossary"}
                     </button>
                     <button
                       onClick={handleCopyVisibleAgentIssueSummaries}
