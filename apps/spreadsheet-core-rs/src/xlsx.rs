@@ -35,17 +35,19 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
       continue;
     };
     let formula_range = workbook.worksheet_formula(sheet_name).ok();
+    let (range_start_row, range_start_col) = range.start().unwrap_or((0, 0));
     let mut mutations = Vec::new();
 
-    for (row_index, row) in range.rows().enumerate() {
-      for (col_index, cell_value) in row.iter().enumerate() {
-        let row_number = (row_index + 1) as u32;
-        let col_number = (col_index + 1) as u32;
+    for (row_offset, row) in range.rows().enumerate() {
+      for (col_offset, cell_value) in row.iter().enumerate() {
+        let row_index = range_start_row as usize + row_offset;
+        let col_index = range_start_col as usize + col_offset;
+        let row_number = row_index as u32 + 1;
+        let col_number = col_index as u32 + 1;
         let formula = formula_range
           .as_ref()
-          .and_then(|formula_grid| formula_grid.get((row_index, col_index)))
-          .map(ToString::to_string)
-          .filter(|value| !value.trim().is_empty());
+          .and_then(|formula_grid| formula_grid.get((row_offset, col_offset)))
+          .and_then(|value| normalize_imported_formula(value.to_string().as_str()));
         if formula.is_some() {
           formula_cells_imported += 1;
         }
@@ -187,6 +189,25 @@ fn map_chart_type(chart_type: ChartType) -> XlsxChartType {
   }
 }
 
+fn normalize_imported_formula(formula: &str) -> Option<String> {
+  let trimmed = formula.trim();
+  if trimmed.is_empty() {
+    return None;
+  }
+
+  let normalized_body = trimmed
+    .strip_prefix('=')
+    .unwrap_or(trimmed)
+    .replace("_xlfn.", "")
+    .replace("_xlws.", "");
+  let normalized_body = normalized_body.trim();
+  if normalized_body.is_empty() {
+    return None;
+  }
+
+  Some(format!("={normalized_body}"))
+}
+
 fn map_data_to_json(value: &Data) -> Option<serde_json::Value> {
   match value {
     Data::Empty => None,
@@ -207,7 +228,7 @@ mod tests {
   use crate::{
     models::{ChartSpec, ChartType, WorkbookSummary},
     state::AppState,
-    store::load_sheet_snapshot,
+    store::{load_sheet_snapshot, recalculate_formulas},
   };
   use chrono::Utc;
   use rust_xlsxwriter::{Formula, Workbook};
@@ -258,6 +279,28 @@ mod tests {
     workbook
       .save_to_buffer()
       .expect("fixture workbook should serialize")
+  }
+
+  fn formula_matrix_fixture_workbook_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let calc_sheet = workbook.add_worksheet();
+    calc_sheet.set_name("Calc").expect("sheet should be renamed");
+    calc_sheet
+      .write_formula(0, 1, Formula::new("=BITAND(6,3)").set_result("2"))
+      .expect("bitand should write");
+    calc_sheet
+      .write_formula(1, 1, Formula::new("=DEC2HEX(255,4)").set_result("00FF"))
+      .expect("dec2hex should write");
+    calc_sheet
+      .write_formula(2, 1, Formula::new("=DOLLARDE(1.02,16)").set_result("1.125"))
+      .expect("dollarde should write");
+    calc_sheet
+      .write_formula(3, 1, Formula::new("=DELTA(5,5)").set_result("1"))
+      .expect("delta should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("formula matrix fixture workbook should serialize")
   }
 
   fn snapshot_map(
@@ -452,6 +495,145 @@ mod tests {
         .and_then(|raw_value| raw_value.parse::<f64>().ok())
         .map(|value| value as i64),
       Some(80),
+    );
+  }
+
+  #[tokio::test]
+  async fn should_recalculate_and_roundtrip_supported_formula_fixture() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let source_state =
+      AppState::new(temp_dir.path().join("source-formulas")).expect("state should initialize");
+    let source_workbook = source_state
+      .create_workbook(Some("xlsx-formula-source".to_string()))
+      .await
+      .expect("source workbook should be created");
+    let source_db_path = source_state
+      .db_path(source_workbook.id)
+      .await
+      .expect("source db path should be accessible");
+
+    let formula_fixture_bytes = formula_matrix_fixture_workbook_bytes();
+    let import_result = import_xlsx(&source_db_path, &formula_fixture_bytes)
+      .expect("formula fixture workbook should import");
+    assert_eq!(import_result.sheets_imported, 1);
+    assert_eq!(import_result.sheet_names, vec!["Calc".to_string()]);
+    assert_eq!(
+      import_result.formula_cells_imported, 4,
+      "formula fixture should import all formula cells",
+    );
+
+    let (_updated_cells, unsupported_formulas) = recalculate_formulas(&source_db_path)
+      .expect("formula fixture workbook should recalculate");
+    assert!(
+      unsupported_formulas.is_empty(),
+      "no supported fixture formulas should be unsupported: {:?}",
+      unsupported_formulas,
+    );
+
+    let source_snapshot =
+      load_sheet_snapshot(&source_db_path, "Calc").expect("calc snapshot should load");
+    let source_map = snapshot_map(&source_snapshot);
+    let source_b1 = source_map.get("B1").expect("B1 should exist");
+    let source_b2 = source_map.get("B2").expect("B2 should exist");
+    let source_b3 = source_map.get("B3").expect("B3 should exist");
+    let source_b4 = source_map.get("B4").expect("B4 should exist");
+    assert_eq!(
+      source_b1.evaluated_value.as_deref(),
+      Some("2"),
+      "bitand should evaluate in imported fixture",
+    );
+    assert_eq!(
+      source_b2.evaluated_value.as_deref(),
+      Some("00FF"),
+      "dec2hex should evaluate in imported fixture",
+    );
+    assert_eq!(
+      source_b3.evaluated_value.as_deref(),
+      Some("1.125"),
+      "dollarde should evaluate in imported fixture",
+    );
+    assert_eq!(
+      source_b4.evaluated_value.as_deref(),
+      Some("1"),
+      "delta should evaluate in imported fixture",
+    );
+    let dollarde_value = source_map
+      .get("B3")
+      .and_then(|cell| cell.evaluated_value.as_deref())
+      .and_then(|value| value.parse::<f64>().ok())
+      .expect("dollarde value should parse as number");
+    assert!(
+      (dollarde_value - 1.125).abs() < 1e-9,
+      "dollarde should evaluate to 1.125",
+    );
+
+    let summary = WorkbookSummary {
+      id: source_workbook.id,
+      name: "formula-roundtrip".to_string(),
+      created_at: Utc::now(),
+      sheets: vec!["Calc".to_string()],
+      charts: Vec::new(),
+      compatibility_warnings: Vec::new(),
+    };
+    let (exported_bytes, _) =
+      export_xlsx(&source_db_path, &summary).expect("formula fixture workbook should export");
+
+    let replay_state =
+      AppState::new(temp_dir.path().join("replay-formulas")).expect("state should initialize");
+    let replay_workbook = replay_state
+      .create_workbook(Some("xlsx-formula-replay".to_string()))
+      .await
+      .expect("replay workbook should be created");
+    let replay_db_path = replay_state
+      .db_path(replay_workbook.id)
+      .await
+      .expect("replay db path should be accessible");
+    import_xlsx(&replay_db_path, &exported_bytes)
+      .expect("re-exported formula workbook should import");
+
+    let (_, replay_unsupported_formulas) = recalculate_formulas(&replay_db_path)
+      .expect("re-exported formula workbook should recalculate");
+    assert!(
+      replay_unsupported_formulas.is_empty(),
+      "roundtrip formulas should remain evaluable: {:?}",
+      replay_unsupported_formulas,
+    );
+
+    let replay_snapshot =
+      load_sheet_snapshot(&replay_db_path, "Calc").expect("replay calc snapshot should load");
+    let replay_map = snapshot_map(&replay_snapshot);
+    assert_eq!(
+      replay_map
+        .get("B1")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some("2"),
+    );
+    assert_eq!(
+      replay_map
+        .get("B2")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some("00FF"),
+    );
+    assert_eq!(
+      replay_map
+        .get("B3")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some("1.125"),
+    );
+    assert_eq!(
+      replay_map
+        .get("B4")
+        .and_then(|cell| cell.evaluated_value.as_deref()),
+      Some("1"),
+    );
+    let replay_dollarde_value = replay_map
+      .get("B3")
+      .and_then(|cell| cell.evaluated_value.as_deref())
+      .and_then(|value| value.parse::<f64>().ok())
+      .expect("replay dollarde value should parse as number");
+    assert!(
+      (replay_dollarde_value - 1.125).abs() < 1e-9,
+      "replay dollarde should evaluate to 1.125",
     );
   }
 }
