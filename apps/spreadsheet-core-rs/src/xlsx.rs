@@ -807,6 +807,7 @@ mod tests {
       import_result.formula_cells_normalized <= import_result.formula_cells_imported,
       "normalized formula count should not exceed imported formula count",
     );
+    assert_eq!(import_result.formula_cells_normalized, 0);
     assert_eq!(
       import_result.sheet_names,
       vec!["Inputs".to_string(), "Notes".to_string()],
@@ -817,6 +818,13 @@ mod tests {
         .iter()
         .any(|warning| warning.contains("not imported")),
       "import warning should mention unsupported artifacts",
+    );
+    assert!(
+      !import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("formula(s) were normalized")),
+      "canonical fixture formulas should not emit normalization telemetry warning",
     );
 
     let inputs_snapshot =
@@ -980,6 +988,13 @@ mod tests {
     assert_eq!(import_result.cells_imported, 3);
     assert_eq!(import_result.formula_cells_imported, 1);
     assert_eq!(import_result.formula_cells_normalized, 1);
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("1 formula(s) were normalized")),
+      "offset fixture should emit normalization warning telemetry",
+    );
 
     let (_, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("offset fixture formulas should recalculate");
@@ -1061,6 +1076,13 @@ mod tests {
     assert!(
       import_result.formula_cells_normalized >= 1,
       "formula matrix fixture should report compatibility normalization for modern function tokens",
+    );
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("formula(s) were normalized")),
+      "formula matrix fixture should emit normalization warning telemetry",
     );
 
     let (_updated_cells, unsupported_formulas) = recalculate_formulas(&source_db_path)
@@ -1223,6 +1245,13 @@ mod tests {
     assert_eq!(import_result.formula_cells_imported, 1);
     assert_eq!(import_result.formula_cells_with_cached_values, 1);
     assert_eq!(import_result.formula_cells_normalized, 1);
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("1 formula(s) were normalized")),
+      "unsupported fixture should emit normalization warning telemetry",
+    );
 
     let (_, unsupported_formulas) =
       recalculate_formulas(&source_db_path).expect("recalculation should complete");

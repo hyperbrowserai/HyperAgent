@@ -3149,6 +3149,13 @@ mod tests {
       import_result.formula_cells_normalized, 0,
       "baseline fixture formulas should not require compatibility normalization",
     );
+    assert!(
+      !import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("formula(s) were normalized")),
+      "baseline fixture import should not emit normalization telemetry warning",
+    );
 
     let refreshed = state
       .get_workbook(workbook.id)
