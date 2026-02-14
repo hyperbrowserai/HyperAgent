@@ -203,6 +203,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
   - `syncFrameContextManager()` now guards trap-prone frame-manager `setDebug` calls, preserving sync flow with sanitized debug warnings.
 - Hardened cache-hydration debug handling in a11y context provider:
   - `hydrateFrameContextFromSnapshot()` now guards trap-prone frame-manager `setDebug` calls so cache hydration continues instead of aborting early.
+- Hardened frame-graph debug artifact capture in agent loop:
+  - `writeFrameGraphSnapshot()` now guards trap-prone frame-manager `setDebug` calls and still proceeds with frame graph serialization.
+  - Added regression coverage to ensure debug-setter traps do not downgrade into "Failed to write frame graph" failures.
 - Refreshed remaining staged-flow wording in the CDP deep dive around OOPIF discovery to describe current execution-context sync progression without stale "Need Phase 4" phrasing.
 - Hardened CDP command dispatch in Playwright session adapter:
   - `PlaywrightSessionAdapter.send()` now guards trap-prone `session.send` method reads and wraps sync send failures with sanitized/diagnostic context.

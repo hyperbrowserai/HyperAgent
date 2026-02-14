@@ -1201,6 +1201,54 @@ describe("runAgentTask completion behavior", () => {
     }
   });
 
+  it("continues frame-graph snapshot writing when frame-manager debug setter throws", async () => {
+    const page = createMockPage();
+    const getCDPClientSpy = jest
+      .spyOn(cdp, "getCDPClient")
+      .mockResolvedValue({} as Awaited<ReturnType<typeof cdp.getCDPClient>>);
+    const getOrCreateFrameContextManagerSpy = jest
+      .spyOn(cdp, "getOrCreateFrameContextManager")
+      .mockReturnValue({
+        setDebug: () => {
+          throw new Error(`frame-debug\u0000\n${"x".repeat(10_000)}`);
+        },
+        toJSON: () => ({ frames: [] }),
+      } as unknown as ReturnType<typeof cdp.getOrCreateFrameContextManager>);
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      return undefined;
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const ctx = createRepeatedActionThenCompleteCtx(1);
+    ctx.debug = true;
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page), {
+        debugDir: "debug/test",
+      });
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(getCDPClientSpy).toHaveBeenCalled();
+      expect(getOrCreateFrameContextManagerSpy).toHaveBeenCalled();
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to configure frame graph debug mode")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+      expect(
+        warnSpy.mock.calls.some((call) =>
+          String(call[0] ?? "").includes("Failed to write frame graph")
+        )
+      ).toBe(false);
+    } finally {
+      getCDPClientSpy.mockRestore();
+      getOrCreateFrameContextManagerSpy.mockRestore();
+      writeSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
   it("truncates oversized structured-output diagnostics", async () => {
     const page = createMockPage();
     const hugeRaw = "x".repeat(120_000);

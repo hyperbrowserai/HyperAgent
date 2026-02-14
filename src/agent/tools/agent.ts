@@ -332,7 +332,21 @@ const writeFrameGraphSnapshot = async (
   try {
     const cdpClient = await getCDPClient(page);
     const frameManager = getOrCreateFrameContextManager(cdpClient);
-    frameManager.setDebug(debug);
+    if (typeof frameManager.setDebug === "function") {
+      try {
+        frameManager.setDebug(debug);
+      } catch (error) {
+        if (debug) {
+          console.warn(
+            `[FrameContext] Failed to configure frame graph debug mode: ${formatDiagnosticText(
+              error,
+              MAX_RUNTIME_ACTION_MESSAGE_CHARS,
+              "unknown error"
+            )}`
+          );
+        }
+      }
+    }
     const data = frameManager.toJSON();
     fs.writeFileSync(`${dir}/frames.json`, safeJsonStringify(data));
   } catch (error) {
