@@ -1880,6 +1880,14 @@ export function SpreadsheetApp() {
       wizardSchemaEndpointDiagnostics,
     ],
   );
+  const hasWizardSchemaCoverageInSync = Boolean(
+    wizardSchemaEndpointCoverage && wizardEndpointCoverageDrift && !wizardEndpointCoverageDrift.hasDrift,
+  );
+  const hasWizardSchemaDiagnosticsInSync = Boolean(
+    wizardSchemaEndpointDiagnostics
+    && wizardEndpointDiagnosticsDrift
+    && !wizardEndpointDiagnosticsDrift.hasDrift,
+  );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
@@ -1901,6 +1909,7 @@ export function SpreadsheetApp() {
         coverage: wizardEndpointCoverageStats,
         schema_coverage: wizardSchemaEndpointCoverage,
         coverage_drift: wizardEndpointCoverageDrift,
+        coverage_in_sync: hasWizardSchemaCoverageInSync,
         diagnostics: {
           status: wizardEndpointCatalogDiagnostics.level,
           issue_count: wizardEndpointCatalogDiagnostics.issueCount,
@@ -1912,6 +1921,7 @@ export function SpreadsheetApp() {
         },
         schema_diagnostics: wizardSchemaEndpointDiagnostics,
         diagnostics_drift: wizardEndpointDiagnosticsDrift,
+        diagnostics_in_sync: hasWizardSchemaDiagnosticsInSync,
         endpoints: wizardSchemaEndpointsWithMethods.map((entry) => ({
           key: entry.key,
           endpoint: entry.endpoint,
@@ -1952,6 +1962,8 @@ export function SpreadsheetApp() {
       wizardEndpointCoverageDrift,
       wizardEndpointCoverageStats,
       wizardEndpointDiagnosticsDrift,
+      hasWizardSchemaCoverageInSync,
+      hasWizardSchemaDiagnosticsInSync,
       wizardSchemaEndpointCoverage,
       wizardSchemaEndpointDiagnostics,
       wizardSchemaEndpointsWithMethods,
@@ -2325,6 +2337,14 @@ export function SpreadsheetApp() {
       agentSchemaEndpointDiagnostics,
     ],
   );
+  const hasAgentSchemaCoverageInSync = Boolean(
+    agentSchemaEndpointCoverage && agentEndpointCoverageDrift && !agentEndpointCoverageDrift.hasDrift,
+  );
+  const hasAgentSchemaDiagnosticsInSync = Boolean(
+    agentSchemaEndpointDiagnostics
+    && agentEndpointDiagnosticsDrift
+    && !agentEndpointDiagnosticsDrift.hasDrift,
+  );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
@@ -2346,6 +2366,7 @@ export function SpreadsheetApp() {
         coverage: agentEndpointCoverageStats,
         schema_coverage: agentSchemaEndpointCoverage,
         coverage_drift: agentEndpointCoverageDrift,
+        coverage_in_sync: hasAgentSchemaCoverageInSync,
         diagnostics: {
           status: agentEndpointCatalogDiagnostics.level,
           issue_count: agentEndpointCatalogDiagnostics.issueCount,
@@ -2357,6 +2378,7 @@ export function SpreadsheetApp() {
         },
         schema_diagnostics: agentSchemaEndpointDiagnostics,
         diagnostics_drift: agentEndpointDiagnosticsDrift,
+        diagnostics_in_sync: hasAgentSchemaDiagnosticsInSync,
         endpoints: agentSchemaEndpointsWithMethods.map((entry) => ({
           key: entry.key,
           endpoint: entry.endpoint,
@@ -2397,6 +2419,8 @@ export function SpreadsheetApp() {
       agentEndpointCoverageDrift,
       agentEndpointCoverageStats,
       agentEndpointDiagnosticsDrift,
+      hasAgentSchemaCoverageInSync,
+      hasAgentSchemaDiagnosticsInSync,
       agentSchemaEndpointCoverage,
       agentSchemaEndpointDiagnostics,
       agentSchemaEndpointsWithMethods,
@@ -4592,6 +4616,11 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_coverage metadata missing.
                   </p>
                 )}
+                {hasWizardSchemaCoverageInSync ? (
+                  <p className="mt-1 text-[11px] text-emerald-300">
+                    schema/local coverage counters are in sync.
+                  </p>
+                ) : null}
                 {wizardSchemaEndpointDiagnostics ? (
                   <p className="mt-1 text-[11px] text-slate-500">
                     schema diagnostics:{" "}
@@ -4614,6 +4643,11 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_diagnostics metadata missing.
                   </p>
                 )}
+                {hasWizardSchemaDiagnosticsInSync ? (
+                  <p className="mt-1 text-[11px] text-emerald-300">
+                    schema/local diagnostics counters are in sync.
+                  </p>
+                ) : null}
                 {wizardEndpointCoverageDrift?.hasDrift ? (
                   <p className="mt-1 text-[11px] text-rose-300">
                     schema/local coverage drift:{" "}
@@ -5838,6 +5872,11 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_coverage metadata missing.
                   </p>
                 )}
+                {hasAgentSchemaCoverageInSync ? (
+                  <p className="mt-1 text-xs text-emerald-300">
+                    schema/local coverage counters are in sync.
+                  </p>
+                ) : null}
                 {agentSchemaEndpointDiagnostics ? (
                   <p className="mt-1 text-xs text-slate-500">
                     schema diagnostics:{" "}
@@ -5860,6 +5899,11 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_diagnostics metadata missing.
                   </p>
                 )}
+                {hasAgentSchemaDiagnosticsInSync ? (
+                  <p className="mt-1 text-xs text-emerald-300">
+                    schema/local diagnostics counters are in sync.
+                  </p>
+                ) : null}
                 {agentEndpointCoverageDrift?.hasDrift ? (
                   <p className="mt-1 text-xs text-rose-300">
                     schema/local coverage drift:{" "}
