@@ -27,6 +27,8 @@ const STALLED_REQUEST_MS = 2000;
 const STALLED_SWEEP_INTERVAL_MS = 500;
 const MAX_WAIT_DIAGNOSTIC_CHARS = 400;
 const MAX_WAIT_IDENTIFIER_CHARS = 200;
+const DEFAULT_WAIT_TIMEOUT_MS = 10_000;
+const MAX_WAIT_TIMEOUT_MS = 120_000;
 const ENV_TRACE_WAIT =
   process.env.HYPERAGENT_TRACE_WAIT === "1" ||
   process.env.HYPERAGENT_TRACE_WAIT === "true";
@@ -117,6 +119,13 @@ function detachSessionListener<TPayload extends unknown[]>(
   }
 }
 
+function normalizeWaitTimeoutMs(value: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_WAIT_TIMEOUT_MS;
+  }
+  return Math.min(Math.floor(value), MAX_WAIT_TIMEOUT_MS);
+}
+
 export interface LifecycleOptions {
   waitUntil?: Array<"domcontentloaded" | "load" | "networkidle">;
   timeoutMs?: number;
@@ -134,8 +143,9 @@ export interface WaitForSettledStats {
 
 export async function waitForSettledDOM(
   page: Page,
-  timeoutMs: number = 10000
+  timeoutMs: number = DEFAULT_WAIT_TIMEOUT_MS
 ): Promise<WaitForSettledStats> {
+  const normalizedTimeoutMs = normalizeWaitTimeoutMs(timeoutMs);
   const ctx = page.context() as BrowserContext & {
     _options?: { recordVideo?: unknown };
   };
@@ -163,7 +173,7 @@ export async function waitForSettledDOM(
 
   const networkStart = performance.now();
   const stats = await waitForNetworkIdle(lifecycleSession, {
-    timeoutMs,
+    timeoutMs: normalizedTimeoutMs,
     trace: traceWaitFlag,
   });
   const networkDuration = performance.now() - networkStart;

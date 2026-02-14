@@ -183,6 +183,38 @@ describe("waitForSettledDOM diagnostics", () => {
     expect(stats.peakInflight).toBe(1);
   });
 
+  it("normalizes invalid timeout values instead of timing out immediately", async () => {
+    const { session } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    const waitPromise = waitForSettledDOM(page, Number.NaN as unknown as number);
+    await Promise.resolve();
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(600);
+    const stats = await waitPromise;
+
+    expect(stats.resolvedByTimeout).toBe(false);
+    expect(stats.requestsSeen).toBe(0);
+    expect(stats.forcedDrops).toBe(0);
+  });
+
   it("falls back to timeout when network listener registration fails", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     const { session } = createSessionWithEvents({
