@@ -42,4 +42,33 @@ describe("getA11yDOM error formatting", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("sanitizes nested error-detail payloads for extraction failures", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = {
+      evaluate: jest
+        .fn()
+        .mockRejectedValue(new Error(`detail\u0000\n${"x".repeat(5_000)}`)),
+    } as unknown as Page;
+
+    try {
+      await getA11yDOM(page);
+
+      const detailsCall = errorSpy.mock.calls.find(
+        (call) => String(call[0] ?? "") === "Error details:"
+      );
+      expect(detailsCall).toBeDefined();
+      const details = (detailsCall?.[1] ?? {}) as {
+        message?: string;
+        stack?: string;
+      };
+      expect(details.message).toContain("[truncated");
+      expect(details.message).not.toContain("\u0000");
+      expect(details.message).not.toContain("\n");
+      expect(details.stack ?? "").not.toContain("\u0000");
+      expect((details.stack ?? "").length).toBeLessThan(700);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

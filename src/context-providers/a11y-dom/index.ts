@@ -1279,9 +1279,9 @@ export async function getA11yDOM(
     );
     if (error instanceof Error) {
       console.error("Error details:", {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
+        message: formatA11yDiagnostic(error.message),
+        stack: error.stack ? formatA11yDiagnostic(error.stack) : undefined,
+        name: formatA11yDiagnostic(error.name),
       });
     }
 
