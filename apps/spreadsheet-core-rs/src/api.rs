@@ -3269,6 +3269,45 @@ mod tests {
         methods
     }
 
+    fn assert_endpoint_http_methods_map_is_normalized(
+        endpoint_http_methods: &serde_json::Value,
+        schema_name: &str,
+    ) {
+        let entries = endpoint_http_methods
+            .as_object()
+            .expect("endpoint_http_methods should be an object");
+        assert!(
+            !entries.is_empty(),
+            "{schema_name} endpoint_http_methods should not be empty",
+        );
+        for (key, value) in entries {
+            let methods = parse_advertised_endpoint_methods(value);
+            assert!(
+                !methods.is_empty(),
+                "{schema_name} endpoint_http_methods entry '{key}' should list at least one method",
+            );
+            let mut sorted_methods = methods.clone();
+            sorted_methods.sort();
+            sorted_methods.dedup();
+            assert_eq!(
+                methods, sorted_methods,
+                "{schema_name} endpoint_http_methods entry '{key}' should be unique and sorted",
+            );
+            for method in methods {
+                assert_eq!(
+                    method,
+                    method.trim(),
+                    "{schema_name} endpoint_http_methods entry '{key}' method should be trimmed",
+                );
+                assert_eq!(
+                    method,
+                    method.to_ascii_uppercase(),
+                    "{schema_name} endpoint_http_methods entry '{key}' method should be uppercase",
+                );
+            }
+        }
+    }
+
     fn assert_endpoint_http_methods_match_openapi_paths(
         schema: &serde_json::Value,
         schema_name: &str,
@@ -10213,5 +10252,71 @@ mod tests {
             );
         }
         assert_endpoint_http_methods_match_openapi_paths(&wizard_schema, "wizard schema", paths);
+    }
+
+    #[tokio::test]
+    async fn should_keep_shared_endpoint_http_methods_in_sync_between_wizard_and_agent_schemas() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("wizard-agent-endpoint-method-parity".to_string()))
+            .await
+            .expect("workbook should be created");
+        let agent_schema = get_agent_schema(State(state), Path(workbook.id))
+            .await
+            .expect("agent schema should resolve")
+            .0;
+        let wizard_schema = get_agent_wizard_schema().await.0;
+
+        let agent_endpoint_http_methods = agent_schema
+            .get("endpoint_http_methods")
+            .expect("agent schema should expose endpoint_http_methods");
+        let wizard_endpoint_http_methods = wizard_schema
+            .get("endpoint_http_methods")
+            .expect("wizard schema should expose endpoint_http_methods");
+        assert_endpoint_http_methods_map_is_normalized(
+            agent_endpoint_http_methods,
+            "agent schema",
+        );
+        assert_endpoint_http_methods_map_is_normalized(
+            wizard_endpoint_http_methods,
+            "wizard schema",
+        );
+
+        let agent_method_map = agent_endpoint_http_methods
+            .as_object()
+            .expect("agent endpoint_http_methods should be object");
+        let wizard_method_map = wizard_endpoint_http_methods
+            .as_object()
+            .expect("wizard endpoint_http_methods should be object");
+        let shared_keys = agent_method_map
+            .keys()
+            .filter(|key| wizard_method_map.contains_key(*key))
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            !shared_keys.is_empty(),
+            "wizard and agent endpoint_http_methods should share endpoint keys",
+        );
+        assert!(
+            shared_keys.contains("endpoint"),
+            "wizard and agent endpoint_http_methods should both include endpoint method metadata",
+        );
+        assert!(
+            shared_keys.contains("health_endpoint"),
+            "wizard and agent endpoint_http_methods should both include health endpoint method metadata",
+        );
+        assert!(
+            shared_keys.contains("openapi_endpoint"),
+            "wizard and agent endpoint_http_methods should both include openapi endpoint method metadata",
+        );
+
+        for key in shared_keys {
+            assert_eq!(
+                agent_method_map.get(&key),
+                wizard_method_map.get(&key),
+                "wizard and agent endpoint_http_methods should stay aligned for shared key '{key}'",
+            );
+        }
     }
 }
