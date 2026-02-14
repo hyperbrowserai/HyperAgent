@@ -4,6 +4,7 @@
 
 import { Page, Frame } from "playwright-core";
 import { AccessibilityNode, EncodedId, AXNode, IframeInfo } from "./types";
+import { normalizePageUrl } from "@/utils/page-url";
 
 /**
  * Clean text by removing private-use unicode characters and normalizing whitespace
@@ -373,11 +374,22 @@ export async function resolveFrameByXPath(
 
     // Try matching by URL (works for cross-origin frames)
     if (targetFrameInfo.src) {
-      const matchByUrl = page
-        .frames()
-        .find((frame) => frame.url() === targetFrameInfo.src);
-      if (matchByUrl) {
-        return matchByUrl;
+      const targetSrc = normalizePageUrl(targetFrameInfo.src, {
+        fallback: "",
+      });
+      if (targetSrc.length > 0) {
+        const frames = page.frames();
+        for (const frame of frames) {
+          let frameUrl = "";
+          try {
+            frameUrl = normalizePageUrl(frame.url(), { fallback: "" });
+          } catch {
+            frameUrl = "";
+          }
+          if (frameUrl === targetSrc) {
+            return frame;
+          }
+        }
       }
     }
 
