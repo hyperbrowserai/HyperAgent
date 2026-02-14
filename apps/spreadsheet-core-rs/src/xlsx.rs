@@ -236,7 +236,7 @@ fn map_data_to_json(value: &Data) -> Option<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
-  use super::{export_xlsx, import_xlsx};
+  use super::{export_xlsx, import_xlsx, normalize_imported_formula};
   use crate::{
     models::{ChartSpec, ChartType, WorkbookSummary},
     state::AppState,
@@ -344,6 +344,23 @@ mod tests {
       .cloned()
       .map(|cell| (cell.address.clone(), cell))
       .collect::<HashMap<_, _>>()
+  }
+
+  #[test]
+  fn should_normalize_prefixed_formula_tokens() {
+    assert_eq!(
+      normalize_imported_formula("=_xlfn.BITAND(6,3)").as_deref(),
+      Some("=BITAND(6,3)"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=_xlws.SUM(A1:A3)").as_deref(),
+      Some("=SUM(A1:A3)"),
+    );
+    assert_eq!(
+      normalize_imported_formula("  SUM(A1:A3)  ").as_deref(),
+      Some("=SUM(A1:A3)"),
+    );
+    assert_eq!(normalize_imported_formula("  "), None);
   }
 
   #[tokio::test]
