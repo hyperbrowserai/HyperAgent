@@ -154,6 +154,23 @@ pub fn parse_iferror_formula(formula: &str) -> Option<(String, String)> {
   Some((args[0].clone(), args[1].clone()))
 }
 
+pub fn parse_ifna_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "IFNA" || args.len() != 2 {
+    return None;
+  }
+
+  Some((args[0].clone(), args[1].clone()))
+}
+
+pub fn parse_na_formula(formula: &str) -> Option<()> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "NA" && args.is_empty() {
+    return Some(());
+  }
+  None
+}
+
 pub fn parse_choose_formula(formula: &str) -> Option<(String, Vec<String>)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function != "CHOOSE" || args.len() < 2 {
@@ -1991,7 +2008,8 @@ mod tests {
     parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
-    parse_if_formula, parse_ifs_formula, parse_iferror_formula, parse_choose_formula,
+    parse_if_formula, parse_ifs_formula, parse_iferror_formula, parse_ifna_formula,
+    parse_na_formula, parse_choose_formula,
     parse_switch_formula,
     parse_today_formula, parse_now_formula, parse_rand_formula,
     parse_randbetween_formula, parse_true_formula,
@@ -2077,6 +2095,12 @@ mod tests {
         .expect("iferror should parse");
     assert_eq!(iferror.0, "VLOOKUP(A1,D1:E5,2,TRUE)");
     assert_eq!(iferror.1, r#""fallback""#);
+    let ifna =
+      parse_ifna_formula(r#"=IFNA(XLOOKUP(A1,D1:D5,E1:E5),"fallback-na")"#)
+        .expect("ifna should parse");
+    assert_eq!(ifna.0, "XLOOKUP(A1,D1:D5,E1:E5)");
+    assert_eq!(ifna.1, r#""fallback-na""#);
+    assert!(parse_na_formula("=NA()").is_some());
 
     let choose = parse_choose_formula(r#"=CHOOSE(2,"alpha","beta","gamma")"#)
       .expect("choose should parse");

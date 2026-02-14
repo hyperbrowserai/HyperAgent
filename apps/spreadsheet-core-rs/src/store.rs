@@ -25,7 +25,8 @@ use crate::{
     parse_time_formula, parse_datedif_formula, parse_networkdays_formula,
     parse_workday_formula, parse_networkdays_intl_formula, parse_workday_intl_formula,
     parse_day_formula,
-    parse_if_formula, parse_ifs_formula, parse_iferror_formula,
+    parse_if_formula, parse_ifs_formula, parse_iferror_formula, parse_ifna_formula,
+    parse_na_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
@@ -1267,6 +1268,17 @@ fn evaluate_formula(
       return Ok(Some(value));
     }
     return resolve_scalar_operand(connection, sheet, &fallback_expression).map(Some);
+  }
+
+  if let Some((value_expression, fallback_expression)) = parse_ifna_formula(formula) {
+    if let Some(value) = evaluate_formula_argument(connection, sheet, &value_expression)? {
+      return Ok(Some(value));
+    }
+    return resolve_scalar_operand(connection, sheet, &fallback_expression).map(Some);
+  }
+
+  if parse_na_formula(formula).is_some() {
+    return Ok(None);
   }
 
   if let Some((selector_operand, options)) = parse_choose_formula(formula) {
@@ -6255,12 +6267,18 @@ mod tests {
         value: None,
         formula: Some(r#"=DAYS360("2024-02-29","2024-03-31",TRUE)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 245,
+        value: None,
+        formula: Some(r#"=IFNA(NA(),"fallback-na")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 242);
+    assert_eq!(updated_cells, 243);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6274,7 +6292,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 244,
+        end_col: 245,
       },
     )
     .expect("cells should be fetched");
@@ -7216,6 +7234,11 @@ mod tests {
       by_position(1, 244).evaluated_value.as_deref(),
       Some("31"),
       "days360 should support European method when method is TRUE",
+    );
+    assert_eq!(
+      by_position(1, 245).evaluated_value.as_deref(),
+      Some("fallback-na"),
+      "ifna should return fallback when lookup result is missing",
     );
   }
 

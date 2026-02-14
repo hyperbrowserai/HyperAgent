@@ -120,6 +120,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "IF",
   "IFS",
   "IFERROR",
+  "IFNA",
+  "NA",
   "CHOOSE",
   "SWITCH",
   "TRUE",
