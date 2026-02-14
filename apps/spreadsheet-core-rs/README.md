@@ -321,7 +321,9 @@ cargo test store::tests::benchmark_large_range_recalculation -- --ignored --noca
 ```
 
 This emits a `large_range_recalc_benchmark` JSON line with row count plus `upsert_ms`, `recalc_ms`, `total_ms`, and `updated_cells`.
-Automated regression guard: `store::tests::should_recalculate_large_range_aggregates_consistently` validates a 500-row aggregate recalc stays under a 2-second recalc budget.
+Automated regression guards:
+- `store::tests::should_set_medium_range_cells_within_update_budget` validates 250-row batch updates stay under a 5-second update budget.
+- `store::tests::should_recalculate_large_range_aggregates_consistently` validates a 500-row aggregate recalc stays under a 2-second recalc budget.
 
 Sample baseline captured in this repository (Linux CI-sized VM, debug test profile):
 

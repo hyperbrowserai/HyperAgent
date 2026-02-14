@@ -6454,6 +6454,53 @@ mod tests {
   }
 
   #[test]
+  fn should_set_medium_range_cells_within_update_budget() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let row_count = 250u32;
+    let mut cells = Vec::with_capacity(row_count as usize);
+    for row in 1..=row_count {
+      cells.push(CellMutation {
+        row,
+        col: 1,
+        value: Some(json!(row)),
+        formula: None,
+      });
+    }
+
+    let update_started = Instant::now();
+    set_cells(&db_path, "Updates", &cells).expect("medium range set should succeed");
+    let update_elapsed = update_started.elapsed();
+
+    assert!(
+      update_elapsed.as_secs_f64() < 5.0,
+      "medium range set_cells should stay within update budget (elapsed_ms={})",
+      update_elapsed.as_millis(),
+    );
+
+    let snapshots = get_cells(
+      &db_path,
+      "Updates",
+      &CellRange {
+        start_row: 1,
+        end_row: row_count,
+        start_col: 1,
+        end_col: 1,
+      },
+    )
+    .expect("inserted update range should be readable");
+    assert_eq!(snapshots.len(), row_count as usize);
+    assert_eq!(
+      snapshots
+        .iter()
+        .find(|cell| cell.row == row_count)
+        .and_then(|cell| cell.raw_value.as_deref())
+        .and_then(|value| value.parse::<i64>().ok()),
+      Some(row_count as i64),
+      "last inserted cell should persist expected value",
+    );
+  }
+
+  #[test]
   fn should_recalculate_large_range_aggregates_consistently() {
     let (_temp_dir, db_path) = create_initialized_db_path();
     let row_count = 500u32;
