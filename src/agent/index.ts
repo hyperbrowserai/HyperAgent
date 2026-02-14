@@ -494,6 +494,34 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return createdPage as Page;
   }
 
+  private readErrorEmitterMethodOrThrow(
+    methodName: "on" | "off"
+  ): (this: ErrorEmitter, eventName: string, listener: (error: Error) => void) => void {
+    let method: unknown;
+    try {
+      method = (
+        this.errorEmitter as ErrorEmitter & {
+          on?: unknown;
+          off?: unknown;
+        }
+      )[methodName];
+    } catch (error) {
+      throw new Error(
+        `failed to read errorEmitter.${methodName}: ${this.formatLifecycleDiagnostic(
+          error
+        )}`
+      );
+    }
+    if (typeof method !== "function") {
+      throw new Error(`errorEmitter.${methodName} is unavailable`);
+    }
+    return method as (
+      this: ErrorEmitter,
+      eventName: string,
+      listener: (error: Error) => void
+    ) => void;
+  }
+
   private async startBrowserProvider(): Promise<Browser> {
     const startMethod = this.safeReadField(this.browserProvider, "start");
     if (typeof startMethod !== "function") {
@@ -741,7 +769,8 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return;
     }
     try {
-      this.errorEmitter.off("error", forwarder);
+      const offMethod = this.readErrorEmitterMethodOrThrow("off");
+      offMethod.call(this.errorEmitter, "error", forwarder);
     } catch {
       // no-op
     }
@@ -1768,13 +1797,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
     let listenerAttached = false;
     try {
-      this.errorEmitter.on("error", onTaskError);
+      const onMethod = this.readErrorEmitterMethodOrThrow("on");
+      onMethod.call(this.errorEmitter, "error", onTaskError);
       listenerAttached = true;
       this.taskErrorForwarders.set(taskId, onTaskError);
     } catch (error) {
       if (listenerAttached) {
         try {
-          this.errorEmitter.off("error", onTaskError);
+          const offMethod = this.readErrorEmitterMethodOrThrow("off");
+          offMethod.call(this.errorEmitter, "error", onTaskError);
         } catch {
           // no-op
         }

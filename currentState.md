@@ -206,6 +206,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened frame-graph debug artifact capture in agent loop:
   - `writeFrameGraphSnapshot()` now guards trap-prone frame-manager `setDebug` calls and still proceeds with frame graph serialization.
   - Added regression coverage to ensure debug-setter traps do not downgrade into "Failed to write frame graph" failures.
+- Hardened task error-forwarder listener registration:
+  - `HyperAgent` now resolves `errorEmitter.on`/`off` methods through trap-safe, receiver-bound helpers before invoking task-scoped forwarding hooks.
+  - Added regression coverage proving async task execution still succeeds (with sanitized warnings) when `errorEmitter.on` getter traps.
 - Refreshed remaining staged-flow wording in the CDP deep dive around OOPIF discovery to describe current execution-context sync progression without stale "Need Phase 4" phrasing.
 - Hardened CDP command dispatch in Playwright session adapter:
   - `PlaywrightSessionAdapter.send()` now guards trap-prone `session.send` method reads and wraps sync send failures with sanitized/diagnostic context.

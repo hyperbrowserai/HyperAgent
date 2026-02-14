@@ -1011,6 +1011,72 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("continues async task execution when errorEmitter.on getter traps", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockImplementation(async (_, state) => ({
+      taskId: state.id,
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: state.id,
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    }));
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const internalAgent = agent as unknown as {
+      errorEmitter: {
+        listenerCount: (event: string) => number;
+      };
+      taskErrorForwarders: Map<string, (error: Error) => void>;
+    };
+    const baseEmitter = internalAgent.errorEmitter;
+    internalAgent.errorEmitter = new Proxy(baseEmitter as object, {
+      get: (target, property, receiver) => {
+        if (property === "on") {
+          throw new Error(`errorEmitter on trap\u0000\n${"x".repeat(10_000)}`);
+        }
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    }) as unknown as typeof internalAgent.errorEmitter;
+
+    const fakePage = {} as unknown as Page;
+    try {
+      const task = await agent.executeTaskAsync(
+        "on getter trap task",
+        undefined,
+        fakePage
+      );
+      await expect(task.result).resolves.toMatchObject({
+        status: TaskStatus.COMPLETED,
+      });
+      expect(internalAgent.taskErrorForwarders.size).toBe(0);
+
+      const warningLine = warnSpy.mock.calls
+        .map((call) => String(call[0] ?? ""))
+        .find((line) =>
+          line.includes("Failed to register task-scoped error listener")
+        );
+      expect(warningLine).toBeDefined();
+      expect(warningLine).toContain("[truncated");
+      expect(warningLine).not.toContain("\u0000");
+      expect(warningLine).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("surfaces HyperagentTaskError without requiring error listeners", async () => {
     const mockedRunAgentTask = jest.mocked(runAgentTask);
     mockedRunAgentTask.mockRejectedValue(new Error("boom without listeners"));
