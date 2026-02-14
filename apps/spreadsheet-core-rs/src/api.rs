@@ -784,6 +784,7 @@ async fn run_agent_wizard_json(
 async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
     let agent_ops_request_shape = agent_ops_request_shape_schema();
     Json(json!({
+      "health_endpoint": "/health",
       "openapi_endpoint": "/v1/openapi",
       "endpoint": "/v1/agent/wizard/run",
       "json_endpoint": "/v1/agent/wizard/run-json",
@@ -1545,6 +1546,7 @@ async fn get_agent_schema(
     state.get_workbook(workbook_id).await?;
     let agent_ops_request_shape = agent_ops_request_shape_schema();
     Ok(Json(json!({
+      "health_endpoint": "/health",
       "openapi_endpoint": "/v1/openapi",
       "endpoint": "/v1/workbooks/{id}/agent/ops",
       "request_shape": agent_ops_request_shape.clone(),
@@ -8002,6 +8004,12 @@ mod tests {
 
         assert_eq!(
             schema
+                .get("health_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/health"),
+        );
+        assert_eq!(
+            schema
                 .get("openapi_endpoint")
                 .and_then(serde_json::Value::as_str),
             Some("/v1/openapi"),
@@ -8779,6 +8787,12 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("health_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/health"),
+        );
+        assert_eq!(
+            schema
                 .get("openapi_endpoint")
                 .and_then(serde_json::Value::as_str),
             Some("/v1/openapi"),
@@ -9269,6 +9283,7 @@ mod tests {
         );
 
         let parity_keys = [
+            "health_endpoint",
             "openapi_endpoint",
             "agent_ops_endpoint",
             "agent_ops_request_shape",
