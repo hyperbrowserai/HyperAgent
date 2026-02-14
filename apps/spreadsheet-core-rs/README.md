@@ -314,7 +314,7 @@ cargo run --bin generate_xlsx_fixtures
 
 The fixture generator is deterministic (fixed workbook document metadata) and covered by `cargo test --bin generate_xlsx_fixtures`.
 Use `cargo run --bin generate_xlsx_fixtures -- --output-dir /tmp/fixtures` to write fixture files to a custom directory.
-Use `cargo run --bin generate_xlsx_fixtures -- --verify-committed` to verify committed fixture files match deterministic generator output.
+Use `cargo run --bin generate_xlsx_fixtures -- --verify-committed` to verify committed fixture files match deterministic generator output (both file membership and byte content).
 Use `cargo test xlsx::tests::should_keep_committed_file_fixture_corpus_in_sync_with_generator -- --nocapture` to verify committed fixture binaries match generated output.
 Use `cargo test xlsx::tests::should_import_every_committed_fixture_corpus_workbook -- --nocapture` for corpus-wide import smoke coverage.
 Use `cargo test xlsx::tests::should_roundtrip_every_committed_fixture_corpus_workbook -- --nocapture` for corpus-wide import/export/re-import smoke coverage.
