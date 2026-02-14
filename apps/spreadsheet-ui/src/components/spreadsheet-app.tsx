@@ -1129,6 +1129,10 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.duckdb_query_response_shape),
     [agentSchemaQuery.data?.duckdb_query_response_shape],
   );
+  const agentOpsRequestFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.request_shape),
+    [agentSchemaQuery.data?.request_shape],
+  );
   const agentOpsPreviewRequestFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.agent_ops_preview_request_shape),
     [agentSchemaQuery.data?.agent_ops_preview_request_shape],
@@ -4053,6 +4057,14 @@ export function SpreadsheetApp() {
                 Supported ops:{" "}
                 <span className="font-mono text-slate-200">
                   {Object.keys(agentSchemaQuery.data.operation_payloads).join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {agentOpsRequestFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                ops request shape:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentOpsRequestFields)}
                 </span>
               </p>
             ) : null}

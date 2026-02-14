@@ -210,6 +210,7 @@ export interface FormulaCapabilitiesSchema {
 
 export interface AgentSchemaInfo {
   endpoint: string;
+  request_shape?: Record<string, unknown>;
   workbook_import_endpoint?: string;
   workbook_export_endpoint?: string;
   workbook_import_response_shape?: Record<string, unknown>;
