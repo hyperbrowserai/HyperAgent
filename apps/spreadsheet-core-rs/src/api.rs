@@ -854,6 +854,75 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "agent_ops_cache_remove_by_prefix_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix",
       "agent_ops_cache_remove_by_prefix_preview_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview",
       "agent_ops_cache_remove_stale_endpoint": "/v1/workbooks/{id}/agent/ops/cache/remove-stale",
+      "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache",
+      "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&max_age_seconds=3600&offset=0&limit=20",
+      "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
+      "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&min_span_seconds=60&max_span_seconds=86400&sort_by=recent&offset=0&limit=8&max_age_seconds=3600",
+      "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
+      "agent_ops_cache_stats_response_shape": {
+        "entries": "current number of cached request_ids",
+        "max_entries": "configured cache capacity per workbook",
+        "oldest_request_id": "oldest cached request_id",
+        "oldest_cached_at": "optional iso timestamp for oldest cached request_id",
+        "newest_request_id": "newest cached request_id",
+        "newest_cached_at": "optional iso timestamp for newest cached request_id"
+      },
+      "agent_ops_cache_entries_response_shape": {
+        "total_entries": "total cache entries after applying optional filters",
+        "unscoped_total_entries": "total cache entries before prefix/age filters",
+        "request_id_prefix": "echoed prefix filter when provided",
+        "max_age_seconds": "echoed age filter when provided",
+        "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
+        "offset": "start index in newest-first list",
+        "limit": "applied limit (default 20, min 1, max 200)",
+        "returned_entries": "number of entries in this page",
+        "has_more": "true when another page exists after this response",
+        "entries": [{
+          "request_id": "string",
+          "cached_at": "iso timestamp when entry was cached",
+          "operations_signature": "optional string",
+          "operation_count": "number of cached operations in this request",
+          "result_count": "number of cached operation results"
+        }]
+      },
+      "agent_ops_cache_prefixes_response_shape": {
+        "total_prefixes": "total distinct prefix suggestions available",
+        "unscoped_total_prefixes": "total distinct prefixes without prefix/age filters",
+        "unscoped_total_entries": "total cache entries without prefix/age filters",
+        "scoped_total_entries": "total cache entries represented by scoped prefixes before pagination",
+        "returned_prefixes": "number of prefixes returned",
+        "returned_entry_count": "total cache entries represented by returned prefixes in this page",
+        "request_id_prefix": "echoed filter prefix when provided",
+        "min_entry_count": "applied minimum entry count filter (default 1)",
+        "min_span_seconds": "echoed minimum span filter when provided",
+        "max_span_seconds": "echoed maximum span filter when provided",
+        "sort_by": "applied sort mode: count|recent|alpha|span",
+        "max_age_seconds": "echoed age filter when provided",
+        "cutoff_timestamp": "optional iso timestamp used for max_age_seconds filtering",
+        "offset": "start index in sorted prefix list",
+        "limit": "applied limit (default 8, min 1, max 100)",
+        "has_more": "true when another page exists after this response",
+        "prefixes": [{
+          "prefix": "string",
+          "entry_count": "number of matching cache entries",
+          "newest_request_id": "newest request_id observed for this prefix within active scope",
+          "newest_cached_at": "optional iso timestamp for newest request_id within active scope",
+          "oldest_request_id": "oldest request_id observed for this prefix within active scope",
+          "oldest_cached_at": "optional iso timestamp for oldest request_id within active scope",
+          "span_seconds": "optional number of seconds between oldest and newest cached timestamps"
+        }]
+      },
+      "agent_ops_cache_entry_detail_response_shape": {
+        "request_id": "string",
+        "cached_at": "iso timestamp when entry was cached",
+        "operation_count": "number of cached operations in this request",
+        "result_count": "number of cached operation results",
+        "cached_response": "cached agent_ops response payload",
+        "operations": "cached operation array for this request id"
+      },
+      "agent_ops_cache_clear_response_shape": {
+        "cleared_entries": "number of removed cache entries"
+      },
       "agent_ops_cache_replay_request_shape": {
         "request_id": "string (required)"
       },
@@ -946,6 +1015,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "INVALID_REQUEST_ID_PREFIX",
         "CACHE_ENTRY_NOT_FOUND"
       ],
+      "agent_ops_idempotency_cache_max_entries": AGENT_OPS_CACHE_MAX_ENTRIES,
       "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
       "scenarios": scenario_catalog(),
       "presets": preset_catalog()
@@ -7946,12 +8016,6 @@ mod tests {
             Some("/v1/workbooks/{id}/agent/ops/cache/reexecute"),
         );
         assert_eq!(
-            schema
-                .get("agent_ops_cache_remove_stale_endpoint")
-                .and_then(serde_json::Value::as_str),
-            Some("/v1/workbooks/{id}/agent/ops/cache/remove-stale"),
-        );
-        assert_eq!(
       schema
         .get("agent_ops_cache_entries_endpoint")
         .and_then(serde_json::Value::as_str),
@@ -8785,10 +8849,51 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("agent_ops_cache_stats_response_shape")
+                .and_then(|value| value.get("oldest_cached_at"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional iso timestamp for oldest cached request_id"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_entries_response_shape")
+                .and_then(|value| value.get("cutoff_timestamp"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional iso timestamp used for max_age_seconds filtering"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_prefixes_response_shape")
+                .and_then(|value| value.get("sort_by"))
+                .and_then(serde_json::Value::as_str),
+            Some("applied sort mode: count|recent|alpha|span"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_entry_detail_response_shape")
+                .and_then(|value| value.get("cached_response"))
+                .and_then(serde_json::Value::as_str),
+            Some("cached agent_ops response payload"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_clear_response_shape")
+                .and_then(|value| value.get("cleared_entries"))
+                .and_then(serde_json::Value::as_str),
+            Some("number of removed cache entries"),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_cache_remove_stale_request_shape")
                 .and_then(|value| value.get("sample_limit"))
                 .and_then(serde_json::Value::as_str),
             Some("optional number (default 20, min 1, max 100)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_idempotency_cache_max_entries")
+                .and_then(serde_json::Value::as_u64),
+            Some(AGENT_OPS_CACHE_MAX_ENTRIES as u64),
         );
         assert_eq!(
             schema
