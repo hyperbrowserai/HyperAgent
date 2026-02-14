@@ -412,9 +412,25 @@ pub fn parse_fact_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_factdouble_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "FACTDOUBLE" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_combin_formula(formula: &str) -> Option<(String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "COMBIN" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_combina_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "COMBINA" && args.len() == 2 {
     return Some((args[0].clone(), args[1].clone()));
   }
   None
@@ -1574,8 +1590,8 @@ mod tests {
     parse_iseven_formula, parse_isodd_formula,
     parse_isnumber_formula, parse_istext_formula, parse_left_formula,
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
-    parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
-    parse_lcm_formula,
+    parse_log_formula, parse_fact_formula, parse_factdouble_formula,
+    parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula,
     parse_sinh_formula, parse_cosh_formula, parse_tanh_formula, parse_asin_formula,
@@ -1788,10 +1804,18 @@ mod tests {
     assert_eq!(log_args.0, "A1");
     assert_eq!(log_args.1.as_deref(), Some("10"));
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
+    assert_eq!(
+      parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),
+      Some("A1"),
+    );
     let combin_args =
       parse_combin_formula("=COMBIN(A1,B1)").expect("combin should parse");
     assert_eq!(combin_args.0, "A1");
     assert_eq!(combin_args.1, "B1");
+    let combina_args =
+      parse_combina_formula("=COMBINA(A1,B1)").expect("combina should parse");
+    assert_eq!(combina_args.0, "A1");
+    assert_eq!(combina_args.1, "B1");
     let permut_args =
       parse_permut_formula("=PERMUT(A1,B1)").expect("permut should parse");
     assert_eq!(permut_args.0, "A1");
