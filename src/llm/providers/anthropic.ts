@@ -336,7 +336,9 @@ export class AnthropicClient implements HyperAgentLLM {
       validatedParams = actionDefinition.actionParams.parse(params);
     } catch (error) {
       console.warn(
-        `[LLM][Anthropic] Failed to validate params for action ${actionDefinition.type}: ${formatUnknownError(error)}`
+        `[LLM][Anthropic] Failed to validate params for action ${actionDefinition.type}: ${formatAnthropicDiagnostic(
+          error
+        )}`
       );
       return {
         rawText: stringifyRawPayload(toolContent),
@@ -361,7 +363,9 @@ export class AnthropicClient implements HyperAgentLLM {
       };
     } catch (error) {
       console.warn(
-        `[LLM][Anthropic] Failed to validate structured output against schema: ${formatUnknownError(error)}`
+        `[LLM][Anthropic] Failed to validate structured output against schema: ${formatAnthropicDiagnostic(
+          error
+        )}`
       );
       return {
         rawText: stringifyRawPayload(toolContent),

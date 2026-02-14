@@ -195,6 +195,53 @@ describe("AnthropicClient", () => {
     warnSpy.mockRestore();
   });
 
+  it("sanitizes and truncates oversized schema-validation diagnostics", async () => {
+    createMessageMock.mockResolvedValue({
+      content: [
+        {
+          type: "tool_use",
+          name: "click",
+          input: {
+            action: {
+              params: {
+                value: "ok",
+              },
+            },
+          },
+        },
+      ],
+    });
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    await client.invokeStructured(
+      {
+        schema: {
+          parse: () => {
+            throw new Error(`schema\u0000\n${"x".repeat(10_000)}`);
+          },
+        } as unknown as z.ZodTypeAny,
+        actions: [
+          {
+            type: "click",
+            actionParams: z.object({
+              value: z.string(),
+            }),
+            run: async () => ({ success: true, message: "ok" }),
+          },
+        ],
+      },
+      [{ role: "user", content: "click it" }]
+    );
+
+    const warning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+    expect(warning).toContain("[truncated");
+    expect(warning).not.toContain("\u0000");
+    expect(warning).not.toContain("\n");
+    expect(warning.length).toBeLessThan(700);
+    warnSpy.mockRestore();
+  });
+
   it("does not crash simple-tool debug logging on circular tool payloads", async () => {
     const circularTool: Record<string, unknown> = { name: "structured_output" };
     circularTool.self = circularTool;
