@@ -216,6 +216,15 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private shouldWarnPerformMaxStepsDeprecation(
+    params?: PerformTaskParams
+  ): boolean {
+    return (
+      typeof params?.maxElementRetries !== "number" &&
+      typeof params?.maxSteps === "number"
+    );
+  }
+
   private readTaskStatus(
     taskState: TaskState,
     fallback: TaskStatus = TaskStatus.FAILED
@@ -2721,10 +2730,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
 
     const getPage = (): Page => this.resolveActionPageInput(pageOrGetter);
-    if (
-      typeof params?.maxElementRetries !== "number" &&
-      typeof params?.maxSteps === "number"
-    ) {
+    if (this.shouldWarnPerformMaxStepsDeprecation(params)) {
       this.warnPerformMaxStepsDeprecation();
     }
 
@@ -3627,6 +3633,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       instruction: string,
       params?: PerformTaskParams
     ) => {
+      if (this.shouldWarnPerformMaxStepsDeprecation(params)) {
+        this.warnPerformMaxStepsDeprecation();
+      }
       const maxRetries = this.normalizeRetryCount(
         params?.maxContextSwitchRetries,
         3,
