@@ -818,6 +818,12 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "results": "array of operation execution results",
         "import": "optional import summary object (see import_response_shape)"
       },
+      "agent_ops_response_shape": {
+        "request_id": "optional string",
+        "operations_signature": "sha256 signature over submitted operations",
+        "served_from_cache": "boolean; true when response reused by request_id idempotency cache",
+        "results": "array of operation results"
+      },
       "agent_ops_result_error_shape": {
         "error": "string in CODE: message form",
         "error_code": "stable error code string",
@@ -8700,6 +8706,13 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("agent_ops_response_shape")
+                .and_then(|value| value.get("served_from_cache"))
+                .and_then(serde_json::Value::as_str),
+            Some("boolean; true when response reused by request_id idempotency cache"),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_preview_endpoint")
                 .and_then(serde_json::Value::as_str),
             Some("/v1/workbooks/{id}/agent/ops/preview"),
@@ -9191,6 +9204,25 @@ mod tests {
         assert_eq!(
             agent_duckdb_keys, wizard_duckdb_keys,
             "wizard schema should expose the same duckdb_query_* key set as agent schema",
+        );
+
+        let agent_agent_ops_keys = agent_schema
+            .as_object()
+            .expect("agent schema should be an object")
+            .keys()
+            .filter(|key| key.starts_with("agent_ops_"))
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let wizard_agent_ops_keys = wizard_schema
+            .as_object()
+            .expect("wizard schema should be an object")
+            .keys()
+            .filter(|key| key.starts_with("agent_ops_"))
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            agent_agent_ops_keys, wizard_agent_ops_keys,
+            "wizard schema should expose the same agent_ops_* key set as agent schema",
         );
 
         let agent_cache_codes = agent_schema
