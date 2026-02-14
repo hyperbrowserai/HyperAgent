@@ -2840,7 +2840,8 @@ mod tests {
         parse_optional_bool, preview_remove_agent_ops_cache_entries_by_prefix,
         reexecute_agent_ops_cache_entry, remove_agent_ops_cache_entries_by_prefix,
         remove_agent_ops_cache_entry, remove_stale_agent_ops_cache_entries,
-        replay_agent_ops_cache_entry, set_cells_batch, validate_expected_operations_signature,
+        replay_agent_ops_cache_entry, run_agent_preset, run_agent_scenario,
+        run_agent_wizard_json, set_cells_batch, validate_expected_operations_signature,
         validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
         AgentOpsCachePrefixesQuery, AgentOpsCacheStatsQuery, FORMULA_SUPPORTED_FUNCTION_LIST,
         FORMULA_UNSUPPORTED_BEHAVIOR_LIST, FORMULA_VALIDATION_ERROR_CODES,
@@ -2857,7 +2858,8 @@ mod tests {
             COMPAT_NORMALIZATION_FILE_NAME, COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
         },
         models::{
-            AgentOperation, AgentOpsRequest, CellMutation,
+            AgentOperation, AgentOpsRequest, AgentPresetRunRequest, AgentScenarioRunRequest,
+            AgentWizardRunJsonRequest, CellMutation,
             PreviewRemoveAgentOpsCacheEntriesByPrefixRequest, QueryRequest,
             ReexecuteAgentOpsCacheEntryRequest, RemoveAgentOpsCacheEntriesByPrefixRequest,
             RemoveAgentOpsCacheEntryRequest, RemoveStaleAgentOpsCacheEntriesRequest,
@@ -4966,6 +4968,130 @@ mod tests {
                 assert_eq!(code, "REQUEST_ID_CONFLICT");
             }
             _ => panic!("expected bad request with custom error code"),
+        }
+    }
+
+    #[tokio::test]
+    async fn should_reject_mismatched_expected_signature_for_preset_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("preset-signature-mismatch".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let expected_signature = operations_signature(
+            &build_preset_operations("export_snapshot", Some(false))
+                .expect("preset operations should build"),
+        )
+        .expect("signature should build");
+        let mismatched_signature = if expected_signature == "0".repeat(64) {
+            "1".repeat(64)
+        } else {
+            "0".repeat(64)
+        };
+
+        let error = run_agent_preset(
+            State(state),
+            Path((workbook.id, "export_snapshot".to_string())),
+            Json(AgentPresetRunRequest {
+                request_id: None,
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some(mismatched_signature),
+            }),
+        )
+        .await
+        .expect_err("mismatched preset signature should fail");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "OPERATION_SIGNATURE_MISMATCH");
+            }
+            _ => panic!("expected mismatched preset signature error code"),
+        }
+    }
+
+    #[tokio::test]
+    async fn should_reject_mismatched_expected_signature_for_scenario_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("scenario-signature-mismatch".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let expected_signature = operations_signature(
+            &build_scenario_operations("refresh_and_export", Some(false))
+                .expect("scenario operations should build"),
+        )
+        .expect("signature should build");
+        let mismatched_signature = if expected_signature == "0".repeat(64) {
+            "1".repeat(64)
+        } else {
+            "0".repeat(64)
+        };
+
+        let error = run_agent_scenario(
+            State(state),
+            Path((workbook.id, "refresh_and_export".to_string())),
+            Json(AgentScenarioRunRequest {
+                request_id: None,
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some(mismatched_signature),
+            }),
+        )
+        .await
+        .expect_err("mismatched scenario signature should fail");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "OPERATION_SIGNATURE_MISMATCH");
+            }
+            _ => panic!("expected mismatched scenario signature error code"),
+        }
+    }
+
+    #[tokio::test]
+    async fn should_reject_mismatched_expected_signature_for_wizard_json_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let expected_signature = operations_signature(
+            &build_scenario_operations("refresh_and_export", Some(false))
+                .expect("scenario operations should build"),
+        )
+        .expect("signature should build");
+        let mismatched_signature = if expected_signature == "0".repeat(64) {
+            "1".repeat(64)
+        } else {
+            "0".repeat(64)
+        };
+
+        let error = run_agent_wizard_json(
+            State(state),
+            Json(AgentWizardRunJsonRequest {
+                scenario: "refresh_and_export".to_string(),
+                request_id: None,
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some(mismatched_signature),
+                workbook_name: Some("wizard-signature-mismatch".to_string()),
+                file_name: None,
+                file_base64: None,
+            }),
+        )
+        .await
+        .expect_err("mismatched wizard signature should fail");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "OPERATION_SIGNATURE_MISMATCH");
+            }
+            _ => panic!("expected mismatched wizard signature error code"),
         }
     }
 
