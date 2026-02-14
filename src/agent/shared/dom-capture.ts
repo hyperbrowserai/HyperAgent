@@ -6,6 +6,7 @@ import {
   type A11yDOMState,
 } from "@/context-providers/a11y-dom";
 import type { FrameChunkEvent } from "@/context-providers/a11y-dom/types";
+import { formatUnknownError } from "@/utils";
 import { waitForSettledDOM } from "@/utils/waitForSettledDOM";
 
 const DOM_CAPTURE_MAX_ATTEMPTS = 3;
@@ -26,6 +27,34 @@ export interface CaptureDOMOptions {
 }
 
 const MAX_DOM_CAPTURE_RETRIES = 10;
+const MAX_DOM_CAPTURE_DIAGNOSTIC_CHARS = 400;
+
+function sanitizeDomCaptureText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateDomCaptureDiagnostic(value: string): string {
+  if (value.length <= MAX_DOM_CAPTURE_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  const omittedChars = value.length - MAX_DOM_CAPTURE_DIAGNOSTIC_CHARS;
+  return `${value.slice(0, MAX_DOM_CAPTURE_DIAGNOSTIC_CHARS)}... [truncated ${omittedChars} chars]`;
+}
+
+function formatDomCaptureDiagnostic(value: unknown): string {
+  const normalized = sanitizeDomCaptureText(formatUnknownError(value));
+  if (normalized.length === 0) {
+    return "unknown callback error";
+  }
+  return truncateDomCaptureDiagnostic(normalized);
+}
 
 class DomChunkAggregator {
   private parts: string[] = [];
@@ -139,9 +168,9 @@ export async function captureDOMState(
                 } catch (error) {
                   if (debug) {
                     console.warn(
-                      `[DOM] onFrameChunk callback failed: ${
-                        error instanceof Error ? error.message : "unknown callback error"
-                      }`
+                      `[DOM] onFrameChunk callback failed: ${formatDomCaptureDiagnostic(
+                        error
+                      )}`
                     );
                   }
                 }

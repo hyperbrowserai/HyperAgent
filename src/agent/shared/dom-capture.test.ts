@@ -115,4 +115,44 @@ describe("captureDOMState", () => {
       logSpy.mockRestore();
     }
   });
+
+  it("sanitizes and truncates onFrameChunk callback diagnostics", async () => {
+    getA11yDOM.mockImplementation(
+      async (
+        _page: Page,
+        _debug: boolean,
+        _enableVisualMode: boolean,
+        _debugStepDir: string | undefined,
+        options?: { onFrameChunk?: (chunk: { order: number; simplified: string }) => void }
+      ) => {
+        options?.onFrameChunk?.({ order: 0, simplified: " streamed chunk " });
+        return createDomState({
+          elements: new Map([["0-1", { name: "button" }]]),
+          domState: "fallback",
+        });
+      }
+    );
+
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const result = await captureDOMState(createPage(), {
+        enableStreaming: true,
+        onFrameChunk: () => {
+          throw new Error(`stream\u0000\n${"x".repeat(10_000)}`);
+        },
+        debug: true,
+      });
+
+      expect(result.domState).toBe("streamed chunk");
+      const diagnostic = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(diagnostic).toContain("[truncated");
+      expect(diagnostic).not.toContain("\u0000");
+      expect(diagnostic).not.toContain("\n");
+      expect(diagnostic.length).toBeLessThan(700);
+    } finally {
+      warnSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
 });
