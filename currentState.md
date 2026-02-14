@@ -193,6 +193,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened task-scoped context page-listener wiring in `HyperAgent`:
   - task listener attach/detach now resolves `context.on/off` methods safely before invocation,
   - `executeTask`/`executeTaskAsync` now tolerate trap-prone `context.on`/`context.off` getter access without aborting task execution.
+  - debug mode now emits explicit unavailable-method diagnostics when task listener attach/detach methods cannot be resolved.
 - Clarified CDP deep-dive OOPIF notes to distinguish main-frame limitations from full runtime behavior (main-frame traversal alone cannot see OOPIF content; dedicated OOPIF session pass supplies it).
 - Hardened a11y runtime-context collection listener wiring:
   - `collectExecutionContexts()` now guards `session.on`/`session.off` method reads and listener attach/detach calls,

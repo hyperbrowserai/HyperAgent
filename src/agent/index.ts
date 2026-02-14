@@ -297,6 +297,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
     const contextOn = this.safeReadField(context, "on");
     if (typeof contextOn !== "function") {
+      if (this.debug) {
+        console.warn(
+          "[HyperAgent] Failed to attach task page listener: context.on is unavailable"
+        );
+      }
       return () => undefined;
     }
     try {
@@ -321,6 +326,11 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return () => {
       const contextOff = this.safeReadField(context, "off");
       if (typeof contextOff !== "function") {
+        if (this.debug) {
+          console.warn(
+            "[HyperAgent] Failed to detach task page listener: context.off is unavailable"
+          );
+        }
         return;
       }
       try {
