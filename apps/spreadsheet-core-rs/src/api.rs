@@ -9688,4 +9688,83 @@ mod tests {
             );
         }
     }
+
+    #[tokio::test]
+    async fn should_keep_agent_schema_endpoints_in_sync_with_openapi_paths() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("agent-schema-openapi-path-sync".to_string()))
+            .await
+            .expect("workbook should be created");
+        let agent_schema = get_agent_schema(State(state), Path(workbook.id))
+            .await
+            .expect("agent schema should resolve")
+            .0;
+        let schema_object = agent_schema
+            .as_object()
+            .expect("agent schema should be an object");
+        let spec = openapi().await.0;
+        let paths = spec
+            .get("paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi spec should include paths");
+        let endpoint_fields = schema_object
+            .iter()
+            .filter_map(|(key, value)| {
+                if key == "endpoint" || key.ends_with("_endpoint") {
+                    value.as_str().map(|endpoint| (key.as_str(), endpoint))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !endpoint_fields.is_empty(),
+            "agent schema should expose endpoint metadata fields",
+        );
+
+        for (key, endpoint) in endpoint_fields {
+            let normalized = endpoint.split('?').next().unwrap_or(endpoint);
+            assert!(
+                paths.contains_key(normalized),
+                "openapi paths should include agent schema endpoint '{key}' -> '{endpoint}' (normalized '{normalized}')",
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn should_keep_wizard_schema_endpoints_in_sync_with_openapi_paths() {
+        let wizard_schema = get_agent_wizard_schema().await.0;
+        let schema_object = wizard_schema
+            .as_object()
+            .expect("wizard schema should be an object");
+        let spec = openapi().await.0;
+        let paths = spec
+            .get("paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi spec should include paths");
+        let endpoint_fields = schema_object
+            .iter()
+            .filter_map(|(key, value)| {
+                if key == "endpoint" || key.ends_with("_endpoint") {
+                    value.as_str().map(|endpoint| (key.as_str(), endpoint))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !endpoint_fields.is_empty(),
+            "wizard schema should expose endpoint metadata fields",
+        );
+
+        for (key, endpoint) in endpoint_fields {
+            let normalized = endpoint.split('?').next().unwrap_or(endpoint);
+            assert!(
+                paths.contains_key(normalized),
+                "openapi paths should include wizard schema endpoint '{key}' -> '{endpoint}' (normalized '{normalized}')",
+            );
+        }
+    }
 }
