@@ -3124,6 +3124,44 @@ mod tests {
         );
     }
 
+    fn assert_schema_endpoint_fields_are_normalized(
+        schema: &serde_json::Value,
+        schema_name: &str,
+    ) {
+        let endpoint_entries = schema
+            .as_object()
+            .expect("schema should be an object")
+            .iter()
+            .filter(|(key, _)| key.as_str() == "endpoint" || key.ends_with("_endpoint"))
+            .collect::<Vec<_>>();
+        assert!(
+            !endpoint_entries.is_empty(),
+            "{schema_name} should expose endpoint metadata fields",
+        );
+        for (key, value) in endpoint_entries {
+            let endpoint = value
+                .as_str()
+                .expect("endpoint metadata fields should be strings");
+            assert!(
+                !endpoint.trim().is_empty(),
+                "{schema_name} endpoint field '{key}' should not be blank",
+            );
+            assert_eq!(
+                endpoint,
+                endpoint.trim(),
+                "{schema_name} endpoint field '{key}' should be trimmed",
+            );
+            assert!(
+                endpoint.starts_with('/'),
+                "{schema_name} endpoint field '{key}' should start with '/'",
+            );
+            assert!(
+                !endpoint.contains("  "),
+                "{schema_name} endpoint field '{key}' should not contain double spaces",
+            );
+        }
+    }
+
     #[test]
     fn should_keep_supported_formula_list_unique_and_trimmed() {
         let mut seen = std::collections::HashSet::new();
@@ -9323,6 +9361,24 @@ mod tests {
             "/v1/agent/wizard/run",
             false,
         );
+    }
+
+    #[tokio::test]
+    async fn should_keep_schema_endpoint_metadata_normalized() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("schema-endpoint-normalization".to_string()))
+            .await
+            .expect("workbook should be created");
+        let agent_schema = get_agent_schema(State(state), Path(workbook.id))
+            .await
+            .expect("agent schema should resolve")
+            .0;
+        let wizard_schema = get_agent_wizard_schema().await.0;
+
+        assert_schema_endpoint_fields_are_normalized(&agent_schema, "agent schema");
+        assert_schema_endpoint_fields_are_normalized(&wizard_schema, "wizard schema");
     }
 
     #[tokio::test]
