@@ -1410,6 +1410,38 @@ pub fn parse_oct2dec_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_bin2hex_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "BIN2HEX" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_hex2bin_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "HEX2BIN" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_bin2oct_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "BIN2OCT" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_oct2bin_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "OCT2BIN" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
 pub fn parse_char_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "CHAR" && args.len() == 1 {
@@ -2382,7 +2414,9 @@ mod tests {
     parse_base_formula, parse_decimal_formula,
     parse_dec2bin_formula, parse_bin2dec_formula,
     parse_dec2hex_formula, parse_hex2dec_formula,
-    parse_dec2oct_formula, parse_oct2dec_formula, parse_char_formula,
+    parse_dec2oct_formula, parse_oct2dec_formula,
+    parse_bin2hex_formula, parse_hex2bin_formula,
+    parse_bin2oct_formula, parse_oct2bin_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_cell_address,
@@ -2981,6 +3015,22 @@ mod tests {
       parse_oct2dec_formula(r#"=OCT2DEC("100")"#).as_deref(),
       Some(r#""100""#),
     );
+    let bin2hex_args =
+      parse_bin2hex_formula(r#"=BIN2HEX("11111111",4)"#).expect("bin2hex should parse");
+    assert_eq!(bin2hex_args.0, r#""11111111""#);
+    assert_eq!(bin2hex_args.1.as_deref(), Some("4"));
+    let hex2bin_args =
+      parse_hex2bin_formula(r#"=HEX2BIN("FF",8)"#).expect("hex2bin should parse");
+    assert_eq!(hex2bin_args.0, r#""FF""#);
+    assert_eq!(hex2bin_args.1.as_deref(), Some("8"));
+    let bin2oct_args =
+      parse_bin2oct_formula(r#"=BIN2OCT("11111111",4)"#).expect("bin2oct should parse");
+    assert_eq!(bin2oct_args.0, r#""11111111""#);
+    assert_eq!(bin2oct_args.1.as_deref(), Some("4"));
+    let oct2bin_args =
+      parse_oct2bin_formula(r#"=OCT2BIN("377",8)"#).expect("oct2bin should parse");
+    assert_eq!(oct2bin_args.0, r#""377""#);
+    assert_eq!(oct2bin_args.1.as_deref(), Some("8"));
     assert_eq!(parse_char_formula("=CHAR(65)").as_deref(), Some("65"));
     assert_eq!(
       parse_code_formula(r#"=CODE("Apple")"#).as_deref(),

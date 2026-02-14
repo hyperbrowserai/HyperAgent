@@ -75,7 +75,9 @@ use crate::{
     parse_base_formula, parse_decimal_formula,
     parse_dec2bin_formula, parse_bin2dec_formula,
     parse_dec2hex_formula, parse_hex2dec_formula,
-    parse_dec2oct_formula, parse_oct2dec_formula, parse_char_formula,
+    parse_dec2oct_formula, parse_oct2dec_formula,
+    parse_bin2hex_formula, parse_hex2bin_formula,
+    parse_bin2oct_formula, parse_oct2bin_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_even_formula, parse_odd_formula,
@@ -1744,6 +1746,118 @@ fn evaluate_formula(
       return Ok(Some((-i128::from(unsigned_value)).to_string()));
     }
     return Ok(Some(unsigned_value.to_string()));
+  }
+
+  if let Some((number_text_arg, places_arg)) = parse_bin2hex_formula(formula) {
+    let number_text = resolve_scalar_operand(connection, sheet, &number_text_arg)?;
+    let trimmed = number_text.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+    let parsed = u64::from_str_radix(&trimmed.to_uppercase(), 2).ok();
+    let Some(unsigned_value) = parsed else {
+      return Ok(None);
+    };
+    let converted = format_radix_u64(unsigned_value, 16);
+    let places = match places_arg {
+      Some(raw_places) => parse_required_integer(connection, sheet, &raw_places)?,
+      None => 0,
+    };
+    if places < 0 {
+      return Ok(None);
+    }
+    if places > 0 {
+      let width = usize::try_from(places).unwrap_or_default();
+      if converted.len() > width {
+        return Ok(None);
+      }
+      return Ok(Some(format!("{:0>width$}", converted, width = width)));
+    }
+    return Ok(Some(converted));
+  }
+
+  if let Some((number_text_arg, places_arg)) = parse_hex2bin_formula(formula) {
+    let number_text = resolve_scalar_operand(connection, sheet, &number_text_arg)?;
+    let trimmed = number_text.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+    let parsed = u64::from_str_radix(&trimmed.to_uppercase(), 16).ok();
+    let Some(unsigned_value) = parsed else {
+      return Ok(None);
+    };
+    let converted = format_radix_u64(unsigned_value, 2);
+    let places = match places_arg {
+      Some(raw_places) => parse_required_integer(connection, sheet, &raw_places)?,
+      None => 0,
+    };
+    if places < 0 {
+      return Ok(None);
+    }
+    if places > 0 {
+      let width = usize::try_from(places).unwrap_or_default();
+      if converted.len() > width {
+        return Ok(None);
+      }
+      return Ok(Some(format!("{:0>width$}", converted, width = width)));
+    }
+    return Ok(Some(converted));
+  }
+
+  if let Some((number_text_arg, places_arg)) = parse_bin2oct_formula(formula) {
+    let number_text = resolve_scalar_operand(connection, sheet, &number_text_arg)?;
+    let trimmed = number_text.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+    let parsed = u64::from_str_radix(&trimmed.to_uppercase(), 2).ok();
+    let Some(unsigned_value) = parsed else {
+      return Ok(None);
+    };
+    let converted = format_radix_u64(unsigned_value, 8);
+    let places = match places_arg {
+      Some(raw_places) => parse_required_integer(connection, sheet, &raw_places)?,
+      None => 0,
+    };
+    if places < 0 {
+      return Ok(None);
+    }
+    if places > 0 {
+      let width = usize::try_from(places).unwrap_or_default();
+      if converted.len() > width {
+        return Ok(None);
+      }
+      return Ok(Some(format!("{:0>width$}", converted, width = width)));
+    }
+    return Ok(Some(converted));
+  }
+
+  if let Some((number_text_arg, places_arg)) = parse_oct2bin_formula(formula) {
+    let number_text = resolve_scalar_operand(connection, sheet, &number_text_arg)?;
+    let trimmed = number_text.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+    let parsed = u64::from_str_radix(&trimmed.to_uppercase(), 8).ok();
+    let Some(unsigned_value) = parsed else {
+      return Ok(None);
+    };
+    let converted = format_radix_u64(unsigned_value, 2);
+    let places = match places_arg {
+      Some(raw_places) => parse_required_integer(connection, sheet, &raw_places)?,
+      None => 0,
+    };
+    if places < 0 {
+      return Ok(None);
+    }
+    if places > 0 {
+      let width = usize::try_from(places).unwrap_or_default();
+      if converted.len() > width {
+        return Ok(None);
+      }
+      return Ok(Some(format!("{:0>width$}", converted, width = width)));
+    }
+    return Ok(Some(converted));
   }
 
   if let Some(char_arg) = parse_char_formula(formula) {
@@ -7980,12 +8094,36 @@ mod tests {
         value: None,
         formula: Some(r#"=OCT2DEC("100")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 282,
+        value: None,
+        formula: Some(r#"=BIN2HEX("11111111",4)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 283,
+        value: None,
+        formula: Some(r#"=HEX2BIN("FF",8)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 284,
+        value: None,
+        formula: Some(r#"=BIN2OCT("11111111",4)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 285,
+        value: None,
+        formula: Some(r#"=OCT2BIN("377",8)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 279);
+    assert_eq!(updated_cells, 283);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7999,7 +8137,7 @@ mod tests {
         start_row: 1,
         end_row: 22,
         start_col: 1,
-        end_col: 281,
+        end_col: 285,
       },
     )
     .expect("cells should be fetched");
@@ -9232,6 +9370,26 @@ mod tests {
       Some("64"),
       "oct2dec should convert octal text to decimal",
     );
+    assert_eq!(
+      by_position(1, 282).evaluated_value.as_deref(),
+      Some("00FF"),
+      "bin2hex should convert binary text to hexadecimal",
+    );
+    assert_eq!(
+      by_position(1, 283).evaluated_value.as_deref(),
+      Some("11111111"),
+      "hex2bin should convert hexadecimal text to binary",
+    );
+    assert_eq!(
+      by_position(1, 284).evaluated_value.as_deref(),
+      Some("0377"),
+      "bin2oct should convert binary text to octal",
+    );
+    assert_eq!(
+      by_position(1, 285).evaluated_value.as_deref(),
+      Some("11111111"),
+      "oct2bin should convert octal text to binary",
+    );
   }
 
   #[test]
@@ -9921,6 +10079,30 @@ mod tests {
         value: None,
         formula: Some(r#"=OCT2DEC("89")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 5,
+        value: None,
+        formula: Some(r#"=BIN2HEX("102")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 6,
+        value: None,
+        formula: Some(r#"=HEX2BIN("G1")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 7,
+        value: None,
+        formula: Some(r#"=BIN2OCT("102")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 8,
+        value: None,
+        formula: Some(r#"=OCT2BIN("89")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
@@ -9933,6 +10115,10 @@ mod tests {
         r#"=HEX2DEC("G1")"#.to_string(),
         "=DEC2OCT(-1)".to_string(),
         r#"=OCT2DEC("89")"#.to_string(),
+        r#"=BIN2HEX("102")"#.to_string(),
+        r#"=HEX2BIN("G1")"#.to_string(),
+        r#"=BIN2OCT("102")"#.to_string(),
+        r#"=OCT2BIN("89")"#.to_string(),
       ],
     );
   }
