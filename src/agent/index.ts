@@ -111,7 +111,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     : LocalBrowserProvider;
   private browserProviderType: T;
   private actions: Array<AgentActionDefinition> = [...DEFAULT_ACTIONS];
-  private cdpActionsEnabled: boolean;
+  private cdpActionsEnabled = true;
   private filterAdTrackingFrames = true;
   private actionCacheByTaskId: Record<string, ActionCacheOutput> = {};
   private actionCacheTaskOrder: string[] = [];
@@ -1177,8 +1177,12 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       });
     }
 
-    this.cdpActionsEnabled = params.cdpActions ?? true;
-    this.filterAdTrackingFrames = params.filterAdTrackingFrames !== false;
+    this.cdpActionsEnabled = this.resolveCdpActions(
+      this.safeReadField(params, "cdpActions")
+    );
+    this.filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
+      this.safeReadField(params, "filterAdTrackingFrames")
+    );
     this.errorEmitter = new ErrorEmitter();
   }
 

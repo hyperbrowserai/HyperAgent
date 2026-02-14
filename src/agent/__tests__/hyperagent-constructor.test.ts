@@ -51,6 +51,47 @@ describe("HyperAgent constructor and task controls", () => {
     expect(getDebugOptions().traceWait).toBe(true);
   });
 
+  it("falls back to default constructor toggles when config getters trap", async () => {
+    const mockedRunAgentTask = jest.mocked(runAgentTask);
+    mockedRunAgentTask.mockResolvedValue({
+      taskId: "task-id-constructor-trap",
+      status: TaskStatus.COMPLETED,
+      steps: [],
+      output: "done",
+      actionCache: {
+        taskId: "task-id-constructor-trap",
+        createdAt: new Date().toISOString(),
+        status: TaskStatus.COMPLETED,
+        steps: [],
+      },
+    });
+
+    const trappedConfig = new Proxy(
+      {
+        llm: createMockLLM(),
+      },
+      {
+        get: (target, prop: string | symbol, receiver) => {
+          if (prop === "cdpActions" || prop === "filterAdTrackingFrames") {
+            throw new Error("constructor option trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    ) as unknown as ConstructorParameters<typeof HyperAgent>[0];
+
+    const agent = new HyperAgent(trappedConfig);
+    const fakePage = {} as unknown as Page;
+    await agent.executeTask("test task", undefined, fakePage);
+
+    const runtimeCtx = mockedRunAgentTask.mock.calls[0]?.[0] as {
+      cdpActions?: boolean;
+      filterAdTrackingFrames?: boolean;
+    };
+    expect(runtimeCtx?.cdpActions).toBe(true);
+    expect(runtimeCtx?.filterAdTrackingFrames).toBe(true);
+  });
+
   it("throws synchronously for reserved custom action names", () => {
     const reservedAction: AgentActionDefinition = {
       type: "complete",
