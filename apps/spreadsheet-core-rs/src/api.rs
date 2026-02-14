@@ -6098,6 +6098,21 @@ mod tests {
         assert_eq!(clamped_preview.sample_limit, 1);
         assert_eq!(clamped_preview.sample_request_ids.len(), 1);
 
+        let clamped_max_preview = preview_remove_agent_ops_cache_entries_by_prefix(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(PreviewRemoveAgentOpsCacheEntriesByPrefixRequest {
+                request_id_prefix: "scenario-".to_string(),
+                max_age_seconds: None,
+                sample_limit: Some(10_000),
+            }),
+        )
+        .await
+        .expect("oversized sample limit should clamp to max")
+        .0;
+        assert_eq!(clamped_max_preview.sample_limit, 100);
+        assert_eq!(clamped_max_preview.sample_request_ids.len(), 2);
+
         let invalid_age_error = preview_remove_agent_ops_cache_entries_by_prefix(
             State(state),
             Path(workbook.id),
@@ -6264,6 +6279,22 @@ mod tests {
         assert_eq!(clamped_preview.unscoped_matched_entries, 2);
         assert_eq!(clamped_preview.sample_limit, 1);
         assert_eq!(clamped_preview.sample_request_ids.len(), 1);
+
+        let clamped_max_preview = remove_stale_agent_ops_cache_entries(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(RemoveStaleAgentOpsCacheEntriesRequest {
+                request_id_prefix: None,
+                max_age_seconds: 1,
+                dry_run: Some(true),
+                sample_limit: Some(10_000),
+            }),
+        )
+        .await
+        .expect("oversized stale sample limit should clamp to max")
+        .0;
+        assert_eq!(clamped_max_preview.sample_limit, 100);
+        assert_eq!(clamped_max_preview.sample_request_ids.len(), 2);
 
         let prefix_scoped_preview = remove_stale_agent_ops_cache_entries(
             State(state.clone()),
