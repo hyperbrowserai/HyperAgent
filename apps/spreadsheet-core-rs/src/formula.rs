@@ -1209,6 +1209,37 @@ pub fn parse_rsq_formula(
   Some((known_y_start, known_y_end, known_x_start, known_x_end))
 }
 
+pub fn parse_forecast_linear_formula(
+  formula: &str,
+) -> Option<(String, String, (u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if (function != "FORECAST.LINEAR" && function != "FORECAST") || args.len() != 3 {
+    return None;
+  }
+  let (known_y_start, known_y_end) = parse_range_reference(&args[1])?;
+  let (known_x_start, known_x_end) = parse_range_reference(&args[2])?;
+  Some((
+    function,
+    args[0].clone(),
+    known_y_start,
+    known_y_end,
+    known_x_start,
+    known_x_end,
+  ))
+}
+
+pub fn parse_steyx_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "STEYX" || args.len() != 2 {
+    return None;
+  }
+  let (known_y_start, known_y_end) = parse_range_reference(&args[0])?;
+  let (known_x_start, known_x_end) = parse_range_reference(&args[1])?;
+  Some((known_y_start, known_y_end, known_x_start, known_x_end))
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1499,6 +1530,7 @@ mod tests {
     parse_vara_formula, parse_varpa_formula,
     parse_covariance_formula, parse_correl_formula,
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
+    parse_forecast_linear_formula, parse_steyx_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -2018,6 +2050,30 @@ mod tests {
     assert_eq!(rsq.1, (5, 2));
     assert_eq!(rsq.2, (1, 1));
     assert_eq!(rsq.3, (5, 1));
+    let forecast_linear =
+      parse_forecast_linear_formula("=FORECAST.LINEAR(4,B1:B5,A1:A5)")
+        .expect("forecast linear should parse");
+    assert_eq!(forecast_linear.0, "FORECAST.LINEAR");
+    assert_eq!(forecast_linear.1, "4");
+    assert_eq!(forecast_linear.2, (1, 2));
+    assert_eq!(forecast_linear.3, (5, 2));
+    assert_eq!(forecast_linear.4, (1, 1));
+    assert_eq!(forecast_linear.5, (5, 1));
+    let forecast_legacy =
+      parse_forecast_linear_formula("=FORECAST(4,B1:B5,A1:A5)")
+        .expect("legacy forecast should parse");
+    assert_eq!(forecast_legacy.0, "FORECAST");
+    assert_eq!(forecast_legacy.1, "4");
+    assert_eq!(forecast_legacy.2, (1, 2));
+    assert_eq!(forecast_legacy.3, (5, 2));
+    assert_eq!(forecast_legacy.4, (1, 1));
+    assert_eq!(forecast_legacy.5, (5, 1));
+    let steyx = parse_steyx_formula("=STEYX(B1:B5,A1:A5)")
+      .expect("steyx should parse");
+    assert_eq!(steyx.0, (1, 2));
+    assert_eq!(steyx.1, (5, 2));
+    assert_eq!(steyx.2, (1, 1));
+    assert_eq!(steyx.3, (5, 1));
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");

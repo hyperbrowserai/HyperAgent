@@ -16,6 +16,7 @@ use crate::{
     parse_vara_formula, parse_varpa_formula,
     parse_covariance_formula, parse_correl_formula,
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
+    parse_forecast_linear_formula, parse_steyx_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -948,6 +949,69 @@ fn evaluate_formula(
     }
     let correl = sum_xy / (sum_xx * sum_yy).sqrt();
     return Ok(Some((correl * correl).to_string()));
+  }
+
+  if let Some((_function, x_arg, known_y_start, known_y_end, known_x_start, known_x_end)) =
+    parse_forecast_linear_formula(formula)
+  {
+    let Some(pairs) = collect_numeric_pairs_from_ranges(
+      connection,
+      sheet,
+      known_x_start,
+      known_x_end,
+      known_y_start,
+      known_y_end,
+    )? else {
+      return Ok(None);
+    };
+    if pairs.len() < 2 {
+      return Ok(None);
+    }
+    let x = parse_required_float(connection, sheet, &x_arg)?;
+    let (mean_x, mean_y, sum_xy, sum_xx, _) = compute_pair_deviation_sums(&pairs)
+      .ok_or_else(|| ApiError::internal("pair statistics should be available"))?;
+    if sum_xx <= 0.0 {
+      return Ok(None);
+    }
+    let slope = sum_xy / sum_xx;
+    let intercept = mean_y - slope * mean_x;
+    let forecast = intercept + slope * x;
+    return Ok(Some(forecast.to_string()));
+  }
+
+  if let Some((known_y_start, known_y_end, known_x_start, known_x_end)) =
+    parse_steyx_formula(formula)
+  {
+    let Some(pairs) = collect_numeric_pairs_from_ranges(
+      connection,
+      sheet,
+      known_x_start,
+      known_x_end,
+      known_y_start,
+      known_y_end,
+    )? else {
+      return Ok(None);
+    };
+    if pairs.len() <= 2 {
+      return Ok(None);
+    }
+    let (mean_x, mean_y, sum_xy, sum_xx, _) = compute_pair_deviation_sums(&pairs)
+      .ok_or_else(|| ApiError::internal("pair statistics should be available"))?;
+    if sum_xx <= 0.0 {
+      return Ok(None);
+    }
+    let slope = sum_xy / sum_xx;
+    let intercept = mean_y - slope * mean_x;
+    let residual_sum = pairs
+      .iter()
+      .map(|pair| {
+        let estimated = intercept + slope * pair.0;
+        let error = pair.1 - estimated;
+        error * error
+      })
+      .sum::<f64>();
+    let steyx = (residual_sum / (pairs.len() as f64 - 2.0)).sqrt();
+    return Ok(Some(steyx.to_string()));
   }
 
   if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
@@ -3420,6 +3484,42 @@ mod tests {
         formula: None,
       },
       CellMutation {
+        row: 10,
+        col: 20,
+        value: Some(json!(1)),
+        formula: None,
+      },
+      CellMutation {
+        row: 11,
+        col: 20,
+        value: Some(json!(2)),
+        formula: None,
+      },
+      CellMutation {
+        row: 12,
+        col: 20,
+        value: Some(json!(3)),
+        formula: None,
+      },
+      CellMutation {
+        row: 10,
+        col: 21,
+        value: Some(json!(2)),
+        formula: None,
+      },
+      CellMutation {
+        row: 11,
+        col: 21,
+        value: Some(json!(4)),
+        formula: None,
+      },
+      CellMutation {
+        row: 12,
+        col: 21,
+        value: Some(json!(5)),
+        formula: None,
+      },
+      CellMutation {
         row: 1,
         col: 2,
         value: None,
@@ -4495,12 +4595,30 @@ mod tests {
         value: None,
         formula: Some("=PEARSON(A1:A2,A4:A5)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 176,
+        value: None,
+        formula: Some("=FORECAST.LINEAR(4,U10:U12,T10:T12)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 177,
+        value: None,
+        formula: Some("=FORECAST(4,U10:U12,T10:T12)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 178,
+        value: None,
+        formula: Some("=STEYX(U10:U12,T10:T12)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 173);
+    assert_eq!(updated_cells, 176);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4514,7 +4632,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 175,
+        end_col: 178,
       },
     )
     .expect("cells should be fetched");
@@ -5039,6 +5157,36 @@ mod tests {
     assert!(
       (pearson - 1.0).abs() < 1e-9,
       "pearson should be 1.0, got {pearson}",
+    );
+    let forecast_linear = by_position(1, 176)
+      .evaluated_value
+      .as_deref()
+      .expect("forecast.linear should evaluate")
+      .parse::<f64>()
+      .expect("forecast.linear should be numeric");
+    assert!(
+      (forecast_linear - 6.666_666_666_666_667).abs() < 1e-9,
+      "forecast.linear should be 6.666..., got {forecast_linear}",
+    );
+    let forecast = by_position(1, 177)
+      .evaluated_value
+      .as_deref()
+      .expect("forecast should evaluate")
+      .parse::<f64>()
+      .expect("forecast should be numeric");
+    assert!(
+      (forecast - 6.666_666_666_666_667).abs() < 1e-9,
+      "forecast should be 6.666..., got {forecast}",
+    );
+    let steyx = by_position(1, 178)
+      .evaluated_value
+      .as_deref()
+      .expect("steyx should evaluate")
+      .parse::<f64>()
+      .expect("steyx should be numeric");
+    assert!(
+      (steyx - 0.408_248_290_463_863).abs() < 1e-9,
+      "steyx should be sqrt(1/6), got {steyx}",
     );
   }
 
@@ -5846,6 +5994,67 @@ mod tests {
         "=SLOPE(B1:B2,A1:A2)".to_string(),
         "=INTERCEPT(B1:B2,A1:A2)".to_string(),
         "=RSQ(B1:B2,A1:A2)".to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_forecast_and_steyx_invalid_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(100)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(100)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(10)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: Some(json!(20)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=FORECAST.LINEAR(4,B1:B2,A1:A1)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 3,
+        value: None,
+        formula: Some("=FORECAST(4,B1:B2,A1:A2)".to_string()),
+      },
+      CellMutation {
+        row: 3,
+        col: 3,
+        value: None,
+        formula: Some("=STEYX(B1:B2,A1:A2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=FORECAST.LINEAR(4,B1:B2,A1:A1)".to_string(),
+        "=FORECAST(4,B1:B2,A1:A2)".to_string(),
+        "=STEYX(B1:B2,A1:A2)".to_string(),
       ],
     );
   }
