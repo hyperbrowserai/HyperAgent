@@ -209,6 +209,8 @@ fn normalize_imported_formula(formula: &str) -> Option<String> {
 
   let normalized_body =
     strip_known_formula_prefixes(trimmed.strip_prefix('=').unwrap_or(trimmed));
+  let normalized_body =
+    strip_implicit_intersection_operators(normalized_body.as_str());
   let normalized_body = normalized_body.trim();
   if normalized_body.is_empty() {
     return None;
@@ -237,6 +239,71 @@ fn strip_known_formula_prefixes(formula_body: &str) -> String {
     let ch = chars.next().expect("remaining string should contain a char");
     normalized.push(ch);
     byte_index += ch.len_utf8();
+  }
+
+  normalized
+}
+
+fn strip_implicit_intersection_operators(formula_body: &str) -> String {
+  let chars = formula_body.chars().collect::<Vec<_>>();
+  let mut normalized = String::with_capacity(formula_body.len());
+  let mut index = 0usize;
+  let mut in_string = false;
+  let mut previous_non_whitespace = None;
+
+  while index < chars.len() {
+    let ch = chars[index];
+
+    if ch == '"' {
+      normalized.push(ch);
+      if in_string && index + 1 < chars.len() && chars[index + 1] == '"' {
+        normalized.push(chars[index + 1]);
+        index += 2;
+        continue;
+      }
+      in_string = !in_string;
+      previous_non_whitespace = Some(ch);
+      index += 1;
+      continue;
+    }
+
+    if !in_string && ch == '@' {
+      let mut lookahead_index = index + 1;
+      while lookahead_index < chars.len() && chars[lookahead_index].is_whitespace() {
+        lookahead_index += 1;
+      }
+      let next_non_whitespace = chars.get(lookahead_index).copied();
+      let starts_identifier = next_non_whitespace
+        .is_some_and(|next| next.is_ascii_alphabetic() || next == '_' || next == '$');
+      let is_prefix_position = matches!(
+        previous_non_whitespace,
+        None
+          | Some('(')
+          | Some(',')
+          | Some('+')
+          | Some('-')
+          | Some('*')
+          | Some('/')
+          | Some('^')
+          | Some('&')
+          | Some('=')
+          | Some('<')
+          | Some('>')
+          | Some(':')
+          | Some(';')
+          | Some('{')
+      );
+      if starts_identifier && is_prefix_position {
+        index += 1;
+        continue;
+      }
+    }
+
+    normalized.push(ch);
+    if !ch.is_whitespace() {
+      previous_non_whitespace = Some(ch);
+    }
+    index += 1;
   }
 
   normalized
@@ -350,7 +417,7 @@ mod tests {
       .write_number(4, 2, 20.0)
       .expect("second number should write");
     offset_sheet
-      .write_formula(5, 3, Formula::new("=SUM(C4:C5)").set_result("30"))
+      .write_formula(5, 3, Formula::new("=@SUM(C4:C5)").set_result("30"))
       .expect("sum formula should write");
 
     workbook
@@ -389,6 +456,22 @@ mod tests {
     assert_eq!(
       normalize_imported_formula("=IF(_XLFN.BITAND(6,3)=2,1,0)").as_deref(),
       Some("=IF(BITAND(6,3)=2,1,0)"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=@SUM(A1:A3)").as_deref(),
+      Some("=SUM(A1:A3)"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=IF(@A1>0,@_XLFN.BITAND(6,3),0)").as_deref(),
+      Some("=IF(A1>0,BITAND(6,3),0)"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=Table[@Amount]").as_deref(),
+      Some("=Table[@Amount]"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=\"user@example.com\"").as_deref(),
+      Some("=\"user@example.com\""),
     );
     assert_eq!(
       normalize_imported_formula("  SUM(A1:A3)  ").as_deref(),
@@ -644,7 +727,7 @@ mod tests {
         .get("D6")
         .and_then(|cell| cell.formula.as_deref()),
       Some("=SUM(C4:C5)"),
-      "formula should stay at D6",
+      "implicit intersection formula should normalize and stay at D6",
     );
     assert_eq!(
       offset_map
