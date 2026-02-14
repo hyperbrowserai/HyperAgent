@@ -915,10 +915,43 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.agent_ops_result_error_shape),
     [wizardSchemaQuery.data?.agent_ops_result_error_shape],
   );
+  const wizardCacheReplayRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_replay_request_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_replay_request_shape],
+  );
+  const wizardCacheReplayResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_replay_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_replay_response_shape],
+  );
+  const wizardCacheReexecuteRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_reexecute_request_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_reexecute_request_shape],
+  );
+  const wizardCacheReexecuteResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_reexecute_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_reexecute_response_shape],
+  );
   const wizardDuckdbValidationErrorCodes = useMemo(
     () =>
       parseCommaSeparatedList(wizardSchemaQuery.data?.duckdb_query_validation_error_codes),
     [wizardSchemaQuery.data?.duckdb_query_validation_error_codes],
+  );
+  const wizardCacheValidationErrorCodes = useMemo(
+    () =>
+      parseCommaSeparatedList(wizardSchemaQuery.data?.cache_validation_error_codes),
+    [wizardSchemaQuery.data?.cache_validation_error_codes],
   );
   const wizardSupportedFormulaFunctions = useMemo(
     () => {
@@ -3081,6 +3114,62 @@ export function SpreadsheetApp() {
                 wizard duckdb validation codes:{" "}
                 <span className="font-mono text-slate-300">
                   {wizardDuckdbValidationErrorCodes.join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_replay_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache replay endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_replay_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_reexecute_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache reexecute endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_reexecute_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheReplayRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache replay request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheReplayRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheReplayResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache replay response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheReplayResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheReexecuteRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache reexecute request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheReexecuteRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheReexecuteResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache reexecute response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheReexecuteResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheValidationErrorCodes.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache validation codes:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardCacheValidationErrorCodes.join(", ")}
                 </span>
               </p>
             ) : null}

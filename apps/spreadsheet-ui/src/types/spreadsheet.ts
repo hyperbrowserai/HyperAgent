@@ -321,7 +321,10 @@ export interface AgentWizardSchemaInfo {
   scenarios_endpoint?: string;
   scenario_operations_endpoint?: string;
   signature_error_codes?: string[];
+  cache_validation_error_codes?: string[];
   agent_ops_result_error_shape?: Record<string, string>;
+  agent_ops_cache_replay_endpoint?: string;
+  agent_ops_cache_reexecute_endpoint?: string;
   request_multipart_fields?: string[];
   request_json_fields?: Record<string, string>;
   operations_preview_response_shape?: Record<string, string>;
@@ -331,6 +334,10 @@ export interface AgentWizardSchemaInfo {
   duckdb_query_request_shape?: Record<string, string>;
   duckdb_query_response_shape?: Record<string, string>;
   duckdb_query_validation_error_codes?: string[];
+  agent_ops_cache_replay_request_shape?: Record<string, string | Record<string, string>>;
+  agent_ops_cache_replay_response_shape?: Record<string, string | Record<string, string>>;
+  agent_ops_cache_reexecute_request_shape?: Record<string, string>;
+  agent_ops_cache_reexecute_response_shape?: Record<string, string>;
   formula_capabilities?: FormulaCapabilitiesSchema;
   presets: AgentPresetInfo[];
   scenarios: AgentScenarioInfo[];
