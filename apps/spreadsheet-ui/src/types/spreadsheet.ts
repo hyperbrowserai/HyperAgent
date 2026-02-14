@@ -211,6 +211,7 @@ export interface FormulaCapabilitiesSchema {
 export interface AgentSchemaInfo {
   endpoint: string;
   request_shape?: Record<string, unknown>;
+  agent_ops_request_shape?: Record<string, unknown>;
   workbook_import_endpoint?: string;
   workbook_export_endpoint?: string;
   workbook_import_response_shape?: Record<string, unknown>;
@@ -349,6 +350,7 @@ export interface AgentWizardSchemaInfo {
   request_json_fields?: Record<string, string>;
   operations_preview_response_shape?: Record<string, string>;
   agent_ops_endpoint?: string;
+  agent_ops_request_shape?: Record<string, unknown>;
   agent_ops_preview_endpoint?: string;
   agent_ops_preview_request_shape?: Record<string, string>;
   agent_ops_preview_response_shape?: Record<string, string>;

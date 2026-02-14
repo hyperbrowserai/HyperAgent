@@ -921,6 +921,13 @@ export function SpreadsheetApp() {
       ),
     [wizardSchemaQuery.data?.agent_ops_preview_request_shape],
   );
+  const wizardAgentOpsRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_request_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_request_shape],
+  );
   const wizardAgentOpsPreviewResponseFields = useMemo(
     () =>
       flattenSchemaShapeEntries(
@@ -1130,8 +1137,12 @@ export function SpreadsheetApp() {
     [agentSchemaQuery.data?.duckdb_query_response_shape],
   );
   const agentOpsRequestFields = useMemo(
-    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.request_shape),
-    [agentSchemaQuery.data?.request_shape],
+    () =>
+      flattenSchemaShapeEntries(
+        agentSchemaQuery.data?.agent_ops_request_shape
+          ?? agentSchemaQuery.data?.request_shape,
+      ),
+    [agentSchemaQuery.data?.agent_ops_request_shape, agentSchemaQuery.data?.request_shape],
   );
   const agentOpsPreviewRequestFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.agent_ops_preview_request_shape),
@@ -3307,6 +3318,14 @@ export function SpreadsheetApp() {
                 agent ops preview endpoint:{" "}
                 <span className="font-mono text-slate-300">
                   {wizardSchemaQuery.data.agent_ops_preview_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardAgentOpsRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                agent ops execute request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardAgentOpsRequestFields)}
                 </span>
               </p>
             ) : null}
