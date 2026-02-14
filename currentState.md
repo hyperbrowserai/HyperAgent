@@ -168,6 +168,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
   - setup now uses trap-safe context/pages materialization when resolving active pages,
   - context page-listener attach/detach paths now use guarded method reads instead of direct calls,
   - preserves child-tab tracking even when context page listing getters are trap-prone.
+- Hardened element-locator debug frame listing:
+  - trap-prone frame arrays no longer collapse the entire debug "Available frames" payload,
+  - readable frame entries are preserved even when individual frame getters/indexes trap.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

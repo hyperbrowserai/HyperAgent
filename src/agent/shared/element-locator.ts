@@ -118,12 +118,48 @@ function safeFrameMetadata(frame: unknown): { url: string; name: string } {
   };
 }
 
+function safeArrayLength(value: unknown): number {
+  try {
+    if (Array.isArray(value)) {
+      return value.length;
+    }
+    if (value && typeof value === "object") {
+      const length = (value as { length?: unknown }).length;
+      if (typeof length === "number" && Number.isFinite(length) && length >= 0) {
+        return Math.floor(length);
+      }
+    }
+  } catch {
+    // ignore trap-prone length access
+  }
+  return 0;
+}
+
+function safeReadArrayItem(value: unknown, index: number): unknown {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  try {
+    return (value as Record<number, unknown>)[index];
+  } catch {
+    return undefined;
+  }
+}
+
 function safeListFrameMetadata(page: Page): Array<{ url: string; name: string }> {
   try {
-    return page
-      .frames()
-      .slice(0, MAX_ELEMENT_LOCATOR_DEBUG_FRAMES)
-      .map((frame) => safeFrameMetadata(frame));
+    const frames = page.frames();
+    const frameCount = safeArrayLength(frames);
+    const limit = Math.min(frameCount, MAX_ELEMENT_LOCATOR_DEBUG_FRAMES);
+    const metadata: Array<{ url: string; name: string }> = [];
+    for (let i = 0; i < limit; i++) {
+      const frame = safeReadArrayItem(frames, i);
+      if (!frame) {
+        continue;
+      }
+      metadata.push(safeFrameMetadata(frame));
+    }
+    return metadata;
   } catch {
     return [];
   }
