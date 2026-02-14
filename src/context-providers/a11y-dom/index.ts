@@ -1096,9 +1096,10 @@ export async function getA11yDOM(
       debug,
     });
 
-    // Discover and attach OOPIF frames
-    // TODO: In the future we might want to consider patching playwright so we can we access underlying CDP session ID for frame attach events for OOPIF
-    // current problem is that the event only exposes sessionId, but this does not match any internal session ID playwright page.createCDPSession() creates.
+    // Discover and attach OOPIF frames.
+    // Note: Playwright does not currently expose the underlying CDP session id used by
+    // page.createCDPSession(), so OOPIF frame-attach events cannot be mapped through
+    // raw session ids directly.
     await frameContextManager.captureOOPIFs((maps.frameMap?.size ?? 0) + 1);
 
     // Step 4: Fetch accessibility trees for main frame and all iframes

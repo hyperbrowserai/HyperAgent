@@ -157,6 +157,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
   - `createSession` now guards context acquisition, `newCDPSession` method reads, and session creation with bounded/sanitized diagnostics.
   - `getCDPClientForPage` now always clears pending init promises (including failed init paths) and tolerates trap-prone `page.once` close-listener attachment with sanitized warnings.
 - Removed stale inline TODO/commented dead code in markdown conversion utility to keep cleanup pass consistent.
+- Replaced remaining TODO-style OOPIF note in a11y DOM extraction with an accurate non-actionable implementation constraint note; `src/` now has no lingering TODO/FIXME/HACK markers.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.
