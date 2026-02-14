@@ -224,6 +224,7 @@ fn normalize_imported_formula(formula: &str) -> Option<String> {
 fn strip_known_formula_prefixes(formula_body: &str) -> String {
   const XLFN_PREFIX: [char; 6] = ['_', 'x', 'l', 'f', 'n', '.'];
   const XLWS_PREFIX: [char; 6] = ['_', 'x', 'l', 'w', 's', '.'];
+  const XLPM_PREFIX: [char; 6] = ['_', 'x', 'l', 'p', 'm', '.'];
 
   let mut normalized = String::with_capacity(formula_body.len());
   let chars = formula_body.chars().collect::<Vec<_>>();
@@ -248,6 +249,7 @@ fn strip_known_formula_prefixes(formula_body: &str) -> String {
     if !in_string {
       if has_case_insensitive_prefix(&chars, index, &XLFN_PREFIX)
         || has_case_insensitive_prefix(&chars, index, &XLWS_PREFIX)
+        || has_case_insensitive_prefix(&chars, index, &XLPM_PREFIX)
       {
         index += 6;
         continue;
@@ -552,7 +554,7 @@ mod tests {
       .write_formula(
         0,
         1,
-        Formula::new("=_xlfn.LET(x,A1,x+1)").set_result("6"),
+        Formula::new("=_xlfn.LET(_xlpm.x,A1,_xlpm.x+1)").set_result("6"),
       )
       .expect("unsupported formula should write");
 
@@ -629,6 +631,10 @@ mod tests {
     assert_eq!(
       normalize_imported_formula(r#"=IF(A1=1,"_XLWS.keep",_xlfn.BITAND(6,3))"#).as_deref(),
       Some(r#"=IF(A1=1,"_XLWS.keep",BITAND(6,3))"#),
+    );
+    assert_eq!(
+      normalize_imported_formula("=_xlfn.LET(_xlpm.x,1,_xlpm.x+1)").as_deref(),
+      Some("=LET(x,1,x+1)"),
     );
     assert_eq!(
       normalize_imported_formula("=@SUM(A1:A3)").as_deref(),
