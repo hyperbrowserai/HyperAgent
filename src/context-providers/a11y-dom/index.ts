@@ -33,9 +33,45 @@ import type { CDPClient, CDPSession } from "@/cdp";
 import { domSnapshotCache } from "./dom-cache";
 import { PerformanceTracker } from "./performance";
 import { getDebugOptions } from "@/debug/options";
-import { formatUnknownError } from "@/utils";
+import { formatUnknownError, normalizePageUrl } from "@/utils";
 
 const DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS = 500;
+const MAX_A11Y_DIAGNOSTIC_CHARS = 400;
+const MAX_A11Y_FRAME_URL_CHARS = 1_000;
+
+function formatA11yDiagnostic(value: unknown): string {
+  const normalized = Array.from(formatUnknownError(value), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_A11Y_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_A11Y_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_A11Y_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
+
+function normalizeA11yFrameUrl(value: unknown, fallback: string = "unknown"): string {
+  return normalizePageUrl(value, {
+    fallback,
+    maxChars: MAX_A11Y_FRAME_URL_CHARS,
+  });
+}
+
+function safeA11yPageUrl(page: Page): string {
+  try {
+    return normalizeA11yFrameUrl(page.url(), "about:blank");
+  } catch {
+    return "about:blank";
+  }
+}
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -113,7 +149,7 @@ async function collectExecutionContexts(
       if (debug) {
         console.warn(
           "[A11y] Failed to enable Runtime domain for context collection. " +
-            `Execution contexts may be missing for iframe elements. ${formatUnknownError(error)}`
+            `Execution contexts may be missing for iframe elements. ${formatA11yDiagnostic(error)}`
         );
       }
     });
@@ -353,7 +389,7 @@ async function hydrateFrameContextFromSnapshot(
   } catch (error) {
     if (debug) {
       console.warn(
-        `[FrameContext] Failed to hydrate frame manager from cache: ${formatUnknownError(error)}`
+        `[FrameContext] Failed to hydrate frame manager from cache: ${formatA11yDiagnostic(error)}`
       );
     }
   }
@@ -521,7 +557,7 @@ async function fetchIframeAXTrees(
           debugInfo: debug
             ? {
                 frameIndex,
-                frameUrl: src || "unknown",
+                frameUrl: normalizeA11yFrameUrl(src, "unknown"),
                 totalNodes: iframeNodes.length,
                 rawNodes: iframeNodes,
               }
@@ -529,8 +565,9 @@ async function fetchIframeAXTrees(
         };
       } catch (error) {
         console.warn(
-          `[A11y] Failed to fetch AX tree for frame ${frameIndex} (contentDocBackendNodeId=${contentDocumentBackendNodeId}):`,
-          (error as Error).message || error
+          `[A11y] Failed to fetch AX tree for frame ${frameIndex} (contentDocBackendNodeId=${contentDocumentBackendNodeId}): ${formatA11yDiagnostic(
+            error
+          )}`
         );
         return null;
       }
@@ -578,7 +615,11 @@ async function fetchIframeAXTrees(
     }
 
     if (debug) {
-      console.log(`[A11y] Processing OOPIF frame ${frameIndex} (${url})`);
+      console.log(
+        `[A11y] Processing OOPIF frame ${frameIndex} (${normalizeA11yFrameUrl(
+          url
+        )})`
+      );
     }
 
     try {
@@ -633,8 +674,9 @@ async function fetchIframeAXTrees(
       };
     } catch (error) {
       console.warn(
-        `[A11y] Failed to process OOPIF frame ${frameIndex} (${url}):`,
-        (error as Error).message || error
+        `[A11y] Failed to process OOPIF frame ${frameIndex} (${normalizeA11yFrameUrl(
+          url
+        )}): ${formatA11yDiagnostic(error)}`
       );
       return null;
     }
@@ -787,7 +829,7 @@ async function collectCrossOriginFrameData({
   if (debug) {
     frameDebugInfo.push({
       frameIndex,
-      frameUrl: frameInfo.src || "unknown",
+      frameUrl: normalizeA11yFrameUrl(frameInfo.src, "unknown"),
       totalNodes: nodes.length,
       rawNodes: nodes,
     });
@@ -956,7 +998,7 @@ export async function getA11yDOM(
     await frameContextManager.ensureInitialized().catch((error) => {
       if (debug) {
         console.warn(
-          `[FrameContext] Failed to initialize frame manager: ${formatUnknownError(error)}`
+          `[FrameContext] Failed to initialize frame manager: ${formatA11yDiagnostic(error)}`
         );
       }
     });
@@ -1109,7 +1151,8 @@ export async function getA11yDOM(
             frameIndex: frameIdx,
             framePath: frameInfo?.framePath,
             frameUrl:
-              frameInfo?.src ?? (frameIdx === 0 ? page.url() : undefined),
+              frameInfo?.src ??
+              (frameIdx === 0 ? safeA11yPageUrl(page) : undefined),
             simplified: treeResult.simplified,
             totalNodes: nodes.length,
             order,
@@ -1232,7 +1275,7 @@ export async function getA11yDOM(
     return snapshot;
   } catch (error) {
     console.error(
-      `Error extracting accessibility tree: ${formatUnknownError(error)}`
+      `Error extracting accessibility tree: ${formatA11yDiagnostic(error)}`
     );
     if (error instanceof Error) {
       console.error("Error details:", {
