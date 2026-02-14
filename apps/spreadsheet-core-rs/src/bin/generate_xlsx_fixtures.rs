@@ -249,23 +249,10 @@ mod tests {
       .copied()
       .collect::<HashSet<_>>();
 
-    let expected_set = [
-      fixture_corpus::COMPAT_BASELINE_FILE_NAME,
-      fixture_corpus::COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
-      fixture_corpus::COMPAT_NORMALIZATION_FILE_NAME,
-      fixture_corpus::COMPAT_OFFSET_RANGE_FILE_NAME,
-      fixture_corpus::COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
-      fixture_corpus::COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
-      fixture_corpus::COMPAT_PREFIX_OPERATOR_FILE_NAME,
-      fixture_corpus::COMPAT_FORMULA_MATRIX_FILE_NAME,
-      fixture_corpus::COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
-      fixture_corpus::COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
-      fixture_corpus::COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
-      fixture_corpus::COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
-      fixture_corpus::COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
-    ]
-    .into_iter()
-    .collect::<HashSet<_>>();
+    let expected_set = fixture_corpus::fixture_corpus_file_names()
+      .iter()
+      .copied()
+      .collect::<HashSet<_>>();
     assert_eq!(
       written_set, expected_set,
       "generator should emit the complete fixture corpus",
@@ -294,14 +281,14 @@ mod tests {
 
     let verified_files = verify_fixture_corpus(&output_dir)
       .expect("written fixture corpus should verify");
-    assert_eq!(verified_files.len(), 13);
+    assert_eq!(verified_files.len(), fixture_corpus::fixture_corpus_file_names().len());
   }
 
   #[test]
   fn should_verify_committed_fixture_corpus_from_default_dir() {
     let verified_files = verify_fixture_corpus(&default_fixture_dir())
       .expect("committed fixture corpus should verify");
-    assert_eq!(verified_files.len(), 13);
+    assert_eq!(verified_files.len(), fixture_corpus::fixture_corpus_file_names().len());
   }
 
   #[test]
@@ -391,6 +378,6 @@ mod tests {
 
     let verified_files = verify_fixture_corpus(&output_dir)
       .expect("verification should ignore non-xlsx sidecar files");
-    assert_eq!(verified_files.len(), 13);
+    assert_eq!(verified_files.len(), fixture_corpus::fixture_corpus_file_names().len());
   }
 }

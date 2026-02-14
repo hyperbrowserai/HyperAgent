@@ -489,6 +489,7 @@ mod tests {
   };
   use crate::{
     fixture_corpus::{
+      fixture_corpus_file_names as shared_fixture_corpus_file_names,
       write_fixture_corpus, COMPAT_BASELINE_FILE_NAME,
       COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
       COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
@@ -498,7 +499,6 @@ mod tests {
       COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
       COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
-      COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
       COMPAT_OFFSET_RANGE_FILE_NAME, COMPAT_PREFIX_OPERATOR_FILE_NAME,
       COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
     },
@@ -510,22 +510,8 @@ mod tests {
   use std::{collections::HashMap, fs, path::PathBuf};
   use tempfile::tempdir;
 
-  fn fixture_corpus_file_names() -> [&'static str; 13] {
-    [
-      COMPAT_BASELINE_FILE_NAME,
-      COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
-      COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
-      COMPAT_FORMULA_MATRIX_FILE_NAME,
-      COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
-      COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
-      COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
-      COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
-      COMPAT_NORMALIZATION_FILE_NAME,
-      COMPAT_OFFSET_RANGE_FILE_NAME,
-      COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
-      COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
-      COMPAT_PREFIX_OPERATOR_FILE_NAME,
-    ]
+  fn fixture_corpus_file_names() -> &'static [&'static str; 13] {
+    shared_fixture_corpus_file_names()
   }
 
   fn file_fixture_bytes(file_name: &str) -> Vec<u8> {
