@@ -1008,6 +1008,28 @@ pub fn parse_rank_formula(
   Some((args[0].clone(), start, end, args.get(2).cloned()))
 }
 
+pub fn parse_percentile_inc_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "PERCENTILE.INC" || args.len() != 2 {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[0])?;
+  Some((start, end, args[1].clone()))
+}
+
+pub fn parse_quartile_inc_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "QUARTILE.INC" || args.len() != 2 {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[0])?;
+  Some((start, end, args[1].clone()))
+}
+
 pub fn parse_sumproduct_formula(
   formula: &str,
 ) -> Option<Vec<((u32, u32), (u32, u32))>> {
@@ -1265,6 +1287,7 @@ mod tests {
     parse_sumifs_formula, parse_row_formula, parse_column_formula,
     parse_rows_formula, parse_columns_formula,
     parse_large_formula, parse_small_formula, parse_rank_formula,
+    parse_percentile_inc_formula, parse_quartile_inc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_rand_formula,
@@ -1661,6 +1684,16 @@ mod tests {
     assert_eq!(rank.1, (1, 1));
     assert_eq!(rank.2, (5, 1));
     assert_eq!(rank.3.as_deref(), Some("0"));
+    let percentile = parse_percentile_inc_formula("=PERCENTILE.INC(A1:A5,0.25)")
+      .expect("percentile should parse");
+    assert_eq!(percentile.0, (1, 1));
+    assert_eq!(percentile.1, (5, 1));
+    assert_eq!(percentile.2, "0.25");
+    let quartile = parse_quartile_inc_formula("=QUARTILE.INC(A1:A5,3)")
+      .expect("quartile should parse");
+    assert_eq!(quartile.0, (1, 1));
+    assert_eq!(quartile.1, (5, 1));
+    assert_eq!(quartile.2, "3");
 
     let sumproduct =
       parse_sumproduct_formula("=SUMPRODUCT(A1:A5,B1:B5)")

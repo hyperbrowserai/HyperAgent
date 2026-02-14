@@ -8,6 +8,7 @@ use crate::{
     parse_row_formula, parse_column_formula, parse_rows_formula,
     parse_columns_formula,
     parse_large_formula, parse_small_formula, parse_rank_formula,
+    parse_percentile_inc_formula, parse_quartile_inc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
@@ -521,18 +522,7 @@ fn evaluate_formula(
 
   if let Some((number_arg, start, end, order_arg)) = parse_rank_formula(formula) {
     let number = parse_required_float(connection, sheet, &number_arg)?;
-    let bounds = normalized_range_bounds(start, end);
-    let mut values = Vec::new();
-    for row_offset in 0..bounds.height {
-      for col_offset in 0..bounds.width {
-        let row_index = bounds.start_row + row_offset;
-        let col_index = bounds.start_col + col_offset;
-        let value = load_cell_scalar(connection, sheet, row_index, col_index)?;
-        if let Ok(parsed) = value.trim().parse::<f64>() {
-          values.push(parsed);
-        }
-      }
-    }
+    let values = collect_numeric_range_values(connection, sheet, start, end)?;
     if values.is_empty() {
       return Ok(None);
     }
@@ -552,6 +542,61 @@ fn evaluate_formula(
         .count()
     };
     return Ok(Some(rank.to_string()));
+  }
+
+  if let Some((start, end, percentile_arg)) = parse_percentile_inc_formula(formula) {
+    let percentile = parse_required_float(connection, sheet, &percentile_arg)?;
+    if !(0.0..=1.0).contains(&percentile) {
+      return Ok(None);
+    }
+    let mut values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    if values.len() == 1 {
+      return Ok(Some(values[0].to_string()));
+    }
+    let position = percentile * (values.len() as f64 - 1.0);
+    let lower_index = position.floor() as usize;
+    let upper_index = position.ceil() as usize;
+    if lower_index == upper_index {
+      return Ok(Some(values[lower_index].to_string()));
+    }
+    let fraction = position - lower_index as f64;
+    let interpolated = values[lower_index]
+      + (values[upper_index] - values[lower_index]) * fraction;
+    return Ok(Some(interpolated.to_string()));
+  }
+
+  if let Some((start, end, quartile_arg)) = parse_quartile_inc_formula(formula) {
+    let quartile = parse_required_integer(connection, sheet, &quartile_arg)?;
+    let percentile = match quartile {
+      0 => 0.0,
+      1 => 0.25,
+      2 => 0.5,
+      3 => 0.75,
+      4 => 1.0,
+      _ => return Ok(None),
+    };
+    let mut values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    if values.len() == 1 {
+      return Ok(Some(values[0].to_string()));
+    }
+    let position = percentile * (values.len() as f64 - 1.0);
+    let lower_index = position.floor() as usize;
+    let upper_index = position.ceil() as usize;
+    if lower_index == upper_index {
+      return Ok(Some(values[lower_index].to_string()));
+    }
+    let fraction = position - lower_index as f64;
+    let interpolated = values[lower_index]
+      + (values[upper_index] - values[lower_index]) * fraction;
+    return Ok(Some(interpolated.to_string()));
   }
 
   if let Some(sumif_formula) = parse_sumif_formula(formula) {
@@ -1672,6 +1717,27 @@ fn normalized_range_bounds(start: (u32, u32), end: (u32, u32)) -> RangeBounds {
     height: end_row.saturating_sub(start_row) + 1,
     width: end_col.saturating_sub(start_col) + 1,
   }
+}
+
+fn collect_numeric_range_values(
+  connection: &Connection,
+  sheet: &str,
+  start: (u32, u32),
+  end: (u32, u32),
+) -> Result<Vec<f64>, ApiError> {
+  let bounds = normalized_range_bounds(start, end);
+  let mut values = Vec::new();
+  for row_offset in 0..bounds.height {
+    for col_offset in 0..bounds.width {
+      let row_index = bounds.start_row + row_offset;
+      let col_index = bounds.start_col + col_offset;
+      let value = load_cell_scalar(connection, sheet, row_index, col_index)?;
+      if let Ok(parsed) = value.trim().parse::<f64>() {
+        values.push(parsed);
+      }
+    }
+  }
+  Ok(values)
 }
 
 fn evaluate_countifs_formula(
@@ -3591,12 +3657,24 @@ mod tests {
         value: None,
         formula: Some("=VAR.S(A1:A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 144,
+        value: None,
+        formula: Some("=PERCENTILE.INC(A1:A2,0.25)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 145,
+        value: None,
+        formula: Some("=QUARTILE.INC(A1:A2,3)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 141);
+    assert_eq!(updated_cells, 143);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3610,7 +3688,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 143,
+        end_col: 145,
       },
     )
     .expect("cells should be fetched");
@@ -3858,6 +3936,26 @@ mod tests {
       .parse::<f64>()
       .expect("var.s should be numeric");
     assert!((var_s - 800.0).abs() < 1e-9, "var.s should be 800, got {var_s}");
+    let percentile = by_position(1, 144)
+      .evaluated_value
+      .as_deref()
+      .expect("percentile should evaluate")
+      .parse::<f64>()
+      .expect("percentile should be numeric");
+    assert!(
+      (percentile - 90.0).abs() < 1e-9,
+      "percentile should be 90.0, got {percentile}",
+    );
+    let quartile = by_position(1, 145)
+      .evaluated_value
+      .as_deref()
+      .expect("quartile should evaluate")
+      .parse::<f64>()
+      .expect("quartile should be numeric");
+    assert!(
+      (quartile - 110.0).abs() < 1e-9,
+      "quartile should be 110.0, got {quartile}",
+    );
   }
 
   #[test]
@@ -4136,6 +4234,48 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=LARGE(A1:A2,0)".to_string(), "=SMALL(A1:A2,3)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_percentile_quartile_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=PERCENTILE.INC(A1:A2,1.5)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=QUARTILE.INC(A1:A2,5)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=PERCENTILE.INC(A1:A2,1.5)".to_string(),
+        "=QUARTILE.INC(A1:A2,5)".to_string(),
+      ],
     );
   }
 
