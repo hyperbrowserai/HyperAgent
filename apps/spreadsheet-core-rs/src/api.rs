@@ -3540,6 +3540,13 @@ mod tests {
         source_import_result.sheets_imported >= 1,
         "fixture {fixture_file_name} source import should include at least one sheet",
       );
+      assert!(
+        source_import_result
+          .warnings
+          .iter()
+          .any(|warning| warning.contains("not imported")),
+        "fixture {fixture_file_name} source import should include baseline compatibility warning",
+      );
 
       let (exported_bytes, _export_response, _export_report_json) =
         build_export_artifacts(&state, source_workbook.id)
@@ -3560,6 +3567,10 @@ mod tests {
         )))
         .await
         .expect("replay workbook should be created");
+      let mut replay_events = state
+        .subscribe(replay_workbook.id)
+        .await
+        .expect("replay event subscription should work");
       let replay_import_result = import_bytes_into_workbook(
         &state,
         replay_workbook.id,
@@ -3589,6 +3600,51 @@ mod tests {
         replay_import_result.formula_cells_with_cached_values
           + replay_import_result.formula_cells_without_cached_values,
         "fixture {fixture_file_name} replay cached/non-cached counts should add up",
+      );
+      assert!(
+        replay_import_result
+          .warnings
+          .iter()
+          .any(|warning| warning.contains("not imported")),
+        "fixture {fixture_file_name} replay import should include baseline compatibility warning",
+      );
+      assert!(
+        replay_import_result.formula_cells_normalized
+          <= source_import_result.formula_cells_imported,
+        "fixture {fixture_file_name} replay normalized formula count should remain bounded by source imported formulas",
+      );
+      let replay_event = timeout(Duration::from_secs(1), replay_events.recv())
+        .await
+        .expect("replay import event should arrive")
+        .expect("replay event payload should decode");
+      assert_eq!(replay_event.event_type, "workbook.imported");
+      assert_eq!(
+        replay_event
+          .payload
+          .get("formula_cells_imported")
+          .and_then(serde_json::Value::as_u64),
+        Some(replay_import_result.formula_cells_imported as u64),
+      );
+      assert_eq!(
+        replay_event
+          .payload
+          .get("formula_cells_with_cached_values")
+          .and_then(serde_json::Value::as_u64),
+        Some(replay_import_result.formula_cells_with_cached_values as u64),
+      );
+      assert_eq!(
+        replay_event
+          .payload
+          .get("formula_cells_without_cached_values")
+          .and_then(serde_json::Value::as_u64),
+        Some(replay_import_result.formula_cells_without_cached_values as u64),
+      );
+      assert_eq!(
+        replay_event
+          .payload
+          .get("formula_cells_normalized")
+          .and_then(serde_json::Value::as_u64),
+        Some(replay_import_result.formula_cells_normalized as u64),
       );
     }
   }
