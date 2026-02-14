@@ -5096,6 +5096,97 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_reject_invalid_signature_format_for_preset_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("preset-signature-format".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let error = run_agent_preset(
+            State(state),
+            Path((workbook.id, "export_snapshot".to_string())),
+            Json(AgentPresetRunRequest {
+                request_id: None,
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some("invalid-signature".to_string()),
+            }),
+        )
+        .await
+        .expect_err("invalid signature format should fail");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "INVALID_SIGNATURE_FORMAT");
+            }
+            _ => panic!("expected invalid preset signature format error code"),
+        }
+    }
+
+    #[tokio::test]
+    async fn should_reject_invalid_signature_format_for_scenario_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("scenario-signature-format".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let error = run_agent_scenario(
+            State(state),
+            Path((workbook.id, "refresh_and_export".to_string())),
+            Json(AgentScenarioRunRequest {
+                request_id: None,
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some("invalid-signature".to_string()),
+            }),
+        )
+        .await
+        .expect_err("invalid signature format should fail");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "INVALID_SIGNATURE_FORMAT");
+            }
+            _ => panic!("expected invalid scenario signature format error code"),
+        }
+    }
+
+    #[tokio::test]
+    async fn should_reject_invalid_signature_format_for_wizard_json_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let error = run_agent_wizard_json(
+            State(state),
+            Json(AgentWizardRunJsonRequest {
+                scenario: "refresh_and_export".to_string(),
+                request_id: None,
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some("invalid-signature".to_string()),
+                workbook_name: Some("wizard-signature-format".to_string()),
+                file_name: None,
+                file_base64: None,
+            }),
+        )
+        .await
+        .expect_err("invalid signature format should fail");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "INVALID_SIGNATURE_FORMAT");
+            }
+            _ => panic!("expected invalid wizard signature format error code"),
+        }
+    }
+
+    #[tokio::test]
     async fn should_round_trip_cache_stats_and_clear_via_handlers() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
