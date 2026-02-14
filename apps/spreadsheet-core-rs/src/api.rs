@@ -3384,6 +3384,20 @@ mod tests {
           "fixture {fixture_file_name} should import before export coverage: {error:?}"
         )
       });
+      let (_expected_export_bytes, expected_export_response, expected_report_json) =
+        build_export_artifacts(&state, workbook.id)
+          .await
+          .unwrap_or_else(|error| {
+            panic!(
+              "fixture {fixture_file_name} should build export artifacts before handler execution: {error:?}"
+            )
+          });
+      let expected_report_json_value: serde_json::Value =
+        serde_json::from_str(expected_report_json.as_str()).unwrap_or_else(|error| {
+          panic!(
+            "fixture {fixture_file_name} expected export report json should parse: {error}"
+          )
+        });
 
       let mut events = state
         .subscribe(workbook.id)
@@ -3434,6 +3448,11 @@ mod tests {
           )
         })
         .to_string();
+      assert_eq!(
+        exported_file_name,
+        expected_export_response.file_name,
+        "fixture {fixture_file_name} export filename should match helper response",
+      );
       let export_meta = export_response
         .headers()
         .get("x-export-meta")
@@ -3447,6 +3466,11 @@ mod tests {
             "fixture {fixture_file_name} x-export-meta should decode as json: {error}"
           )
         });
+      assert_eq!(
+        export_meta_json,
+        expected_report_json_value,
+        "fixture {fixture_file_name} x-export-meta should match helper report json",
+      );
       assert!(
         export_meta_json
           .get("preserved")
