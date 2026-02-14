@@ -8017,6 +8017,20 @@ mod tests {
             Some("boolean; true when response reused by request_id idempotency cache"),
         );
         assert_eq!(
+            schema
+                .get("agent_ops_response_shape")
+                .and_then(|value| value.get("operations_signature"))
+                .and_then(serde_json::Value::as_str),
+            Some("sha256 signature over submitted operations"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_response_shape")
+                .and_then(|value| value.get("results"))
+                .and_then(serde_json::Value::as_str),
+            Some("array of operation results"),
+        );
+        assert_eq!(
       schema
         .get("agent_ops_cache_stats_endpoint")
         .and_then(serde_json::Value::as_str),
