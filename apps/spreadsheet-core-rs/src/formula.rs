@@ -665,6 +665,38 @@ pub fn parse_syd_formula(formula: &str) -> Option<(String, String, String, Strin
   ))
 }
 
+pub fn parse_db_formula(
+  formula: &str,
+) -> Option<(String, String, String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "DB" || !(args.len() == 4 || args.len() == 5) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+    args.get(4).cloned(),
+  ))
+}
+
+pub fn parse_ddb_formula(
+  formula: &str,
+) -> Option<(String, String, String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "DDB" || !(args.len() == 4 || args.len() == 5) {
+    return None;
+  }
+  Some((
+    args[0].clone(),
+    args[1].clone(),
+    args[2].clone(),
+    args[3].clone(),
+    args.get(4).cloned(),
+  ))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2154,6 +2186,7 @@ mod tests {
     parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
     parse_ipmt_formula, parse_ppmt_formula,
     parse_sln_formula, parse_syd_formula,
+    parse_db_formula, parse_ddb_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2494,6 +2527,18 @@ mod tests {
     assert_eq!(syd_args.1, "B1");
     assert_eq!(syd_args.2, "C1");
     assert_eq!(syd_args.3, "D1");
+    let db_args = parse_db_formula("=DB(A1,B1,C1,D1,6)").expect("db should parse");
+    assert_eq!(db_args.0, "A1");
+    assert_eq!(db_args.1, "B1");
+    assert_eq!(db_args.2, "C1");
+    assert_eq!(db_args.3, "D1");
+    assert_eq!(db_args.4.as_deref(), Some("6"));
+    let ddb_args = parse_ddb_formula("=DDB(A1,B1,C1,D1)").expect("ddb should parse");
+    assert_eq!(ddb_args.0, "A1");
+    assert_eq!(ddb_args.1, "B1");
+    assert_eq!(ddb_args.2, "C1");
+    assert_eq!(ddb_args.3, "D1");
+    assert_eq!(ddb_args.4, None);
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),

@@ -163,6 +163,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "PPMT",
   "SLN",
   "SYD",
+  "DB",
+  "DDB",
   "SIN",
   "COS",
   "TAN",

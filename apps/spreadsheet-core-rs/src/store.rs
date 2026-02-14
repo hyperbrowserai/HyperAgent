@@ -34,6 +34,7 @@ use crate::{
     parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
     parse_ipmt_formula, parse_ppmt_formula,
     parse_sln_formula, parse_syd_formula,
+    parse_db_formula, parse_ddb_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1910,6 +1911,40 @@ fn evaluate_formula(
       return Ok(None);
     }
     let depreciation = ((cost - salvage) * (life - period + 1.0) * 2.0) / (life * (life + 1.0));
+    return Ok(Some(depreciation.to_string()));
+  }
+
+  if let Some((cost_arg, salvage_arg, life_arg, period_arg, month_arg)) = parse_db_formula(formula)
+  {
+    let cost = parse_required_float(connection, sheet, &cost_arg)?;
+    let salvage = parse_required_float(connection, sheet, &salvage_arg)?;
+    let life = parse_required_float(connection, sheet, &life_arg)?;
+    let period = parse_required_integer(connection, sheet, &period_arg)?;
+    let month = match month_arg {
+      Some(raw_month) => parse_required_integer(connection, sheet, &raw_month)?,
+      None => 12,
+    };
+    let depreciation = match calculate_db_depreciation(cost, salvage, life, period, month) {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    return Ok(Some(depreciation.to_string()));
+  }
+
+  if let Some((cost_arg, salvage_arg, life_arg, period_arg, factor_arg)) = parse_ddb_formula(formula)
+  {
+    let cost = parse_required_float(connection, sheet, &cost_arg)?;
+    let salvage = parse_required_float(connection, sheet, &salvage_arg)?;
+    let life = parse_required_float(connection, sheet, &life_arg)?;
+    let period = parse_required_integer(connection, sheet, &period_arg)?;
+    let factor = match factor_arg {
+      Some(raw_factor) => parse_required_float(connection, sheet, &raw_factor)?,
+      None => 2.0,
+    };
+    let depreciation = match calculate_ddb_depreciation(cost, salvage, life, period, factor) {
+      Some(value) => value,
+      None => return Ok(None),
+    };
     return Ok(Some(depreciation.to_string()));
   }
 
@@ -4271,6 +4306,70 @@ fn calculate_ipmt_ppmt(
   }
 
   None
+}
+
+fn calculate_db_depreciation(
+  cost: f64,
+  salvage: f64,
+  life: f64,
+  period: i32,
+  month: i32,
+) -> Option<f64> {
+  if cost <= 0.0 || life <= 0.0 || period < 1 || month < 1 || month > 12 {
+    return None;
+  }
+  let max_period = life.ceil() as i32 + 1;
+  if period > max_period {
+    return None;
+  }
+  let salvage_ratio = if salvage <= 0.0 {
+    0.0
+  } else if salvage >= cost {
+    1.0
+  } else {
+    salvage / cost
+  };
+  let mut rate = 1.0 - salvage_ratio.powf(1.0 / life);
+  rate = (rate * 1_000.0).round() / 1_000.0;
+  let mut remaining = cost;
+  let mut depreciation = cost * rate * (f64::from(month) / 12.0);
+  remaining -= depreciation;
+  if period == 1 {
+    return Some(depreciation.max(0.0));
+  }
+  for current_period in 2..=period {
+    depreciation = if current_period == max_period {
+      remaining * rate * (f64::from(12 - month) / 12.0)
+    } else {
+      remaining * rate
+    };
+    remaining -= depreciation;
+  }
+  Some(depreciation.max(0.0))
+}
+
+fn calculate_ddb_depreciation(
+  cost: f64,
+  salvage: f64,
+  life: f64,
+  period: i32,
+  factor: f64,
+) -> Option<f64> {
+  if cost <= 0.0 || life <= 0.0 || period < 1 || factor <= 0.0 {
+    return None;
+  }
+  if period > life.ceil() as i32 {
+    return None;
+  }
+  let mut remaining = cost;
+  let mut depreciation = 0.0;
+  for _ in 1..=period {
+    let declining = remaining * factor / life;
+    let salvage_floor = (remaining - salvage).max(0.0);
+    depreciation = declining.min(salvage_floor).max(0.0);
+    remaining -= depreciation;
+  }
+  Some(depreciation)
 }
 
 fn calculate_irr(cash_flows: &[f64], guess: f64) -> Option<f64> {
@@ -7145,12 +7244,24 @@ mod tests {
         value: None,
         formula: Some("=SYD(1000,100,9,1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 262,
+        value: None,
+        formula: Some("=DB(1000,0,1,1,6)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 263,
+        value: None,
+        formula: Some("=DDB(1000,100,5,1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 259);
+    assert_eq!(updated_cells, 261);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7164,7 +7275,7 @@ mod tests {
         start_row: 1,
         end_row: 20,
         start_col: 1,
-        end_col: 261,
+        end_col: 263,
       },
     )
     .expect("cells should be fetched");
@@ -8247,6 +8358,16 @@ mod tests {
       Some("180"),
       "syd should compute sum-of-years depreciation",
     );
+    assert_eq!(
+      by_position(1, 262).evaluated_value.as_deref(),
+      Some("500"),
+      "db should honor first period partial month depreciation",
+    );
+    assert_eq!(
+      by_position(1, 263).evaluated_value.as_deref(),
+      Some("400"),
+      "ddb should compute declining balance depreciation",
+    );
   }
 
   #[test]
@@ -8626,6 +8747,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=SLN(1000,100,0)".to_string(), "=SYD(1000,100,9,10)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_db_ddb_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=DB(1000,100,5,1,0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=DDB(1000,100,5,1,0)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=DB(1000,100,5,1,0)".to_string(), "=DDB(1000,100,5,1,0)".to_string()],
     );
   }
 
