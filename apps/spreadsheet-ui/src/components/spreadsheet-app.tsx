@@ -48,6 +48,7 @@ import { buildAddress, indexToColumn, TOTAL_COLS, TOTAL_ROWS } from "@/lib/cell-
 import { useWorkbookStore } from "@/store/workbook-store";
 import {
   AgentOpsCacheEntryDetailResponse,
+  AgentWizardImportResult,
   ExportCompatibilityReport,
   AgentOperationPreview,
   AgentOperationResult,
@@ -65,6 +66,16 @@ const CACHE_ENTRIES_PREVIEW_LIMIT = 6;
 const CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT = "12";
 const CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT: "count" | "recent" | "alpha" | "span" =
   "count";
+
+interface LatestImportSummary {
+  sheetsImported: number;
+  cellsImported: number;
+  formulaCellsImported: number;
+  formulaCellsWithCachedValues: number;
+  formulaCellsWithoutCachedValues: number;
+  formulaCellsNormalized: number;
+  warnings: string[];
+}
 
 function parsePositiveIntegerInput(value: string): number | undefined {
   const normalized = value.trim();
@@ -158,14 +169,22 @@ function parseCompatibilityReport(
   };
 }
 
-function parseImportSummaryFromEvent(event: WorkbookEvent): {
-  sheetsImported: number;
-  cellsImported: number;
-  formulaCellsImported: number;
-  formulaCellsWithCachedValues: number;
-  formulaCellsWithoutCachedValues: number;
-  warnings: string[];
-} | null {
+function toLatestImportSummary(
+  importSummary: AgentWizardImportResult,
+): LatestImportSummary {
+  return {
+    sheetsImported: importSummary.sheets_imported,
+    cellsImported: importSummary.cells_imported,
+    formulaCellsImported: importSummary.formula_cells_imported,
+    formulaCellsWithCachedValues: importSummary.formula_cells_with_cached_values,
+    formulaCellsWithoutCachedValues:
+      importSummary.formula_cells_without_cached_values,
+    formulaCellsNormalized: importSummary.formula_cells_normalized,
+    warnings: importSummary.warnings,
+  };
+}
+
+function parseImportSummaryFromEvent(event: WorkbookEvent): LatestImportSummary | null {
   if (event.event_type !== "workbook.imported") {
     return null;
   }
@@ -176,12 +195,14 @@ function parseImportSummaryFromEvent(event: WorkbookEvent): {
     event.payload.formula_cells_with_cached_values;
   const formulaCellsWithoutCachedValues =
     event.payload.formula_cells_without_cached_values;
+  const formulaCellsNormalized = event.payload.formula_cells_normalized;
   if (
     typeof sheetsImported !== "number"
     || typeof cellsImported !== "number"
     || typeof formulaCellsImported !== "number"
     || typeof formulaCellsWithCachedValues !== "number"
     || typeof formulaCellsWithoutCachedValues !== "number"
+    || typeof formulaCellsNormalized !== "number"
   ) {
     return null;
   }
@@ -191,6 +212,7 @@ function parseImportSummaryFromEvent(event: WorkbookEvent): {
     formulaCellsImported,
     formulaCellsWithCachedValues,
     formulaCellsWithoutCachedValues,
+    formulaCellsNormalized,
     warnings: parseStringArray(event.payload.warnings),
   };
 }
@@ -334,14 +356,9 @@ export function SpreadsheetApp() {
     AgentOpsCacheEntryDetailResponse | null
   >(null);
   const [lastAgentOps, setLastAgentOps] = useState<AgentOperationResult[]>([]);
-  const [lastWizardImportSummary, setLastWizardImportSummary] = useState<{
-    sheetsImported: number;
-    cellsImported: number;
-    formulaCellsImported: number;
-    formulaCellsWithCachedValues: number;
-    formulaCellsWithoutCachedValues: number;
-    warnings: string[];
-  } | null>(null);
+  const [lastWizardImportSummary, setLastWizardImportSummary] = useState<
+    LatestImportSummary | null
+  >(null);
   const [lastExportSummary, setLastExportSummary] = useState<{
     fileName: string;
     exportedAt: string;
@@ -424,13 +441,14 @@ export function SpreadsheetApp() {
     mutationFn: (file: File) => importWorkbook(file),
     onSuccess: (response) => {
       const importedWorkbook = response.workbook;
+      const importSummary = toLatestImportSummary(response.import);
       clearUiError();
       setWorkbook(importedWorkbook);
-      const formulaSummary = response.import.formula_cells_imported > 0
-        ? `, ${response.import.formula_cells_imported} formulas (${response.import.formula_cells_with_cached_values} cached, ${response.import.formula_cells_without_cached_values} uncached)`
+      const formulaSummary = importSummary.formulaCellsImported > 0
+        ? `, ${importSummary.formulaCellsImported} formulas (${importSummary.formulaCellsWithCachedValues} cached, ${importSummary.formulaCellsWithoutCachedValues} uncached${importSummary.formulaCellsNormalized > 0 ? `, ${importSummary.formulaCellsNormalized} normalized` : ""})`
         : "";
       setNotice(
-        `Imported workbook ${importedWorkbook.name} (${response.import.sheets_imported} sheets, ${response.import.cells_imported} cells${formulaSummary}).`,
+        `Imported workbook ${importedWorkbook.name} (${importSummary.sheetsImported} sheets, ${importSummary.cellsImported} cells${formulaSummary}).`,
       );
       setLastAgentRequestId(null);
       setLastPreset(null);
@@ -439,16 +457,7 @@ export function SpreadsheetApp() {
       setLastServedFromCache(null);
       setLastExecutedOperations([]);
       setLastAgentOps([]);
-      setLastWizardImportSummary({
-        sheetsImported: response.import.sheets_imported,
-        cellsImported: response.import.cells_imported,
-        formulaCellsImported: response.import.formula_cells_imported,
-        formulaCellsWithCachedValues:
-          response.import.formula_cells_with_cached_values,
-        formulaCellsWithoutCachedValues:
-          response.import.formula_cells_without_cached_values,
-        warnings: response.import.warnings,
-      });
+      setLastWizardImportSummary(importSummary);
       queryClient.invalidateQueries({ queryKey: ["cells", importedWorkbook.id] });
     },
     onError: (error) => {
@@ -2297,18 +2306,7 @@ export function SpreadsheetApp() {
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
       setLastWizardImportSummary(
-        response.import
-          ? {
-              sheetsImported: response.import.sheets_imported,
-              cellsImported: response.import.cells_imported,
-              formulaCellsImported: response.import.formula_cells_imported,
-              formulaCellsWithCachedValues:
-                response.import.formula_cells_with_cached_values,
-              formulaCellsWithoutCachedValues:
-                response.import.formula_cells_without_cached_values,
-              warnings: response.import.warnings,
-            }
-          : null,
+        response.import ? toLatestImportSummary(response.import) : null,
       );
 
       await Promise.all([
@@ -4296,7 +4294,11 @@ export function SpreadsheetApp() {
                     <>
                       {" "}
                       ({lastWizardImportSummary.formulaCellsWithCachedValues} cached,{" "}
-                      {lastWizardImportSummary.formulaCellsWithoutCachedValues} uncached)
+                      {lastWizardImportSummary.formulaCellsWithoutCachedValues} uncached
+                      {lastWizardImportSummary.formulaCellsNormalized > 0
+                        ? `, ${lastWizardImportSummary.formulaCellsNormalized} normalized`
+                        : ""}
+                      )
                     </>
                   ) : null}
                 </span>

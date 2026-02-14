@@ -254,6 +254,7 @@ export interface AgentWizardImportResult {
   formula_cells_imported: number;
   formula_cells_with_cached_values: number;
   formula_cells_without_cached_values: number;
+  formula_cells_normalized: number;
   warnings: string[];
 }
 
