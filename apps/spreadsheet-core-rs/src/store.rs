@@ -38,7 +38,8 @@ use crate::{
     parse_atan_formula, parse_atan2_formula,
     parse_degrees_formula, parse_radians_formula,
     parse_choose_formula, parse_left_formula,
-    parse_ceiling_formula, parse_exact_formula, parse_floor_formula,
+    parse_ceiling_formula, parse_ceiling_math_formula, parse_exact_formula,
+    parse_floor_formula, parse_floor_math_formula,
     parse_index_formula,
     parse_int_formula, parse_isblank_formula, parse_iseven_formula,
     parse_isnumber_formula, parse_isodd_formula,
@@ -1954,33 +1955,48 @@ fn evaluate_formula(
     return Ok(Some(rounded.to_string()));
   }
 
+  if let Some((value_arg, significance_arg, mode_arg)) =
+    parse_ceiling_math_formula(formula)
+  {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let significance = match significance_arg {
+      Some(raw_significance) => parse_required_float(connection, sheet, &raw_significance)?,
+      None => 1.0,
+    };
+    let mode = match mode_arg {
+      Some(raw_mode) => parse_required_integer(connection, sheet, &raw_mode)?,
+      None => 0,
+    };
+    let rounded = ceiling_math(value, significance, mode);
+    return Ok(Some(rounded.to_string()));
+  }
+
   if let Some((value_arg, significance_arg)) = parse_ceiling_formula(formula) {
     let value = parse_required_float(connection, sheet, &value_arg)?;
     let significance = parse_required_float(connection, sheet, &significance_arg)?;
-    if significance == 0.0 {
-      return Ok(Some("0".to_string()));
-    }
-    let quotient = value / significance;
-    let rounded = if quotient.is_sign_negative() {
-      quotient.floor()
-    } else {
-      quotient.ceil()
-    } * significance;
+    let rounded = ceiling_math(value, significance, 0);
+    return Ok(Some(rounded.to_string()));
+  }
+
+  if let Some((value_arg, significance_arg, mode_arg)) = parse_floor_math_formula(formula)
+  {
+    let value = parse_required_float(connection, sheet, &value_arg)?;
+    let significance = match significance_arg {
+      Some(raw_significance) => parse_required_float(connection, sheet, &raw_significance)?,
+      None => 1.0,
+    };
+    let mode = match mode_arg {
+      Some(raw_mode) => parse_required_integer(connection, sheet, &raw_mode)?,
+      None => 0,
+    };
+    let rounded = floor_math(value, significance, mode);
     return Ok(Some(rounded.to_string()));
   }
 
   if let Some((value_arg, significance_arg)) = parse_floor_formula(formula) {
     let value = parse_required_float(connection, sheet, &value_arg)?;
     let significance = parse_required_float(connection, sheet, &significance_arg)?;
-    if significance == 0.0 {
-      return Ok(Some("0".to_string()));
-    }
-    let quotient = value / significance;
-    let rounded = if quotient.is_sign_negative() {
-      quotient.ceil()
-    } else {
-      quotient.floor()
-    } * significance;
+    let rounded = floor_math(value, significance, 1);
     return Ok(Some(rounded.to_string()));
   }
 
@@ -3452,6 +3468,34 @@ fn roman_char_value(value: char) -> Option<u32> {
     'M' => Some(1000),
     _ => None,
   }
+}
+
+fn ceiling_math(value: f64, significance: f64, mode: i32) -> f64 {
+  let significance_abs = significance.abs();
+  if significance_abs < f64::EPSILON {
+    return 0.0;
+  }
+  let quotient = value / significance_abs;
+  let rounded_multiplier = if value.is_sign_negative() && mode != 0 {
+    quotient.floor()
+  } else {
+    quotient.ceil()
+  };
+  rounded_multiplier * significance_abs
+}
+
+fn floor_math(value: f64, significance: f64, mode: i32) -> f64 {
+  let significance_abs = significance.abs();
+  if significance_abs < f64::EPSILON {
+    return 0.0;
+  }
+  let quotient = value / significance_abs;
+  let rounded_multiplier = if value.is_sign_negative() && mode != 0 {
+    quotient.ceil()
+  } else {
+    quotient.floor()
+  };
+  rounded_multiplier * significance_abs
 }
 
 fn lcm_u64(left: u64, right: u64) -> Result<u64, ApiError> {
@@ -5316,12 +5360,36 @@ mod tests {
         value: None,
         formula: Some("=ARABIC(\"MCMXCIX\")".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 209,
+        value: None,
+        formula: Some("=CEILING.MATH(-12.31,0.25,1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 210,
+        value: None,
+        formula: Some("=FLOOR.MATH(-12.31,0.25)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 211,
+        value: None,
+        formula: Some("=CEILING.MATH(12.31)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 212,
+        value: None,
+        formula: Some("=FLOOR.MATH(12.31)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 206);
+    assert_eq!(updated_cells, 210);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5335,7 +5403,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 208,
+        end_col: 212,
       },
     )
     .expect("cells should be fetched");
@@ -6087,6 +6155,26 @@ mod tests {
       by_position(1, 208).evaluated_value.as_deref(),
       Some("1999"),
       "arabic should evaluate to integer text",
+    );
+    assert_eq!(
+      by_position(1, 209).evaluated_value.as_deref(),
+      Some("-12.5"),
+      "ceiling.math with mode 1 should round away from zero",
+    );
+    assert_eq!(
+      by_position(1, 210).evaluated_value.as_deref(),
+      Some("-12.5"),
+      "floor.math should round away from zero for negative numbers by default",
+    );
+    assert_eq!(
+      by_position(1, 211).evaluated_value.as_deref(),
+      Some("13"),
+      "ceiling.math should default significance to one",
+    );
+    assert_eq!(
+      by_position(1, 212).evaluated_value.as_deref(),
+      Some("12"),
+      "floor.math should default significance to one",
     );
   }
 

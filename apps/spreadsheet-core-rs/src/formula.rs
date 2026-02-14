@@ -724,12 +724,32 @@ pub fn parse_ceiling_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_ceiling_math_formula(
+  formula: &str,
+) -> Option<(String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "CEILING.MATH" || args.is_empty() || args.len() > 3 {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned(), args.get(2).cloned()))
+}
+
 pub fn parse_floor_formula(formula: &str) -> Option<(String, String)> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FLOOR" && args.len() == 2 {
     return Some((args[0].clone(), args[1].clone()));
   }
   None
+}
+
+pub fn parse_floor_math_formula(
+  formula: &str,
+) -> Option<(String, Option<String>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "FLOOR.MATH" || args.is_empty() || args.len() > 3 {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned(), args.get(2).cloned()))
 }
 
 pub fn parse_sqrt_formula(formula: &str) -> Option<String> {
@@ -1719,7 +1739,8 @@ mod tests {
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
     parse_abs_formula, parse_concat_formula, parse_date_formula, parse_day_formula,
-    parse_ceiling_formula, parse_floor_formula,
+    parse_ceiling_formula, parse_ceiling_math_formula, parse_floor_formula,
+    parse_floor_math_formula,
     parse_exact_formula,
     parse_hour_formula, parse_minute_formula, parse_second_formula,
     parse_index_formula, parse_int_formula, parse_isblank_formula,
@@ -2018,10 +2039,20 @@ mod tests {
       parse_ceiling_formula("=CEILING(12.31, 0.25)").expect("ceiling should parse");
     assert_eq!(ceiling.0, "12.31");
     assert_eq!(ceiling.1, "0.25");
+    let ceiling_math = parse_ceiling_math_formula("=CEILING.MATH(-12.31,0.25,1)")
+      .expect("ceiling math should parse");
+    assert_eq!(ceiling_math.0, "-12.31");
+    assert_eq!(ceiling_math.1.as_deref(), Some("0.25"));
+    assert_eq!(ceiling_math.2.as_deref(), Some("1"));
     let floor = parse_floor_formula("=FLOOR(-12.31, 0.25)")
       .expect("floor should parse");
     assert_eq!(floor.0, "-12.31");
     assert_eq!(floor.1, "0.25");
+    let floor_math =
+      parse_floor_math_formula("=FLOOR.MATH(12.31)").expect("floor math should parse");
+    assert_eq!(floor_math.0, "12.31");
+    assert_eq!(floor_math.1, None);
+    assert_eq!(floor_math.2, None);
     assert_eq!(
       parse_sqrt_formula("=SQRT(81)").as_deref(),
       Some("81"),
