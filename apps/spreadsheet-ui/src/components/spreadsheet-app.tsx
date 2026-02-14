@@ -880,6 +880,14 @@ export function SpreadsheetApp() {
       ),
     [agentSchemaQuery.data?.workbook_export_response_headers_shape],
   );
+  const agentDuckdbQueryRequestFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.duckdb_query_request_shape),
+    [agentSchemaQuery.data?.duckdb_query_request_shape],
+  );
+  const agentDuckdbQueryResponseFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.duckdb_query_response_shape),
+    [agentSchemaQuery.data?.duckdb_query_response_shape],
+  );
   const agentFormulaCapabilityFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.formula_capabilities),
     [agentSchemaQuery.data?.formula_capabilities],
@@ -3235,6 +3243,38 @@ export function SpreadsheetApp() {
                 workbook export endpoint:{" "}
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.workbook_export_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.duckdb_query_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                duckdb query endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.duckdb_query_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {agentDuckdbQueryRequestFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                duckdb query request fields:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentDuckdbQueryRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentDuckdbQueryResponseFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                duckdb query response fields:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentDuckdbQueryResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.duckdb_query_validation_error_codes?.length ? (
+              <p className="mb-2 text-xs text-slate-400">
+                duckdb query validation codes:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.duckdb_query_validation_error_codes.join(", ")}
                 </span>
               </p>
             ) : null}
