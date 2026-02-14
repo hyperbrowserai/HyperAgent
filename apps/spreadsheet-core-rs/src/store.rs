@@ -39,7 +39,7 @@ use crate::{
     parse_asin_formula, parse_acos_formula,
     parse_atan_formula, parse_atan2_formula,
     parse_degrees_formula, parse_radians_formula,
-    parse_choose_formula, parse_left_formula,
+    parse_choose_formula, parse_switch_formula, parse_left_formula,
     parse_ceiling_formula, parse_ceiling_math_formula, parse_exact_formula,
     parse_floor_formula, parse_floor_math_formula,
     parse_index_formula,
@@ -1275,6 +1275,20 @@ fn evaluate_formula(
       return Ok(Some(value));
     }
     return Ok(Some(String::new()));
+  }
+
+  if let Some((expression_operand, cases, default_value)) = parse_switch_formula(formula) {
+    let expression_value = resolve_scalar_operand(connection, sheet, &expression_operand)?;
+    for (candidate_operand, result_operand) in cases {
+      let candidate_value = resolve_scalar_operand(connection, sheet, &candidate_operand)?;
+      if expression_value == candidate_value {
+        return resolve_scalar_operand(connection, sheet, &result_operand).map(Some);
+      }
+    }
+    if let Some(default_operand) = default_value {
+      return resolve_scalar_operand(connection, sheet, &default_operand).map(Some);
+    }
+    return Ok(None);
   }
 
   if let Some(concat_args) = parse_concat_formula(formula) {
@@ -5492,12 +5506,18 @@ mod tests {
         value: None,
         formula: Some(r#"=IFS(A1>=100,"bonus",A1>=80,"standard",TRUE,"low")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 217,
+        value: None,
+        formula: Some(r#"=SWITCH(E1,"north","N","south","S","other")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 214);
+    assert_eq!(updated_cells, 215);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5511,7 +5531,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 216,
+        end_col: 217,
       },
     )
     .expect("cells should be fetched");
@@ -6303,6 +6323,11 @@ mod tests {
       by_position(1, 216).evaluated_value.as_deref(),
       Some("bonus"),
       "ifs should return the first matching branch value",
+    );
+    assert_eq!(
+      by_position(1, 217).evaluated_value.as_deref(),
+      Some("N"),
+      "switch should return matching branch result",
     );
   }
 
@@ -7795,6 +7820,25 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=IFS(FALSE,"no",0>1,"still-no")"#.to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_switch_without_default_and_match_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=SWITCH("west","north","N","south","S")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=SWITCH("west","north","N","south","S")"#.to_string()],
     );
   }
 

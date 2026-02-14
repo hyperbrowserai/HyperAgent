@@ -163,6 +163,33 @@ pub fn parse_choose_formula(formula: &str) -> Option<(String, Vec<String>)> {
   Some((args[0].clone(), args[1..].to_vec()))
 }
 
+pub fn parse_switch_formula(
+  formula: &str,
+) -> Option<(String, Vec<(String, String)>, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SWITCH" || args.len() < 3 {
+    return None;
+  }
+  let expression = args[0].clone();
+  let pairs_and_default = &args[1..];
+  let has_default = pairs_and_default.len() % 2 == 1;
+  let pair_args_len = if has_default {
+    pairs_and_default.len().saturating_sub(1)
+  } else {
+    pairs_and_default.len()
+  };
+  let pairs = pairs_and_default[..pair_args_len]
+    .chunks(2)
+    .map(|chunk| (chunk[0].clone(), chunk[1].clone()))
+    .collect::<Vec<(String, String)>>();
+  let default_value = if has_default {
+    pairs_and_default.last().cloned()
+  } else {
+    None
+  };
+  Some((expression, pairs, default_value))
+}
+
 pub fn parse_concat_formula(formula: &str) -> Option<Vec<String>> {
   let (function, args) = parse_function_arguments(formula)?;
   if (function != "CONCAT" && function != "CONCATENATE") || args.is_empty() {
@@ -1835,6 +1862,7 @@ mod tests {
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_ifs_formula, parse_iferror_formula, parse_choose_formula,
+    parse_switch_formula,
     parse_today_formula, parse_now_formula, parse_rand_formula,
     parse_randbetween_formula, parse_true_formula,
     parse_false_formula, parse_pi_formula, parse_vlookup_formula,
@@ -1918,6 +1946,19 @@ mod tests {
       .expect("choose should parse");
     assert_eq!(choose.0, "2");
     assert_eq!(choose.1, vec![r#""alpha""#, r#""beta""#, r#""gamma""#]);
+    let switch = parse_switch_formula(
+      r#"=SWITCH(B2,"north","N","south","S","fallback")"#,
+    )
+    .expect("switch should parse");
+    assert_eq!(switch.0, "B2");
+    assert_eq!(
+      switch.1,
+      vec![
+        (r#""north""#.to_string(), r#""N""#.to_string()),
+        (r#""south""#.to_string(), r#""S""#.to_string()),
+      ],
+    );
+    assert_eq!(switch.2.as_deref(), Some(r#""fallback""#));
   }
 
   #[test]
