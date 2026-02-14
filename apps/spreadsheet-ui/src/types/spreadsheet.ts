@@ -220,6 +220,7 @@ export interface AgentSchemaInfo {
   duckdb_query_validation_error_codes?: string[];
   agent_ops_response_shape?: Record<string, string>;
   agent_ops_result_error_shape?: Record<string, string>;
+  agent_ops_endpoint?: string;
   workbook_import_event_shape?: Record<string, unknown>;
   workbook_export_event_shape?: Record<string, unknown>;
   workbook_event_shapes?: Record<string, unknown>;
@@ -346,6 +347,7 @@ export interface AgentWizardSchemaInfo {
   request_multipart_fields?: string[];
   request_json_fields?: Record<string, string>;
   operations_preview_response_shape?: Record<string, string>;
+  agent_ops_endpoint?: string;
   agent_ops_preview_endpoint?: string;
   agent_ops_preview_request_shape?: Record<string, string>;
   agent_ops_preview_response_shape?: Record<string, string>;
