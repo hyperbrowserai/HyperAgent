@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   resetDebugSession,
+  writePerformDebug,
   writeAiActionDebug,
   type DebugData,
 } from "@/utils/debugWriter";
@@ -10,6 +11,33 @@ import {
 describe("writeAiActionDebug", () => {
   beforeEach(() => {
     resetDebugSession();
+  });
+
+  it("writes debug artifacts via canonical writePerformDebug API", async () => {
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "hyperagent-debug-writer-")
+    );
+    const debugData: DebugData = {
+      instruction: "click login",
+      url: "https://example.com",
+      timestamp: new Date().toISOString(),
+      domElementCount: 5,
+      domTree: "dom tree",
+      success: true,
+    };
+
+    try {
+      const debugDir = await writePerformDebug(debugData, tempDir);
+      const metadata = await fs.promises.readFile(
+        path.join(debugDir, "metadata.json"),
+        "utf-8"
+      );
+
+      expect(debugDir.endsWith("action-0")).toBe(true);
+      expect(metadata).toContain("click login");
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("serializes circular and bigint payloads without throwing", async () => {

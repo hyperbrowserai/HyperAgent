@@ -20,7 +20,7 @@ jest.mock("@/utils/waitForSettledDOM", () => ({
 }));
 
 jest.mock("@/utils/debugWriter", () => ({
-  writeAiActionDebug: jest.fn(),
+  writePerformDebug: jest.fn(),
 }));
 
 jest.mock("@/context-providers/a11y-dom/dom-cache", () => ({
@@ -51,10 +51,10 @@ const { waitForSettledDOM } = jest.requireMock(
   waitForSettledDOM: jest.Mock;
 };
 
-const { writeAiActionDebug } = jest.requireMock(
+const { writePerformDebug } = jest.requireMock(
   "@/utils/debugWriter"
 ) as {
-  writeAiActionDebug: jest.Mock;
+  writePerformDebug: jest.Mock;
 };
 
 function createMockLLM(): HyperAgentLLM {
@@ -113,7 +113,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       resolvedByTimeout: false,
       forcedDrops: 0,
     });
-    writeAiActionDebug.mockResolvedValue(undefined);
+    writePerformDebug.mockResolvedValue(undefined);
   });
 
   it("passes maxElementRetries and retryDelayMs to findElementWithInstruction", async () => {
@@ -192,7 +192,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
     } as unknown as Page;
     performAction.mockRejectedValue({ reason: "perform crashed" });
-    writeAiActionDebug.mockResolvedValue(undefined);
+    writePerformDebug.mockResolvedValue(undefined);
     const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
 
     try {
@@ -204,7 +204,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
         'Failed to execute action: {"reason":"perform crashed"}'
       );
 
-      expect(writeAiActionDebug).toHaveBeenCalledWith(
+      expect(writePerformDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({
@@ -229,7 +229,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
     } as unknown as Page;
     performAction.mockRejectedValue(new Error("x".repeat(2_000)));
-    writeAiActionDebug.mockResolvedValue(undefined);
+    writePerformDebug.mockResolvedValue(undefined);
     const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
 
     try {
@@ -239,7 +239,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
         })
       ).rejects.toThrow(/\[truncated/);
 
-      expect(writeAiActionDebug).toHaveBeenCalledWith(
+      expect(writePerformDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({
@@ -263,7 +263,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       url: () => "https://example.com",
       screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
     } as unknown as Page;
-    writeAiActionDebug.mockRejectedValue({ reason: "debug writer crashed" });
+    writePerformDebug.mockRejectedValue({ reason: "debug writer crashed" });
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
     const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
 
@@ -292,7 +292,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       url: () => "https://example.com",
       screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
     } as unknown as Page;
-    writeAiActionDebug.mockRejectedValue(new Error("x".repeat(2_000)));
+    writePerformDebug.mockRejectedValue(new Error("x".repeat(2_000)));
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
     const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
 
@@ -346,7 +346,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
         })
       ).rejects.toThrow("No elements found for instruction");
 
-      expect(writeAiActionDebug).toHaveBeenCalledWith(
+      expect(writePerformDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           url: "about:blank",
         }),
@@ -380,7 +380,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
         })
       ).rejects.toThrow("perform failed");
 
-      expect(writeAiActionDebug).toHaveBeenCalledWith(
+      expect(writePerformDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
         }),
@@ -426,7 +426,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
           maxElementRetries: 1,
         })
       ).rejects.toThrow("No elements found for instruction");
-      expect(writeAiActionDebug).toHaveBeenCalledWith(
+      expect(writePerformDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           url: "about:blank",
         }),
@@ -445,7 +445,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
       cdpActions: false,
     });
     performAction.mockRejectedValueOnce({ reason: "perform crashed" });
-    writeAiActionDebug.mockResolvedValue(undefined);
+    writePerformDebug.mockResolvedValue(undefined);
     const page = {
       url: () => "https://example.com",
       get screenshot(): unknown {
@@ -462,7 +462,7 @@ describe("HyperAgent.executeSingleAction retry options", () => {
         })
       ).rejects.toThrow('Failed to execute action: {"reason":"perform crashed"}');
 
-      expect(writeAiActionDebug).toHaveBeenCalledWith(
+      expect(writePerformDebug).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           screenshot: undefined,

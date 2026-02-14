@@ -347,12 +347,11 @@ function getSessionId(): string {
 }
 
 /**
- * Write debug data for a single-action call.
- * @deprecated Prefer canonical page.perform() naming at call sites.
+ * Write debug data for a canonical page.perform() single-action call.
  */
-export async function writeAiActionDebug(
+export async function writePerformDebug(
   debugData: DebugData,
-  baseDir: string = "debug/aiAction"
+  baseDir: string = "debug/perform"
 ): Promise<string> {
   const normalizedDebugData = normalizeDebugData(debugData);
   const session = getSessionId();
@@ -472,6 +471,17 @@ export async function writeAiActionDebug(
   }
 
   return debugDir;
+}
+
+/**
+ * @deprecated Use writePerformDebug() instead.
+ * Backward-compatible alias that keeps the legacy default base directory.
+ */
+export async function writeAiActionDebug(
+  debugData: DebugData,
+  baseDir: string = "debug/aiAction"
+): Promise<string> {
+  return writePerformDebug(debugData, baseDir);
 }
 
 /**

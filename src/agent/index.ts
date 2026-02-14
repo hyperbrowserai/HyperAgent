@@ -2552,7 +2552,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       return;
     }
 
-    const { writeAiActionDebug } = await import("../utils/debugWriter");
+    const { writePerformDebug } = await import("../utils/debugWriter");
 
     try {
       const screenshot = await this.captureDebugScreenshot(params.page);
@@ -2560,7 +2560,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
       if (params.success && params.element) {
         // Success case - write found element data
-        await writeAiActionDebug({
+        await writePerformDebug({
           instruction: params.instruction,
           url: safeUrl,
           timestamp: params.startTime,
@@ -2584,7 +2584,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           HyperAgent.AIACTION_CONFIG.MAX_DEBUG_ELEMENTS_TO_STORE
         );
 
-        await writeAiActionDebug({
+        await writePerformDebug({
           instruction: params.instruction,
           url: safeUrl,
           timestamp: params.startTime,
