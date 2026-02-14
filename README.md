@@ -527,6 +527,7 @@ const page = await agent.newPage();
 const replay = await page.runFromActionCache(cache, {
   maxXPathRetries: 3,  // Retry XPath resolution up to 3 times before LLM fallback
   debug: true,
+  filterAdTrackingFrames: false, // Optional: include ad/tracking iframes during replay resolution
 });
 
 console.log(replay);

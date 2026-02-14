@@ -99,6 +99,9 @@ export interface ActionCacheReplayResult {
 export interface RunFromActionCacheParams {
   maxXPathRetries?: number;
   debug?: boolean;
+  /**
+   * Override ad/tracking iframe filtering for this replay.
+   */
   filterAdTrackingFrames?: boolean;
 }
 
@@ -115,6 +118,9 @@ export interface TaskParams extends AgentExecutionHooks {
   enableVisualMode?: boolean;
   useDomCache?: boolean;
   enableDomStreaming?: boolean;
+  /**
+   * Override ad/tracking iframe filtering for this task run.
+   */
   filterAdTrackingFrames?: boolean;
 }
 
@@ -214,6 +220,9 @@ export interface PerformOptions {
   frameIndex?: number | null;
   performInstruction?: string | null;
   maxSteps?: number;
+  /**
+   * Override ad/tracking iframe filtering for this helper replay call.
+   */
   filterAdTrackingFrames?: boolean;
 }
 
