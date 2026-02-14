@@ -188,7 +188,9 @@ program
           console.log("\nShutting down HyperAgent");
           const shutdown = await closeAgentSafely(createdAgent);
           if (!shutdown.success) {
-            console.error(`Error during shutdown: ${shutdown.message}`);
+            console.error(
+              `Error during shutdown: ${formatCliError(shutdown.message)}`
+            );
             process.exit(1);
           }
           process.exit(0);
@@ -264,7 +266,9 @@ program
         } else {
           const shutdown = await closeAgentSafely(createdAgent);
           if (!shutdown.success) {
-            console.error(`Error during shutdown: ${shutdown.message}`);
+            console.error(
+              `Error during shutdown: ${formatCliError(shutdown.message)}`
+            );
             process.exit(1);
           }
           process.exit(0);

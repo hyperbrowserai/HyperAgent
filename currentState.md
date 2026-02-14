@@ -128,6 +128,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened element-locator debug logging payloads to avoid trap-prone second lookups and unbounded object dumps when frame resolution fails.
 - Aligned examine-dom action instruction prompt with the actual supported method set (removed guidance implying arbitrary Playwright methods are valid).
 - Replay cached-step execution now honors `cdpActions: false` by skipping CDP XPath resolution/runtime initialization and using Playwright-path action execution for that attempt.
+- Normalized CLI shutdown failure logging in `cli/index.ts` to use `formatCliError`, avoiding raw unsanitized shutdown diagnostics.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.
