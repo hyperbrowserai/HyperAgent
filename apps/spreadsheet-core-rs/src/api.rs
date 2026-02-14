@@ -3145,6 +3145,10 @@ mod tests {
       import_result.formula_cells_normalized <= import_result.formula_cells_imported,
       "normalized formula count should not exceed imported formula count",
     );
+    assert_eq!(
+      import_result.formula_cells_normalized, 0,
+      "baseline fixture formulas should not require compatibility normalization",
+    );
 
     let refreshed = state
       .get_workbook(workbook.id)
