@@ -316,6 +316,19 @@ The fixture generator is deterministic (fixed workbook document metadata) and co
 Use `cargo run --bin generate_xlsx_fixtures -- --output-dir /tmp/fixtures` to write fixture files to a custom directory.
 Use `cargo test xlsx::tests::should_keep_committed_file_fixture_corpus_in_sync_with_generator -- --nocapture` to verify committed fixture binaries match generated output.
 
+Fixture corpus inventory:
+
+| File | Scenario |
+| --- | --- |
+| `compat_baseline.xlsx` | Canonical workbook import/export baseline with formulas + mixed value types. |
+| `compat_formula_matrix.xlsx` | Supported formula matrix for engineering/financial/statistical function roundtrip checks. |
+| `compat_normalization_single.xlsx` | Single-formula normalization telemetry scenario (`_xlfn.` + implicit `@` + unary `+`). |
+| `compat_normalization.xlsx` | Comprehensive normalization scenario with quoted literal preservation. |
+| `compat_offset_range.xlsx` | Non-`A1` used-range coordinate preservation scenario. |
+| `compat_unsupported_formula.xlsx` | Unsupported modern formula preservation scenario (`LET` with `_xlpm` params). |
+| `compat_mixed_literal_prefix.xlsx` | Literal prefix text preservation while normalizing executable function tokens. |
+| `compat_prefix_operator.xlsx` | Prefix operator (`+@`) normalization on executable functions. |
+
 Performance baseline probe (manual, ignored by default):
 
 ```bash
