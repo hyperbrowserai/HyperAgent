@@ -1529,7 +1529,7 @@ async fn get_agent_schema(
         "request_id": "optional string (if repeated, returns cached response for idempotency)",
         "actor": "optional string",
         "stop_on_error": "optional boolean (default false)",
-        "expected_operations_signature": "optional string for payload integrity checks",
+        "expected_operations_signature": "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
         "operations (non-empty array)": [
           {
           "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
@@ -8003,6 +8003,15 @@ mod tests {
                 .and_then(serde_json::Value::as_str)
                 .is_some_and(|value| value.contains("duckdb_query")),
             "request-shape op_type list should include duckdb_query",
+        );
+        assert_eq!(
+            schema
+                .get("request_shape")
+                .and_then(|value| value.get("expected_operations_signature"))
+                .and_then(serde_json::Value::as_str),
+            Some(
+                "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
+            ),
         );
         assert_eq!(
             schema
