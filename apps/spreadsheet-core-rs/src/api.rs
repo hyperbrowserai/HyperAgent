@@ -3055,7 +3055,7 @@ mod tests {
         ensure_non_empty_operations, export_workbook, formula_supported_functions_summary,
         formula_unsupported_behaviors_summary, get_agent_schema, get_agent_wizard_schema,
         import_bytes_into_workbook, normalize_sheet_name, operations_signature,
-        parse_optional_bool, preview_remove_agent_ops_cache_entries_by_prefix,
+        openapi, parse_optional_bool, preview_remove_agent_ops_cache_entries_by_prefix,
         reexecute_agent_ops_cache_entry, remove_agent_ops_cache_entries_by_prefix,
         remove_agent_ops_cache_entry, remove_stale_agent_ops_cache_entries,
         replay_agent_ops_cache_entry, run_agent_preset, run_agent_scenario,
@@ -9423,6 +9423,60 @@ mod tests {
             agent_schema.get("formula_capabilities"),
             wizard_schema.get("formula_capabilities"),
             "wizard schema formula capabilities should stay in lockstep with agent schema",
+        );
+    }
+
+    #[tokio::test]
+    async fn should_expose_openapi_paths_for_agent_cache_and_duckdb_workflows() {
+        let spec = openapi().await.0;
+        let paths = spec
+            .get("paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi spec should include paths");
+        let expected_paths = [
+            "/v1/workbooks/{id}/agent/ops",
+            "/v1/workbooks/{id}/agent/ops/preview",
+            "/v1/workbooks/{id}/agent/ops/cache",
+            "/v1/workbooks/{id}/agent/ops/cache/entries",
+            "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
+            "/v1/workbooks/{id}/agent/ops/cache/prefixes",
+            "/v1/workbooks/{id}/agent/ops/cache/clear",
+            "/v1/workbooks/{id}/agent/ops/cache/replay",
+            "/v1/workbooks/{id}/agent/ops/cache/reexecute",
+            "/v1/workbooks/{id}/agent/ops/cache/remove",
+            "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix",
+            "/v1/workbooks/{id}/agent/ops/cache/remove-by-prefix/preview",
+            "/v1/workbooks/{id}/agent/ops/cache/remove-stale",
+            "/v1/workbooks/{id}/duckdb/query",
+        ];
+
+        for path in expected_paths {
+            assert!(
+                paths.contains_key(path),
+                "openapi spec should advertise path '{path}'",
+            );
+        }
+
+        let duckdb_summary = paths
+            .get("/v1/workbooks/{id}/duckdb/query")
+            .and_then(|value| value.get("post"))
+            .and_then(|value| value.get("summary"))
+            .and_then(serde_json::Value::as_str)
+            .expect("duckdb query path should expose post summary");
+        assert!(
+            duckdb_summary.contains("DuckDB"),
+            "duckdb query summary should mention DuckDB",
+        );
+
+        let stale_remove_summary = paths
+            .get("/v1/workbooks/{id}/agent/ops/cache/remove-stale")
+            .and_then(|value| value.get("post"))
+            .and_then(|value| value.get("summary"))
+            .and_then(serde_json::Value::as_str)
+            .expect("remove-stale path should expose post summary");
+        assert!(
+            stale_remove_summary.contains("stale cache entries"),
+            "remove-stale summary should mention stale cache entries",
         );
     }
 }
