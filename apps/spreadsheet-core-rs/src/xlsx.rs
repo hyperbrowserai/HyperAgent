@@ -510,7 +510,7 @@ mod tests {
   use std::{collections::HashMap, fs, path::PathBuf};
   use tempfile::tempdir;
 
-  fn fixture_corpus_file_names() -> &'static [&'static str; 13] {
+  fn fixture_corpus_file_names() -> &'static [&'static str] {
     shared_fixture_corpus_file_names()
   }
 

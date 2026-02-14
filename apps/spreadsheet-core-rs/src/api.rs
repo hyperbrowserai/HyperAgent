@@ -2928,8 +2928,8 @@ mod tests {
     workbook_fixture_bytes(COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME)
   }
 
-  fn workbook_import_fixture_file_names() -> [&'static str; 13] {
-    *shared_fixture_corpus_file_names()
+  fn workbook_import_fixture_file_names() -> &'static [&'static str] {
+    shared_fixture_corpus_file_names()
   }
 
   #[test]

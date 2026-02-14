@@ -44,7 +44,7 @@ pub const FIXTURE_CORPUS_FILE_NAMES: [&str; 13] = [
   COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
 ];
 
-pub fn fixture_corpus_file_names() -> &'static [&'static str; 13] {
+pub fn fixture_corpus_file_names() -> &'static [&'static str] {
   &FIXTURE_CORPUS_FILE_NAMES
 }
 
