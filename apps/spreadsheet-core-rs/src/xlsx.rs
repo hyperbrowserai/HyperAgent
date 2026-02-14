@@ -588,6 +588,31 @@ mod tests {
       .expect("mixed literal and prefixed formula fixture should serialize")
   }
 
+  fn normalized_prefix_operator_fixture_workbook_bytes() -> Vec<u8> {
+    let mut workbook = Workbook::new();
+    let normalized_sheet = workbook.add_worksheet();
+    normalized_sheet
+      .set_name("Normalized")
+      .expect("sheet should be renamed");
+    normalized_sheet
+      .write_number(0, 0, 2.0)
+      .expect("first number should write");
+    normalized_sheet
+      .write_number(1, 0, 3.0)
+      .expect("second number should write");
+    normalized_sheet
+      .write_formula(
+        0,
+        1,
+        Formula::new("=+@_xlws.SUM(A1:A2)").set_result("5"),
+      )
+      .expect("normalized-prefix formula should write");
+
+    workbook
+      .save_to_buffer()
+      .expect("normalized prefix/operator fixture should serialize")
+  }
+
   fn snapshot_map(
     cells: &[crate::models::CellSnapshot],
   ) -> HashMap<String, crate::models::CellSnapshot> {
@@ -1243,6 +1268,55 @@ mod tests {
         .and_then(|cell| cell.evaluated_value.as_deref()),
       Some("_xlfn.keep me"),
       "normalized formula should preserve quoted literal evaluation path",
+    );
+  }
+
+  #[tokio::test]
+  async fn should_normalize_prefixed_operator_tokens_during_import_and_recalc() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("xlsx-normalized-operators".to_string()))
+      .await
+      .expect("workbook should be created");
+    let db_path = state
+      .db_path(workbook.id)
+      .await
+      .expect("db path should be accessible");
+
+    let fixture_bytes = normalized_prefix_operator_fixture_workbook_bytes();
+    let import_result =
+      import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
+    assert_eq!(import_result.sheets_imported, 1);
+    assert_eq!(import_result.formula_cells_imported, 1);
+
+    let (_, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should complete");
+    assert!(
+      unsupported_formulas.is_empty(),
+      "normalized formula should remain supported: {:?}",
+      unsupported_formulas,
+    );
+
+    let snapshot =
+      load_sheet_snapshot(&db_path, "Normalized").expect("snapshot should load");
+    let by_address = snapshot_map(&snapshot);
+    assert_eq!(
+      by_address
+        .get("B1")
+        .and_then(|cell| cell.formula.as_deref()),
+      Some("=SUM(A1:A2)"),
+      "prefix/operator normalization should store canonical formula text",
+    );
+    assert_eq!(
+      by_address
+        .get("B1")
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(5),
+      "normalized formula should evaluate as expected",
     );
   }
 }
