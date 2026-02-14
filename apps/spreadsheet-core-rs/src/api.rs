@@ -9690,6 +9690,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_keep_openapi_path_summaries_non_empty() {
+        let spec = openapi().await.0;
+        let paths = spec
+            .get("paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi spec should include paths");
+        assert!(
+            !paths.is_empty(),
+            "openapi paths should include at least one endpoint",
+        );
+
+        for (path, methods) in paths {
+            let method_map = methods
+                .as_object()
+                .expect("openapi path entry should map HTTP methods");
+            assert!(
+                !method_map.is_empty(),
+                "openapi path '{path}' should expose at least one HTTP method",
+            );
+
+            for (method, metadata) in method_map {
+                let summary = metadata
+                    .get("summary")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty());
+                assert!(
+                    summary.is_some(),
+                    "openapi path '{path}' method '{method}' should expose a non-empty summary",
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn should_keep_agent_schema_endpoints_in_sync_with_openapi_paths() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
