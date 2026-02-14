@@ -311,6 +311,15 @@ const FORMULA_FALLBACK_BEHAVIOR: &str =
     "unsupported formulas are preserved and reported by formula.recalculated payloads";
 const FORMULA_VALIDATION_ERROR_CODES: &[&str] = &["INVALID_FORMULA"];
 const ENDPOINT_CATALOG_CONTRACT_VERSION: &str = "2026-02-endpoint-catalog-v1";
+const ENDPOINT_CATALOG_ISSUE_REASON_KEYS: &[&str] = &[
+    "unmapped_methods",
+    "method_mismatch",
+    "summary_mismatch",
+    "path_mismatch",
+    "method_fallback",
+    "summary_fallback",
+    "path_fallback",
+];
 const AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION: &str =
     "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)";
 
@@ -662,7 +671,10 @@ fn endpoint_catalog_diagnostics_from_coverage(
 
 fn endpoint_openapi_fingerprint(openapi_spec: &serde_json::Value) -> String {
     let mut operations = Vec::<String>::new();
-    if let Some(paths) = openapi_spec.get("paths").and_then(serde_json::Value::as_object) {
+    if let Some(paths) = openapi_spec
+        .get("paths")
+        .and_then(serde_json::Value::as_object)
+    {
         for (path, methods_value) in paths {
             let Some(methods) = methods_value.as_object() else {
                 continue;
@@ -692,7 +704,10 @@ fn endpoint_openapi_stats(openapi_spec: &serde_json::Value) -> serde_json::Value
     let mut path_count = 0u64;
     let mut operation_count = 0u64;
     let mut summarized_operation_count = 0u64;
-    if let Some(paths) = openapi_spec.get("paths").and_then(serde_json::Value::as_object) {
+    if let Some(paths) = openapi_spec
+        .get("paths")
+        .and_then(serde_json::Value::as_object)
+    {
         path_count = paths.len() as u64;
         for methods in paths.values() {
             let Some(method_map) = methods.as_object() else {
@@ -1497,10 +1512,17 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
             "endpoint_catalog_openapi_fingerprint".to_string(),
             json!(endpoint_openapi_fingerprint),
         );
-        schema_object.insert("endpoint_catalog_openapi_stats".to_string(), endpoint_openapi_stats);
+        schema_object.insert(
+            "endpoint_catalog_openapi_stats".to_string(),
+            endpoint_openapi_stats,
+        );
         schema_object.insert(
             "endpoint_catalog_contract_version".to_string(),
             json!(ENDPOINT_CATALOG_CONTRACT_VERSION),
+        );
+        schema_object.insert(
+            "endpoint_catalog_issue_reason_keys".to_string(),
+            json!(ENDPOINT_CATALOG_ISSUE_REASON_KEYS),
         );
     }
     Json(schema)
@@ -2398,10 +2420,17 @@ async fn get_agent_schema(
             "endpoint_catalog_openapi_fingerprint".to_string(),
             json!(endpoint_openapi_fingerprint),
         );
-        schema_object.insert("endpoint_catalog_openapi_stats".to_string(), endpoint_openapi_stats);
+        schema_object.insert(
+            "endpoint_catalog_openapi_stats".to_string(),
+            endpoint_openapi_stats,
+        );
         schema_object.insert(
             "endpoint_catalog_contract_version".to_string(),
             json!(ENDPOINT_CATALOG_CONTRACT_VERSION),
+        );
+        schema_object.insert(
+            "endpoint_catalog_issue_reason_keys".to_string(),
+            json!(ENDPOINT_CATALOG_ISSUE_REASON_KEYS),
         );
     }
     Ok(Json(schema))
@@ -3516,6 +3545,10 @@ async fn openapi() -> Json<serde_json::Value> {
             "x-endpoint-catalog-contract-version".to_string(),
             json!(ENDPOINT_CATALOG_CONTRACT_VERSION),
         );
+        spec_object.insert(
+            "x-endpoint-catalog-issue-reason-keys".to_string(),
+            json!(ENDPOINT_CATALOG_ISSUE_REASON_KEYS),
+        );
     }
     Json(spec)
 }
@@ -3535,10 +3568,9 @@ mod tests {
         agent_ops, agent_ops_cache_entries, agent_ops_cache_entry_detail, agent_ops_cache_prefixes,
         agent_ops_cache_stats, build_export_artifacts, build_preset_operations,
         build_scenario_operations, clear_agent_ops_cache, duckdb_query,
-        ensure_non_empty_operations, export_workbook, formula_supported_functions_summary,
-        endpoint_openapi_fingerprint, endpoint_openapi_stats,
-        formula_unsupported_behaviors_summary, get_agent_schema,
-        get_agent_wizard_schema,
+        endpoint_openapi_fingerprint, endpoint_openapi_stats, ensure_non_empty_operations,
+        export_workbook, formula_supported_functions_summary,
+        formula_unsupported_behaviors_summary, get_agent_schema, get_agent_wizard_schema,
         import_bytes_into_workbook, normalize_sheet_name, openapi, operations_signature,
         parse_optional_bool, preview_remove_agent_ops_cache_entries_by_prefix,
         reexecute_agent_ops_cache_entry, remove_agent_ops_cache_entries_by_prefix,
@@ -3547,9 +3579,10 @@ mod tests {
         set_cells_batch, validate_expected_operations_signature,
         validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
         AgentOpsCachePrefixesQuery, AgentOpsCacheStatsQuery,
-        AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION, FORMULA_SUPPORTED_FUNCTION_LIST,
+        AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION, ENDPOINT_CATALOG_CONTRACT_VERSION,
+        ENDPOINT_CATALOG_ISSUE_REASON_KEYS, FORMULA_SUPPORTED_FUNCTION_LIST,
         FORMULA_UNSUPPORTED_BEHAVIOR_LIST, FORMULA_VALIDATION_ERROR_CODES,
-        MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT, ENDPOINT_CATALOG_CONTRACT_VERSION,
+        MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
     };
     use crate::{
         error::ApiError,
@@ -4487,7 +4520,10 @@ mod tests {
             Some(&expected_stats),
             "{schema_name} endpoint_catalog_openapi_stats should match openapi-derived counters",
         );
-        assert!(path_count > 0, "{schema_name} endpoint_catalog_openapi_stats.path_count should be positive");
+        assert!(
+            path_count > 0,
+            "{schema_name} endpoint_catalog_openapi_stats.path_count should be positive"
+        );
         assert!(
             operation_count > 0,
             "{schema_name} endpoint_catalog_openapi_stats.operation_count should be positive",
@@ -4522,6 +4558,50 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some(schema_version),
             "{schema_name} endpoint_catalog_contract_version should match openapi extension version",
+        );
+    }
+
+    fn assert_endpoint_catalog_issue_reason_keys_are_consistent(
+        schema: &serde_json::Value,
+        schema_name: &str,
+        openapi_spec: &serde_json::Value,
+    ) {
+        let schema_reason_keys = schema
+            .get("endpoint_catalog_issue_reason_keys")
+            .and_then(serde_json::Value::as_array)
+            .expect("schema should expose endpoint_catalog_issue_reason_keys");
+        assert_eq!(
+            schema_reason_keys.len(),
+            ENDPOINT_CATALOG_ISSUE_REASON_KEYS.len(),
+            "{schema_name} endpoint_catalog_issue_reason_keys should match server reason key count",
+        );
+        let parsed_schema_reason_keys = schema_reason_keys
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|item| !item.is_empty())
+                    .expect(
+                        "endpoint_catalog_issue_reason_keys entries should be non-empty strings",
+                    )
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            parsed_schema_reason_keys,
+            ENDPOINT_CATALOG_ISSUE_REASON_KEYS
+                .iter()
+                .map(|item| item.to_string())
+                .collect::<Vec<_>>(),
+            "{schema_name} endpoint_catalog_issue_reason_keys should match server constants",
+        );
+        assert_eq!(
+            openapi_spec
+                .get("x-endpoint-catalog-issue-reason-keys")
+                .and_then(serde_json::Value::as_array),
+            Some(schema_reason_keys),
+            "{schema_name} endpoint_catalog_issue_reason_keys should match openapi extension reason keys",
         );
     }
 
@@ -4561,6 +4641,26 @@ mod tests {
             assert!(
                 seen.insert(*error_code),
                 "formula validation error codes should not contain duplicates: {error_code}",
+            );
+        }
+    }
+
+    #[test]
+    fn should_keep_endpoint_catalog_issue_reason_keys_unique_and_trimmed() {
+        let mut seen = std::collections::HashSet::new();
+        for reason_key in ENDPOINT_CATALOG_ISSUE_REASON_KEYS {
+            assert!(
+                !reason_key.trim().is_empty(),
+                "endpoint catalog issue reason keys should not be blank",
+            );
+            assert_eq!(
+                reason_key.trim(),
+                *reason_key,
+                "endpoint catalog issue reason keys should be trimmed",
+            );
+            assert!(
+                seen.insert(*reason_key),
+                "endpoint catalog issue reason keys should be unique: {reason_key}",
             );
         }
     }
@@ -9572,13 +9672,14 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("Get OpenAPI specification document"),
         );
-        assert_endpoint_openapi_fingerprint_is_consistent(
+        assert_endpoint_openapi_fingerprint_is_consistent(&schema, "agent schema", &openapi_spec);
+        assert_endpoint_openapi_stats_are_consistent(&schema, "agent schema", &openapi_spec);
+        assert_endpoint_catalog_contract_version_is_consistent(
             &schema,
             "agent schema",
             &openapi_spec,
         );
-        assert_endpoint_openapi_stats_are_consistent(&schema, "agent schema", &openapi_spec);
-        assert_endpoint_catalog_contract_version_is_consistent(
+        assert_endpoint_catalog_issue_reason_keys_are_consistent(
             &schema,
             "agent schema",
             &openapi_spec,
@@ -10485,13 +10586,14 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("Get OpenAPI specification document"),
         );
-        assert_endpoint_openapi_fingerprint_is_consistent(
+        assert_endpoint_openapi_fingerprint_is_consistent(&schema, "wizard schema", &openapi_spec);
+        assert_endpoint_openapi_stats_are_consistent(&schema, "wizard schema", &openapi_spec);
+        assert_endpoint_catalog_contract_version_is_consistent(
             &schema,
             "wizard schema",
             &openapi_spec,
         );
-        assert_endpoint_openapi_stats_are_consistent(&schema, "wizard schema", &openapi_spec);
-        assert_endpoint_catalog_contract_version_is_consistent(
+        assert_endpoint_catalog_issue_reason_keys_are_consistent(
             &schema,
             "wizard schema",
             &openapi_spec,
@@ -11109,6 +11211,7 @@ mod tests {
             "endpoint_catalog_openapi_fingerprint",
             "endpoint_catalog_openapi_stats",
             "endpoint_catalog_contract_version",
+            "endpoint_catalog_issue_reason_keys",
         ];
 
         for key in parity_keys {
@@ -11580,6 +11683,16 @@ mod tests {
             Some(ENDPOINT_CATALOG_CONTRACT_VERSION),
             "openapi spec should expose endpoint catalog contract version extension",
         );
+        let expected_reason_keys = ENDPOINT_CATALOG_ISSUE_REASON_KEYS
+            .iter()
+            .map(|key| json!(key))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            spec.get("x-endpoint-catalog-issue-reason-keys")
+                .and_then(serde_json::Value::as_array),
+            Some(&expected_reason_keys),
+            "openapi spec should expose endpoint catalog issue reason extension",
+        );
     }
 
     #[tokio::test]
@@ -11641,13 +11754,14 @@ mod tests {
             "agent schema",
             paths,
         );
-        assert_endpoint_openapi_fingerprint_is_consistent(
+        assert_endpoint_openapi_fingerprint_is_consistent(&agent_schema, "agent schema", &spec);
+        assert_endpoint_openapi_stats_are_consistent(&agent_schema, "agent schema", &spec);
+        assert_endpoint_catalog_contract_version_is_consistent(
             &agent_schema,
             "agent schema",
             &spec,
         );
-        assert_endpoint_openapi_stats_are_consistent(&agent_schema, "agent schema", &spec);
-        assert_endpoint_catalog_contract_version_is_consistent(
+        assert_endpoint_catalog_issue_reason_keys_are_consistent(
             &agent_schema,
             "agent schema",
             &spec,
@@ -11705,13 +11819,14 @@ mod tests {
             "wizard schema",
             paths,
         );
-        assert_endpoint_openapi_fingerprint_is_consistent(
+        assert_endpoint_openapi_fingerprint_is_consistent(&wizard_schema, "wizard schema", &spec);
+        assert_endpoint_openapi_stats_are_consistent(&wizard_schema, "wizard schema", &spec);
+        assert_endpoint_catalog_contract_version_is_consistent(
             &wizard_schema,
             "wizard schema",
             &spec,
         );
-        assert_endpoint_openapi_stats_are_consistent(&wizard_schema, "wizard schema", &spec);
-        assert_endpoint_catalog_contract_version_is_consistent(
+        assert_endpoint_catalog_issue_reason_keys_are_consistent(
             &wizard_schema,
             "wizard schema",
             &spec,
@@ -11801,6 +11916,16 @@ mod tests {
             "wizard schema",
             &openapi_spec,
         );
+        assert_endpoint_catalog_issue_reason_keys_are_consistent(
+            &agent_schema,
+            "agent schema",
+            &openapi_spec,
+        );
+        assert_endpoint_catalog_issue_reason_keys_are_consistent(
+            &wizard_schema,
+            "wizard schema",
+            &openapi_spec,
+        );
         assert_eq!(
             agent_schema.get("endpoint_catalog_openapi_fingerprint"),
             wizard_schema.get("endpoint_catalog_openapi_fingerprint"),
@@ -11815,6 +11940,11 @@ mod tests {
             agent_schema.get("endpoint_catalog_contract_version"),
             wizard_schema.get("endpoint_catalog_contract_version"),
             "wizard and agent schemas should advertise identical endpoint catalog contract version",
+        );
+        assert_eq!(
+            agent_schema.get("endpoint_catalog_issue_reason_keys"),
+            wizard_schema.get("endpoint_catalog_issue_reason_keys"),
+            "wizard and agent schemas should advertise identical endpoint catalog issue reason keys",
         );
 
         let agent_method_map = agent_endpoint_http_methods
