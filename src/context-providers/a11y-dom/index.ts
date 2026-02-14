@@ -495,7 +495,17 @@ async function hydrateFrameContextFromSnapshot(
   try {
     const cdpClient = await getCDPClient(page);
     const manager = getOrCreateFrameContextManager(cdpClient);
-    manager.setDebug(debug);
+    try {
+      manager.setDebug(debug);
+    } catch (error) {
+      if (debug) {
+        console.warn(
+          `[FrameContext] Failed to configure cache-hydration debug mode: ${formatA11yDiagnostic(
+            error
+          )}`
+        );
+      }
+    }
     await manager.ensureInitialized().catch(() => {});
     await syncFrameContextManager({
       manager,

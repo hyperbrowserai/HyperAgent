@@ -1,5 +1,6 @@
 import type { Page } from "playwright-core";
 import { getA11yDOM } from "@/context-providers/a11y-dom";
+import { domSnapshotCache } from "@/context-providers/a11y-dom/dom-cache";
 
 const getCDPClientMock = jest.fn();
 const getOrCreateFrameContextManagerMock = jest.fn();
@@ -470,6 +471,71 @@ describe("getA11yDOM error formatting", () => {
       logSpy.mockRestore();
       warnSpy.mockRestore();
       errorSpy.mockRestore();
+    }
+  });
+
+  it("continues cache hydration when frame-manager debug setter traps", async () => {
+    const page = {
+      url: jest.fn(() => "https://example.com"),
+    } as unknown as Page;
+    const cachedState = {
+      domState: "cached dom",
+      elements: new Map(),
+      xpathMap: {},
+      backendNodeMap: {},
+      frameMap: new Map([
+        [
+          1,
+          {
+            frameIndex: 1,
+            siblingPosition: 0,
+            frameId: "frame-1",
+            xpath: "//iframe[1]",
+            parentFrameIndex: 0,
+          },
+        ],
+      ]),
+    } as unknown as Parameters<typeof domSnapshotCache.set>[1];
+    domSnapshotCache.set(page, cachedState);
+
+    const rootSession = {
+      id: "session-1",
+      send: jest.fn().mockResolvedValue({
+        frameTree: {
+          frame: {
+            id: "root-frame",
+            parentId: undefined,
+            loaderId: "loader-1",
+            name: "root",
+            url: "https://example.com",
+          },
+        },
+      }),
+    };
+    const ensureInitialized = jest.fn().mockResolvedValue(undefined);
+    getCDPClientMock.mockResolvedValue({
+      rootSession,
+    });
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest.fn(() => {
+        throw new Error("cache-hydration debug trap");
+      }),
+      ensureInitialized,
+      upsertFrame: jest.fn(),
+      assignFrameIndex: jest.fn(),
+      setFrameSession: jest.fn(),
+      getFrameByBackendNodeId: jest.fn(),
+      getFrameSession: jest.fn(),
+    });
+
+    try {
+      const result = await getA11yDOM(page, false, false, undefined, {
+        useCache: true,
+      });
+      expect(result.domState).toBe("cached dom");
+      expect(ensureInitialized).toHaveBeenCalled();
+    } finally {
+      domSnapshotCache.invalidate(page);
     }
   });
 });
