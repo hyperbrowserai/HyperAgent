@@ -1144,6 +1144,8 @@ export function SpreadsheetApp() {
     useState(false);
   const [isCopyingVisibleWizardOpenApiPaths, setIsCopyingVisibleWizardOpenApiPaths] =
     useState(false);
+  const [isCopyingVisibleWizardMethods, setIsCopyingVisibleWizardMethods] =
+    useState(false);
   const [isCopyingVisibleWizardSummaries, setIsCopyingVisibleWizardSummaries] =
     useState(false);
   const [isCopyingWizardEndpointIssueReport, setIsCopyingWizardEndpointIssueReport] =
@@ -1157,6 +1159,8 @@ export function SpreadsheetApp() {
   const [isCopyingVisibleAgentEndpointUrls, setIsCopyingVisibleAgentEndpointUrls] =
     useState(false);
   const [isCopyingVisibleAgentOpenApiPaths, setIsCopyingVisibleAgentOpenApiPaths] =
+    useState(false);
+  const [isCopyingVisibleAgentMethods, setIsCopyingVisibleAgentMethods] =
     useState(false);
   const [isCopyingVisibleAgentSummaries, setIsCopyingVisibleAgentSummaries] =
     useState(false);
@@ -4136,6 +4140,27 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyVisibleWizardMethods() {
+    if (wizardVisibleSchemaEndpointsWithMethods.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleWizardMethods(true);
+    try {
+      const payload = wizardVisibleSchemaEndpointsWithMethods
+        .map((entry) => `${entry.key}: ${entry.methods.join("|") || "∅"}`)
+        .join("\n");
+      await navigator.clipboard.writeText(payload);
+      clearUiError();
+      setNotice(
+        `Copied visible wizard endpoint methods (${wizardVisibleSchemaEndpointsWithMethods.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible wizard endpoint methods.");
+    } finally {
+      setIsCopyingVisibleWizardMethods(false);
+    }
+  }
+
   async function handleCopyVisibleWizardSummaries() {
     if (wizardVisibleSchemaEndpointsWithMethods.length === 0) {
       return;
@@ -4313,6 +4338,27 @@ export function SpreadsheetApp() {
       applyUiError(error, "Failed to copy visible agent OpenAPI paths.");
     } finally {
       setIsCopyingVisibleAgentOpenApiPaths(false);
+    }
+  }
+
+  async function handleCopyVisibleAgentMethods() {
+    if (agentVisibleSchemaEndpointsWithMethods.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleAgentMethods(true);
+    try {
+      const payload = agentVisibleSchemaEndpointsWithMethods
+        .map((entry) => `${entry.key}: ${entry.methods.join("|") || "∅"}`)
+        .join("\n");
+      await navigator.clipboard.writeText(payload);
+      clearUiError();
+      setNotice(
+        `Copied visible agent endpoint methods (${agentVisibleSchemaEndpointsWithMethods.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible agent endpoint methods.");
+    } finally {
+      setIsCopyingVisibleAgentMethods(false);
     }
   }
 
@@ -5633,6 +5679,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleWizardOpenApiPaths
                         ? "Copying..."
                         : "Copy visible paths"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleWizardMethods}
+                      disabled={isCopyingVisibleWizardMethods}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleWizardMethods
+                        ? "Copying..."
+                        : "Copy visible methods"}
                     </button>
                     <button
                       onClick={handleCopyVisibleWizardSummaries}
@@ -7230,6 +7285,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleAgentOpenApiPaths
                         ? "Copying..."
                         : "Copy visible paths"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleAgentMethods}
+                      disabled={isCopyingVisibleAgentMethods}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleAgentMethods
+                        ? "Copying..."
+                        : "Copy visible methods"}
                     </button>
                     <button
                       onClick={handleCopyVisibleAgentSummaries}
