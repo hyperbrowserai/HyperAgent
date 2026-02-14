@@ -488,6 +488,19 @@ mod tests {
   use std::{collections::HashMap, fs, path::PathBuf};
   use tempfile::tempdir;
 
+  fn fixture_corpus_file_names() -> [&'static str; 8] {
+    [
+      COMPAT_BASELINE_FILE_NAME,
+      COMPAT_FORMULA_MATRIX_FILE_NAME,
+      COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
+      COMPAT_NORMALIZATION_FILE_NAME,
+      COMPAT_OFFSET_RANGE_FILE_NAME,
+      COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
+      COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
+      COMPAT_PREFIX_OPERATOR_FILE_NAME,
+    ]
+  }
+
   fn file_fixture_bytes(file_name: &str) -> Vec<u8> {
     let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("fixtures")
@@ -1533,16 +1546,7 @@ mod tests {
     let temp_dir = tempdir().expect("temp dir should be created");
     let state = AppState::new(temp_dir.path().join("fixture-corpus-imports"))
       .expect("state should initialize");
-    let fixture_file_names = [
-      COMPAT_BASELINE_FILE_NAME,
-      COMPAT_FORMULA_MATRIX_FILE_NAME,
-      COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
-      COMPAT_NORMALIZATION_FILE_NAME,
-      COMPAT_OFFSET_RANGE_FILE_NAME,
-      COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
-      COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
-      COMPAT_PREFIX_OPERATOR_FILE_NAME,
-    ];
+    let fixture_file_names = fixture_corpus_file_names();
 
     for (fixture_index, fixture_file_name) in fixture_file_names.iter().enumerate() {
       let workbook = state
@@ -1577,6 +1581,85 @@ mod tests {
       assert!(
         import_result.formula_cells_normalized <= import_result.formula_cells_imported,
         "fixture {fixture_file_name} normalized formula counts should not exceed imported formula counts",
+      );
+    }
+  }
+
+  #[tokio::test]
+  async fn should_roundtrip_every_committed_fixture_corpus_workbook() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state = AppState::new(temp_dir.path().join("fixture-corpus-roundtrip"))
+      .expect("state should initialize");
+
+    for (fixture_index, fixture_file_name) in
+      fixture_corpus_file_names().iter().enumerate()
+    {
+      let source_workbook = state
+        .create_workbook(Some(format!(
+          "fixture-corpus-roundtrip-source-{fixture_index}"
+        )))
+        .await
+        .expect("source workbook should be created");
+      let source_db_path = state
+        .db_path(source_workbook.id)
+        .await
+        .expect("source db path should be available");
+
+      let source_import_result = import_xlsx(
+        &source_db_path,
+        &file_fixture_bytes(fixture_file_name),
+      )
+      .unwrap_or_else(|error| {
+        panic!("source fixture {fixture_file_name} should import: {error:?}")
+      });
+      assert!(
+        source_import_result.sheets_imported >= 1,
+        "fixture {fixture_file_name} should import at least one sheet before export",
+      );
+
+      let summary = WorkbookSummary {
+        id: source_workbook.id,
+        name: format!("fixture-roundtrip-{fixture_index}"),
+        created_at: Utc::now(),
+        sheets: source_import_result.sheet_names.clone(),
+        charts: Vec::new(),
+        compatibility_warnings: Vec::new(),
+      };
+      let (exported_bytes, _) = export_xlsx(&source_db_path, &summary)
+        .unwrap_or_else(|error| {
+          panic!("fixture {fixture_file_name} should export: {error:?}")
+        });
+      assert!(
+        !exported_bytes.is_empty(),
+        "fixture {fixture_file_name} export should produce non-empty payload",
+      );
+
+      let replay_workbook = state
+        .create_workbook(Some(format!(
+          "fixture-corpus-roundtrip-replay-{fixture_index}"
+        )))
+        .await
+        .expect("replay workbook should be created");
+      let replay_db_path = state
+        .db_path(replay_workbook.id)
+        .await
+        .expect("replay db path should be available");
+      let replay_import_result = import_xlsx(&replay_db_path, &exported_bytes)
+        .unwrap_or_else(|error| {
+          panic!("fixture {fixture_file_name} export should re-import: {error:?}")
+        });
+
+      assert!(
+        replay_import_result.sheets_imported >= 1,
+        "fixture {fixture_file_name} should retain at least one sheet after roundtrip",
+      );
+      assert!(
+        replay_import_result.cells_imported >= 1,
+        "fixture {fixture_file_name} should retain imported cells after roundtrip",
+      );
+      assert!(
+        replay_import_result.formula_cells_imported <= replay_import_result.cells_imported,
+        "fixture {fixture_file_name} roundtrip formula counts should not exceed total imported cells",
       );
     }
   }
