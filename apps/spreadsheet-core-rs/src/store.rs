@@ -841,10 +841,10 @@ fn evaluate_formula(
     let (_, _, covariance_sum, _, _) = compute_pair_deviation_sums(&pairs)
       .ok_or_else(|| ApiError::internal("pair statistics should be available"))?;
     let count = pairs.len() as f64;
-    let covariance = if function == "COVARIANCE.P" {
-      covariance_sum / count
-    } else {
+    let covariance = if function == "COVARIANCE.S" {
       covariance_sum / (count - 1.0)
+    } else {
+      covariance_sum / count
     };
     return Ok(Some(covariance.to_string()));
   }
@@ -4483,12 +4483,24 @@ mod tests {
         value: None,
         formula: Some("=RSQ(A4:A5,A1:A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 174,
+        value: None,
+        formula: Some("=COVAR(A1:A2,A4:A5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 175,
+        value: None,
+        formula: Some("=PEARSON(A1:A2,A4:A5)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 171);
+    assert_eq!(updated_cells, 173);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4502,7 +4514,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 173,
+        end_col: 175,
       },
     )
     .expect("cells should be fetched");
@@ -5011,6 +5023,23 @@ mod tests {
       .parse::<f64>()
       .expect("rsq should be numeric");
     assert!((rsq - 1.0).abs() < 1e-9, "rsq should be 1.0, got {rsq}");
+    let covar = by_position(1, 174)
+      .evaluated_value
+      .as_deref()
+      .expect("covar should evaluate")
+      .parse::<f64>()
+      .expect("covar should be numeric");
+    assert!((covar - 800.0).abs() < 1e-9, "covar should be 800.0, got {covar}");
+    let pearson = by_position(1, 175)
+      .evaluated_value
+      .as_deref()
+      .expect("pearson should evaluate")
+      .parse::<f64>()
+      .expect("pearson should be numeric");
+    assert!(
+      (pearson - 1.0).abs() < 1e-9,
+      "pearson should be 1.0, got {pearson}",
+    );
   }
 
   #[test]
@@ -5635,6 +5664,18 @@ mod tests {
         value: None,
         formula: Some("=CORREL(A1:A2,B1:B1)".to_string()),
       },
+      CellMutation {
+        row: 3,
+        col: 3,
+        value: None,
+        formula: Some("=COVAR(A1:A2,B1:B1)".to_string()),
+      },
+      CellMutation {
+        row: 4,
+        col: 3,
+        value: None,
+        formula: Some("=PEARSON(A1:A2,B1:B1)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
@@ -5645,6 +5686,8 @@ mod tests {
       vec![
         "=COVARIANCE.P(A1:A2,B1:B1)".to_string(),
         "=CORREL(A1:A2,B1:B1)".to_string(),
+        "=COVAR(A1:A2,B1:B1)".to_string(),
+        "=PEARSON(A1:A2,B1:B1)".to_string(),
       ],
     );
   }

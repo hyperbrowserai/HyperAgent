@@ -1151,7 +1151,9 @@ pub fn parse_covariance_formula(
   formula: &str,
 ) -> Option<(String, (u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
   let (function, args) = parse_function_arguments(formula)?;
-  if (function != "COVARIANCE.P" && function != "COVARIANCE.S") || args.len() != 2 {
+  if (function != "COVARIANCE.P" && function != "COVARIANCE.S" && function != "COVAR")
+    || args.len() != 2
+  {
     return None;
   }
   let (left_start, left_end) = parse_range_reference(&args[0])?;
@@ -1163,7 +1165,7 @@ pub fn parse_correl_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
   let (function, args) = parse_function_arguments(formula)?;
-  if function != "CORREL" || args.len() != 2 {
+  if (function != "CORREL" && function != "PEARSON") || args.len() != 2 {
     return None;
   }
   let (left_start, left_end) = parse_range_reference(&args[0])?;
@@ -1981,12 +1983,25 @@ mod tests {
     assert_eq!(covariance.2, (5, 1));
     assert_eq!(covariance.3, (1, 2));
     assert_eq!(covariance.4, (5, 2));
+    let covariance_legacy = parse_covariance_formula("=COVAR(A1:A5,B1:B5)")
+      .expect("legacy covariance should parse");
+    assert_eq!(covariance_legacy.0, "COVAR");
+    assert_eq!(covariance_legacy.1, (1, 1));
+    assert_eq!(covariance_legacy.2, (5, 1));
+    assert_eq!(covariance_legacy.3, (1, 2));
+    assert_eq!(covariance_legacy.4, (5, 2));
     let correl = parse_correl_formula("=CORREL(A1:A5,B1:B5)")
       .expect("correl should parse");
     assert_eq!(correl.0, (1, 1));
     assert_eq!(correl.1, (5, 1));
     assert_eq!(correl.2, (1, 2));
     assert_eq!(correl.3, (5, 2));
+    let pearson = parse_correl_formula("=PEARSON(A1:A5,B1:B5)")
+      .expect("pearson should parse");
+    assert_eq!(pearson.0, (1, 1));
+    assert_eq!(pearson.1, (5, 1));
+    assert_eq!(pearson.2, (1, 2));
+    assert_eq!(pearson.3, (5, 2));
     let slope = parse_slope_formula("=SLOPE(B1:B5,A1:A5)").expect("slope should parse");
     assert_eq!(slope.0, (1, 2));
     assert_eq!(slope.1, (5, 2));
