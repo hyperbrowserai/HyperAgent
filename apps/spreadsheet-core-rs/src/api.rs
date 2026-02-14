@@ -3275,6 +3275,17 @@ mod tests {
         .and_then(serde_json::Value::as_u64),
       Some(1),
     );
+    assert!(
+      emitted_event
+        .payload
+        .get("warnings")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .any(|warning| warning.contains("1 formula(s) were normalized")),
+      "import event payload warnings should include normalization telemetry",
+    );
   }
 
   #[tokio::test]
