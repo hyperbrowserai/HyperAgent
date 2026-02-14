@@ -38,6 +38,24 @@ The same setting is propagated through:
 - cached replay + special replay actions,
 - DOM settle/wait paths (`waitForSettledDOM`).
 
+## Runtime CDP Toggle Policy (Current Behavior)
+
+CDP execution is enabled by default and configurable at both agent and per-call scope.
+
+```ts
+const agent = new HyperAgent({
+  cdpActions: true, // default
+});
+```
+
+Override scopes:
+- agent-level default via `new HyperAgent({ cdpActions: ... })`,
+- per-task override via `page.ai(task, { cdpActions: ... })`,
+- per-single-action override via `page.perform(instruction, { cdpActions: ... })`,
+- replay override via `runFromActionCache(..., { cdpActions: ... })`.
+
+When disabled for a given run, execution paths skip CDP-specific action dispatch and rely on Playwright fallback behavior for that invocation.
+
 ---
 
 ## 0. THE BIG PICTURE: The Map Problem & Why We Need Multiple Event Listeners
