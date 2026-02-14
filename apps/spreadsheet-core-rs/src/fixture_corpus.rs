@@ -5,6 +5,13 @@ pub const COMPAT_BASELINE_FILE_NAME: &str = "compat_baseline.xlsx";
 pub const COMPAT_NORMALIZATION_SINGLE_FILE_NAME: &str =
   "compat_normalization_single.xlsx";
 pub const COMPAT_NORMALIZATION_FILE_NAME: &str = "compat_normalization.xlsx";
+pub const COMPAT_OFFSET_RANGE_FILE_NAME: &str = "compat_offset_range.xlsx";
+pub const COMPAT_UNSUPPORTED_FORMULA_FILE_NAME: &str =
+  "compat_unsupported_formula.xlsx";
+pub const COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME: &str =
+  "compat_mixed_literal_prefix.xlsx";
+pub const COMPAT_PREFIX_OPERATOR_FILE_NAME: &str =
+  "compat_prefix_operator.xlsx";
 
 pub fn generate_fixture_corpus(
 ) -> Result<Vec<(&'static str, Vec<u8>)>, XlsxError> {
@@ -20,6 +27,22 @@ pub fn generate_fixture_corpus(
     (
       COMPAT_NORMALIZATION_FILE_NAME,
       build_compat_normalization_fixture_bytes()?,
+    ),
+    (
+      COMPAT_OFFSET_RANGE_FILE_NAME,
+      build_compat_offset_range_fixture_bytes()?,
+    ),
+    (
+      COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
+      build_compat_unsupported_formula_fixture_bytes()?,
+    ),
+    (
+      COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
+      build_compat_mixed_literal_prefix_fixture_bytes()?,
+    ),
+    (
+      COMPAT_PREFIX_OPERATOR_FILE_NAME,
+      build_compat_prefix_operator_fixture_bytes()?,
     ),
   ])
 }
@@ -88,6 +111,65 @@ fn build_compat_normalization_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
     1,
     Formula::new(r#"=+@IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#)
       .set_result(r#"_xlfn.literal "@_xlws.keep""#),
+  )?;
+
+  workbook.save_to_buffer()
+}
+
+fn build_compat_offset_range_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let offset_sheet = workbook.add_worksheet();
+  offset_sheet.set_name("Offset")?;
+  offset_sheet.write_number(3, 2, 10.0)?;
+  offset_sheet.write_number(4, 2, 20.0)?;
+  offset_sheet.write_formula(5, 3, Formula::new("=@SUM(C4:C5)").set_result("30"))?;
+
+  workbook.save_to_buffer()
+}
+
+fn build_compat_unsupported_formula_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let modern_sheet = workbook.add_worksheet();
+  modern_sheet.set_name("Modern")?;
+  modern_sheet.write_number(0, 0, 5.0)?;
+  modern_sheet.write_formula(
+    0,
+    1,
+    Formula::new("=_xlfn.LET(_xlpm.x,A1,_xlpm.x+1)").set_result("6"),
+  )?;
+
+  workbook.save_to_buffer()
+}
+
+fn build_compat_mixed_literal_prefix_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let mixed_sheet = workbook.add_worksheet();
+  mixed_sheet.set_name("Mixed")?;
+  mixed_sheet.write_number(0, 0, 1.0)?;
+  mixed_sheet.write_formula(
+    0,
+    1,
+    Formula::new(r#"=IF(A1=1,"_xlfn.keep me",@_XLFN.BITAND(6,3))"#)
+      .set_result("_xlfn.keep me"),
+  )?;
+
+  workbook.save_to_buffer()
+}
+
+fn build_compat_prefix_operator_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let normalized_sheet = workbook.add_worksheet();
+  normalized_sheet.set_name("Normalized")?;
+  normalized_sheet.write_number(0, 0, 2.0)?;
+  normalized_sheet.write_number(1, 0, 3.0)?;
+  normalized_sheet.write_formula(
+    0,
+    1,
+    Formula::new("=+@_xlws.SUM(A1:A2)").set_result("5"),
   )?;
 
   workbook.save_to_buffer()

@@ -473,7 +473,10 @@ mod tests {
   use crate::{
     fixture_corpus::{
       write_fixture_corpus, COMPAT_BASELINE_FILE_NAME,
+      COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
+      COMPAT_OFFSET_RANGE_FILE_NAME, COMPAT_PREFIX_OPERATOR_FILE_NAME,
+      COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
     },
     models::{ChartSpec, ChartType, WorkbookSummary},
     state::AppState,
@@ -567,141 +570,12 @@ mod tests {
       .expect("formula matrix fixture workbook should serialize")
   }
 
-  fn offset_range_fixture_workbook_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let offset_sheet = workbook.add_worksheet();
-    offset_sheet
-      .set_name("Offset")
-      .expect("sheet should be renamed");
-    offset_sheet
-      .write_number(3, 2, 10.0)
-      .expect("first number should write");
-    offset_sheet
-      .write_number(4, 2, 20.0)
-      .expect("second number should write");
-    offset_sheet
-      .write_formula(5, 3, Formula::new("=@SUM(C4:C5)").set_result("30"))
-      .expect("sum formula should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("offset range fixture workbook should serialize")
-  }
-
-  fn unsupported_formula_fixture_workbook_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let modern_sheet = workbook.add_worksheet();
-    modern_sheet
-      .set_name("Modern")
-      .expect("sheet should be renamed");
-    modern_sheet
-      .write_number(0, 0, 5.0)
-      .expect("seed number should write");
-    modern_sheet
-      .write_formula(
-        0,
-        1,
-        Formula::new("=_xlfn.LET(_xlpm.x,A1,_xlpm.x+1)").set_result("6"),
-      )
-      .expect("unsupported formula should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("unsupported formula fixture workbook should serialize")
-  }
-
-  fn mixed_literal_and_prefixed_formula_fixture_workbook_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let mixed_sheet = workbook.add_worksheet();
-    mixed_sheet
-      .set_name("Mixed")
-      .expect("sheet should be renamed");
-    mixed_sheet
-      .write_number(0, 0, 1.0)
-      .expect("seed number should write");
-    mixed_sheet
-      .write_formula(
-        0,
-        1,
-        Formula::new(
-          r#"=IF(A1=1,"_xlfn.keep me",@_XLFN.BITAND(6,3))"#,
-        )
-        .set_result("_xlfn.keep me"),
-      )
-      .expect("mixed literal/prefix formula should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("mixed literal and prefixed formula fixture should serialize")
-  }
-
-  fn normalized_prefix_operator_fixture_workbook_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let normalized_sheet = workbook.add_worksheet();
-    normalized_sheet
-      .set_name("Normalized")
-      .expect("sheet should be renamed");
-    normalized_sheet
-      .write_number(0, 0, 2.0)
-      .expect("first number should write");
-    normalized_sheet
-      .write_number(1, 0, 3.0)
-      .expect("second number should write");
-    normalized_sheet
-      .write_formula(
-        0,
-        1,
-        Formula::new("=+@_xlws.SUM(A1:A2)").set_result("5"),
-      )
-      .expect("normalized-prefix formula should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("normalized prefix/operator fixture should serialize")
-  }
-
   fn file_fixture_bytes(file_name: &str) -> Vec<u8> {
     let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
       .join("fixtures")
       .join(file_name);
     fs::read(&fixture_path)
       .unwrap_or_else(|error| panic!("failed to read fixture {}: {error}", fixture_path.display()))
-  }
-
-  fn comprehensive_normalization_fixture_workbook_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let comprehensive_sheet = workbook.add_worksheet();
-    comprehensive_sheet
-      .set_name("Comprehensive")
-      .expect("sheet should be renamed");
-    comprehensive_sheet
-      .write_number(0, 0, 3.0)
-      .expect("first number should write");
-    comprehensive_sheet
-      .write_number(1, 0, 4.0)
-      .expect("second number should write");
-    comprehensive_sheet
-      .write_formula(
-        0,
-        1,
-        Formula::new(r#"= +@_xlfn.SUM(A1:A2)"#).set_result("7"),
-      )
-      .expect("comprehensive first formula should write");
-    comprehensive_sheet
-      .write_formula(1, 1, Formula::new("=_xlpm.MIN(A1:A2)").set_result("3"))
-      .expect("comprehensive second formula should write");
-    comprehensive_sheet
-      .write_formula(
-        2,
-        1,
-        Formula::new(r#"=+@IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#)
-          .set_result(r#"_xlfn.literal "@_xlws.keep""#),
-      )
-      .expect("comprehensive third formula should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("comprehensive normalization fixture should serialize")
   }
 
   fn snapshot_map(
@@ -1029,7 +903,7 @@ mod tests {
       .await
       .expect("db path should be accessible");
 
-    let fixture_bytes = offset_range_fixture_workbook_bytes();
+    let fixture_bytes = file_fixture_bytes(COMPAT_OFFSET_RANGE_FILE_NAME);
     let import_result =
       import_xlsx(&db_path, &fixture_bytes).expect("offset fixture should import");
     assert_eq!(import_result.sheets_imported, 1);
@@ -1286,7 +1160,8 @@ mod tests {
       .await
       .expect("source db path should be accessible");
 
-    let fixture_bytes = unsupported_formula_fixture_workbook_bytes();
+    let fixture_bytes =
+      file_fixture_bytes(COMPAT_UNSUPPORTED_FORMULA_FILE_NAME);
     let import_result =
       import_xlsx(&source_db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 1);
@@ -1387,7 +1262,8 @@ mod tests {
       .await
       .expect("db path should be accessible");
 
-    let fixture_bytes = mixed_literal_and_prefixed_formula_fixture_workbook_bytes();
+    let fixture_bytes =
+      file_fixture_bytes(COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME);
     let import_result =
       import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 1);
@@ -1441,7 +1317,7 @@ mod tests {
       .await
       .expect("db path should be accessible");
 
-    let fixture_bytes = normalized_prefix_operator_fixture_workbook_bytes();
+    let fixture_bytes = file_fixture_bytes(COMPAT_PREFIX_OPERATOR_FILE_NAME);
     let import_result =
       import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 1);
@@ -1491,7 +1367,7 @@ mod tests {
       .await
       .expect("source db path should be accessible");
 
-    let fixture_bytes = comprehensive_normalization_fixture_workbook_bytes();
+    let fixture_bytes = file_fixture_bytes(COMPAT_NORMALIZATION_FILE_NAME);
     let source_import_result =
       import_xlsx(&source_db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(source_import_result.sheets_imported, 1);
