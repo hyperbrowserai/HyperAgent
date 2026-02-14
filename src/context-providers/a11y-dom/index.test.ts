@@ -1,7 +1,21 @@
 import type { Page } from "playwright-core";
 import { getA11yDOM } from "@/context-providers/a11y-dom";
 
+const getCDPClientMock = jest.fn();
+const getOrCreateFrameContextManagerMock = jest.fn();
+
+jest.mock("@/cdp", () => ({
+  getCDPClient: (...args: unknown[]) => getCDPClientMock(...args),
+  getOrCreateFrameContextManager: (...args: unknown[]) =>
+    getOrCreateFrameContextManagerMock(...args),
+}));
+
 describe("getA11yDOM error formatting", () => {
+  beforeEach(() => {
+    getCDPClientMock.mockReset();
+    getOrCreateFrameContextManagerMock.mockReset();
+  });
+
   it("formats non-Error failures from script injection and returns fallback state", async () => {
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
     const page = {
@@ -68,6 +82,79 @@ describe("getA11yDOM error formatting", () => {
       expect(details.stack ?? "").not.toContain("\u0000");
       expect((details.stack ?? "").length).toBeLessThan(700);
     } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("continues when frame manager debug setter throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = {
+      evaluate: jest.fn().mockResolvedValue(undefined),
+    } as unknown as Page;
+    getCDPClientMock.mockResolvedValue({
+      acquireSession: jest
+        .fn()
+        .mockRejectedValue(new Error("dom session unavailable")),
+    });
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest.fn(() => {
+        throw new Error(`debug\u0000\n${"x".repeat(5_000)}`);
+      }),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+    });
+
+    try {
+      const result = await getA11yDOM(page);
+      expect(result.domState).toBe("Error: Could not extract accessibility tree");
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("configure frame manager debug")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("continues when frame manager filtering setter throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = {
+      evaluate: jest.fn().mockResolvedValue(undefined),
+    } as unknown as Page;
+    getCDPClientMock.mockResolvedValue({
+      acquireSession: jest
+        .fn()
+        .mockRejectedValue(new Error("dom session unavailable")),
+    });
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest.fn(),
+      setFrameFilteringEnabled: jest.fn(() => {
+        throw new Error(`filter\u0000\n${"y".repeat(5_000)}`);
+      }),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+    });
+
+    try {
+      const result = await getA11yDOM(page, false, false, undefined, {
+        filterAdTrackingFrames: false,
+      });
+      expect(result.domState).toBe("Error: Could not extract accessibility tree");
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("configure frame filtering")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
       errorSpy.mockRestore();
     }
   });

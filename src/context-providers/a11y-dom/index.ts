@@ -995,14 +995,30 @@ export async function getA11yDOM(
     // Step 2: Create CDP session for main frame
     const cdpClient = await getCDPClient(page);
     const frameContextManager = getOrCreateFrameContextManager(cdpClient);
-    frameContextManager.setDebug(debug);
+    try {
+      frameContextManager.setDebug(debug);
+    } catch (error) {
+      console.warn(
+        `[FrameContext] Failed to configure frame manager debug: ${formatA11yDiagnostic(
+          error
+        )}`
+      );
+    }
     if (
       typeof frameContextManager.setFrameFilteringEnabled === "function" &&
       typeof options?.filterAdTrackingFrames === "boolean"
     ) {
-      frameContextManager.setFrameFilteringEnabled(
-        options.filterAdTrackingFrames
-      );
+      try {
+        frameContextManager.setFrameFilteringEnabled(
+          options.filterAdTrackingFrames
+        );
+      } catch (error) {
+        console.warn(
+          `[FrameContext] Failed to configure frame filtering: ${formatA11yDiagnostic(
+            error
+          )}`
+        );
+      }
     }
     await frameContextManager.ensureInitialized().catch((error) => {
       if (debug) {
