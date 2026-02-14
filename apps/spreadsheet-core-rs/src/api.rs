@@ -374,6 +374,26 @@ fn endpoint_http_methods_from_openapi(
     serde_json::Value::Object(endpoint_methods)
 }
 
+fn endpoint_openapi_paths_from_schema(schema: &serde_json::Value) -> serde_json::Value {
+    let mut endpoint_paths = serde_json::Map::new();
+    if let Some(schema_object) = schema.as_object() {
+        for (key, value) in schema_object {
+            if key != "endpoint" && !key.ends_with("_endpoint") {
+                continue;
+            }
+            let Some(endpoint) = value.as_str() else {
+                continue;
+            };
+            let normalized = endpoint.split('?').next().unwrap_or(endpoint).trim();
+            if normalized.is_empty() {
+                continue;
+            }
+            endpoint_paths.insert(key.clone(), json!(normalized));
+        }
+    }
+    serde_json::Value::Object(endpoint_paths)
+}
+
 fn endpoint_summaries_from_openapi(
     schema: &serde_json::Value,
     openapi_spec: &serde_json::Value,
@@ -1178,8 +1198,10 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
     });
     let openapi_spec = openapi().await.0;
     let endpoint_http_methods = endpoint_http_methods_from_openapi(&schema, &openapi_spec);
+    let endpoint_openapi_paths = endpoint_openapi_paths_from_schema(&schema);
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
     if let Some(schema_object) = schema.as_object_mut() {
+        schema_object.insert("endpoint_openapi_paths".to_string(), endpoint_openapi_paths);
         schema_object.insert("endpoint_http_methods".to_string(), endpoint_http_methods);
         schema_object.insert("endpoint_summaries".to_string(), endpoint_summaries);
     }
@@ -2048,8 +2070,10 @@ async fn get_agent_schema(
     });
     let openapi_spec = openapi().await.0;
     let endpoint_http_methods = endpoint_http_methods_from_openapi(&schema, &openapi_spec);
+    let endpoint_openapi_paths = endpoint_openapi_paths_from_schema(&schema);
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
     if let Some(schema_object) = schema.as_object_mut() {
+        schema_object.insert("endpoint_openapi_paths".to_string(), endpoint_openapi_paths);
         schema_object.insert("endpoint_http_methods".to_string(), endpoint_http_methods);
         schema_object.insert("endpoint_summaries".to_string(), endpoint_summaries);
     }
@@ -3278,6 +3302,30 @@ mod tests {
             Some("Get OpenAPI specification document"),
             "{schema_name} should expose openapi endpoint summary metadata",
         );
+        assert_eq!(
+            schema
+                .get("endpoint_openapi_paths")
+                .and_then(|value| value.get("endpoint"))
+                .and_then(serde_json::Value::as_str),
+            Some(expected_endpoint),
+            "{schema_name} should expose normalized endpoint_openapi_paths for endpoint",
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_openapi_paths")
+                .and_then(|value| value.get("health_endpoint"))
+                .and_then(serde_json::Value::as_str),
+            Some("/health"),
+            "{schema_name} should expose normalized endpoint_openapi_paths for health endpoint",
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_openapi_paths")
+                .and_then(|value| value.get("openapi_endpoint"))
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/openapi"),
+            "{schema_name} should expose normalized endpoint_openapi_paths for openapi endpoint",
+        );
     }
 
     fn assert_schema_endpoint_fields_are_normalized(
@@ -3347,6 +3395,76 @@ mod tests {
         methods.sort();
         methods.dedup();
         methods
+    }
+
+    fn assert_endpoint_openapi_paths_match_schema_endpoints(
+        schema: &serde_json::Value,
+        schema_name: &str,
+    ) {
+        let schema_object = schema
+            .as_object()
+            .expect("schema should be encoded as object");
+        let endpoint_entries = schema_object
+            .iter()
+            .filter_map(|(key, value)| {
+                if key == "endpoint" || key.ends_with("_endpoint") {
+                    value.as_str().map(|endpoint| (key.as_str(), endpoint))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let endpoint_openapi_paths = schema
+            .get("endpoint_openapi_paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_openapi_paths object");
+        assert_eq!(
+            endpoint_openapi_paths.len(),
+            endpoint_entries.len(),
+            "{schema_name} endpoint_openapi_paths should cover every endpoint field",
+        );
+
+        for (key, endpoint) in endpoint_entries {
+            let normalized = endpoint.split('?').next().unwrap_or(endpoint);
+            let advertised_path = endpoint_openapi_paths
+                .get(key)
+                .and_then(serde_json::Value::as_str)
+                .expect("endpoint_openapi_paths entry should be string");
+            assert_eq!(
+                advertised_path,
+                normalized,
+                "{schema_name} endpoint_openapi_paths for '{key}' should match normalized endpoint path",
+            );
+            assert!(
+                advertised_path.starts_with('/'),
+                "{schema_name} endpoint_openapi_paths for '{key}' should start with '/'",
+            );
+            assert_eq!(
+                advertised_path,
+                advertised_path.trim(),
+                "{schema_name} endpoint_openapi_paths for '{key}' should be trimmed",
+            );
+        }
+    }
+
+    fn assert_endpoint_openapi_paths_match_openapi_paths(
+        schema: &serde_json::Value,
+        schema_name: &str,
+        paths: &serde_json::Map<String, serde_json::Value>,
+    ) {
+        let endpoint_openapi_paths = schema
+            .get("endpoint_openapi_paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_openapi_paths object");
+        for (key, value) in endpoint_openapi_paths {
+            let path = value
+                .as_str()
+                .expect("endpoint_openapi_paths entries should be strings");
+            assert!(
+                paths.contains_key(path),
+                "{schema_name} endpoint_openapi_paths '{key}' -> '{path}' should exist in openapi paths",
+            );
+        }
     }
 
     fn endpoint_summary_from_openapi_path(
@@ -8510,6 +8628,20 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("endpoint_openapi_paths")
+                .and_then(|value| value.get("agent_ops_cache_stats_endpoint"))
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache"),
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_openapi_paths")
+                .and_then(|value| value.get("agent_ops_cache_entries_endpoint"))
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/entries"),
+        );
+        assert_eq!(
+            schema
                 .get("endpoint_summaries")
                 .and_then(|value| value.get("endpoint"))
                 .and_then(serde_json::Value::as_str),
@@ -9366,6 +9498,20 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("endpoint_openapi_paths")
+                .and_then(|value| value.get("agent_ops_cache_stats_endpoint"))
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache"),
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_openapi_paths")
+                .and_then(|value| value.get("agent_ops_cache_prefixes_endpoint"))
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/workbooks/{id}/agent/ops/cache/prefixes"),
+        );
+        assert_eq!(
+            schema
                 .get("endpoint_summaries")
                 .and_then(|value| value.get("endpoint"))
                 .and_then(serde_json::Value::as_str),
@@ -9887,6 +10033,8 @@ mod tests {
 
         assert_schema_endpoint_fields_are_normalized(&agent_schema, "agent schema");
         assert_schema_endpoint_fields_are_normalized(&wizard_schema, "wizard schema");
+        assert_endpoint_openapi_paths_match_schema_endpoints(&agent_schema, "agent schema");
+        assert_endpoint_openapi_paths_match_schema_endpoints(&wizard_schema, "wizard schema");
     }
 
     #[tokio::test]
@@ -10422,6 +10570,7 @@ mod tests {
                 "agent schema endpoint '{key}' -> '{normalized}' should map to exactly one HTTP method",
             );
         }
+        assert_endpoint_openapi_paths_match_openapi_paths(&agent_schema, "agent schema", paths);
         assert_endpoint_http_methods_match_openapi_paths(&agent_schema, "agent schema", paths);
         assert_endpoint_summaries_match_openapi_paths(&agent_schema, "agent schema", paths);
     }
@@ -10468,6 +10617,7 @@ mod tests {
                 "wizard schema endpoint '{key}' -> '{normalized}' should map to exactly one HTTP method",
             );
         }
+        assert_endpoint_openapi_paths_match_openapi_paths(&wizard_schema, "wizard schema", paths);
         assert_endpoint_http_methods_match_openapi_paths(&wizard_schema, "wizard schema", paths);
         assert_endpoint_summaries_match_openapi_paths(&wizard_schema, "wizard schema", paths);
     }
@@ -10492,6 +10642,12 @@ mod tests {
         let wizard_endpoint_http_methods = wizard_schema
             .get("endpoint_http_methods")
             .expect("wizard schema should expose endpoint_http_methods");
+        let agent_endpoint_openapi_paths = agent_schema
+            .get("endpoint_openapi_paths")
+            .expect("agent schema should expose endpoint_openapi_paths");
+        let wizard_endpoint_openapi_paths = wizard_schema
+            .get("endpoint_openapi_paths")
+            .expect("wizard schema should expose endpoint_openapi_paths");
         let agent_endpoint_summaries = agent_schema
             .get("endpoint_summaries")
             .expect("agent schema should expose endpoint_summaries");
@@ -10506,6 +10662,8 @@ mod tests {
             wizard_endpoint_http_methods,
             "wizard schema",
         );
+        assert_endpoint_openapi_paths_match_schema_endpoints(&agent_schema, "agent schema");
+        assert_endpoint_openapi_paths_match_schema_endpoints(&wizard_schema, "wizard schema");
         assert_endpoint_summaries_map_is_normalized(agent_endpoint_summaries, "agent schema");
         assert_endpoint_summaries_map_is_normalized(wizard_endpoint_summaries, "wizard schema");
 
@@ -10563,6 +10721,12 @@ mod tests {
         let wizard_summary_map = wizard_endpoint_summaries
             .as_object()
             .expect("wizard endpoint_summaries should be object");
+        let agent_openapi_path_map = agent_endpoint_openapi_paths
+            .as_object()
+            .expect("agent endpoint_openapi_paths should be object");
+        let wizard_openapi_path_map = wizard_endpoint_openapi_paths
+            .as_object()
+            .expect("wizard endpoint_openapi_paths should be object");
         for key in shared_endpoint_keys {
             assert!(
                 agent_summary_map.contains_key(&key) && wizard_summary_map.contains_key(&key),
@@ -10572,6 +10736,11 @@ mod tests {
                 agent_summary_map.get(&key),
                 wizard_summary_map.get(&key),
                 "wizard and agent endpoint_summaries should stay aligned for shared key '{key}'",
+            );
+            assert_eq!(
+                agent_openapi_path_map.get(&key),
+                wizard_openapi_path_map.get(&key),
+                "wizard and agent endpoint_openapi_paths should stay aligned for shared key '{key}'",
             );
         }
     }

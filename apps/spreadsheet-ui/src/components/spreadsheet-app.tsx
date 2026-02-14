@@ -125,6 +125,7 @@ function parseCommaSeparatedList(value: unknown): string[] {
 
 function collectSchemaEndpointMetadata(
   schema: unknown,
+  endpointOpenApiPathsByKey?: Record<string, string>,
 ): Array<{ key: string; endpoint: string; openApiPath: string }> {
   if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
     return [];
@@ -141,7 +142,9 @@ function collectSchemaEndpointMetadata(
       if (!endpoint) {
         return [];
       }
-      const openApiPath = endpoint.split("?").shift() ?? endpoint;
+      const openApiPath = endpointOpenApiPathsByKey?.[key]
+        ?? endpoint.split("?").shift()
+        ?? endpoint;
       return [{ key, endpoint, openApiPath }];
     })
     .sort((left, right) => left.key.localeCompare(right.key));
@@ -169,6 +172,25 @@ function normalizeEndpointMethodsByKey(value: unknown): Record<string, string[]>
     if (normalizedMethods.length > 0) {
       accumulator[key] = normalizedMethods;
     }
+    return accumulator;
+  }, {});
+}
+
+function normalizeEndpointPathsByKey(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value as Record<string, unknown>).reduce<
+    Record<string, string>
+  >((accumulator, [key, path]) => {
+    if (typeof path !== "string") {
+      return accumulator;
+    }
+    const normalizedPath = path.trim();
+    if (!normalizedPath) {
+      return accumulator;
+    }
+    accumulator[key] = normalizedPath;
     return accumulator;
   }, {});
 }
@@ -1268,17 +1290,21 @@ export function SpreadsheetApp() {
     },
     [wizardSchemaQuery.data?.formula_capabilities],
   );
-  const wizardSchemaEndpoints = useMemo(
-    () => collectSchemaEndpointMetadata(wizardSchemaQuery.data),
-    [wizardSchemaQuery.data],
-  );
   const wizardEndpointMethodsByKey = useMemo(
     () => normalizeEndpointMethodsByKey(wizardSchemaQuery.data?.endpoint_http_methods),
     [wizardSchemaQuery.data?.endpoint_http_methods],
   );
+  const wizardEndpointOpenApiPathsByKey = useMemo(
+    () => normalizeEndpointPathsByKey(wizardSchemaQuery.data?.endpoint_openapi_paths),
+    [wizardSchemaQuery.data?.endpoint_openapi_paths],
+  );
   const wizardEndpointSummariesByKey = useMemo(
     () => normalizeEndpointSummariesByKey(wizardSchemaQuery.data?.endpoint_summaries),
     [wizardSchemaQuery.data?.endpoint_summaries],
+  );
+  const wizardSchemaEndpoints = useMemo(
+    () => collectSchemaEndpointMetadata(wizardSchemaQuery.data, wizardEndpointOpenApiPathsByKey),
+    [wizardEndpointOpenApiPathsByKey, wizardSchemaQuery.data],
   );
   const openApiMethodsByPath = useMemo(
     () => collectOpenApiMethodsByPath(openApiSpecQuery.data),
@@ -1291,12 +1317,18 @@ export function SpreadsheetApp() {
   const wizardSchemaEndpointsWithMethods = useMemo(
     () =>
       wizardSchemaEndpoints.map((entry) => {
+        const derivedOpenApiPath = entry.endpoint.split("?").shift() ?? entry.endpoint;
+        const schemaOpenApiPath = wizardEndpointOpenApiPathsByKey[entry.key] ?? null;
         const schemaMethods = wizardEndpointMethodsByKey[entry.key] ?? [];
         const openApiMethods = openApiMethodsByPath[entry.openApiPath] ?? [];
         const schemaSummary = wizardEndpointSummariesByKey[entry.key] ?? null;
         const openApiSummary = openApiSummariesByPath[entry.openApiPath] ?? null;
         return {
           ...entry,
+          openApiPath: schemaOpenApiPath ?? derivedOpenApiPath,
+          openApiPathSource: schemaOpenApiPath ? "schema" : "derived",
+          hasPathMismatch:
+            Boolean(schemaOpenApiPath) && schemaOpenApiPath !== derivedOpenApiPath,
           methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
           schemaMethods,
           openApiMethods,
@@ -1321,6 +1353,7 @@ export function SpreadsheetApp() {
     [
       openApiMethodsByPath,
       openApiSummariesByPath,
+      wizardEndpointOpenApiPathsByKey,
       wizardEndpointMethodsByKey,
       wizardEndpointSummariesByKey,
       wizardSchemaEndpoints,
@@ -1337,6 +1370,13 @@ export function SpreadsheetApp() {
     () =>
       wizardSchemaEndpointsWithMethods
         .filter((entry) => entry.hasMethodMismatch)
+        .map((entry) => entry.key),
+    [wizardSchemaEndpointsWithMethods],
+  );
+  const wizardPathMismatchEndpointKeys = useMemo(
+    () =>
+      wizardSchemaEndpointsWithMethods
+        .filter((entry) => entry.hasPathMismatch)
         .map((entry) => entry.key),
     [wizardSchemaEndpointsWithMethods],
   );
@@ -1542,27 +1582,37 @@ export function SpreadsheetApp() {
     },
     [agentSchemaQuery.data?.formula_capabilities],
   );
-  const agentSchemaEndpoints = useMemo(
-    () => collectSchemaEndpointMetadata(agentSchemaQuery.data),
-    [agentSchemaQuery.data],
-  );
   const agentEndpointMethodsByKey = useMemo(
     () => normalizeEndpointMethodsByKey(agentSchemaQuery.data?.endpoint_http_methods),
     [agentSchemaQuery.data?.endpoint_http_methods],
+  );
+  const agentEndpointOpenApiPathsByKey = useMemo(
+    () => normalizeEndpointPathsByKey(agentSchemaQuery.data?.endpoint_openapi_paths),
+    [agentSchemaQuery.data?.endpoint_openapi_paths],
   );
   const agentEndpointSummariesByKey = useMemo(
     () => normalizeEndpointSummariesByKey(agentSchemaQuery.data?.endpoint_summaries),
     [agentSchemaQuery.data?.endpoint_summaries],
   );
+  const agentSchemaEndpoints = useMemo(
+    () => collectSchemaEndpointMetadata(agentSchemaQuery.data, agentEndpointOpenApiPathsByKey),
+    [agentEndpointOpenApiPathsByKey, agentSchemaQuery.data],
+  );
   const agentSchemaEndpointsWithMethods = useMemo(
     () =>
       agentSchemaEndpoints.map((entry) => {
+        const derivedOpenApiPath = entry.endpoint.split("?").shift() ?? entry.endpoint;
+        const schemaOpenApiPath = agentEndpointOpenApiPathsByKey[entry.key] ?? null;
         const schemaMethods = agentEndpointMethodsByKey[entry.key] ?? [];
         const openApiMethods = openApiMethodsByPath[entry.openApiPath] ?? [];
         const schemaSummary = agentEndpointSummariesByKey[entry.key] ?? null;
         const openApiSummary = openApiSummariesByPath[entry.openApiPath] ?? null;
         return {
           ...entry,
+          openApiPath: schemaOpenApiPath ?? derivedOpenApiPath,
+          openApiPathSource: schemaOpenApiPath ? "schema" : "derived",
+          hasPathMismatch:
+            Boolean(schemaOpenApiPath) && schemaOpenApiPath !== derivedOpenApiPath,
           methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
           schemaMethods,
           openApiMethods,
@@ -1586,6 +1636,7 @@ export function SpreadsheetApp() {
       }),
     [
       agentEndpointMethodsByKey,
+      agentEndpointOpenApiPathsByKey,
       agentEndpointSummariesByKey,
       agentSchemaEndpoints,
       openApiMethodsByPath,
@@ -1603,6 +1654,13 @@ export function SpreadsheetApp() {
     () =>
       agentSchemaEndpointsWithMethods
         .filter((entry) => entry.hasMethodMismatch)
+        .map((entry) => entry.key),
+    [agentSchemaEndpointsWithMethods],
+  );
+  const agentPathMismatchEndpointKeys = useMemo(
+    () =>
+      agentSchemaEndpointsWithMethods
+        .filter((entry) => entry.hasPathMismatch)
         .map((entry) => entry.key),
     [agentSchemaEndpointsWithMethods],
   );
@@ -3645,6 +3703,14 @@ export function SpreadsheetApp() {
                     </span>
                   </p>
                 ) : null}
+                {wizardPathMismatchEndpointKeys.length > 0 ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    schema/derived openapi path mismatch for:{" "}
+                    <span className="font-mono">
+                      {wizardPathMismatchEndpointKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : null}
                 {wizardSummaryMismatchEndpointKeys.length > 0 ? (
                   <p className="mt-1 text-[11px] text-rose-300">
                     schema/openapi summary mismatch for:{" "}
@@ -3673,9 +3739,17 @@ export function SpreadsheetApp() {
                         <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
                           {entry.summarySource}
                         </span>
+                        <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                          {entry.openApiPathSource}
+                        </span>
                         {entry.hasMethodMismatch ? (
                           <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
                             method mismatch
+                          </span>
+                        ) : null}
+                        {entry.hasPathMismatch ? (
+                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                            path mismatch
                           </span>
                         ) : null}
                         {entry.hasSummaryMismatch ? (
@@ -3697,6 +3771,9 @@ export function SpreadsheetApp() {
                           summary: {entry.summary}
                         </p>
                       ) : null}
+                      <p className="ml-1 text-[10px] text-slate-500">
+                        openapi path: {entry.openApiPath}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -4606,6 +4683,14 @@ export function SpreadsheetApp() {
                     </span>
                   </p>
                 ) : null}
+                {agentPathMismatchEndpointKeys.length > 0 ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    schema/derived openapi path mismatch for:{" "}
+                    <span className="font-mono">
+                      {agentPathMismatchEndpointKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : null}
                 {agentSummaryMismatchEndpointKeys.length > 0 ? (
                   <p className="mt-1 text-xs text-rose-300">
                     schema/openapi summary mismatch for:{" "}
@@ -4634,9 +4719,17 @@ export function SpreadsheetApp() {
                         <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
                           {entry.summarySource}
                         </span>
+                        <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                          {entry.openApiPathSource}
+                        </span>
                         {entry.hasMethodMismatch ? (
                           <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
                             method mismatch
+                          </span>
+                        ) : null}
+                        {entry.hasPathMismatch ? (
+                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                            path mismatch
                           </span>
                         ) : null}
                         {entry.hasSummaryMismatch ? (
@@ -4658,6 +4751,9 @@ export function SpreadsheetApp() {
                           summary: {entry.summary}
                         </p>
                       ) : null}
+                      <p className="ml-1 text-[10px] text-slate-500">
+                        openapi path: {entry.openApiPath}
+                      </p>
                     </div>
                   ))}
                 </div>
