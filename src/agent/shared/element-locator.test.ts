@@ -81,6 +81,42 @@ describe("getElementLocator", () => {
     ).rejects.toThrow("Element lookup failed for 0-10: xpath map trap");
   });
 
+  it("reuses first lookup value in debug path when map getter becomes trap-prone", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = createPage();
+    toEncodedId.mockReturnValue("0-10");
+    let readCount = 0;
+    const xpathMap = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop !== "0-10") {
+            return undefined;
+          }
+          readCount += 1;
+          if (readCount > 1) {
+            throw new Error("second lookup trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    try {
+      await expect(
+        getElementLocator(
+          "0-10",
+          xpathMap as unknown as Record<string, string>,
+          page,
+          undefined,
+          true
+        )
+      ).rejects.toThrow("Element 0-10 not found in xpath map");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("truncates oversized xpath-map trap diagnostics", async () => {
     const page = createPage();
     toEncodedId.mockReturnValue("0-10");
@@ -226,6 +262,57 @@ describe("getElementLocator", () => {
       logSpy.mockRestore();
       errorSpy.mockRestore();
       warnSpy.mockRestore();
+    }
+  });
+
+  it("sanitizes and truncates unresolved-frame debug payload logs", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = createPage({
+      frames: jest.fn(() => [
+        {
+          url: () => `https://example.com/\u0000\n${"x".repeat(2_000)}`,
+          name: () => `frame\u0000\n${"y".repeat(2_000)}`,
+        },
+      ]),
+    });
+    toEncodedId.mockReturnValue("1-10");
+    resolveFrameByXPath.mockResolvedValue(null);
+    const frameMap = new Map<number, unknown>([
+      [
+        1,
+        {
+          src: `https://frame.example/\u0000\n${"x".repeat(2_000)}`,
+          name: `name\u0000\n${"y".repeat(2_000)}`,
+          xpath: "//iframe[1]",
+          parentFrameIndex: 0,
+        },
+      ],
+    ]) as unknown as Map<number, never>;
+
+    try {
+      await expect(
+        getElementLocator(
+          "1-10",
+          { "1-10": "//button[1]" },
+          page,
+          frameMap,
+          true
+        )
+      ).rejects.toThrow("Could not resolve frame for element 1-10");
+
+      const payloadLogs = errorSpy.mock.calls
+        .map((call) => String(call[0] ?? ""))
+        .filter((entry) =>
+          entry.includes("Frame info:") || entry.includes("Available frames:")
+        );
+      expect(payloadLogs.length).toBeGreaterThanOrEqual(2);
+      for (const logLine of payloadLogs) {
+        expect(logLine).toContain("[truncated");
+        expect(logLine).not.toContain("\u0000");
+        expect(logLine).not.toContain("\n");
+      }
+    } finally {
+      errorSpy.mockRestore();
     }
   });
 });

@@ -14,6 +14,8 @@ import { formatUnknownError } from "@/utils";
 
 const MAX_ELEMENT_LOCATOR_DIAGNOSTIC_CHARS = 400;
 const MAX_ELEMENT_LOCATOR_IDENTIFIER_CHARS = 128;
+const MAX_ELEMENT_LOCATOR_DEBUG_CHARS = 600;
+const MAX_ELEMENT_LOCATOR_DEBUG_FRAMES = 20;
 
 function sanitizeElementLocatorText(value: string): string {
   if (value.length === 0) {
@@ -57,6 +59,38 @@ function formatElementLocatorIdentifier(value: unknown, fallback: string): strin
   );
 }
 
+function formatElementLocatorDebug(value: unknown, fallback: string): string {
+  const seen = new WeakSet<object>();
+  const raw = (() => {
+    if (typeof value === "string") {
+      return value;
+    }
+    try {
+      const serialized = JSON.stringify(value, (_key, candidate: unknown) => {
+        if (typeof candidate === "bigint") {
+          return `${candidate.toString()}n`;
+        }
+        if (typeof candidate === "object" && candidate !== null) {
+          if (seen.has(candidate)) {
+            return "[Circular]";
+          }
+          seen.add(candidate);
+        }
+        return candidate;
+      });
+      return typeof serialized === "string" ? serialized : fallback;
+    } catch {
+      return fallback;
+    }
+  })();
+  const normalized = sanitizeElementLocatorText(raw);
+  const safeFallback = fallback.trim().length > 0 ? fallback : "unavailable";
+  if (normalized.length === 0) {
+    return safeFallback;
+  }
+  return truncateElementLocatorText(normalized, MAX_ELEMENT_LOCATOR_DEBUG_CHARS);
+}
+
 function safeReadFrameText(
   frame: unknown,
   methodName: "url" | "name",
@@ -86,7 +120,10 @@ function safeFrameMetadata(frame: unknown): { url: string; name: string } {
 
 function safeListFrameMetadata(page: Page): Array<{ url: string; name: string }> {
   try {
-    return page.frames().map((frame) => safeFrameMetadata(frame));
+    return page
+      .frames()
+      .slice(0, MAX_ELEMENT_LOCATOR_DEBUG_FRAMES)
+      .map((frame) => safeFrameMetadata(frame));
   } catch {
     return [];
   }
@@ -154,8 +191,10 @@ export async function getElementLocator(
         `[getElementLocator] Looking for element with ID: ${normalizedElementId} (type: ${typeof normalizedElementId})`
       );
       console.error(
-        `[getElementLocator] Direct lookup result:`,
-        xpathMap[encodedId]
+        `[getElementLocator] Direct lookup result: ${formatElementLocatorDebug(
+          rawXpath,
+          "undefined"
+        )}`
       );
     }
     throw new HyperagentError(errorMsg, 404);
@@ -247,15 +286,22 @@ export async function getElementLocator(
     const errorMsg = `Could not resolve frame for element ${safeElementId} (frameIndex: ${frameIndex})`;
     if (debug) {
       console.error(`[getElementLocator] ${errorMsg}`);
-      console.error(`[getElementLocator] Frame info:`, {
-        src: iframeInfo.src,
-        name: iframeInfo.name,
-        xpath: iframeInfo.xpath,
-        parentFrameIndex: iframeInfo.parentFrameIndex,
-      });
       console.error(
-        `[getElementLocator] Available frames:`,
-        safeListFrameMetadata(page)
+        `[getElementLocator] Frame info: ${formatElementLocatorDebug(
+          {
+            src: iframeInfo.src,
+            name: iframeInfo.name,
+            xpath: iframeInfo.xpath,
+            parentFrameIndex: iframeInfo.parentFrameIndex,
+          },
+          "unavailable"
+        )}`
+      );
+      console.error(
+        `[getElementLocator] Available frames: ${formatElementLocatorDebug(
+          safeListFrameMetadata(page),
+          "[]"
+        )}`
       );
     }
     throw new HyperagentError(errorMsg, 404);
