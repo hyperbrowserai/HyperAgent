@@ -797,6 +797,18 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         "operations": "array of operation objects"
       },
       "agent_ops_endpoint": "/v1/workbooks/{id}/agent/ops",
+      "agent_ops_request_shape": {
+        "request_id": "optional string (if repeated, returns cached response for idempotency)",
+        "actor": "optional string",
+        "stop_on_error": "optional boolean (default false)",
+        "expected_operations_signature": "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
+        "operations (non-empty array)": [
+          {
+            "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
+            "payload": "operation-specific object"
+          }
+        ]
+      },
       "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
       "agent_ops_preview_request_shape": {
         "operations": "non-empty array of operation objects"
@@ -1685,6 +1697,18 @@ async fn get_agent_schema(
         }
       },
       "agent_ops_endpoint": "/v1/workbooks/{id}/agent/ops",
+      "agent_ops_request_shape": {
+        "request_id": "optional string (if repeated, returns cached response for idempotency)",
+        "actor": "optional string",
+        "stop_on_error": "optional boolean (default false)",
+        "expected_operations_signature": "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
+        "operations (non-empty array)": [
+          {
+            "op_type": "get_workbook | list_sheets | create_sheet | set_cells | get_cells | duckdb_query | recalculate | upsert_chart | export_workbook",
+            "payload": "operation-specific object"
+          }
+        ]
+      },
       "agent_ops_preview_endpoint": "/v1/workbooks/{id}/agent/ops/preview",
       "agent_ops_cache_stats_endpoint": "/v1/workbooks/{id}/agent/ops/cache?request_id_prefix=scenario-&max_age_seconds=3600",
       "agent_ops_cache_entries_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries?request_id_prefix=demo&offset=0&limit=20",
@@ -8048,6 +8072,15 @@ mod tests {
             Some("/v1/workbooks/{id}/agent/ops"),
         );
         assert_eq!(
+            schema
+                .get("agent_ops_request_shape")
+                .and_then(|value| value.get("expected_operations_signature"))
+                .and_then(serde_json::Value::as_str),
+            Some(
+                "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
+            ),
+        );
+        assert_eq!(
       schema
         .get("agent_ops_cache_stats_endpoint")
         .and_then(serde_json::Value::as_str),
@@ -8785,6 +8818,15 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("agent_ops_request_shape")
+                .and_then(|value| value.get("expected_operations_signature"))
+                .and_then(serde_json::Value::as_str),
+            Some(
+                "optional string from /v1/workbooks/{id}/agent/ops/preview for payload integrity checks (trimmed; blank ignored)",
+            ),
+        );
+        assert_eq!(
+            schema
                 .get("agent_ops_preview_endpoint")
                 .and_then(serde_json::Value::as_str),
             Some("/v1/workbooks/{id}/agent/ops/preview"),
@@ -9199,6 +9241,7 @@ mod tests {
 
         let parity_keys = [
             "agent_ops_endpoint",
+            "agent_ops_request_shape",
             "agent_ops_preview_endpoint",
             "agent_ops_preview_request_shape",
             "agent_ops_preview_response_shape",
