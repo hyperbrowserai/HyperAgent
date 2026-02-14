@@ -350,4 +350,28 @@ mod tests {
       "verification error should describe byte mismatch",
     );
   }
+
+  #[test]
+  fn should_fail_verify_when_unexpected_fixture_file_is_present() {
+    let output_dir = tempdir()
+      .expect("temp dir should create")
+      .path()
+      .join("generated-fixtures");
+    fixture_corpus::write_fixture_corpus(&output_dir)
+      .expect("fixture corpus should write");
+    fs::write(
+      output_dir.join("unexpected_fixture.xlsx"),
+      b"unexpected fixture bytes",
+    )
+    .expect("unexpected fixture file should be writable");
+
+    let error = verify_fixture_corpus(&output_dir)
+      .expect_err("verification should fail with unexpected fixture file");
+    assert!(
+      error
+        .to_string()
+        .contains("fixture corpus membership mismatch"),
+      "verification error should describe membership mismatch",
+    );
+  }
 }
