@@ -31,7 +31,7 @@ use crate::{
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
-    parse_irr_formula,
+    parse_irr_formula, parse_mirr_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1790,6 +1790,48 @@ fn evaluate_formula(
     };
     let irr = calculate_irr(&cash_flows, guess);
     return Ok(irr.map(|value| value.to_string()));
+  }
+
+  if let Some((values_arg, finance_rate_arg, reinvest_rate_arg)) = parse_mirr_formula(formula) {
+    let cash_flows = resolve_numeric_values_for_operand(connection, sheet, &values_arg)?;
+    if cash_flows.len() < 2 {
+      return Ok(None);
+    }
+    let finance_rate = parse_required_float(connection, sheet, &finance_rate_arg)?;
+    let reinvest_rate = parse_required_float(connection, sheet, &reinvest_rate_arg)?;
+    if finance_rate <= -1.0 || reinvest_rate <= -1.0 {
+      return Ok(None);
+    }
+    let horizon = cash_flows.len() - 1;
+    if horizon == 0 {
+      return Ok(None);
+    }
+    let mut present_value_negative = 0.0f64;
+    let mut future_value_positive = 0.0f64;
+    for (period, cash_flow) in cash_flows.iter().enumerate() {
+      let period_i32 = i32::try_from(period).map_err(|error| {
+        ApiError::internal(format!(
+          "period index exceeded i32 conversion range: {error}"
+        ))
+      })?;
+      if *cash_flow < 0.0 {
+        present_value_negative += cash_flow / (1.0 + finance_rate).powi(period_i32);
+      } else if *cash_flow > 0.0 {
+        let remaining_periods = horizon - period;
+        let remaining_i32 = i32::try_from(remaining_periods).map_err(|error| {
+          ApiError::internal(format!(
+            "period index exceeded i32 conversion range: {error}"
+          ))
+        })?;
+        future_value_positive += cash_flow * (1.0 + reinvest_rate).powi(remaining_i32);
+      }
+    }
+    if present_value_negative >= 0.0 || future_value_positive <= 0.0 {
+      return Ok(None);
+    }
+    let horizon_f64 = horizon as f64;
+    let mirr = (-future_value_positive / present_value_negative).powf(1.0 / horizon_f64) - 1.0;
+    return Ok(Some(mirr.to_string()));
   }
 
   if let Some(fact_arg) = parse_fact_formula(formula) {
@@ -6676,12 +6718,36 @@ mod tests {
         value: None,
         formula: Some("=IRR(-100,110)".to_string()),
       },
+      CellMutation {
+        row: 20,
+        col: 1,
+        value: Some(json!(-100)),
+        formula: None,
+      },
+      CellMutation {
+        row: 20,
+        col: 2,
+        value: Some(json!(60)),
+        formula: None,
+      },
+      CellMutation {
+        row: 20,
+        col: 3,
+        value: Some(json!(70)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 255,
+        value: None,
+        formula: Some("=MIRR(A20:C20,0.1,0.12)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 252);
+    assert_eq!(updated_cells, 253);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6693,9 +6759,9 @@ mod tests {
       "Sheet1",
       &CellRange {
         start_row: 1,
-        end_row: 2,
+        end_row: 20,
         start_col: 1,
-        end_col: 254,
+        end_col: 255,
       },
     )
     .expect("cells should be fetched");
@@ -7723,6 +7789,16 @@ mod tests {
       (irr_value - 0.1).abs() < 1e-9,
       "irr should solve discounted cash flow rate, got {irr_value}",
     );
+    let mirr_value = by_position(1, 255)
+      .evaluated_value
+      .as_deref()
+      .expect("mirr should evaluate")
+      .parse::<f64>()
+      .expect("mirr should be numeric");
+    assert!(
+      (mirr_value - 0.171_324_037_147_705_38).abs() < 1e-12,
+      "mirr should compute modified internal return rate, got {mirr_value}",
+    );
   }
 
   #[test]
@@ -7978,6 +8054,42 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=IRR(10,20,30)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_mirr_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(-100)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(60)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: Some(json!(70)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 4,
+        value: None,
+        formula: Some("=MIRR(A1:C1,-1,0.1)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=MIRR(A1:C1,-1,0.1)".to_string()]);
   }
 
   #[test]

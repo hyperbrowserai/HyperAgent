@@ -569,6 +569,14 @@ pub fn parse_irr_formula(formula: &str) -> Option<(Vec<String>, Option<String>)>
   Some((args, None))
 }
 
+pub fn parse_mirr_formula(formula: &str) -> Option<(String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "MIRR" || args.len() != 3 {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args[2].clone()))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2055,7 +2063,7 @@ mod tests {
     parse_len_formula, parse_ln_formula, parse_log10_formula, parse_exp_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
-    parse_irr_formula,
+    parse_irr_formula, parse_mirr_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2356,6 +2364,10 @@ mod tests {
     let irr_scalar_args = parse_irr_formula("=IRR(-100,60,70)").expect("irr should parse");
     assert_eq!(irr_scalar_args.0, vec!["-100", "60", "70"]);
     assert_eq!(irr_scalar_args.1, None);
+    let mirr_args = parse_mirr_formula("=MIRR(A1:A5,0.1,0.12)").expect("mirr should parse");
+    assert_eq!(mirr_args.0, "A1:A5");
+    assert_eq!(mirr_args.1, "0.1");
+    assert_eq!(mirr_args.2, "0.12");
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),
