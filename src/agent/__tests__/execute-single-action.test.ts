@@ -143,6 +143,57 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     );
   });
 
+  it("uses deprecated maxSteps as fallback for single-action retries", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+
+    await agent.executeSingleAction("click login", page, {
+      maxSteps: 4,
+      retryDelayMs: 33,
+    });
+
+    expect(findElementWithInstruction).toHaveBeenCalledWith(
+      "click login",
+      page,
+      expect.any(Object),
+      expect.objectContaining({
+        maxRetries: 4,
+        retryDelayMs: 33,
+      })
+    );
+  });
+
+  it("prefers maxElementRetries over deprecated maxSteps when both are set", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+
+    await agent.executeSingleAction("click login", page, {
+      maxElementRetries: 6,
+      maxSteps: 2,
+    });
+
+    expect(findElementWithInstruction).toHaveBeenCalledWith(
+      "click login",
+      page,
+      expect.any(Object),
+      expect.objectContaining({
+        maxRetries: 6,
+      })
+    );
+  });
+
   it("formats non-Error execution failures with readable messages", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

@@ -200,6 +200,7 @@ await page.perform("click the login button", {
 - `retryDelayMs`: delay between element-refetch retries.
 - `maxContextSwitchRetries`: retries when a tab/context switch interrupts an in-flight action.
 - `contextSwitchRetryDelayMs`: delay between context-switch retries (defaults to 500ms, capped for safety).
+- `maxSteps` (**deprecated**): compatibility alias for `maxElementRetries`.
 
 ### 🧠 `page.ai()` - Complex Multi-Step Tasks
 
