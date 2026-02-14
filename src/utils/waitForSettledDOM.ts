@@ -20,6 +20,7 @@ import type { CDPSession } from "@/cdp";
 import { Protocol } from "devtools-protocol";
 import { performance } from "perf_hooks";
 import { getDebugOptions } from "@/debug/options";
+import { formatUnknownError } from "@/utils";
 
 const NETWORK_IDLE_THRESHOLD_MS = 500;
 const STALLED_REQUEST_MS = 2000;
@@ -72,13 +73,11 @@ function formatWaitUrl(value: unknown): string {
 }
 
 function formatWaitDiagnostic(value: unknown): string {
-  if (typeof value === "string") {
-    return formatWaitUrl(value);
+  const normalized = sanitizeWaitDiagnosticText(formatUnknownError(value));
+  if (normalized.length === 0) {
+    return "unknown error";
   }
-  if (value instanceof Error) {
-    return formatWaitUrl(value.message);
-  }
-  return formatWaitUrl(String(value));
+  return truncateWaitDiagnostic(normalized, MAX_WAIT_DIAGNOSTIC_CHARS);
 }
 
 function attachSessionListener<TPayload extends unknown[]>(

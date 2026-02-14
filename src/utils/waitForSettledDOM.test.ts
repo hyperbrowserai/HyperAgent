@@ -27,6 +27,8 @@ function createSessionWithEvents(options?: {
   throwOnOffEvent?: string;
   onErrorMessage?: string;
   offErrorMessage?: string;
+  onErrorValue?: unknown;
+  offErrorValue?: unknown;
 }): {
   session: CDPSession;
   emit: (event: string, payload: unknown) => void;
@@ -39,9 +41,10 @@ function createSessionWithEvents(options?: {
       handler: (...payload: TPayload) => void
     ) => {
       if (options?.throwOnOnEvent === event) {
-        throw new Error(
-          options.onErrorMessage ?? "listener registration failed"
-        );
+        if (typeof options.onErrorValue !== "undefined") {
+          throw options.onErrorValue;
+        }
+        throw new Error(options.onErrorMessage ?? "listener registration failed");
       }
       const eventHandler = handler as EventHandler;
       const existing = handlers.get(event);
@@ -56,6 +59,9 @@ function createSessionWithEvents(options?: {
       handler: (...payload: TPayload) => void
     ) => {
       if (options?.throwOnOffEvent === event) {
+        if (typeof options.offErrorValue !== "undefined") {
+          throw options.offErrorValue;
+        }
         throw new Error(options.offErrorMessage ?? "listener detach failed");
       }
       handlers.get(event)?.delete(handler as EventHandler);
@@ -218,6 +224,45 @@ describe("waitForSettledDOM diagnostics", () => {
       expect(stats.resolvedByTimeout).toBe(true);
       expect(stats.requestsSeen).toBe(0);
       expect(stats.peakInflight).toBe(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("formats non-Error listener registration diagnostics deterministically", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session } = createSessionWithEvents({
+      throwOnOnEvent: "Network.requestWillBeSent",
+      onErrorValue: { reason: "attach object failure" },
+    });
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 700);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(800);
+      await waitPromise;
+
+      const attachWarning = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(attachWarning).toContain('{"reason":"attach object failure"}');
     } finally {
       warnSpy.mockRestore();
     }
