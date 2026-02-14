@@ -899,9 +899,30 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.import_response_shape),
     [wizardSchemaQuery.data?.import_response_shape],
   );
+  const wizardOperationsPreviewResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.operations_preview_response_shape,
+      ),
+    [wizardSchemaQuery.data?.operations_preview_response_shape],
+  );
   const wizardFormulaCapabilityFields = useMemo(
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.formula_capabilities),
     [wizardSchemaQuery.data?.formula_capabilities],
+  );
+  const wizardAgentOpsPreviewRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_preview_request_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_preview_request_shape],
+  );
+  const wizardAgentOpsPreviewResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_preview_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_preview_response_shape],
   );
   const wizardDuckdbQueryRequestFields = useMemo(
     () => flattenSchemaShapeEntries(wizardSchemaQuery.data?.duckdb_query_request_shape),
@@ -3234,6 +3255,38 @@ export function SpreadsheetApp() {
                 import response fields:{" "}
                 <span className="font-mono text-slate-300">
                   {formatSchemaShapeEntries(wizardImportResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardOperationsPreviewResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                scenario operations preview shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardOperationsPreviewResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_preview_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                agent ops preview endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_preview_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardAgentOpsPreviewRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                agent ops preview request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardAgentOpsPreviewRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardAgentOpsPreviewResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                agent ops preview response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardAgentOpsPreviewResponseFields)}
                 </span>
               </p>
             ) : null}
