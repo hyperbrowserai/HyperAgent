@@ -73,7 +73,9 @@ use crate::{
     parse_find_formula,
     parse_value_formula, parse_n_formula, parse_t_formula,
     parse_base_formula, parse_decimal_formula,
-    parse_dec2bin_formula, parse_bin2dec_formula, parse_char_formula,
+    parse_dec2bin_formula, parse_bin2dec_formula,
+    parse_dec2hex_formula, parse_hex2dec_formula,
+    parse_dec2oct_formula, parse_oct2dec_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_even_formula, parse_odd_formula,
@@ -1649,6 +1651,92 @@ fn evaluate_formula(
       None => (false, trimmed),
     };
     let parsed = u64::from_str_radix(&digits.to_uppercase(), 2).ok();
+    let Some(unsigned_value) = parsed else {
+      return Ok(None);
+    };
+    if is_negative {
+      return Ok(Some((-i128::from(unsigned_value)).to_string()));
+    }
+    return Ok(Some(unsigned_value.to_string()));
+  }
+
+  if let Some((number_arg, places_arg)) = parse_dec2hex_formula(formula) {
+    let number = parse_required_float(connection, sheet, &number_arg)?.trunc();
+    if number < 0.0 {
+      return Ok(None);
+    }
+    let places = match places_arg {
+      Some(raw_places) => parse_required_integer(connection, sheet, &raw_places)?,
+      None => 0,
+    };
+    if places < 0 {
+      return Ok(None);
+    }
+    let converted = format_radix_u64(number as u64, 16);
+    if places > 0 {
+      let width = usize::try_from(places).unwrap_or_default();
+      if converted.len() > width {
+        return Ok(None);
+      }
+      return Ok(Some(format!("{:0>width$}", converted, width = width)));
+    }
+    return Ok(Some(converted));
+  }
+
+  if let Some(number_text_arg) = parse_hex2dec_formula(formula) {
+    let number_text = resolve_scalar_operand(connection, sheet, &number_text_arg)?;
+    let trimmed = number_text.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+    let (is_negative, digits) = match trimmed.strip_prefix('-') {
+      Some(rest) => (true, rest),
+      None => (false, trimmed),
+    };
+    let parsed = u64::from_str_radix(&digits.to_uppercase(), 16).ok();
+    let Some(unsigned_value) = parsed else {
+      return Ok(None);
+    };
+    if is_negative {
+      return Ok(Some((-i128::from(unsigned_value)).to_string()));
+    }
+    return Ok(Some(unsigned_value.to_string()));
+  }
+
+  if let Some((number_arg, places_arg)) = parse_dec2oct_formula(formula) {
+    let number = parse_required_float(connection, sheet, &number_arg)?.trunc();
+    if number < 0.0 {
+      return Ok(None);
+    }
+    let places = match places_arg {
+      Some(raw_places) => parse_required_integer(connection, sheet, &raw_places)?,
+      None => 0,
+    };
+    if places < 0 {
+      return Ok(None);
+    }
+    let converted = format_radix_u64(number as u64, 8);
+    if places > 0 {
+      let width = usize::try_from(places).unwrap_or_default();
+      if converted.len() > width {
+        return Ok(None);
+      }
+      return Ok(Some(format!("{:0>width$}", converted, width = width)));
+    }
+    return Ok(Some(converted));
+  }
+
+  if let Some(number_text_arg) = parse_oct2dec_formula(formula) {
+    let number_text = resolve_scalar_operand(connection, sheet, &number_text_arg)?;
+    let trimmed = number_text.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+    let (is_negative, digits) = match trimmed.strip_prefix('-') {
+      Some(rest) => (true, rest),
+      None => (false, trimmed),
+    };
+    let parsed = u64::from_str_radix(&digits.to_uppercase(), 8).ok();
     let Some(unsigned_value) = parsed else {
       return Ok(None);
     };
@@ -7868,12 +7956,36 @@ mod tests {
         value: None,
         formula: Some(r#"=BIN2DEC("11111111")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 278,
+        value: None,
+        formula: Some("=DEC2HEX(255,4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 279,
+        value: None,
+        formula: Some(r#"=HEX2DEC("FF")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 280,
+        value: None,
+        formula: Some("=DEC2OCT(64,4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 281,
+        value: None,
+        formula: Some(r#"=OCT2DEC("100")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 275);
+    assert_eq!(updated_cells, 279);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7887,7 +7999,7 @@ mod tests {
         start_row: 1,
         end_row: 22,
         start_col: 1,
-        end_col: 277,
+        end_col: 281,
       },
     )
     .expect("cells should be fetched");
@@ -9100,6 +9212,26 @@ mod tests {
       Some("255"),
       "bin2dec should convert binary text to decimal",
     );
+    assert_eq!(
+      by_position(1, 278).evaluated_value.as_deref(),
+      Some("00FF"),
+      "dec2hex should convert decimal to hexadecimal with padding",
+    );
+    assert_eq!(
+      by_position(1, 279).evaluated_value.as_deref(),
+      Some("255"),
+      "hex2dec should convert hexadecimal text to decimal",
+    );
+    assert_eq!(
+      by_position(1, 280).evaluated_value.as_deref(),
+      Some("0100"),
+      "dec2oct should convert decimal to octal with padding",
+    );
+    assert_eq!(
+      by_position(1, 281).evaluated_value.as_deref(),
+      Some("64"),
+      "oct2dec should convert octal text to decimal",
+    );
   }
 
   #[test]
@@ -9758,6 +9890,50 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=DEC2BIN(-1)".to_string(), r#"=BIN2DEC("102")"#.to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_hex_octal_conversion_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=DEC2HEX(-1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(r#"=HEX2DEC("G1")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=DEC2OCT(-1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 4,
+        value: None,
+        formula: Some(r#"=OCT2DEC("89")"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=DEC2HEX(-1)".to_string(),
+        r#"=HEX2DEC("G1")"#.to_string(),
+        "=DEC2OCT(-1)".to_string(),
+        r#"=OCT2DEC("89")"#.to_string(),
+      ],
     );
   }
 

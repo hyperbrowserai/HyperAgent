@@ -1378,6 +1378,38 @@ pub fn parse_bin2dec_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_dec2hex_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "DEC2HEX" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_hex2dec_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "HEX2DEC" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_dec2oct_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "DEC2OCT" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_oct2dec_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "OCT2DEC" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_char_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "CHAR" && args.len() == 1 {
@@ -2348,7 +2380,9 @@ mod tests {
     parse_replace_formula, parse_search_formula, parse_substitute_formula,
     parse_value_formula, parse_n_formula, parse_t_formula,
     parse_base_formula, parse_decimal_formula,
-    parse_dec2bin_formula, parse_bin2dec_formula, parse_char_formula,
+    parse_dec2bin_formula, parse_bin2dec_formula,
+    parse_dec2hex_formula, parse_hex2dec_formula,
+    parse_dec2oct_formula, parse_oct2dec_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_cell_address,
@@ -2930,6 +2964,22 @@ mod tests {
     assert_eq!(
       parse_bin2dec_formula(r#"=BIN2DEC("11111111")"#).as_deref(),
       Some(r#""11111111""#),
+    );
+    let dec2hex_args =
+      parse_dec2hex_formula("=DEC2HEX(A1,4)").expect("dec2hex should parse");
+    assert_eq!(dec2hex_args.0, "A1");
+    assert_eq!(dec2hex_args.1.as_deref(), Some("4"));
+    assert_eq!(
+      parse_hex2dec_formula(r#"=HEX2DEC("FF")"#).as_deref(),
+      Some(r#""FF""#),
+    );
+    let dec2oct_args =
+      parse_dec2oct_formula("=DEC2OCT(A1,4)").expect("dec2oct should parse");
+    assert_eq!(dec2oct_args.0, "A1");
+    assert_eq!(dec2oct_args.1.as_deref(), Some("4"));
+    assert_eq!(
+      parse_oct2dec_formula(r#"=OCT2DEC("100")"#).as_deref(),
+      Some(r#""100""#),
     );
     assert_eq!(parse_char_formula("=CHAR(65)").as_deref(), Some("65"));
     assert_eq!(
