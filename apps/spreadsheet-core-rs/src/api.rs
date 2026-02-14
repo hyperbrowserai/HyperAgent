@@ -9143,6 +9143,25 @@ mod tests {
             "wizard schema should expose the same agent_ops_cache_* key set as agent schema",
         );
 
+        let agent_duckdb_keys = agent_schema
+            .as_object()
+            .expect("agent schema should be an object")
+            .keys()
+            .filter(|key| key.starts_with("duckdb_query_"))
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let wizard_duckdb_keys = wizard_schema
+            .as_object()
+            .expect("wizard schema should be an object")
+            .keys()
+            .filter(|key| key.starts_with("duckdb_query_"))
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            agent_duckdb_keys, wizard_duckdb_keys,
+            "wizard schema should expose the same duckdb_query_* key set as agent schema",
+        );
+
         let agent_cache_codes = agent_schema
             .get("cache_validation_error_codes")
             .and_then(serde_json::Value::as_array)
