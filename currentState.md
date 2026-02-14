@@ -153,6 +153,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Expanded settle trace regressions with cleaner log-capture coverage to ensure recording-video trace diagnostics remain validated without noisy test output.
 - Hardened settle debug-option lookup against trap-prone `getDebugOptions()` reads, with deterministic fallback trace defaults and sanitized warning diagnostics.
 - Refined settle context probing to avoid noisy warnings when `page.context` is unavailable while still surfacing sanitized diagnostics for trap-prone context method/getter failures.
+- Hardened Playwright CDP session initialization flow:
+  - `createSession` now guards context acquisition, `newCDPSession` method reads, and session creation with bounded/sanitized diagnostics.
+  - `getCDPClientForPage` now always clears pending init promises (including failed init paths) and tolerates trap-prone `page.once` close-listener attachment with sanitized warnings.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

@@ -109,4 +109,81 @@ describe("playwright adapter error formatting", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("surfaces sanitized diagnostics when page context traps during init", async () => {
+    const page = {
+      context: () => {
+        throw new Error(`context\u0000\n${"x".repeat(2_000)}`);
+      },
+      once: jest.fn(),
+    } as unknown as Page;
+
+    await expect(getCDPClientForPage(page)).rejects.toThrow(
+      "[CDP][PlaywrightAdapter] Failed to create CDP session"
+    );
+
+    await expect(getCDPClientForPage(page)).rejects.toThrow("[truncated");
+  });
+
+  it("clears pending init promise after context-init failure", async () => {
+    const session = {
+      send: jest.fn().mockResolvedValue({}),
+      on: jest.fn(),
+      off: jest.fn(),
+      detach: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PlaywrightSession;
+
+    const context = jest
+      .fn<unknown, []>()
+      .mockImplementationOnce(() => {
+        throw new Error("first init failure");
+      })
+      .mockImplementation(() => ({
+        newCDPSession: jest.fn().mockResolvedValue(session),
+      }));
+
+    const page = {
+      context,
+      once: jest.fn(),
+    } as unknown as Page;
+
+    await expect(getCDPClientForPage(page)).rejects.toThrow(
+      "first init failure"
+    );
+    await expect(getCDPClientForPage(page)).resolves.toBeDefined();
+    expect(context).toHaveBeenCalledTimes(2);
+  });
+
+  it("warns and continues when close-listener attachment traps", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const session = {
+      send: jest.fn().mockResolvedValue({}),
+      on: jest.fn(),
+      off: jest.fn(),
+      detach: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PlaywrightSession;
+
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(session),
+      }),
+      get once() {
+        throw new Error(`close-listener\u0000\n${"x".repeat(2_000)}`);
+      },
+    } as unknown as Page;
+
+    try {
+      await expect(getCDPClientForPage(page)).resolves.toBeDefined();
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to attach page close listener")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

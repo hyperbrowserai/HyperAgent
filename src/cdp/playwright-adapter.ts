@@ -161,7 +161,52 @@ class PlaywrightCDPClient implements CDPClient {
 
   async createSession(descriptor?: CDPTargetDescriptor): Promise<CDPSession> {
     const target = this.resolveTarget(descriptor);
-    const session = await this.page.context().newCDPSession(target);
+    let pageContext: unknown;
+    try {
+      pageContext = this.page.context();
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to create CDP session: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
+    if (!pageContext || typeof pageContext !== "object") {
+      throw new Error(
+        "[CDP][PlaywrightAdapter] Failed to create CDP session: page context unavailable"
+      );
+    }
+
+    let newCDPSessionMethod: unknown;
+    try {
+      newCDPSessionMethod = (
+        pageContext as { newCDPSession?: unknown }
+      ).newCDPSession;
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to create CDP session: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
+    if (typeof newCDPSessionMethod !== "function") {
+      throw new Error(
+        "[CDP][PlaywrightAdapter] Failed to create CDP session: newCDPSession() unavailable"
+      );
+    }
+
+    let session: PlaywrightSession;
+    try {
+      session = (await (
+        newCDPSessionMethod as (targetArg: Page | Frame) => Promise<PlaywrightSession>
+      )(target)) as PlaywrightSession;
+    } catch (error) {
+      throw new Error(
+        `[CDP][PlaywrightAdapter] Failed to create CDP session: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
     const wrapped = new PlaywrightSessionAdapter(session, (adapter) =>
       this.trackedSessions.delete(adapter)
     );
@@ -298,12 +343,30 @@ export async function getCDPClientForPage(page: Page): Promise<CDPClient> {
     const client = new PlaywrightCDPClient(page);
     await client.init();
     clientCache.set(page, client);
-    pendingClients.delete(page);
-    page.once("close", () => {
-      disposeCDPClientForPage(page).catch(() => {});
-    });
+    try {
+      const once = (page as Page & { once?: unknown }).once;
+      if (typeof once === "function") {
+        (
+          once as (
+            this: Page,
+            event: "close",
+            listener: () => void
+          ) => void
+        ).call(page, "close", () => {
+          disposeCDPClientForPage(page).catch(() => {});
+        });
+      }
+    } catch (error) {
+      console.warn(
+        `[CDP][PlaywrightAdapter] Failed to attach page close listener: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+    }
     return client;
-  })();
+  })().finally(() => {
+    pendingClients.delete(page);
+  });
 
   pendingClients.set(page, initPromise);
   return initPromise;
