@@ -56,6 +56,69 @@ describe("initializeRuntimeContext", () => {
     expect(frameContextManager.ensureInitialized).toHaveBeenCalledTimes(1);
   });
 
+  it("continues when frame manager debug setter throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const page = {} as unknown as Page;
+    const cdpClient = { id: "client-debug-trap" };
+    const frameContextManager = {
+      setDebug: jest.fn(() => {
+        throw new Error(`debug\u0000\n${"x".repeat(2_000)}`);
+      }),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+    };
+    getCDPClientMock.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManagerMock.mockReturnValue(frameContextManager);
+
+    try {
+      const result = await initializeRuntimeContext(page, true);
+      expect(result.frameContextManager).toBe(frameContextManager);
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("configure frame manager debug")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+      expect(frameContextManager.ensureInitialized).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("continues when frame manager filtering setter throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const page = {} as unknown as Page;
+    const cdpClient = { id: "client-filter-trap" };
+    const frameContextManager = {
+      setDebug: jest.fn(),
+      setFrameFilteringEnabled: jest.fn(() => {
+        throw new Error(`filter\u0000\n${"y".repeat(2_000)}`);
+      }),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+    };
+    getCDPClientMock.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManagerMock.mockReturnValue(frameContextManager);
+
+    try {
+      const result = await initializeRuntimeContext(page, true, {
+        filterAdTrackingFrames: false,
+      });
+      expect(result.frameContextManager).toBe(frameContextManager);
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("configure frame filtering")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+      expect(frameContextManager.ensureInitialized).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("initializes even when setDebug is unavailable", async () => {
     const page = {} as unknown as Page;
     const cdpClient = { id: "client-2" };

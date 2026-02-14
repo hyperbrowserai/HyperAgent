@@ -123,6 +123,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened per-call frame-filter option reads against trap-prone parameter objects in `executeTask`, `executeTaskAsync`, and `executeSingleAction` (falls back to agent default instead of throwing).
 - Hardened `waitForSettledDOM` frame-manager option setup so debug/filter configuration setter failures are isolated to sanitized warnings instead of aborting settle behavior.
 - Hardened `getA11yDOM` frame-manager configuration so trap-prone `setDebug` / `setFrameFilteringEnabled` calls degrade to sanitized warnings instead of failing DOM extraction setup.
+- Hardened shared runtime-context initialization so trap-prone frame-manager config setters (`setDebug`, `setFrameFilteringEnabled`) no longer abort action/task setup.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.
