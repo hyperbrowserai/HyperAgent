@@ -859,6 +859,26 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "agent_ops_cache_entry_detail_endpoint": "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
       "agent_ops_cache_prefixes_endpoint": "/v1/workbooks/{id}/agent/ops/cache/prefixes?request_id_prefix=scenario-&min_entry_count=2&min_span_seconds=60&max_span_seconds=86400&sort_by=recent&offset=0&limit=8&max_age_seconds=3600",
       "agent_ops_cache_clear_endpoint": "/v1/workbooks/{id}/agent/ops/cache/clear",
+      "agent_ops_cache_stats_query_shape": {
+        "request_id_prefix": "optional non-blank string filter (prefix match)",
+        "max_age_seconds": "optional number > 0 (filter stats to entries older than or equal to this age)"
+      },
+      "agent_ops_cache_entries_query_shape": {
+        "request_id_prefix": "optional non-blank string filter (prefix match)",
+        "max_age_seconds": "optional number > 0 (filter to entries older than or equal to this age)",
+        "offset": "optional number, default 0",
+        "limit": "optional number, default 20, min 1, max 200"
+      },
+      "agent_ops_cache_prefixes_query_shape": {
+        "request_id_prefix": "optional non-blank string filter (prefix match)",
+        "min_entry_count": "optional number > 0 (filter out prefixes with fewer matches, default 1)",
+        "min_span_seconds": "optional number > 0 (filter out prefixes with narrower time spans)",
+        "max_span_seconds": "optional number > 0 (filter out prefixes with wider time spans; when combined with min_span_seconds must be >= min_span_seconds)",
+        "sort_by": "optional string enum: count|recent|alpha|span (default count)",
+        "max_age_seconds": "optional number > 0 (filter prefixes to entries older than or equal to this age)",
+        "offset": "optional number, default 0",
+        "limit": "optional number, default 8, min 1, max 100"
+      },
       "agent_ops_cache_stats_response_shape": {
         "entries": "current number of cached request_ids",
         "max_entries": "configured cache capacity per workbook",
@@ -8811,6 +8831,27 @@ mod tests {
                 .get("agent_ops_cache_remove_stale_endpoint")
                 .and_then(serde_json::Value::as_str),
             Some("/v1/workbooks/{id}/agent/ops/cache/remove-stale"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_stats_query_shape")
+                .and_then(|value| value.get("max_age_seconds"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional number > 0 (filter stats to entries older than or equal to this age)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_entries_query_shape")
+                .and_then(|value| value.get("limit"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional number, default 20, min 1, max 200"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_prefixes_query_shape")
+                .and_then(|value| value.get("sort_by"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional string enum: count|recent|alpha|span (default count)"),
         );
         assert_eq!(
             schema
