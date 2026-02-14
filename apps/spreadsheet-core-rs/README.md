@@ -358,11 +358,11 @@ Sample baseline captured in this repository (Linux CI-sized VM, debug test profi
 
 | benchmark | rows | elapsed_ms | persisted_cells |
 | --- | ---: | ---: | ---: |
-| medium_range_set_cells_benchmark | 500 | 4815 | 500 |
+| medium_range_set_cells_benchmark | 500 | 4990 | 500 |
 
 | rows | upsert_ms | recalc_ms | total_ms | updated_cells |
 | ---: | ---: | ---: | ---: | ---: |
-| 3000 | 31194 | 69 | 31263 | 1 |
+| 3000 | 31090 | 66 | 31157 | 1 |
 
 XLSX compatibility regression coverage includes:
 - supported formula roundtrip fixtures (engineering + financial families),
