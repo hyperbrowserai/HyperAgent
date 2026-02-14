@@ -2233,6 +2233,16 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyEndpoint(endpoint: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      clearUiError();
+      setNotice(`Copied ${label} endpoint ${endpoint}.`);
+    } catch (error) {
+      applyUiError(error, `Failed to copy ${label} endpoint.`);
+    }
+  }
+
   async function handleReplayLastRequestId() {
     if (!workbook || !lastAgentRequestId) {
       return;
@@ -3271,6 +3281,17 @@ export function SpreadsheetApp() {
                 <span className="font-mono text-slate-300">
                   {wizardSchemaQuery.data.openapi_endpoint}
                 </span>
+                <button
+                  onClick={() => {
+                    void handleCopyEndpoint(
+                      wizardSchemaQuery.data?.openapi_endpoint ?? "",
+                      "wizard openapi",
+                    );
+                  }}
+                  className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                >
+                  copy
+                </button>
               </p>
             ) : null}
             {wizardSchemaQuery.data?.signature_error_codes?.length ? (
@@ -4093,6 +4114,17 @@ export function SpreadsheetApp() {
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.openapi_endpoint}
                 </span>
+                <button
+                  onClick={() => {
+                    void handleCopyEndpoint(
+                      agentSchemaQuery.data?.openapi_endpoint ?? "",
+                      "agent openapi",
+                    );
+                  }}
+                  className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                >
+                  copy
+                </button>
               </p>
             ) : null}
             {agentOpsRequestFields.length > 0 ? (
