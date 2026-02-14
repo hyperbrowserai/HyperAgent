@@ -38,7 +38,7 @@ use crate::{
     parse_rri_formula, parse_pduration_formula,
     parse_fvschedule_formula, parse_ispmt_formula,
     parse_cumipmt_formula, parse_cumprinc_formula,
-    parse_xnpv_formula,
+    parse_xnpv_formula, parse_xirr_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -2087,6 +2087,28 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(xnpv.to_string()));
+  }
+
+  if let Some((values_arg, dates_arg, guess_arg)) = parse_xirr_formula(formula) {
+    let values = resolve_numeric_values_for_operand(connection, sheet, &values_arg)?;
+    let dates = match resolve_date_values_for_operand(connection, sheet, &dates_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    if values.len() < 2
+      || dates.len() < 2
+      || values.len() != dates.len()
+      || !values.iter().any(|value| *value < 0.0)
+      || !values.iter().any(|value| *value > 0.0)
+    {
+      return Ok(None);
+    }
+    let guess = match guess_arg {
+      Some(raw_guess) => parse_required_float(connection, sheet, &raw_guess)?,
+      None => 0.1,
+    };
+    let xirr = calculate_xirr(&values, &dates, guess);
+    return Ok(xirr.map(|value| value.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -4575,6 +4597,116 @@ fn calculate_ddb_depreciation(
     remaining -= depreciation;
   }
   Some(depreciation)
+}
+
+fn calculate_xirr(values: &[f64], dates: &[NaiveDate], guess: f64) -> Option<f64> {
+  if values.len() != dates.len() || values.is_empty() {
+    return None;
+  }
+  let mut rate = if guess.is_finite() { guess } else { 0.1 };
+  rate = rate.max(-0.999_999_999);
+  let tolerance = 1e-10;
+
+  for _ in 0..100 {
+    let npv = xnpv_for_rate(values, dates, rate)?;
+    if npv.abs() < tolerance {
+      return Some(rate);
+    }
+    let derivative = xnpv_derivative_for_rate(values, dates, rate)?;
+    if derivative.abs() < tolerance {
+      break;
+    }
+    let next_rate = rate - (npv / derivative);
+    if !next_rate.is_finite() || next_rate <= -0.999_999_999 {
+      break;
+    }
+    if (next_rate - rate).abs() < tolerance {
+      return Some(next_rate);
+    }
+    rate = next_rate;
+  }
+
+  let bracket_candidates = [-0.9, -0.5, -0.1, 0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0];
+  for index in 0..(bracket_candidates.len() - 1) {
+    let low = bracket_candidates[index];
+    let high = bracket_candidates[index + 1];
+    let low_npv = xnpv_for_rate(values, dates, low)?;
+    let high_npv = xnpv_for_rate(values, dates, high)?;
+    if low_npv.abs() < tolerance {
+      return Some(low);
+    }
+    if high_npv.abs() < tolerance {
+      return Some(high);
+    }
+    if low_npv.signum() == high_npv.signum() {
+      continue;
+    }
+    return bisection_xirr(values, dates, low, high);
+  }
+
+  None
+}
+
+fn xnpv_for_rate(values: &[f64], dates: &[NaiveDate], rate: f64) -> Option<f64> {
+  if rate <= -1.0 || !rate.is_finite() || values.len() != dates.len() || values.is_empty() {
+    return None;
+  }
+  let origin = dates[0];
+  let mut npv = 0.0f64;
+  for (value, date_value) in values.iter().zip(dates.iter()) {
+    let day_diff = (*date_value - origin).num_days() as f64;
+    npv += value / (1.0 + rate).powf(day_diff / 365.0);
+  }
+  if npv.is_finite() {
+    Some(npv)
+  } else {
+    None
+  }
+}
+
+fn xnpv_derivative_for_rate(values: &[f64], dates: &[NaiveDate], rate: f64) -> Option<f64> {
+  if rate <= -1.0 || !rate.is_finite() || values.len() != dates.len() || values.is_empty() {
+    return None;
+  }
+  let origin = dates[0];
+  let mut derivative = 0.0f64;
+  for (value, date_value) in values.iter().zip(dates.iter()) {
+    let day_diff = (*date_value - origin).num_days() as f64;
+    let exponent = day_diff / 365.0;
+    derivative -= exponent * value / (1.0 + rate).powf(exponent + 1.0);
+  }
+  if derivative.is_finite() {
+    Some(derivative)
+  } else {
+    None
+  }
+}
+
+fn bisection_xirr(values: &[f64], dates: &[NaiveDate], mut low: f64, mut high: f64) -> Option<f64> {
+  let mut low_npv = xnpv_for_rate(values, dates, low)?;
+  let mut high_npv = xnpv_for_rate(values, dates, high)?;
+  if low_npv.signum() == high_npv.signum() {
+    return None;
+  }
+  for _ in 0..100 {
+    let mid = (low + high) / 2.0;
+    let mid_npv = xnpv_for_rate(values, dates, mid)?;
+    if mid_npv.abs() < 1e-10 || (high - low).abs() < 1e-10 {
+      return Some(mid);
+    }
+    if low_npv.signum() == mid_npv.signum() {
+      low = mid;
+      low_npv = mid_npv;
+    } else {
+      high = mid;
+      high_npv = mid_npv;
+    }
+  }
+  if low_npv.abs() <= high_npv.abs() {
+    Some(low)
+  } else {
+    Some(high)
+  }
 }
 
 fn calculate_irr(cash_flows: &[f64], guess: f64) -> Option<f64> {
@@ -7527,12 +7659,18 @@ mod tests {
         value: None,
         formula: Some("=XNPV(0.1,A22:B22,A21:B21)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 271,
+        value: None,
+        formula: Some("=XIRR(A22:B22,A21:B21)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 268);
+    assert_eq!(updated_cells, 269);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7546,7 +7684,7 @@ mod tests {
         start_row: 1,
         end_row: 22,
         start_col: 1,
-        end_col: 270,
+        end_col: 271,
       },
     )
     .expect("cells should be fetched");
@@ -8709,6 +8847,16 @@ mod tests {
       xnpv_value.abs() < 1e-9,
       "xnpv should discount irregular cashflows by exact day difference, got {xnpv_value}",
     );
+    let xirr_value = by_position(1, 271)
+      .evaluated_value
+      .as_deref()
+      .expect("xirr should evaluate")
+      .parse::<f64>()
+      .expect("xirr should be numeric");
+    assert!(
+      (xirr_value - 0.1).abs() < 1e-9,
+      "xirr should solve irregular return rate, got {xirr_value}",
+    );
   }
 
   #[test]
@@ -9245,6 +9393,48 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=XNPV(0.1,A1:B1,A2:A2)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_xirr_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(1000)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(1100)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!("2023-01-01")),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: Some(json!("2024-01-01")),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=XIRR(A1:B1,A2:B2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=XIRR(A1:B1,A2:B2)".to_string()]);
   }
 
   #[test]

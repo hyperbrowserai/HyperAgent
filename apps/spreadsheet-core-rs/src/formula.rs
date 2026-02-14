@@ -776,6 +776,14 @@ pub fn parse_xnpv_formula(formula: &str) -> Option<(String, String, String)> {
   Some((args[0].clone(), args[1].clone(), args[2].clone()))
 }
 
+pub fn parse_xirr_formula(formula: &str) -> Option<(String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "XIRR" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2269,7 +2277,7 @@ mod tests {
     parse_rri_formula, parse_pduration_formula,
     parse_fvschedule_formula, parse_ispmt_formula,
     parse_cumipmt_formula, parse_cumprinc_formula,
-    parse_xnpv_formula,
+    parse_xnpv_formula, parse_xirr_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2660,6 +2668,10 @@ mod tests {
     assert_eq!(xnpv_args.0, "A1");
     assert_eq!(xnpv_args.1, "B1:B2");
     assert_eq!(xnpv_args.2, "C1:C2");
+    let xirr_args = parse_xirr_formula("=XIRR(A1:A2,B1:B2,0.2)").expect("xirr should parse");
+    assert_eq!(xirr_args.0, "A1:A2");
+    assert_eq!(xirr_args.1, "B1:B2");
+    assert_eq!(xirr_args.2.as_deref(), Some("0.2"));
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),
