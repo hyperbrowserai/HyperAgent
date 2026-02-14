@@ -7,7 +7,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Excel-like grid interaction
 - Formula bar editing
 - Workbook import/export controls
-- Read-only DuckDB query console with tabular result preview (row-limit input is validated and capped to backend max 1000)
+- Read-only DuckDB query console with tabular result preview (row-limit input is validated and capped to backend max 1000), with direct-run and signed `agent/ops` execution paths
 - Export action surfaces backend compatibility-report counts and latest-export detail lists (preserved/transformed/unsupported)
 - Realtime server stream sync via SSE
 - Live chart preview with metadata sync endpoint

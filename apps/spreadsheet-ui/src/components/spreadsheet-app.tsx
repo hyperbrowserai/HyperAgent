@@ -248,6 +248,45 @@ function parseExportSummaryFromEvent(event: WorkbookEvent): {
   };
 }
 
+function parseDuckdbQueryResponseFromOperationData(
+  value: unknown,
+): DuckdbQueryResponse | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const payload = value as Record<string, unknown>;
+  if (
+    !Array.isArray(payload.rows)
+    || typeof payload.row_count !== "number"
+    || typeof payload.row_limit !== "number"
+    || typeof payload.truncated !== "boolean"
+  ) {
+    return null;
+  }
+  const columns = parseStringArray(payload.columns);
+  const rows: Array<Array<string | null>> = [];
+  for (const rowValue of payload.rows) {
+    if (!Array.isArray(rowValue)) {
+      return null;
+    }
+    rows.push(
+      rowValue.map((entry) => {
+        if (typeof entry === "string" || entry === null) {
+          return entry;
+        }
+        return String(entry);
+      }),
+    );
+  }
+  return {
+    columns,
+    rows,
+    row_count: payload.row_count,
+    row_limit: payload.row_limit,
+    truncated: payload.truncated,
+  };
+}
+
 function extractRequestIdPrefix(requestId: string): string | null {
   const delimiterIndex = requestId.indexOf("-");
   if (delimiterIndex <= 0) {
@@ -303,6 +342,7 @@ export function SpreadsheetApp() {
   );
   const [duckdbQueryRowLimit, setDuckdbQueryRowLimit] = useState("200");
   const [isRunningDuckdbQuery, setIsRunningDuckdbQuery] = useState(false);
+  const [isRunningDuckdbOpsQuery, setIsRunningDuckdbOpsQuery] = useState(false);
   const [duckdbQueryResult, setDuckdbQueryResult] = useState<DuckdbQueryResponse | null>(
     null,
   );
@@ -2376,6 +2416,109 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleRunDuckdbQueryViaAgentOps() {
+    if (!workbook) {
+      return;
+    }
+    const normalizedSql = duckdbQuerySql.trim();
+    if (!normalizedSql) {
+      setUiError("DuckDB query SQL cannot be blank.");
+      setUiErrorCode("INVALID_QUERY_SQL");
+      return;
+    }
+    if (hasInvalidDuckdbQueryRowLimitInput) {
+      setUiError("DuckDB row limit must be a positive integer.");
+      setUiErrorCode("INVALID_QUERY_ROW_LIMIT");
+      return;
+    }
+
+    setIsRunningDuckdbOpsQuery(true);
+    try {
+      clearUiError();
+      const operations: AgentOperationPreview[] = [
+        {
+          op_type: "duckdb_query",
+          sql: normalizedSql,
+          row_limit: effectiveDuckdbQueryRowLimit,
+        },
+      ];
+      const signedPlan = await signOperationsForExecution(operations);
+      const response = await runAgentOps(workbook.id, {
+        request_id: `duckdb-ops-query-${Date.now()}`,
+        actor: "ui-duckdb-query",
+        stop_on_error: true,
+        expected_operations_signature: signedPlan.operationsSignature,
+        operations: signedPlan.operations,
+      });
+      setLastExecutedOperations(signedPlan.operations);
+      setLastAgentRequestId(response.request_id ?? null);
+      setLastOperationsSignature(response.operations_signature ?? null);
+      setLastServedFromCache(response.served_from_cache ?? null);
+      setLastAgentOps(response.results);
+      setLastPreset(null);
+      setLastScenario(null);
+      setLastWizardImportSummary(null);
+
+      const queryResult = response.results.find(
+        (result) => result.op_type === "duckdb_query",
+      );
+      if (!queryResult) {
+        setDuckdbQueryResult(null);
+        setNotice("DuckDB agent/ops query completed without a duckdb_query result entry.");
+        await refreshWorkbookRunQueries(workbook.id, activeSheet);
+        return;
+      }
+      if (!queryResult.ok) {
+        setDuckdbQueryResult(null);
+        const errorMessage =
+          typeof queryResult.data.error_message === "string"
+            ? queryResult.data.error_message
+            : "DuckDB agent/ops query failed.";
+        setUiError(errorMessage);
+        setUiErrorCode(
+          typeof queryResult.data.error_code === "string"
+            ? queryResult.data.error_code
+            : null,
+        );
+        await refreshWorkbookRunQueries(workbook.id, activeSheet);
+        return;
+      }
+
+      const parsedQueryResponse = parseDuckdbQueryResponseFromOperationData(
+        queryResult.data,
+      );
+      if (!parsedQueryResponse) {
+        setDuckdbQueryResult(null);
+        setNotice(
+          "DuckDB agent/ops query completed, but result payload could not be parsed.",
+        );
+        await refreshWorkbookRunQueries(workbook.id, activeSheet);
+        return;
+      }
+      setDuckdbQueryResult(parsedQueryResponse);
+      setNotice(
+        `DuckDB agent/ops query returned ${parsedQueryResponse.row_count} row${
+          parsedQueryResponse.row_count === 1 ? "" : "s"
+        }${
+          parsedQueryResponse.truncated
+            ? ` (truncated to ${parsedQueryResponse.row_limit})`
+            : ""
+        }.`,
+      );
+      await refreshWorkbookRunQueries(workbook.id, activeSheet);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (await handleSignatureMismatchRecovery(error))
+      ) {
+        return;
+      }
+      applyUiError(error, "Failed to execute DuckDB query via agent/ops.");
+    } finally {
+      setIsRunningDuckdbOpsQuery(false);
+    }
+  }
+
   async function handleWizardRun() {
     if (!wizardScenario) {
       return;
@@ -2659,6 +2802,15 @@ export function SpreadsheetApp() {
                 className="rounded bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-500 disabled:opacity-40"
               >
                 {isRunningDuckdbQuery ? "Running query..." : "Run Query"}
+              </button>
+              <button
+                onClick={handleRunDuckdbQueryViaAgentOps}
+                disabled={!workbook || isRunningDuckdbOpsQuery || hasInvalidDuckdbQueryRowLimitInput}
+                className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40"
+              >
+                {isRunningDuckdbOpsQuery
+                  ? "Running via agent/ops..."
+                  : "Run via agent/ops"}
               </button>
               <button
                 onClick={() => setDuckdbQueryResult(null)}
