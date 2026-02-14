@@ -8010,6 +8010,13 @@ mod tests {
             Some("stable error code string"),
         );
         assert_eq!(
+            schema
+                .get("agent_ops_response_shape")
+                .and_then(|value| value.get("served_from_cache"))
+                .and_then(serde_json::Value::as_str),
+            Some("boolean; true when response reused by request_id idempotency cache"),
+        );
+        assert_eq!(
       schema
         .get("agent_ops_cache_stats_endpoint")
         .and_then(serde_json::Value::as_str),
