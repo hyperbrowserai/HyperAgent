@@ -1535,7 +1535,31 @@ mod tests {
       .join("generated-fixtures");
     let generated_files = write_fixture_corpus(&generated_dir)
       .expect("fixture corpus should be generated");
-    for file_name in generated_files {
+    let expected_fixture_names = generated_files
+      .iter()
+      .copied()
+      .collect::<std::collections::BTreeSet<_>>();
+    let committed_fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("fixtures");
+    let committed_fixture_names = fs::read_dir(&committed_fixture_dir)
+      .expect("committed fixture directory should be readable")
+      .filter_map(|entry| entry.ok())
+      .filter_map(|entry| {
+        let file_name = entry.file_name();
+        let file_name = file_name.to_str()?;
+        file_name.ends_with(".xlsx").then_some(file_name.to_string())
+      })
+      .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+      committed_fixture_names,
+      expected_fixture_names
+        .iter()
+        .map(|file_name| file_name.to_string())
+        .collect::<std::collections::BTreeSet<_>>(),
+      "committed fixture directory should contain only expected generated workbook files",
+    );
+
+    for file_name in expected_fixture_names {
       assert_eq!(
         file_fixture_bytes(file_name),
         fs::read(generated_dir.join(file_name))
