@@ -673,9 +673,12 @@ export function SpreadsheetApp() {
     queryKey: ["wizard-schema"],
     queryFn: getWizardSchema,
   });
+  const hasLoadedSchemaMetadata = Boolean(agentSchemaQuery.data || wizardSchemaQuery.data);
   const openApiSpecQuery = useQuery({
     queryKey: ["openapi-spec"],
     queryFn: getOpenApiSpec,
+    enabled: hasLoadedSchemaMetadata,
+    staleTime: 5 * 60 * 1000,
   });
 
   const agentOpsCacheQuery = useQuery({
@@ -3515,6 +3518,11 @@ export function SpreadsheetApp() {
                     openapi method mapping available for all discovered endpoints.
                   </p>
                 )}
+                {openApiSpecQuery.isError ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    openapi sync check unavailable: failed to load /v1/openapi.
+                  </p>
+                ) : null}
                 {wizardMethodMismatchEndpointKeys.length > 0 ? (
                   <p className="mt-1 text-[11px] text-rose-300">
                     schema/openapi method mismatch for:{" "}
@@ -4448,6 +4456,11 @@ export function SpreadsheetApp() {
                     openapi method mapping available for all discovered endpoints.
                   </p>
                 )}
+                {openApiSpecQuery.isError ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    openapi sync check unavailable: failed to load /v1/openapi.
+                  </p>
+                ) : null}
                 {agentMethodMismatchEndpointKeys.length > 0 ? (
                   <p className="mt-1 text-xs text-rose-300">
                     schema/openapi method mismatch for:{" "}
