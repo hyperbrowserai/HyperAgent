@@ -10,7 +10,7 @@ use crate::{
     parse_large_formula, parse_small_formula, parse_rank_formula,
     parse_percentile_inc_formula, parse_quartile_inc_formula,
     parse_percentile_exc_formula, parse_quartile_exc_formula,
-    parse_mode_sngl_formula, parse_geomean_formula,
+    parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -655,6 +655,22 @@ fn evaluate_formula(
     }
     let ln_sum = values.iter().map(|value| value.ln()).sum::<f64>();
     let mean = (ln_sum / values.len() as f64).exp();
+    return Ok(Some(mean.to_string()));
+  }
+
+  if let Some((start, end)) = parse_harmean_formula(formula) {
+    let values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    if values.iter().any(|value| *value <= 0.0) {
+      return Ok(None);
+    }
+    let reciprocal_sum = values.iter().map(|value| 1.0 / value).sum::<f64>();
+    if reciprocal_sum <= 0.0 {
+      return Ok(None);
+    }
+    let mean = values.len() as f64 / reciprocal_sum;
     return Ok(Some(mean.to_string()));
   }
 
@@ -3929,12 +3945,18 @@ mod tests {
         value: None,
         formula: Some("=GEOMEAN(A1:A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 152,
+        value: None,
+        formula: Some("=HARMEAN(A1:A2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 149);
+    assert_eq!(updated_cells, 150);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3948,7 +3970,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 151,
+        end_col: 152,
       },
     )
     .expect("cells should be fetched");
@@ -4266,6 +4288,16 @@ mod tests {
     assert!(
       (geomean - 97.979_589_711_327_12).abs() < 1e-9,
       "geomean should be sqrt(9600), got {geomean}",
+    );
+    let harmean = by_position(1, 152)
+      .evaluated_value
+      .as_deref()
+      .expect("harmean should evaluate")
+      .parse::<f64>()
+      .expect("harmean should be numeric");
+    assert!(
+      (harmean - 96.0).abs() < 1e-9,
+      "harmean should be 96.0, got {harmean}",
     );
   }
 
@@ -4711,6 +4743,36 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=GEOMEAN(A1:A2)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_harmean_non_positive_input_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(0)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=HARMEAN(A1:A2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=HARMEAN(A1:A2)".to_string()]);
   }
 
   #[test]
