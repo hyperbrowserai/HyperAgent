@@ -7926,6 +7926,18 @@ mod tests {
             signature_error_codes.contains(&"OPERATION_SIGNATURE_MISMATCH"),
             "wizard schema should advertise operation-signature mismatch errors",
         );
+        assert!(
+            signature_error_codes.contains(&"INVALID_SIGNATURE_FORMAT"),
+            "wizard schema should advertise signature format validation errors",
+        );
+        assert!(
+            signature_error_codes.contains(&"EMPTY_OPERATION_LIST"),
+            "wizard schema should advertise empty operation list errors",
+        );
+        assert!(
+            signature_error_codes.contains(&"REQUEST_ID_CONFLICT"),
+            "wizard schema should advertise request-id conflict errors",
+        );
         assert_eq!(
             schema
                 .get("agent_ops_result_error_shape")
