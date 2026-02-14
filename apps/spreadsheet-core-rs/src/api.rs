@@ -3422,14 +3422,29 @@ mod tests {
         ),
         "fixture {fixture_file_name} export should return XLSX content type",
       );
+      let content_disposition = export_response
+        .headers()
+        .get(header::CONTENT_DISPOSITION)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_else(|| {
+          panic!(
+            "fixture {fixture_file_name} export should include attachment filename header",
+          )
+        });
       assert!(
-        export_response
-          .headers()
-          .get(header::CONTENT_DISPOSITION)
-          .and_then(|value| value.to_str().ok())
-          .is_some_and(|value| value.contains("attachment; filename=\"") && value.ends_with(".xlsx\"")),
+        content_disposition.contains("attachment; filename=\"")
+          && content_disposition.ends_with(".xlsx\""),
         "fixture {fixture_file_name} export should include attachment filename",
       );
+      let exported_file_name = content_disposition
+        .strip_prefix("attachment; filename=\"")
+        .and_then(|value| value.strip_suffix('"'))
+        .unwrap_or_else(|| {
+          panic!(
+            "fixture {fixture_file_name} content-disposition should follow attachment filename pattern",
+          )
+        })
+        .to_string();
       let export_meta = export_response
         .headers()
         .get("x-export-meta")
@@ -3482,12 +3497,13 @@ mod tests {
           .payload
           .get("file_name")
           .and_then(serde_json::Value::as_str)
-          .is_some_and(|value| value.ends_with(".xlsx")),
+          .is_some_and(|value| value == exported_file_name.as_str()),
         "fixture {fixture_file_name} export event should include xlsx file name",
       );
-      assert!(
-        emitted_event.payload.get("compatibility_report").is_some(),
-        "fixture {fixture_file_name} export event should include compatibility report payload",
+      assert_eq!(
+        emitted_event.payload.get("compatibility_report"),
+        Some(&export_meta_json),
+        "fixture {fixture_file_name} export event compatibility report should match x-export-meta header",
       );
     }
   }
