@@ -12,6 +12,8 @@ use crate::{
     parse_percentile_exc_formula, parse_quartile_exc_formula,
     parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
     parse_trimmean_formula, parse_devsq_formula, parse_avedev_formula,
+    parse_averagea_formula, parse_stdeva_formula, parse_stdevpa_formula,
+    parse_vara_formula, parse_varpa_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -736,6 +738,83 @@ fn evaluate_formula(
       values.iter().map(|value| (*value - mean).abs()).sum::<f64>();
     let avedev = total_absolute_deviation / values.len() as f64;
     return Ok(Some(avedev.to_string()));
+  }
+
+  if let Some((start, end)) = parse_averagea_formula(formula) {
+    let values = collect_statisticala_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    let average = values.iter().sum::<f64>() / values.len() as f64;
+    return Ok(Some(average.to_string()));
+  }
+
+  if let Some((start, end)) = parse_stdeva_formula(formula) {
+    let values = collect_statisticala_range_values(connection, sheet, start, end)?;
+    if values.len() < 2 {
+      return Ok(None);
+    }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let variance_sample = values
+      .iter()
+      .map(|value| {
+        let delta = *value - mean;
+        delta * delta
+      })
+      .sum::<f64>()
+      / (values.len() as f64 - 1.0);
+    return Ok(Some(variance_sample.sqrt().to_string()));
+  }
+
+  if let Some((start, end)) = parse_stdevpa_formula(formula) {
+    let values = collect_statisticala_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let variance_population = values
+      .iter()
+      .map(|value| {
+        let delta = *value - mean;
+        delta * delta
+      })
+      .sum::<f64>()
+      / values.len() as f64;
+    return Ok(Some(variance_population.sqrt().to_string()));
+  }
+
+  if let Some((start, end)) = parse_vara_formula(formula) {
+    let values = collect_statisticala_range_values(connection, sheet, start, end)?;
+    if values.len() < 2 {
+      return Ok(None);
+    }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let variance_sample = values
+      .iter()
+      .map(|value| {
+        let delta = *value - mean;
+        delta * delta
+      })
+      .sum::<f64>()
+      / (values.len() as f64 - 1.0);
+    return Ok(Some(variance_sample.to_string()));
+  }
+
+  if let Some((start, end)) = parse_varpa_formula(formula) {
+    let values = collect_statisticala_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let variance_population = values
+      .iter()
+      .map(|value| {
+        let delta = *value - mean;
+        delta * delta
+      })
+      .sum::<f64>()
+      / values.len() as f64;
+    return Ok(Some(variance_population.to_string()));
   }
 
   if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
@@ -1920,6 +1999,47 @@ fn collect_numeric_range_values(
       }
     }
   }
+  Ok(values)
+}
+
+fn collect_statisticala_range_values(
+  connection: &Connection,
+  sheet: &str,
+  start: (u32, u32),
+  end: (u32, u32),
+) -> Result<Vec<f64>, ApiError> {
+  let bounds = normalized_range_bounds(start, end);
+  let mut statement = connection
+    .prepare(
+      "SELECT COALESCE(evaluated_value, raw_value) FROM cells WHERE sheet = ?1 AND row_index BETWEEN ?2 AND ?3 AND col_index BETWEEN ?4 AND ?5",
+    )
+    .map_err(ApiError::internal)?;
+  let rows = statement
+    .query_map(
+      params![
+        sheet,
+        i64::from(bounds.start_row),
+        i64::from(bounds.start_row + bounds.height.saturating_sub(1)),
+        i64::from(bounds.start_col),
+        i64::from(bounds.start_col + bounds.width.saturating_sub(1))
+      ],
+      |row| row.get::<_, Option<String>>(0),
+    )
+    .map_err(ApiError::internal)?;
+
+  let mut values = Vec::new();
+  for value_result in rows {
+    let raw_value = value_result.map_err(ApiError::internal)?.unwrap_or_default();
+    let trimmed = raw_value.trim();
+    if let Ok(parsed) = trimmed.parse::<f64>() {
+      values.push(parsed);
+    } else if trimmed.eq_ignore_ascii_case("TRUE") {
+      values.push(1.0);
+    } else {
+      values.push(0.0);
+    }
+  }
+
   Ok(values)
 }
 
@@ -3144,6 +3264,18 @@ mod tests {
         formula: None,
       },
       CellMutation {
+        row: 3,
+        col: 5,
+        value: Some(json!(true)),
+        formula: None,
+      },
+      CellMutation {
+        row: 4,
+        col: 5,
+        value: Some(json!(false)),
+        formula: None,
+      },
+      CellMutation {
         row: 2,
         col: 6,
         value: Some(json!("Southeast")),
@@ -4087,12 +4219,42 @@ mod tests {
         value: None,
         formula: Some("=PERCENTRANK(A1:A2,120)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 163,
+        value: None,
+        formula: Some("=AVERAGEA(E1:E4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 164,
+        value: None,
+        formula: Some("=STDEVA(E1:E4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 165,
+        value: None,
+        formula: Some("=STDEVPA(E1:E4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 166,
+        value: None,
+        formula: Some("=VARA(E1:E4)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 167,
+        value: None,
+        formula: Some("=VARPA(E1:E4)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 160);
+    assert_eq!(updated_cells, 165);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4106,7 +4268,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 162,
+        end_col: 167,
       },
     )
     .expect("cells should be fetched");
@@ -4526,6 +4688,44 @@ mod tests {
       (percentrank_legacy - 1.0).abs() < 1e-9,
       "legacy percentrank should be 1.0, got {percentrank_legacy}",
     );
+    let averagea = by_position(1, 163)
+      .evaluated_value
+      .as_deref()
+      .expect("averagea should evaluate")
+      .parse::<f64>()
+      .expect("averagea should be numeric");
+    assert!((averagea - 0.25).abs() < 1e-9, "averagea should be 0.25, got {averagea}");
+    let stdeva = by_position(1, 164)
+      .evaluated_value
+      .as_deref()
+      .expect("stdeva should evaluate")
+      .parse::<f64>()
+      .expect("stdeva should be numeric");
+    assert!((stdeva - 0.5).abs() < 1e-9, "stdeva should be 0.5, got {stdeva}");
+    let stdevpa = by_position(1, 165)
+      .evaluated_value
+      .as_deref()
+      .expect("stdevpa should evaluate")
+      .parse::<f64>()
+      .expect("stdevpa should be numeric");
+    assert!(
+      (stdevpa - 0.433_012_701_892_219_3).abs() < 1e-9,
+      "stdevpa should be sqrt(0.1875), got {stdevpa}",
+    );
+    let vara = by_position(1, 166)
+      .evaluated_value
+      .as_deref()
+      .expect("vara should evaluate")
+      .parse::<f64>()
+      .expect("vara should be numeric");
+    assert!((vara - 0.25).abs() < 1e-9, "vara should be 0.25, got {vara}");
+    let varpa = by_position(1, 167)
+      .evaluated_value
+      .as_deref()
+      .expect("varpa should evaluate")
+      .parse::<f64>()
+      .expect("varpa should be numeric");
+    assert!((varpa - 0.1875).abs() < 1e-9, "varpa should be 0.1875, got {varpa}");
   }
 
   #[test]
@@ -5080,6 +5280,39 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=DEVSQ(A1:A2)".to_string(), "=AVEDEV(A1:A2)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_stdeva_and_vara_with_insufficient_values_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(true)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=STDEVA(A1:A1)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=VARA(A1:A1)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=STDEVA(A1:A1)".to_string(), "=VARA(A1:A1)".to_string()],
     );
   }
 

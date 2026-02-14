@@ -1107,6 +1107,46 @@ pub fn parse_avedev_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
   parse_range_reference(&args[0])
 }
 
+pub fn parse_averagea_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "AVERAGEA" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_stdeva_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "STDEVA" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_stdevpa_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "STDEVPA" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_vara_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "VARA" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
+pub fn parse_varpa_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "VARPA" || args.len() != 1 {
+    return None;
+  }
+  parse_range_reference(&args[0])
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1393,6 +1433,8 @@ mod tests {
     parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
     parse_trimmean_formula,
     parse_devsq_formula, parse_avedev_formula,
+    parse_averagea_formula, parse_stdeva_formula, parse_stdevpa_formula,
+    parse_vara_formula, parse_varpa_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -1852,6 +1894,24 @@ mod tests {
       parse_avedev_formula("=AVEDEV(A1:A5)").expect("avedev should parse");
     assert_eq!(avedev.0, (1, 1));
     assert_eq!(avedev.1, (5, 1));
+    let averagea =
+      parse_averagea_formula("=AVERAGEA(A1:A5)").expect("averagea should parse");
+    assert_eq!(averagea.0, (1, 1));
+    assert_eq!(averagea.1, (5, 1));
+    let stdeva =
+      parse_stdeva_formula("=STDEVA(A1:A5)").expect("stdeva should parse");
+    assert_eq!(stdeva.0, (1, 1));
+    assert_eq!(stdeva.1, (5, 1));
+    let stdevpa =
+      parse_stdevpa_formula("=STDEVPA(A1:A5)").expect("stdevpa should parse");
+    assert_eq!(stdevpa.0, (1, 1));
+    assert_eq!(stdevpa.1, (5, 1));
+    let vara = parse_vara_formula("=VARA(A1:A5)").expect("vara should parse");
+    assert_eq!(vara.0, (1, 1));
+    assert_eq!(vara.1, (5, 1));
+    let varpa = parse_varpa_formula("=VARPA(A1:A5)").expect("varpa should parse");
+    assert_eq!(varpa.0, (1, 1));
+    assert_eq!(varpa.1, (5, 1));
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");
