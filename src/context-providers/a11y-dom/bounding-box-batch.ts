@@ -5,6 +5,7 @@
 
 import type { CDPSession } from "@/cdp";
 import { ensureScriptInjected } from "@/cdp/script-injector";
+import { formatUnknownError } from "@/utils";
 import { EncodedId, DOMRect, IframeInfo } from "./types";
 import { createEncodedId } from "./utils";
 
@@ -14,6 +15,53 @@ export type BoundingBoxTarget = {
   executionContextId?: number;
   frameId: string;
 };
+
+const MAX_BOUNDING_BOX_BATCH_DIAGNOSTIC_CHARS = 400;
+const MAX_BOUNDING_BOX_BATCH_IDENTIFIER_CHARS = 128;
+
+function sanitizeBoundingBoxBatchText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateBoundingBoxBatchText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omittedChars = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omittedChars} chars]`;
+}
+
+function formatBoundingBoxBatchDiagnostic(value: unknown): string {
+  const normalized = sanitizeBoundingBoxBatchText(formatUnknownError(value));
+  if (normalized.length === 0) {
+    return "unknown error";
+  }
+  return truncateBoundingBoxBatchText(
+    normalized,
+    MAX_BOUNDING_BOX_BATCH_DIAGNOSTIC_CHARS
+  );
+}
+
+function formatBoundingBoxBatchIdentifier(value: unknown): string {
+  if (typeof value !== "string") {
+    return "unknown-frame";
+  }
+  const normalized = sanitizeBoundingBoxBatchText(value);
+  if (normalized.length === 0) {
+    return "unknown-frame";
+  }
+  return truncateBoundingBoxBatchText(
+    normalized,
+    MAX_BOUNDING_BOX_BATCH_IDENTIFIER_CHARS
+  );
+}
 
 function translateBoundingRect(
   rect: DOMRect,
@@ -302,8 +350,9 @@ async function batchCollectBoundingBoxesViaCDP(
     return boundingBoxMap;
   } catch (error) {
     console.warn(
-      `[A11y] Batch bounding box collection via CDP failed for frame ${frameIndex} (${frameId}):`,
-      error
+      `[A11y] Batch bounding box collection via CDP failed for frame ${frameIndex} (${formatBoundingBoxBatchIdentifier(
+        frameId
+      )}): ${formatBoundingBoxBatchDiagnostic(error)}`
     );
     return new Map();
   }
