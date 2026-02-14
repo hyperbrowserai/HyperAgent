@@ -1373,6 +1373,7 @@ export function SpreadsheetApp() {
         const openApiSummary = openApiSummariesByPath[entry.openApiPath] ?? null;
         return {
           ...entry,
+          derivedOpenApiPath,
           openApiPath: schemaOpenApiPath ?? derivedOpenApiPath,
           openApiPathSource: schemaOperation?.path
             ? "operation"
@@ -1384,6 +1385,7 @@ export function SpreadsheetApp() {
           methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
           schemaMethods,
           openApiMethods,
+          openApiSummary,
           summary: schemaSummary ?? openApiSummary,
           summarySource: schemaOperation?.summary
             ? "operation"
@@ -1465,12 +1467,23 @@ export function SpreadsheetApp() {
         key: entry.key,
         endpoint: entry.endpoint,
         openapi_path: entry.openApiPath,
+        derived_openapi_path: entry.derivedOpenApiPath,
         methods: entry.methods,
         summary: entry.summary,
         sources: {
           path: entry.openApiPathSource,
           methods: entry.methodSource,
           summary: entry.summarySource,
+        },
+        operation_metadata: {
+          path: entry.openApiPathSource === "operation" ? entry.openApiPath : null,
+          methods: entry.schemaMethods,
+          summary: entry.summarySource === "operation" ? entry.summary : null,
+        },
+        openapi_metadata: {
+          path: entry.openApiPathSource === "derived" ? null : entry.openApiPath,
+          methods: entry.openApiMethods,
+          summary: entry.openApiSummary,
         },
         mismatches: {
           path: entry.hasPathMismatch,
@@ -1710,6 +1723,7 @@ export function SpreadsheetApp() {
         const openApiSummary = openApiSummariesByPath[entry.openApiPath] ?? null;
         return {
           ...entry,
+          derivedOpenApiPath,
           openApiPath: schemaOpenApiPath ?? derivedOpenApiPath,
           openApiPathSource: schemaOperation?.path
             ? "operation"
@@ -1721,6 +1735,7 @@ export function SpreadsheetApp() {
           methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
           schemaMethods,
           openApiMethods,
+          openApiSummary,
           summary: schemaSummary ?? openApiSummary,
           summarySource: schemaOperation?.summary
             ? "operation"
@@ -1802,12 +1817,23 @@ export function SpreadsheetApp() {
         key: entry.key,
         endpoint: entry.endpoint,
         openapi_path: entry.openApiPath,
+        derived_openapi_path: entry.derivedOpenApiPath,
         methods: entry.methods,
         summary: entry.summary,
         sources: {
           path: entry.openApiPathSource,
           methods: entry.methodSource,
           summary: entry.summarySource,
+        },
+        operation_metadata: {
+          path: entry.openApiPathSource === "operation" ? entry.openApiPath : null,
+          methods: entry.schemaMethods,
+          summary: entry.summarySource === "operation" ? entry.summary : null,
+        },
+        openapi_metadata: {
+          path: entry.openApiPathSource === "derived" ? null : entry.openApiPath,
+          methods: entry.openApiMethods,
+          summary: entry.openApiSummary,
         },
         mismatches: {
           path: entry.hasPathMismatch,
@@ -3996,6 +4022,34 @@ export function SpreadsheetApp() {
                           summary: {entry.summary}
                         </p>
                       ) : null}
+                      {entry.hasMethodMismatch ? (
+                        <p className="ml-1 text-[10px] text-rose-300">
+                          methods (schema vs openapi):{" "}
+                          <span className="font-mono">
+                            {(entry.schemaMethods.length > 0
+                              ? entry.schemaMethods
+                              : ["∅"]).join("|")}
+                          </span>{" "}
+                          vs{" "}
+                          <span className="font-mono">
+                            {(entry.openApiMethods.length > 0
+                              ? entry.openApiMethods
+                              : ["∅"]).join("|")}
+                          </span>
+                        </p>
+                      ) : null}
+                      {entry.hasSummaryMismatch ? (
+                        <p className="ml-1 text-[10px] text-rose-300">
+                          summary (schema vs openapi):{" "}
+                          <span className="font-mono">
+                            {entry.summary ?? "∅"}
+                          </span>{" "}
+                          vs{" "}
+                          <span className="font-mono">
+                            {entry.openApiSummary ?? "∅"}
+                          </span>
+                        </p>
+                      ) : null}
                       <p className="ml-1 text-[10px] text-slate-500">
                         openapi path:{" "}
                         <span className="font-mono text-slate-400">{entry.openApiPath}</span>
@@ -4011,6 +4065,13 @@ export function SpreadsheetApp() {
                           copy path
                         </button>
                       </p>
+                      {entry.hasPathMismatch ? (
+                        <p className="ml-1 text-[10px] text-rose-300">
+                          path (schema vs derived):{" "}
+                          <span className="font-mono">{entry.openApiPath}</span> vs{" "}
+                          <span className="font-mono">{entry.derivedOpenApiPath}</span>
+                        </p>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -5011,6 +5072,34 @@ export function SpreadsheetApp() {
                           summary: {entry.summary}
                         </p>
                       ) : null}
+                      {entry.hasMethodMismatch ? (
+                        <p className="ml-1 text-[10px] text-rose-300">
+                          methods (schema vs openapi):{" "}
+                          <span className="font-mono">
+                            {(entry.schemaMethods.length > 0
+                              ? entry.schemaMethods
+                              : ["∅"]).join("|")}
+                          </span>{" "}
+                          vs{" "}
+                          <span className="font-mono">
+                            {(entry.openApiMethods.length > 0
+                              ? entry.openApiMethods
+                              : ["∅"]).join("|")}
+                          </span>
+                        </p>
+                      ) : null}
+                      {entry.hasSummaryMismatch ? (
+                        <p className="ml-1 text-[10px] text-rose-300">
+                          summary (schema vs openapi):{" "}
+                          <span className="font-mono">
+                            {entry.summary ?? "∅"}
+                          </span>{" "}
+                          vs{" "}
+                          <span className="font-mono">
+                            {entry.openApiSummary ?? "∅"}
+                          </span>
+                        </p>
+                      ) : null}
                       <p className="ml-1 text-[10px] text-slate-500">
                         openapi path:{" "}
                         <span className="font-mono text-slate-400">{entry.openApiPath}</span>
@@ -5026,6 +5115,13 @@ export function SpreadsheetApp() {
                           copy path
                         </button>
                       </p>
+                      {entry.hasPathMismatch ? (
+                        <p className="ml-1 text-[10px] text-rose-300">
+                          path (schema vs derived):{" "}
+                          <span className="font-mono">{entry.openApiPath}</span> vs{" "}
+                          <span className="font-mono">{entry.derivedOpenApiPath}</span>
+                        </p>
+                      ) : null}
                     </div>
                   ))}
                 </div>
