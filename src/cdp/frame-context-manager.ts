@@ -167,6 +167,70 @@ export class FrameContextManager {
     this.sessionListeners.set(session, listeners);
   }
 
+  private resolveSessionMethod(
+    session: CDPSession,
+    methodName: "on" | "off"
+  ): ((event: string, handler: (...args: unknown[]) => void) => void) | null {
+    try {
+      const method = (session as CDPSession & { [key: string]: unknown })[
+        methodName
+      ];
+      if (typeof method !== "function") {
+        return null;
+      }
+      return method as (event: string, handler: (...args: unknown[]) => void) => void;
+    } catch (error) {
+      console.warn(
+        `[FrameContext] Failed to read session.${methodName}: ${formatFrameContextDiagnostic(
+          error
+        )}`
+      );
+      return null;
+    }
+  }
+
+  private attachSessionListener(
+    session: CDPSession,
+    event: string,
+    handler: (...args: unknown[]) => void
+  ): boolean {
+    const onMethod = this.resolveSessionMethod(session, "on");
+    if (!onMethod) {
+      return false;
+    }
+    try {
+      onMethod.call(session, event, handler);
+      return true;
+    } catch (error) {
+      console.warn(
+        `[FrameContext] Failed to attach session listener (${event}): ${formatFrameContextDiagnostic(
+          error
+        )}`
+      );
+      return false;
+    }
+  }
+
+  private detachSessionListener(
+    session: CDPSession,
+    event: string,
+    handler: (...args: unknown[]) => void
+  ): void {
+    const offMethod = this.resolveSessionMethod(session, "off");
+    if (!offMethod) {
+      return;
+    }
+    try {
+      offMethod.call(session, event, handler);
+    } catch (error) {
+      console.warn(
+        `[FrameContext] Failed to detach session listener (${event}): ${formatFrameContextDiagnostic(
+          error
+        )}`
+      );
+    }
+  }
+
   setDebug(debug?: boolean): void {
     this.debugLogs = !!debug;
   }
@@ -184,7 +248,7 @@ export class FrameContextManager {
     const record = this.playwrightOopifCache.get(frame);
     if (!record) return;
     if (record.detachHandler) {
-      record.session.off?.("Detached", record.detachHandler);
+      this.detachSessionListener(record.session, "Detached", record.detachHandler);
       record.detachHandler = undefined;
     }
     this.playwrightOopifCache.delete(frame);
@@ -227,7 +291,7 @@ export class FrameContextManager {
         const listeners = this.sessionListeners.get(session);
         if (listeners) {
           for (const { event, handler } of listeners) {
-            session.off?.(event, handler);
+            this.detachSessionListener(session, event, handler);
           }
           this.sessionListeners.delete(session);
         }
@@ -378,7 +442,7 @@ export class FrameContextManager {
 
     for (const [session, listeners] of this.sessionListeners.entries()) {
       for (const { event, handler } of listeners) {
-        session.off?.(event, handler);
+        this.detachSessionListener(session, event, handler);
       }
     }
     this.sessionListeners.clear();
@@ -684,10 +748,12 @@ export class FrameContextManager {
         const detachHandler = (): void => {
           this.removeCachedPlaywrightFrame(frame);
           this.removeFrame(frameId);
-          oopifSession?.off?.("Detached", detachHandler);
+          if (oopifSession) {
+            this.detachSessionListener(oopifSession, "Detached", detachHandler);
+          }
         };
         record.detachHandler = detachHandler;
-        oopifSession.on?.("Detached", detachHandler);
+        this.attachSessionListener(oopifSession, "Detached", detachHandler);
         this.playwrightOopifCache.set(frame, record);
 
         return {
@@ -775,9 +841,21 @@ export class FrameContextManager {
       this.handlePageFrameNavigated(event);
     };
 
-    session.on("Page.frameAttached", attachedHandler);
-    session.on("Page.frameDetached", detachedHandler);
-    session.on("Page.frameNavigated", navigatedHandler);
+    this.attachSessionListener(
+      session,
+      "Page.frameAttached",
+      attachedHandler as (...args: unknown[]) => void
+    );
+    this.attachSessionListener(
+      session,
+      "Page.frameDetached",
+      detachedHandler as (...args: unknown[]) => void
+    );
+    this.attachSessionListener(
+      session,
+      "Page.frameNavigated",
+      navigatedHandler as (...args: unknown[]) => void
+    );
 
     this.addSessionListener(
       session,
@@ -911,9 +989,21 @@ export class FrameContextManager {
       }
     };
 
-    session.on("Runtime.executionContextCreated", createdHandler);
-    session.on("Runtime.executionContextDestroyed", destroyedHandler);
-    session.on("Runtime.executionContextsCleared", clearedHandler);
+    this.attachSessionListener(
+      session,
+      "Runtime.executionContextCreated",
+      createdHandler as (...args: unknown[]) => void
+    );
+    this.attachSessionListener(
+      session,
+      "Runtime.executionContextDestroyed",
+      destroyedHandler as (...args: unknown[]) => void
+    );
+    this.attachSessionListener(
+      session,
+      "Runtime.executionContextsCleared",
+      clearedHandler as (...args: unknown[]) => void
+    );
 
     this.addSessionListener(
       session,

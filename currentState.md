@@ -175,6 +175,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
   - `PlaywrightCDPClient.createSession()` now calls `newCDPSession` with the browser context receiver explicitly.
   - `FrameContextManager.captureOOPIFs()` now calls `newCDPSession` with the discovered context receiver explicitly.
   - Added regressions proving receiver-sensitive `newCDPSession` implementations continue to work.
+- Hardened frame-context listener lifecycle against trap-prone session listener methods:
+  - added guarded session listener attach/detach helpers in `frame-context-manager.ts` with sanitized diagnostics,
+  - `ensureInitialized`, OOPIF detach wiring, `removeFrame`, and `clear` now tolerate `session.on`/`session.off` getter traps without crashing.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

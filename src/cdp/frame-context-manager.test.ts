@@ -201,6 +201,71 @@ describe("FrameContextManager listener bookkeeping", () => {
     }
   });
 
+  it("continues initialization when session.on getter traps", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const baseSession = new FakeSession();
+    const trappedSession = new Proxy(baseSession, {
+      get: (target, property, receiver) => {
+        if (property === "on") {
+          throw new Error(`listener-on\u0000\n${"x".repeat(2_000)}`);
+        }
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    }) as unknown as CDPSession;
+    const manager = new FrameContextManager(createFakeClient(trappedSession));
+
+    try {
+      await expect(manager.ensureInitialized()).resolves.toBeUndefined();
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read session.on")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("continues clear() when session.off getter traps", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const baseSession = new FakeSession();
+    const trappedSession = new Proxy(baseSession, {
+      get: (target, property, receiver) => {
+        if (property === "off") {
+          throw new Error(`listener-off\u0000\n${"x".repeat(2_000)}`);
+        }
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    }) as unknown as CDPSession;
+    const manager = new FrameContextManager(createFakeClient(trappedSession));
+
+    try {
+      await manager.ensureInitialized();
+      expect(() => manager.clear()).not.toThrow();
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read session.off")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("cleans cached Playwright OOPIF detach handlers on clear", () => {
     const session = new FakeSession();
     const manager = new FrameContextManager(createFakeClient(session));
