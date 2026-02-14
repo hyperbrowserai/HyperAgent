@@ -3287,6 +3287,22 @@ mod tests {
         import_result.formula_cells_normalized <= import_result.formula_cells_imported,
         "fixture {fixture_file_name} normalized formula count should be bounded by imported formulas",
       );
+      assert!(
+        import_result
+          .warnings
+          .iter()
+          .any(|warning| warning.contains("not imported")),
+        "fixture {fixture_file_name} should include baseline compatibility warning",
+      );
+      if import_result.formula_cells_normalized > 0 {
+        assert!(
+          import_result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("formula(s) were normalized")),
+          "fixture {fixture_file_name} with normalized formulas should include normalization warning",
+        );
+      }
 
       let emitted_event = timeout(Duration::from_secs(1), events.recv())
         .await
@@ -3321,6 +3337,28 @@ mod tests {
           .and_then(serde_json::Value::as_u64),
         Some(import_result.formula_cells_normalized as u64),
       );
+      let event_warning_messages = emitted_event
+        .payload
+        .get("warnings")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .collect::<Vec<_>>();
+      assert!(
+        event_warning_messages
+          .iter()
+          .any(|warning| warning.contains("not imported")),
+        "fixture {fixture_file_name} event payload should include baseline compatibility warning",
+      );
+      if import_result.formula_cells_normalized > 0 {
+        assert!(
+          event_warning_messages
+            .iter()
+            .any(|warning| warning.contains("formula(s) were normalized")),
+          "fixture {fixture_file_name} event payload should include normalization warning",
+        );
+      }
     }
   }
 
