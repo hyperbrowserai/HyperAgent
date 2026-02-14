@@ -2798,14 +2798,24 @@ export function SpreadsheetApp() {
               </label>
               <button
                 onClick={handleRunDuckdbQuery}
-                disabled={!workbook || isRunningDuckdbQuery || hasInvalidDuckdbQueryRowLimitInput}
+                disabled={
+                  !workbook
+                  || isRunningDuckdbQuery
+                  || isRunningDuckdbOpsQuery
+                  || hasInvalidDuckdbQueryRowLimitInput
+                }
                 className="rounded bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-500 disabled:opacity-40"
               >
                 {isRunningDuckdbQuery ? "Running query..." : "Run Query"}
               </button>
               <button
                 onClick={handleRunDuckdbQueryViaAgentOps}
-                disabled={!workbook || isRunningDuckdbOpsQuery || hasInvalidDuckdbQueryRowLimitInput}
+                disabled={
+                  !workbook
+                  || isRunningDuckdbOpsQuery
+                  || isRunningDuckdbQuery
+                  || hasInvalidDuckdbQueryRowLimitInput
+                }
                 className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40"
               >
                 {isRunningDuckdbOpsQuery
