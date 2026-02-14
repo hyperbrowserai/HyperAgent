@@ -943,6 +943,62 @@ export function SpreadsheetApp() {
       ),
     [wizardSchemaQuery.data?.agent_ops_cache_reexecute_response_shape],
   );
+  const wizardCacheRemoveRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_remove_request_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_remove_request_shape],
+  );
+  const wizardCacheRemoveResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_remove_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_remove_response_shape],
+  );
+  const wizardCacheRemoveByPrefixRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_request_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_request_shape],
+  );
+  const wizardCacheRemoveByPrefixResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_response_shape],
+  );
+  const wizardCacheRemoveByPrefixPreviewRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_preview_request_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_preview_request_shape],
+  );
+  const wizardCacheRemoveByPrefixPreviewResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_preview_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_preview_response_shape],
+  );
+  const wizardCacheRemoveStaleRequestFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_remove_stale_request_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_remove_stale_request_shape],
+  );
+  const wizardCacheRemoveStaleResponseFields = useMemo(
+    () =>
+      flattenSchemaShapeEntries(
+        wizardSchemaQuery.data?.agent_ops_cache_remove_stale_response_shape,
+      ),
+    [wizardSchemaQuery.data?.agent_ops_cache_remove_stale_response_shape],
+  );
   const wizardDuckdbValidationErrorCodes = useMemo(
     () =>
       parseCommaSeparatedList(wizardSchemaQuery.data?.duckdb_query_validation_error_codes),
@@ -3133,6 +3189,38 @@ export function SpreadsheetApp() {
                 </span>
               </p>
             ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_remove_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_remove_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-by-prefix endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_remove_by_prefix_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_remove_by_prefix_preview_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-by-prefix preview endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_remove_by_prefix_preview_endpoint}
+                </span>
+              </p>
+            ) : null}
+            {wizardSchemaQuery.data?.agent_ops_cache_remove_stale_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-stale endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.agent_ops_cache_remove_stale_endpoint}
+                </span>
+              </p>
+            ) : null}
             {wizardCacheReplayRequestFields.length > 0 ? (
               <p className="mb-2 text-[11px] text-slate-500">
                 wizard cache replay request shape:{" "}
@@ -3162,6 +3250,74 @@ export function SpreadsheetApp() {
                 wizard cache reexecute response shape:{" "}
                 <span className="font-mono text-slate-300">
                   {formatSchemaShapeEntries(wizardCacheReexecuteResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheRemoveRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheRemoveRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheRemoveResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheRemoveResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheRemoveByPrefixRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-by-prefix request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheRemoveByPrefixRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheRemoveByPrefixResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-by-prefix response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheRemoveByPrefixResponseFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheRemoveByPrefixPreviewRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-by-prefix preview request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(
+                    wizardCacheRemoveByPrefixPreviewRequestFields,
+                  )}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheRemoveByPrefixPreviewResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-by-prefix preview response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(
+                    wizardCacheRemoveByPrefixPreviewResponseFields,
+                  )}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheRemoveStaleRequestFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-stale request shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheRemoveStaleRequestFields)}
+                </span>
+              </p>
+            ) : null}
+            {wizardCacheRemoveStaleResponseFields.length > 0 ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                wizard cache remove-stale response shape:{" "}
+                <span className="font-mono text-slate-300">
+                  {formatSchemaShapeEntries(wizardCacheRemoveStaleResponseFields)}
                 </span>
               </p>
             ) : null}
