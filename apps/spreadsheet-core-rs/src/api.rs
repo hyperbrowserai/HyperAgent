@@ -107,6 +107,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "SKEW",
   "SKEW.P",
   "KURT",
+  "FISHER",
+  "FISHERINV",
   "SUMIF",
   "SUMIFS",
   "MINIFS",

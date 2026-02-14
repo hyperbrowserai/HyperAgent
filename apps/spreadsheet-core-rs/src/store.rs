@@ -18,6 +18,7 @@ use crate::{
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
     parse_forecast_linear_formula, parse_steyx_formula,
     parse_sumx_formula, parse_skew_formula, parse_skew_p_formula, parse_kurt_formula,
+    parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -1132,6 +1133,22 @@ fn evaluate_formula(
     let kurt = (n * (n + 1.0) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * fourth_moment
       - (3.0 * (n - 1.0).powi(2) / ((n - 2.0) * (n - 3.0)));
     return Ok(Some(kurt.to_string()));
+  }
+
+  if let Some(x_arg) = parse_fisher_formula(formula) {
+    let x = parse_required_float(connection, sheet, &x_arg)?;
+    if !(x > -1.0 && x < 1.0) {
+      return Ok(None);
+    }
+    let fisher = 0.5 * ((1.0 + x) / (1.0 - x)).ln();
+    return Ok(Some(fisher.to_string()));
+  }
+
+  if let Some(y_arg) = parse_fisherinv_formula(formula) {
+    let y = parse_required_float(connection, sheet, &y_arg)?;
+    let exp_term = (2.0 * y).exp();
+    let fisherinv = (exp_term - 1.0) / (exp_term + 1.0);
+    return Ok(Some(fisherinv.to_string()));
   }
 
   if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
@@ -4811,12 +4828,24 @@ mod tests {
         value: None,
         formula: Some("=SKEW.P(V10:V14)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 185,
+        value: None,
+        formula: Some("=FISHER(0.75)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 186,
+        value: None,
+        formula: Some("=FISHERINV(0.5)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 182);
+    assert_eq!(updated_cells, 184);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4830,7 +4859,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 184,
+        end_col: 186,
       },
     )
     .expect("cells should be fetched");
@@ -5442,6 +5471,26 @@ mod tests {
     assert!(
       (skew_p - 0.395_870_337_343_816_44).abs() < 1e-9,
       "skew.p should be 0.395870..., got {skew_p}",
+    );
+    let fisher = by_position(1, 185)
+      .evaluated_value
+      .as_deref()
+      .expect("fisher should evaluate")
+      .parse::<f64>()
+      .expect("fisher should be numeric");
+    assert!(
+      (fisher - 0.972_955_074_527_656_6).abs() < 1e-9,
+      "fisher should be 0.972955..., got {fisher}",
+    );
+    let fisherinv = by_position(1, 186)
+      .evaluated_value
+      .as_deref()
+      .expect("fisherinv should evaluate")
+      .parse::<f64>()
+      .expect("fisherinv should be numeric");
+    assert!(
+      (fisherinv - 0.462_117_157_260_009_74).abs() < 1e-9,
+      "fisherinv should be 0.462117..., got {fisherinv}",
     );
   }
 
@@ -6417,6 +6466,33 @@ mod tests {
         "=KURT(A1:A4)".to_string(),
         "=SKEW.P(A1:A4)".to_string(),
       ],
+    );
+  }
+
+  #[test]
+  fn should_leave_fisher_out_of_domain_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=FISHER(1)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: None,
+        formula: Some("=FISHER(-1.2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=FISHER(1)".to_string(), "=FISHER(-1.2)".to_string()],
     );
   }
 

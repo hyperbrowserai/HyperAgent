@@ -1278,6 +1278,22 @@ pub fn parse_kurt_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> {
   parse_range_reference(&args[0])
 }
 
+pub fn parse_fisher_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "FISHER" || args.len() != 1 {
+    return None;
+  }
+  Some(args[0].clone())
+}
+
+pub fn parse_fisherinv_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "FISHERINV" || args.len() != 1 {
+    return None;
+  }
+  Some(args[0].clone())
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1571,6 +1587,7 @@ mod tests {
     parse_forecast_linear_formula, parse_steyx_formula,
     parse_sumx_formula,
     parse_skew_formula, parse_skew_p_formula, parse_kurt_formula,
+    parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -2130,6 +2147,14 @@ mod tests {
     let kurt = parse_kurt_formula("=KURT(A1:A5)").expect("kurt should parse");
     assert_eq!(kurt.0, (1, 1));
     assert_eq!(kurt.1, (5, 1));
+    assert_eq!(
+      parse_fisher_formula("=FISHER(0.75)").as_deref(),
+      Some("0.75"),
+    );
+    assert_eq!(
+      parse_fisherinv_formula("=FISHERINV(0.5)").as_deref(),
+      Some("0.5"),
+    );
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");
