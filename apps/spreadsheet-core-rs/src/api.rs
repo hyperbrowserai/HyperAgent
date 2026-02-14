@@ -1345,6 +1345,11 @@ async fn get_agent_schema(
         "served_from_cache": "boolean; true when response reused by request_id idempotency cache",
         "results": "array of operation results"
       },
+      "agent_ops_result_error_shape": {
+        "error": "string in CODE: message form",
+        "error_code": "stable error code string",
+        "error_message": "human-readable error details"
+      },
       "workbook_import_endpoint": "/v1/workbooks/import",
       "workbook_import_response_shape": {
         "workbook": "imported workbook summary",
@@ -1857,9 +1862,7 @@ async fn execute_agent_operations(
                 op_index,
                 op_type,
                 ok: false,
-                data: json!({
-                  "error": format!("{error:?}")
-                }),
+                data: operation_error_payload(&error),
             }),
         }
 
@@ -1869,6 +1872,31 @@ async fn execute_agent_operations(
     }
 
     results
+}
+
+fn operation_error_payload(error: &ApiError) -> serde_json::Value {
+    match error {
+        ApiError::BadRequestWithCode { code, message } => json!({
+          "error": format!("{code}: {message}"),
+          "error_code": code,
+          "error_message": message
+        }),
+        ApiError::BadRequest(message) => json!({
+          "error": format!("BAD_REQUEST: {message}"),
+          "error_code": "BAD_REQUEST",
+          "error_message": message
+        }),
+        ApiError::NotFound(message) => json!({
+          "error": format!("NOT_FOUND: {message}"),
+          "error_code": "NOT_FOUND",
+          "error_message": message
+        }),
+        ApiError::Internal(message) => json!({
+          "error": format!("INTERNAL_ERROR: {message}"),
+          "error_code": "INTERNAL_ERROR",
+          "error_message": message
+        }),
+    }
 }
 
 async fn agent_ops(
@@ -3272,6 +3300,21 @@ mod tests {
         assert_eq!(response.results.len(), 1);
         assert_eq!(response.results[0].op_type, "duckdb_query");
         assert!(!response.results[0].ok);
+        assert_eq!(
+            response.results[0]
+                .data
+                .get("error_code")
+                .and_then(serde_json::Value::as_str),
+            Some("INVALID_QUERY_SQL"),
+        );
+        assert!(
+            response.results[0]
+                .data
+                .get("error_message")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|message| message.contains("read-only")),
+            "failed operation should include readable error message",
+        );
         let error_text = response.results[0]
             .data
             .get("error")
@@ -6544,6 +6587,13 @@ mod tests {
                 .and_then(|value| value.get("sql"))
                 .and_then(serde_json::Value::as_str),
             Some("required read-only single-statement SQL query (SELECT/WITH)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_result_error_shape")
+                .and_then(|value| value.get("error_code"))
+                .and_then(serde_json::Value::as_str),
+            Some("stable error code string"),
         );
         assert_eq!(
       schema
