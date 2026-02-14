@@ -26,6 +26,22 @@ describe("isAdOrTrackingFrame", () => {
     ).toBe(true);
   });
 
+  it("filters protocol-relative known ad domains", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "//securepubads.g.doubleclick.net/pagead/ads",
+      })
+    ).toBe(true);
+  });
+
+  it("filters known ad domains without explicit protocol", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "securepubads.g.doubleclick.net/pagead/ads",
+      })
+    ).toBe(true);
+  });
+
   it("filters obvious pixel-style tracking frames", () => {
     expect(
       isAdOrTrackingFrame({
@@ -90,6 +106,14 @@ describe("isAdOrTrackingFrame", () => {
     expect(
       isAdOrTrackingFrame({
         url: "https://example.com/redirect?next=https://yahoo.com/pixel",
+      })
+    ).toBe(false);
+  });
+
+  it("does not match host-based ad domains for path-only urls", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "/redirect/doubleclick.net/pagead/ads",
       })
     ).toBe(false);
   });

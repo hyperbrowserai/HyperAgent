@@ -101,15 +101,47 @@ const TRACKING_PARAMS = [
 
 const MIN_FILTER_SCORE = 2;
 
-function safeGetHostname(value: string | undefined): string | null {
-  if (!value || value.trim().length === 0) {
+const HAS_PROTOCOL_PATTERN = /^[a-z][a-z0-9+\-.]*:/i;
+
+function normalizeUrlForParsing(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+  if (trimmed.startsWith("//")) {
+    return `https:${trimmed}`;
+  }
+  if (HAS_PROTOCOL_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("/")) {
+    return "";
+  }
+  return `https://${trimmed}`;
+}
+
+function safeParseUrl(value: string | undefined): URL | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = normalizeUrlForParsing(value);
+  if (normalized.length === 0) {
     return null;
   }
   try {
-    return new URL(value).hostname.toLowerCase();
+    return new URL(normalized);
   } catch {
     return null;
   }
+}
+
+function safeGetHostname(value: string | undefined): string | null {
+  const parsed = safeParseUrl(value);
+  if (!parsed) {
+    return null;
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  return hostname.length > 0 ? hostname : null;
 }
 
 function isSameSiteFrame(url: string, parentUrl: string | undefined): boolean {
@@ -126,11 +158,8 @@ function isSameSiteFrame(url: string, parentUrl: string | undefined): boolean {
 }
 
 function matchesKnownAdDomain(url: string): boolean {
-  const urlLower = url.toLowerCase();
-  let parsedUrl: URL | null = null;
-  try {
-    parsedUrl = new URL(urlLower);
-  } catch {
+  const parsedUrl = safeParseUrl(url);
+  if (!parsedUrl) {
     return false;
   }
 
@@ -167,12 +196,10 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
   const nameLower = (name || "").toLowerCase();
   let normalizedPathSignalText = urlLower;
   let normalizedQuerySignalText = "";
-  try {
-    const parsedUrl = new URL(urlLower);
+  const parsedUrl = safeParseUrl(urlLower);
+  if (parsedUrl) {
     normalizedPathSignalText = `${parsedUrl.hostname}${parsedUrl.pathname}`;
     normalizedQuerySignalText = parsedUrl.search;
-  } catch {
-    // Keep whole URL fallback for non-standard URLs.
   }
 
   // Allow empty/about:blank frames. They are often bootstrapped to real apps post-load.
