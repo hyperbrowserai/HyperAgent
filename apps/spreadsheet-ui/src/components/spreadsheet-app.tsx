@@ -3884,7 +3884,19 @@ export function SpreadsheetApp() {
                         </p>
                       ) : null}
                       <p className="ml-1 text-[10px] text-slate-500">
-                        openapi path: {entry.openApiPath}
+                        openapi path:{" "}
+                        <span className="font-mono text-slate-400">{entry.openApiPath}</span>
+                        <button
+                          onClick={() => {
+                            void handleCopyEndpoint(
+                              entry.openApiPath,
+                              `wizard ${entry.key} openapi path`,
+                            );
+                          }}
+                          className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                        >
+                          copy path
+                        </button>
                       </p>
                     </div>
                   ))}
@@ -4876,7 +4888,19 @@ export function SpreadsheetApp() {
                         </p>
                       ) : null}
                       <p className="ml-1 text-[10px] text-slate-500">
-                        openapi path: {entry.openApiPath}
+                        openapi path:{" "}
+                        <span className="font-mono text-slate-400">{entry.openApiPath}</span>
+                        <button
+                          onClick={() => {
+                            void handleCopyEndpoint(
+                              entry.openApiPath,
+                              `agent ${entry.key} openapi path`,
+                            );
+                          }}
+                          className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                        >
+                          copy path
+                        </button>
                       </p>
                     </div>
                   ))}
