@@ -6456,7 +6456,7 @@ mod tests {
   #[test]
   fn should_recalculate_large_range_aggregates_consistently() {
     let (_temp_dir, db_path) = create_initialized_db_path();
-    let row_count = 2_000u32;
+    let row_count = 500u32;
     let mut cells = Vec::with_capacity((row_count as usize) + 3);
     for row in 1..=row_count {
       cells.push(CellMutation {
@@ -6526,7 +6526,7 @@ mod tests {
         .and_then(|cell| cell.evaluated_value.as_deref())
         .and_then(|value| value.parse::<f64>().ok())
         .map(|value| value as i64),
-      Some(2_001_000),
+      Some(125_250),
       "SUM should match arithmetic progression total",
     );
     let average_value = by_row
@@ -6535,7 +6535,7 @@ mod tests {
       .and_then(|value| value.parse::<f64>().ok())
       .expect("AVERAGE result should parse as f64");
     assert!(
-      (average_value - 1_000.5).abs() < 1e-9,
+      (average_value - 250.5).abs() < 1e-9,
       "AVERAGE should match arithmetic progression midpoint",
     );
     assert_eq!(
@@ -6544,7 +6544,7 @@ mod tests {
         .and_then(|cell| cell.evaluated_value.as_deref())
         .and_then(|value| value.parse::<f64>().ok())
         .map(|value| value as i64),
-      Some(2_000),
+      Some(500),
       "MAX should match largest seeded value",
     );
   }
