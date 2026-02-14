@@ -291,4 +291,27 @@ mod tests {
       .expect("written fixture corpus should verify");
     assert_eq!(verified_files.len(), 8);
   }
+
+  #[test]
+  fn should_fail_verify_when_fixture_file_is_missing() {
+    let output_dir = tempdir()
+      .expect("temp dir should create")
+      .path()
+      .join("generated-fixtures");
+    fixture_corpus::write_fixture_corpus(&output_dir)
+      .expect("fixture corpus should write");
+    fs::remove_file(
+      output_dir.join(fixture_corpus::COMPAT_PREFIX_OPERATOR_FILE_NAME),
+    )
+    .expect("fixture file should be removable");
+
+    let error = verify_fixture_corpus(&output_dir)
+      .expect_err("verification should fail when fixture file is missing");
+    assert!(
+      error
+        .to_string()
+        .contains("fixture corpus membership mismatch"),
+      "verification error should describe membership mismatch",
+    );
+  }
 }
