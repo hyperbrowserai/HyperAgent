@@ -245,4 +245,37 @@ describe("action-cache perform helper dispatch", () => {
       })
     );
   });
+
+  it("sanitizes control characters in perform options and text arguments", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+
+    await page.performType("//input[\u0000 1]", "ab\u0000\ncd", {
+      performInstruction: "  custom\u0000\n instruction  ",
+      maxSteps: 2,
+    });
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instruction: "custom instruction",
+        cachedAction: expect.objectContaining({
+          xpath: expect.stringContaining("//input["),
+          arguments: ["ab  cd"],
+        }),
+      })
+    );
+    const cachedAction = (
+      runCachedStep.mock.calls[0]?.[0] as {
+        cachedAction?: { xpath?: string };
+      }
+    ).cachedAction;
+    expect(cachedAction?.xpath).not.toContain("\u0000");
+  });
 });

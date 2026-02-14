@@ -154,7 +154,13 @@ function normalizeInstruction(value: unknown, fallback: string): string {
   if (typeof value !== "string") {
     return fallback;
   }
-  const normalized = value.trim();
+  const normalized = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
   return normalized.length > 0 ? normalized : fallback;
 }
 
@@ -162,10 +168,14 @@ function normalizeOptionalTextArg(value: string | number): string | number {
   if (typeof value !== "string") {
     return value;
   }
-  if (value.length <= MAX_PERFORM_VALUE_CHARS) {
-    return value;
+  const normalized = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  if (normalized.length <= MAX_PERFORM_VALUE_CHARS) {
+    return normalized;
   }
-  return value.slice(0, MAX_PERFORM_VALUE_CHARS);
+  return normalized.slice(0, MAX_PERFORM_VALUE_CHARS);
 }
 
 function normalizeMaxSteps(value: unknown): number {
