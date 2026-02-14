@@ -173,11 +173,71 @@ function normalizeEndpointMethodsByKey(value: unknown): Record<string, string[]>
   }, {});
 }
 
+function normalizeEndpointSummariesByKey(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value as Record<string, unknown>).reduce<
+    Record<string, string>
+  >((accumulator, [key, summary]) => {
+    if (typeof summary !== "string") {
+      return accumulator;
+    }
+    const normalizedSummary = summary.trim();
+    if (!normalizedSummary) {
+      return accumulator;
+    }
+    accumulator[key] = normalizedSummary;
+    return accumulator;
+  }, {});
+}
+
 function areMethodListsEqual(left: string[], right: string[]): boolean {
   if (left.length !== right.length) {
     return false;
   }
   return left.every((value, index) => value === right[index]);
+}
+
+function collectOpenApiSummariesByPath(spec: unknown): Record<string, string> {
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+    return {};
+  }
+  const paths = (spec as { paths?: unknown }).paths;
+  if (!paths || typeof paths !== "object" || Array.isArray(paths)) {
+    return {};
+  }
+  return Object.entries(paths as Record<string, unknown>).reduce<Record<string, string>>(
+    (accumulator, [path, methods]) => {
+      if (!methods || typeof methods !== "object" || Array.isArray(methods)) {
+        return accumulator;
+      }
+      const summaries = Object.entries(methods as Record<string, unknown>)
+        .flatMap(([method, metadata]) => {
+          if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+            return [];
+          }
+          const summary = (metadata as { summary?: unknown }).summary;
+          if (typeof summary !== "string" || !summary.trim()) {
+            return [];
+          }
+          return [{
+            method: method.trim().toUpperCase(),
+            summary: summary.trim(),
+          }];
+        })
+        .sort((left, right) => left.method.localeCompare(right.method));
+      if (summaries.length === 0) {
+        return accumulator;
+      }
+      const renderedSummary = summaries.length === 1
+        ? summaries[0].summary
+        : summaries.map((entry) => `${entry.method}: ${entry.summary}`).join(" | ");
+      accumulator[path] = renderedSummary;
+      return accumulator;
+    },
+    {},
+  );
 }
 
 function collectOpenApiMethodsByPath(
@@ -1216,8 +1276,16 @@ export function SpreadsheetApp() {
     () => normalizeEndpointMethodsByKey(wizardSchemaQuery.data?.endpoint_http_methods),
     [wizardSchemaQuery.data?.endpoint_http_methods],
   );
+  const wizardEndpointSummariesByKey = useMemo(
+    () => normalizeEndpointSummariesByKey(wizardSchemaQuery.data?.endpoint_summaries),
+    [wizardSchemaQuery.data?.endpoint_summaries],
+  );
   const openApiMethodsByPath = useMemo(
     () => collectOpenApiMethodsByPath(openApiSpecQuery.data),
+    [openApiSpecQuery.data],
+  );
+  const openApiSummariesByPath = useMemo(
+    () => collectOpenApiSummariesByPath(openApiSpecQuery.data),
     [openApiSpecQuery.data],
   );
   const wizardSchemaEndpointsWithMethods = useMemo(
@@ -1225,24 +1293,38 @@ export function SpreadsheetApp() {
       wizardSchemaEndpoints.map((entry) => {
         const schemaMethods = wizardEndpointMethodsByKey[entry.key] ?? [];
         const openApiMethods = openApiMethodsByPath[entry.openApiPath] ?? [];
+        const schemaSummary = wizardEndpointSummariesByKey[entry.key] ?? null;
+        const openApiSummary = openApiSummariesByPath[entry.openApiPath] ?? null;
         return {
           ...entry,
           methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
           schemaMethods,
           openApiMethods,
+          summary: schemaSummary ?? openApiSummary,
+          summarySource: schemaSummary ? "schema" : openApiSummary ? "openapi" : "missing",
           methodSource:
             schemaMethods.length > 0
               ? "schema"
               : openApiMethods.length > 0
                 ? "openapi"
                 : "missing",
+          hasSummaryMismatch:
+            Boolean(schemaSummary)
+            && Boolean(openApiSummary)
+            && schemaSummary !== openApiSummary,
           hasMethodMismatch:
             schemaMethods.length > 0
             && openApiMethods.length > 0
             && !areMethodListsEqual(schemaMethods, openApiMethods),
         };
       }),
-    [openApiMethodsByPath, wizardEndpointMethodsByKey, wizardSchemaEndpoints],
+    [
+      openApiMethodsByPath,
+      openApiSummariesByPath,
+      wizardEndpointMethodsByKey,
+      wizardEndpointSummariesByKey,
+      wizardSchemaEndpoints,
+    ],
   );
   const wizardUnmappedSchemaEndpointKeys = useMemo(
     () =>
@@ -1255,6 +1337,13 @@ export function SpreadsheetApp() {
     () =>
       wizardSchemaEndpointsWithMethods
         .filter((entry) => entry.hasMethodMismatch)
+        .map((entry) => entry.key),
+    [wizardSchemaEndpointsWithMethods],
+  );
+  const wizardSummaryMismatchEndpointKeys = useMemo(
+    () =>
+      wizardSchemaEndpointsWithMethods
+        .filter((entry) => entry.hasSummaryMismatch)
         .map((entry) => entry.key),
     [wizardSchemaEndpointsWithMethods],
   );
@@ -1461,29 +1550,47 @@ export function SpreadsheetApp() {
     () => normalizeEndpointMethodsByKey(agentSchemaQuery.data?.endpoint_http_methods),
     [agentSchemaQuery.data?.endpoint_http_methods],
   );
+  const agentEndpointSummariesByKey = useMemo(
+    () => normalizeEndpointSummariesByKey(agentSchemaQuery.data?.endpoint_summaries),
+    [agentSchemaQuery.data?.endpoint_summaries],
+  );
   const agentSchemaEndpointsWithMethods = useMemo(
     () =>
       agentSchemaEndpoints.map((entry) => {
         const schemaMethods = agentEndpointMethodsByKey[entry.key] ?? [];
         const openApiMethods = openApiMethodsByPath[entry.openApiPath] ?? [];
+        const schemaSummary = agentEndpointSummariesByKey[entry.key] ?? null;
+        const openApiSummary = openApiSummariesByPath[entry.openApiPath] ?? null;
         return {
           ...entry,
           methods: schemaMethods.length > 0 ? schemaMethods : openApiMethods,
           schemaMethods,
           openApiMethods,
+          summary: schemaSummary ?? openApiSummary,
+          summarySource: schemaSummary ? "schema" : openApiSummary ? "openapi" : "missing",
           methodSource:
             schemaMethods.length > 0
               ? "schema"
               : openApiMethods.length > 0
                 ? "openapi"
                 : "missing",
+          hasSummaryMismatch:
+            Boolean(schemaSummary)
+            && Boolean(openApiSummary)
+            && schemaSummary !== openApiSummary,
           hasMethodMismatch:
             schemaMethods.length > 0
             && openApiMethods.length > 0
             && !areMethodListsEqual(schemaMethods, openApiMethods),
         };
       }),
-    [agentEndpointMethodsByKey, agentSchemaEndpoints, openApiMethodsByPath],
+    [
+      agentEndpointMethodsByKey,
+      agentEndpointSummariesByKey,
+      agentSchemaEndpoints,
+      openApiMethodsByPath,
+      openApiSummariesByPath,
+    ],
   );
   const agentUnmappedSchemaEndpointKeys = useMemo(
     () =>
@@ -1496,6 +1603,13 @@ export function SpreadsheetApp() {
     () =>
       agentSchemaEndpointsWithMethods
         .filter((entry) => entry.hasMethodMismatch)
+        .map((entry) => entry.key),
+    [agentSchemaEndpointsWithMethods],
+  );
+  const agentSummaryMismatchEndpointKeys = useMemo(
+    () =>
+      agentSchemaEndpointsWithMethods
+        .filter((entry) => entry.hasSummaryMismatch)
         .map((entry) => entry.key),
     [agentSchemaEndpointsWithMethods],
   );
@@ -3531,36 +3645,59 @@ export function SpreadsheetApp() {
                     </span>
                   </p>
                 ) : null}
+                {wizardSummaryMismatchEndpointKeys.length > 0 ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    schema/openapi summary mismatch for:{" "}
+                    <span className="font-mono">
+                      {wizardSummaryMismatchEndpointKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : null}
                 <div className="mt-2 space-y-1">
                   {wizardSchemaEndpointsWithMethods.map((entry) => (
-                    <p
+                    <div
                       key={`wizard-endpoint-catalog-${entry.key}`}
                       className="text-[11px] text-slate-500"
                     >
-                      {entry.methods.length > 0 ? (
-                        <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                          {entry.methods.join("|")}
+                      <p>
+                        {entry.methods.length > 0 ? (
+                          <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                            {entry.methods.join("|")}
+                          </span>
+                        ) : null}
+                        {entry.key}:{" "}
+                        <span className="font-mono text-slate-300">{entry.endpoint}</span>
+                        <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                          {entry.methodSource}
                         </span>
-                      ) : null}
-                      {entry.key}:{" "}
-                      <span className="font-mono text-slate-300">{entry.endpoint}</span>
-                      <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                        {entry.methodSource}
-                      </span>
-                      {entry.hasMethodMismatch ? (
-                        <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
-                          mismatch
+                        <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                          {entry.summarySource}
                         </span>
+                        {entry.hasMethodMismatch ? (
+                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                            method mismatch
+                          </span>
+                        ) : null}
+                        {entry.hasSummaryMismatch ? (
+                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                            summary mismatch
+                          </span>
+                        ) : null}
+                        <button
+                          onClick={() => {
+                            void handleCopyEndpoint(entry.endpoint, `wizard ${entry.key}`);
+                          }}
+                          className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                        >
+                          copy
+                        </button>
+                      </p>
+                      {entry.summary ? (
+                        <p className="ml-1 text-[10px] text-slate-400">
+                          summary: {entry.summary}
+                        </p>
                       ) : null}
-                      <button
-                        onClick={() => {
-                          void handleCopyEndpoint(entry.endpoint, `wizard ${entry.key}`);
-                        }}
-                        className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-                      >
-                        copy
-                      </button>
-                    </p>
+                    </div>
                   ))}
                 </div>
               </details>
@@ -4469,36 +4606,59 @@ export function SpreadsheetApp() {
                     </span>
                   </p>
                 ) : null}
+                {agentSummaryMismatchEndpointKeys.length > 0 ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    schema/openapi summary mismatch for:{" "}
+                    <span className="font-mono">
+                      {agentSummaryMismatchEndpointKeys.join(", ")}
+                    </span>
+                  </p>
+                ) : null}
                 <div className="mt-2 space-y-1">
                   {agentSchemaEndpointsWithMethods.map((entry) => (
-                    <p
+                    <div
                       key={`agent-endpoint-catalog-${entry.key}`}
                       className="text-xs text-slate-400"
                     >
-                      {entry.methods.length > 0 ? (
-                        <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                          {entry.methods.join("|")}
+                      <p>
+                        {entry.methods.length > 0 ? (
+                          <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                            {entry.methods.join("|")}
+                          </span>
+                        ) : null}
+                        {entry.key}:{" "}
+                        <span className="font-mono text-slate-200">{entry.endpoint}</span>
+                        <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                          {entry.methodSource}
                         </span>
-                      ) : null}
-                      {entry.key}:{" "}
-                      <span className="font-mono text-slate-200">{entry.endpoint}</span>
-                      <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                        {entry.methodSource}
-                      </span>
-                      {entry.hasMethodMismatch ? (
-                        <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
-                          mismatch
+                        <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                          {entry.summarySource}
                         </span>
+                        {entry.hasMethodMismatch ? (
+                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                            method mismatch
+                          </span>
+                        ) : null}
+                        {entry.hasSummaryMismatch ? (
+                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                            summary mismatch
+                          </span>
+                        ) : null}
+                        <button
+                          onClick={() => {
+                            void handleCopyEndpoint(entry.endpoint, `agent ${entry.key}`);
+                          }}
+                          className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                        >
+                          copy
+                        </button>
+                      </p>
+                      {entry.summary ? (
+                        <p className="ml-1 text-[10px] text-slate-400">
+                          summary: {entry.summary}
+                        </p>
                       ) : null}
-                      <button
-                        onClick={() => {
-                          void handleCopyEndpoint(entry.endpoint, `agent ${entry.key}`);
-                        }}
-                        className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-                      >
-                        copy
-                      </button>
-                    </p>
+                    </div>
                   ))}
                 </div>
               </details>

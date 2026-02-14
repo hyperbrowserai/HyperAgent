@@ -213,6 +213,7 @@ export interface AgentSchemaInfo {
   health_endpoint?: string;
   openapi_endpoint?: string;
   endpoint_http_methods?: Record<string, string[]>;
+  endpoint_summaries?: Record<string, string>;
   request_shape?: Record<string, unknown>;
   agent_ops_request_shape?: Record<string, unknown>;
   workbook_import_endpoint?: string;
@@ -338,6 +339,7 @@ export interface AgentWizardSchemaInfo {
   health_endpoint?: string;
   openapi_endpoint?: string;
   endpoint_http_methods?: Record<string, string[]>;
+  endpoint_summaries?: Record<string, string>;
   json_endpoint?: string;
   presets_endpoint?: string;
   preset_operations_endpoint?: string;
