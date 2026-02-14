@@ -944,6 +944,7 @@ interface GetA11yDomOptions {
   useCache?: boolean;
   enableStreaming?: boolean;
   onFrameChunk?: (chunk: FrameChunkEvent) => void;
+  filterAdTrackingFrames?: boolean;
 }
 
 export async function getA11yDOM(
@@ -995,6 +996,14 @@ export async function getA11yDOM(
     const cdpClient = await getCDPClient(page);
     const frameContextManager = getOrCreateFrameContextManager(cdpClient);
     frameContextManager.setDebug(debug);
+    if (
+      typeof frameContextManager.setFrameFilteringEnabled === "function" &&
+      typeof options?.filterAdTrackingFrames === "boolean"
+    ) {
+      frameContextManager.setFrameFilteringEnabled(
+        options.filterAdTrackingFrames
+      );
+    }
     await frameContextManager.ensureInitialized().catch((error) => {
       if (debug) {
         console.warn(

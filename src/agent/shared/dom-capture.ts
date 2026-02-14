@@ -24,6 +24,7 @@ export interface CaptureDOMOptions {
   enableStreaming?: boolean;
   onFrameChunk?: (chunk: FrameChunkEvent) => void;
   maxRetries?: number;
+  filterAdTrackingFrames?: boolean;
 }
 
 const MAX_DOM_CAPTURE_RETRIES = 10;
@@ -134,6 +135,7 @@ export async function captureDOMState(
     enableStreaming = false,
     onFrameChunk,
     maxRetries = DOM_CAPTURE_MAX_ATTEMPTS,
+    filterAdTrackingFrames,
   } = options;
   const normalizedMaxRetries =
     typeof maxRetries === "number" &&
@@ -159,6 +161,7 @@ export async function captureDOMState(
         {
           useCache,
           enableStreaming,
+          filterAdTrackingFrames,
           onFrameChunk: attemptAggregator
             ? (chunk) => {
                 attemptAggregator.push(chunk);
@@ -209,7 +212,9 @@ export async function captureDOMState(
     }
     
     // Wait for DOM to settle before next retry
-    await waitForSettledDOM(page).catch(() => {});
+    await waitForSettledDOM(page, undefined, {
+      filterAdTrackingFrames,
+    }).catch(() => {});
   }
 
   throw (

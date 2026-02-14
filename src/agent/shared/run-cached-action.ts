@@ -563,6 +563,7 @@ async function runCachedAttempt(args: {
     useCache: false,
     debug,
     enableVisualMode: false,
+    filterAdTrackingFrames,
   });
   const resolved = await resolveXPathWithCDP({
     xpath: cachedAction.xpath!,

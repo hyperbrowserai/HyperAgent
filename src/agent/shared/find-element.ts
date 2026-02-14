@@ -159,6 +159,7 @@ export async function findElementWithInstruction(
         // Don't retry capture inside captureDOMState too aggressively since we have an outer loop here
         // But we do want it to handle transient CDP errors
         maxRetries: 2,
+        filterAdTrackingFrames: options.filterAdTrackingFrames,
       });
 
       if (debug) {

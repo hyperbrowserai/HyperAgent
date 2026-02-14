@@ -773,6 +773,7 @@ export const runAgentTask = async (
           enableVisualMode: params?.enableVisualMode ?? false,
           debugStepDir: stepDebugArtifactsEnabled ? debugStepDir : undefined,
           enableStreaming: enableDomStreaming,
+          filterAdTrackingFrames: ctx.filterAdTrackingFrames,
           onFrameChunk: enableDomStreaming
             ? () => {
                 // captureDOMState handles aggregation

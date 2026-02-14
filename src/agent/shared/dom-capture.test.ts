@@ -50,7 +50,37 @@ describe("captureDOMState", () => {
 
     expect(result.domState).toBe("dom tree");
     expect(getA11yDOM).toHaveBeenCalledTimes(2);
-    expect(waitForSettledDOM).toHaveBeenCalledTimes(1);
+    expect(waitForSettledDOM).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      expect.objectContaining({
+        filterAdTrackingFrames: undefined,
+      })
+    );
+  });
+
+  it("forwards filterAdTrackingFrames option to DOM capture and retry waits", async () => {
+    getA11yDOM
+      .mockRejectedValueOnce(new Error("Execution context was destroyed"))
+      .mockResolvedValueOnce(createDomState());
+
+    const page = createPage();
+    await captureDOMState(page, {
+      maxRetries: 2,
+      filterAdTrackingFrames: false,
+    });
+
+    const domOptions = getA11yDOM.mock.calls[0]?.[4] as
+      | { filterAdTrackingFrames?: boolean }
+      | undefined;
+    expect(domOptions?.filterAdTrackingFrames).toBe(false);
+    expect(waitForSettledDOM).toHaveBeenCalledWith(
+      page,
+      undefined,
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
   });
 
   it("throws immediately for non-recoverable errors", async () => {
