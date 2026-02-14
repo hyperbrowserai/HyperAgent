@@ -106,6 +106,34 @@ describe("HyperAgent constructor and task controls", () => {
     expect(getDebugOptions().enabled).toBe(false);
   });
 
+  it("throws readable missing-provider error when llm getter traps", () => {
+    const previousKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      const trappedConfig = new Proxy(
+        {},
+        {
+          get: (_target, prop: string | symbol) => {
+            if (prop === "llm") {
+              throw new Error("llm getter trap");
+            }
+            return undefined;
+          },
+        }
+      ) as unknown as ConstructorParameters<typeof HyperAgent>[0];
+
+      expect(() => new HyperAgent(trappedConfig)).toThrow(
+        "No LLM provider provided"
+      );
+    } finally {
+      if (typeof previousKey === "undefined") {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = previousKey;
+      }
+    }
+  });
+
   it("throws synchronously for reserved custom action names", () => {
     const reservedAction: AgentActionDefinition = {
       type: "complete",
