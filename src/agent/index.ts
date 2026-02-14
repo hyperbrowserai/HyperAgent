@@ -90,6 +90,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
   private static readonly MAX_MCP_SERVER_IDENTIFIER_CHARS = 128;
   private static readonly MAX_LIFECYCLE_DIAGNOSTIC_CHARS = 400;
   private static readonly MAX_HELPER_DIAGNOSTIC_CHARS = 400;
+  private static readonly MAX_PAGE_URL_CHARS = 1_000;
   private static readonly MAX_REPLAY_STEPS = 1_000;
   private static readonly MAX_ACTION_CACHE_ENTRIES = 200;
   private static readonly DEFAULT_ACTION_CACHE_CREATED_AT =
@@ -132,7 +133,9 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
 
   private safeGetPageUrl(page: Page): string {
     try {
-      return normalizePageUrl(page.url());
+      return normalizePageUrl(page.url(), {
+        maxChars: HyperAgent.MAX_PAGE_URL_CHARS,
+      });
     } catch {
       return "about:blank";
     }

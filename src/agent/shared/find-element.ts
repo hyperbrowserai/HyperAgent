@@ -42,6 +42,7 @@ const DEFAULT_MAX_RETRIES = 1;
 const MAX_FIND_ELEMENT_RETRIES = 20;
 const MAX_RETRY_DELAY_MS = 30_000;
 const MAX_FIND_ELEMENT_DIAGNOSTIC_CHARS = 400;
+const MAX_FIND_ELEMENT_URL_CHARS = 1_000;
 
 function formatFindElementDiagnostic(value: unknown): string {
   const normalized = Array.from(formatUnknownError(value), (char) => {
@@ -78,7 +79,9 @@ function normalizeRetryDelayMs(value: unknown): number {
 
 function safeGetPageUrl(page: Page): string {
   try {
-    return normalizePageUrl(page.url());
+    return normalizePageUrl(page.url(), {
+      maxChars: MAX_FIND_ELEMENT_URL_CHARS,
+    });
   } catch {
     return "about:blank";
   }
