@@ -395,6 +395,42 @@ describe("FrameContextManager listener bookkeeping", () => {
     }
   });
 
+  it("captureOOPIFs uses the browser-context receiver for session creation", async () => {
+    const session = new FakeSession();
+    const mainFrame = {
+      url: () => "https://example.com",
+      parentFrame: () => null,
+      name: () => "main",
+      isDetached: () => false,
+    };
+    const sameOriginFrame = {
+      url: () => "https://example.com/child",
+      parentFrame: () => mainFrame,
+      name: () => "child",
+      isDetached: () => false,
+    };
+    const context = {
+      newCDPSession: jest.fn(function (this: unknown, frame: unknown) {
+        if (this !== context) {
+          throw new Error("invalid context receiver");
+        }
+        void frame;
+        return Promise.reject(new Error("same origin frame"));
+      }),
+    };
+    const page = {
+      context: () => context,
+      frames: () => [mainFrame, sameOriginFrame],
+      mainFrame: () => mainFrame,
+    };
+    const manager = new FrameContextManager(
+      createFakeClientWithPage(session, page)
+    );
+
+    await expect(manager.captureOOPIFs(1)).resolves.toBeUndefined();
+    expect(context.newCDPSession).toHaveBeenCalledWith(sameOriginFrame);
+  });
+
   it("captureOOPIFs skips ad/tracking frame session creation by default", async () => {
     const session = new FakeSession();
     const mainFrame = {

@@ -198,8 +198,11 @@ class PlaywrightCDPClient implements CDPClient {
     let session: PlaywrightSession;
     try {
       session = (await (
-        newCDPSessionMethod as (targetArg: Page | Frame) => Promise<PlaywrightSession>
-      )(target)) as PlaywrightSession;
+        newCDPSessionMethod as (
+          this: object,
+          targetArg: Page | Frame
+        ) => Promise<PlaywrightSession>
+      ).call(pageContext as object, target)) as PlaywrightSession;
     } catch (error) {
       throw new Error(
         `[CDP][PlaywrightAdapter] Failed to create CDP session: ${formatPlaywrightAdapterDiagnostic(

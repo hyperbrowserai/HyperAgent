@@ -186,4 +186,30 @@ describe("playwright adapter error formatting", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("creates CDP sessions with the browser-context receiver", async () => {
+    const session = {
+      send: jest.fn().mockResolvedValue({}),
+      on: jest.fn(),
+      off: jest.fn(),
+      detach: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PlaywrightSession;
+    const context = {
+      newCDPSession: jest.fn(function (this: unknown, target: unknown) {
+        if (this !== context) {
+          throw new Error("invalid context receiver");
+        }
+        void target;
+        return Promise.resolve(session);
+      }),
+    };
+    const page = {
+      context: () => context,
+      once: jest.fn(),
+    } as unknown as Page;
+
+    const client = await getCDPClientForPage(page);
+    await expect(client.acquireSession("lifecycle")).resolves.toBeDefined();
+    expect(context.newCDPSession).toHaveBeenCalled();
+  });
 });

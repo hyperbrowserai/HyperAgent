@@ -171,6 +171,10 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Hardened element-locator debug frame listing:
   - trap-prone frame arrays no longer collapse the entire debug "Available frames" payload,
   - readable frame entries are preserved even when individual frame getters/indexes trap.
+- Bound CDP session creation to context receivers in both discovery paths:
+  - `PlaywrightCDPClient.createSession()` now calls `newCDPSession` with the browser context receiver explicitly.
+  - `FrameContextManager.captureOOPIFs()` now calls `newCDPSession` with the discovered context receiver explicitly.
+  - Added regressions proving receiver-sensitive `newCDPSession` implementations continue to work.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.

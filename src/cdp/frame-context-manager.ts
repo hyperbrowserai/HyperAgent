@@ -650,9 +650,10 @@ export class FrameContextManager {
       try {
         oopifSession = await (
           newCDPSessionMethod as (
+            this: object,
             frameArg: PlaywrightFrameHandle
           ) => Promise<CDPSession>
-        )(frame);
+        ).call(contextUnknown as object, frame);
       } catch {
         // Failed to create session = same-origin frame (already processed via DOM.getDocument)
         this.log(`[FrameContext] Frame ${frameUrl} is same-origin, skipping`);
