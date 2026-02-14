@@ -714,6 +714,16 @@ function buildEndpointCatalogDiagnosticsDrift(
   };
 }
 
+function endpointCatalogStatusBadgeClasses(level: EndpointCatalogDiagnostics["level"]): string {
+  if (level === "healthy") {
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  }
+  if (level === "warning") {
+    return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  }
+  return "border-rose-500/40 bg-rose-500/10 text-rose-200";
+}
+
 function formatSchemaShapeEntries(
   entries: Array<{ key: string; description: string | null }>,
 ): string {
@@ -1888,6 +1898,12 @@ export function SpreadsheetApp() {
     && wizardEndpointDiagnosticsDrift
     && !wizardEndpointDiagnosticsDrift.hasDrift,
   );
+  const hasWizardSchemaEndpointMetadata = Boolean(
+    wizardSchemaEndpointCoverage && wizardSchemaEndpointDiagnostics,
+  );
+  const hasWizardSchemaEndpointDrift = Boolean(
+    wizardEndpointCoverageDrift?.hasDrift || wizardEndpointDiagnosticsDrift?.hasDrift,
+  );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
@@ -1910,6 +1926,8 @@ export function SpreadsheetApp() {
         schema_coverage: wizardSchemaEndpointCoverage,
         coverage_drift: wizardEndpointCoverageDrift,
         coverage_in_sync: hasWizardSchemaCoverageInSync,
+        schema_metadata_available: hasWizardSchemaEndpointMetadata,
+        schema_drift_detected: hasWizardSchemaEndpointDrift,
         diagnostics: {
           status: wizardEndpointCatalogDiagnostics.level,
           issue_count: wizardEndpointCatalogDiagnostics.issueCount,
@@ -1964,6 +1982,8 @@ export function SpreadsheetApp() {
       wizardEndpointDiagnosticsDrift,
       hasWizardSchemaCoverageInSync,
       hasWizardSchemaDiagnosticsInSync,
+      hasWizardSchemaEndpointDrift,
+      hasWizardSchemaEndpointMetadata,
       wizardSchemaEndpointCoverage,
       wizardSchemaEndpointDiagnostics,
       wizardSchemaEndpointsWithMethods,
@@ -2345,6 +2365,12 @@ export function SpreadsheetApp() {
     && agentEndpointDiagnosticsDrift
     && !agentEndpointDiagnosticsDrift.hasDrift,
   );
+  const hasAgentSchemaEndpointMetadata = Boolean(
+    agentSchemaEndpointCoverage && agentSchemaEndpointDiagnostics,
+  );
+  const hasAgentSchemaEndpointDrift = Boolean(
+    agentEndpointCoverageDrift?.hasDrift || agentEndpointDiagnosticsDrift?.hasDrift,
+  );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
@@ -2367,6 +2393,8 @@ export function SpreadsheetApp() {
         schema_coverage: agentSchemaEndpointCoverage,
         coverage_drift: agentEndpointCoverageDrift,
         coverage_in_sync: hasAgentSchemaCoverageInSync,
+        schema_metadata_available: hasAgentSchemaEndpointMetadata,
+        schema_drift_detected: hasAgentSchemaEndpointDrift,
         diagnostics: {
           status: agentEndpointCatalogDiagnostics.level,
           issue_count: agentEndpointCatalogDiagnostics.issueCount,
@@ -2421,6 +2449,8 @@ export function SpreadsheetApp() {
       agentEndpointDiagnosticsDrift,
       hasAgentSchemaCoverageInSync,
       hasAgentSchemaDiagnosticsInSync,
+      hasAgentSchemaEndpointDrift,
+      hasAgentSchemaEndpointMetadata,
       agentSchemaEndpointCoverage,
       agentSchemaEndpointDiagnostics,
       agentSchemaEndpointsWithMethods,
@@ -4487,11 +4517,33 @@ export function SpreadsheetApp() {
             {wizardSchemaEndpointsWithMethods.length > 0 ? (
               <details className="mb-2 rounded border border-slate-800 bg-slate-950/60 p-2">
                 <summary className="cursor-pointer text-[11px] text-slate-400">
-                  discovered endpoint catalog ({wizardVisibleSchemaEndpointsWithMethods.length}
-                  {isWizardEndpointCatalogFilterActive
-                    ? ` of ${wizardSchemaEndpointsWithMethods.length}`
-                    : ""}
-                  )
+                  <span>
+                    discovered endpoint catalog ({wizardVisibleSchemaEndpointsWithMethods.length}
+                    {isWizardEndpointCatalogFilterActive
+                      ? ` of ${wizardSchemaEndpointsWithMethods.length}`
+                      : ""}
+                    )
+                  </span>
+                  <span
+                    className={`ml-2 rounded border px-1.5 py-0.5 text-[10px] font-medium ${endpointCatalogStatusBadgeClasses(wizardEndpointCatalogDiagnostics.level)}`}
+                  >
+                    {wizardEndpointCatalogDiagnostics.level.toUpperCase()}
+                  </span>
+                  {hasWizardSchemaEndpointMetadata ? (
+                    <span
+                      className={`ml-1 rounded border px-1.5 py-0.5 text-[10px] ${
+                        hasWizardSchemaEndpointDrift
+                          ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                          : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                      }`}
+                    >
+                      {hasWizardSchemaEndpointDrift ? "schema drift" : "schema in-sync"}
+                    </span>
+                  ) : (
+                    <span className="ml-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200">
+                      schema metadata missing
+                    </span>
+                  )}
                 </summary>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -4561,13 +4613,7 @@ export function SpreadsheetApp() {
                 <p className="mt-1 text-[11px] text-slate-400">
                   catalog status:{" "}
                   <span
-                    className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
-                      wizardEndpointCatalogDiagnostics.level === "healthy"
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                        : wizardEndpointCatalogDiagnostics.level === "warning"
-                          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-                          : "border-rose-500/40 bg-rose-500/10 text-rose-200"
-                    }`}
+                    className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${endpointCatalogStatusBadgeClasses(wizardEndpointCatalogDiagnostics.level)}`}
                   >
                     {wizardEndpointCatalogDiagnostics.level.toUpperCase()}
                   </span>{" "}
@@ -5743,11 +5789,33 @@ export function SpreadsheetApp() {
             {agentSchemaEndpointsWithMethods.length > 0 ? (
               <details className="mb-2 rounded border border-slate-800 bg-slate-950/60 p-2">
                 <summary className="cursor-pointer text-xs text-slate-400">
-                  discovered endpoint catalog ({agentVisibleSchemaEndpointsWithMethods.length}
-                  {isAgentEndpointCatalogFilterActive
-                    ? ` of ${agentSchemaEndpointsWithMethods.length}`
-                    : ""}
-                  )
+                  <span>
+                    discovered endpoint catalog ({agentVisibleSchemaEndpointsWithMethods.length}
+                    {isAgentEndpointCatalogFilterActive
+                      ? ` of ${agentSchemaEndpointsWithMethods.length}`
+                      : ""}
+                    )
+                  </span>
+                  <span
+                    className={`ml-2 rounded border px-1.5 py-0.5 text-[10px] font-medium ${endpointCatalogStatusBadgeClasses(agentEndpointCatalogDiagnostics.level)}`}
+                  >
+                    {agentEndpointCatalogDiagnostics.level.toUpperCase()}
+                  </span>
+                  {hasAgentSchemaEndpointMetadata ? (
+                    <span
+                      className={`ml-1 rounded border px-1.5 py-0.5 text-[10px] ${
+                        hasAgentSchemaEndpointDrift
+                          ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                          : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                      }`}
+                    >
+                      {hasAgentSchemaEndpointDrift ? "schema drift" : "schema in-sync"}
+                    </span>
+                  ) : (
+                    <span className="ml-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200">
+                      schema metadata missing
+                    </span>
+                  )}
                 </summary>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -5817,13 +5885,7 @@ export function SpreadsheetApp() {
                 <p className="mt-1 text-xs text-slate-400">
                   catalog status:{" "}
                   <span
-                    className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
-                      agentEndpointCatalogDiagnostics.level === "healthy"
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                        : agentEndpointCatalogDiagnostics.level === "warning"
-                          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-                          : "border-rose-500/40 bg-rose-500/10 text-rose-200"
-                    }`}
+                    className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${endpointCatalogStatusBadgeClasses(agentEndpointCatalogDiagnostics.level)}`}
                   >
                     {agentEndpointCatalogDiagnostics.level.toUpperCase()}
                   </span>{" "}
