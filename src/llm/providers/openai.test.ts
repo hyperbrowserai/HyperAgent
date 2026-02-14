@@ -33,6 +33,10 @@ jest.mock("@/debug/options", () => ({
   getDebugOptions: jest.fn(() => debugOptions),
 }));
 
+const { getDebugOptions } = jest.requireMock("@/debug/options") as {
+  getDebugOptions: jest.Mock;
+};
+
 describe("OpenAIClient", () => {
   beforeEach(() => {
     createCompletionMock.mockReset();
@@ -295,6 +299,33 @@ describe("OpenAIClient", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+
+  it("continues structured invocation when debug option getter traps", async () => {
+    createCompletionMock.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: '{"ok":"yes"}',
+          },
+        },
+      ],
+    });
+    getDebugOptions.mockImplementationOnce(() => {
+      throw new Error("debug options trap");
+    });
+
+    const client = new OpenAIClient({ model: "gpt-test" });
+    const result = await client.invokeStructured(
+      {
+        schema: z.object({
+          ok: z.string(),
+        }),
+      },
+      [{ role: "user", content: "hello" }]
+    );
+
+    expect(result.parsed).toEqual({ ok: "yes" });
   });
 
   it("throws readable error when completion choices are unreadable", async () => {

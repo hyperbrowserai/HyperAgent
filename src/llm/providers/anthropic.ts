@@ -35,7 +35,12 @@ const RESERVED_ANTHROPIC_PROVIDER_OPTION_KEYS = new Set([
 const MAX_ANTHROPIC_DIAGNOSTIC_CHARS = 300;
 
 function shouldDebugStructuredSchema(): boolean {
-  const opts = getDebugOptions();
+  let opts: ReturnType<typeof getDebugOptions>;
+  try {
+    opts = getDebugOptions();
+  } catch {
+    return ENV_STRUCTURED_SCHEMA_DEBUG;
+  }
   if (opts.enabled && typeof opts.structuredSchema === "boolean") {
     return opts.structuredSchema;
   }

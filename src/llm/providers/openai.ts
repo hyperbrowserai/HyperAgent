@@ -122,7 +122,12 @@ function safeReadUsageTokens(
 }
 
 function shouldDebugStructuredSchema(): boolean {
-  const opts = getDebugOptions();
+  let opts: ReturnType<typeof getDebugOptions>;
+  try {
+    opts = getDebugOptions();
+  } catch {
+    return ENV_STRUCTURED_SCHEMA_DEBUG;
+  }
   if (opts.enabled && typeof opts.structuredSchema === "boolean") {
     return opts.structuredSchema;
   }

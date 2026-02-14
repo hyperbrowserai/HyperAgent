@@ -39,6 +39,10 @@ jest.mock("@/debug/options", () => ({
   getDebugOptions: jest.fn(() => debugOptions),
 }));
 
+const { getDebugOptions } = jest.requireMock("@/debug/options") as {
+  getDebugOptions: jest.Mock;
+};
+
 describe("AnthropicClient", () => {
   beforeEach(() => {
     createMessageMock.mockReset();
@@ -344,6 +348,36 @@ describe("AnthropicClient", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+
+  it("continues structured invocation when debug option getter traps", async () => {
+    createMessageMock.mockResolvedValue({
+      content: [
+        {
+          type: "tool_use",
+          input: {
+            result: {
+              value: "ok",
+            },
+          },
+        },
+      ],
+    });
+    getDebugOptions.mockImplementationOnce(() => {
+      throw new Error("debug options trap");
+    });
+
+    const client = new AnthropicClient({ model: "claude-test" });
+    const result = await client.invokeStructured(
+      {
+        schema: z.object({
+          value: z.string(),
+        }),
+      },
+      [{ role: "user", content: "extract value" }]
+    );
+
+    expect(result.parsed).toEqual({ value: "ok" });
   });
 
   it("ignores reserved provider option overrides while preserving custom options", async () => {
