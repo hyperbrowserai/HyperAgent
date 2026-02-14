@@ -472,6 +472,28 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private async createContextPageOrThrow(context: BrowserContext): Promise<Page> {
+    let newPageMethod: unknown;
+    try {
+      newPageMethod = (context as BrowserContext & { newPage?: unknown }).newPage;
+    } catch (error) {
+      throw new Error(
+        `failed to read context.newPage: ${this.formatLifecycleDiagnostic(error)}`
+      );
+    }
+    if (typeof newPageMethod !== "function") {
+      throw new Error("context.newPage is unavailable");
+    }
+
+    const createdPage = await (
+      newPageMethod as (this: BrowserContext) => Promise<unknown>
+    ).call(context);
+    if (!createdPage || typeof createdPage !== "object") {
+      throw new Error("context.newPage returned an invalid page");
+    }
+    return createdPage as Page;
+  }
+
   private async startBrowserProvider(): Promise<Browser> {
     const startMethod = this.safeReadField(this.browserProvider, "start");
     if (typeof startMethod !== "function") {
@@ -1562,7 +1584,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     let page: Page;
     try {
-      page = await this.context.newPage();
+      page = await this.createContextPageOrThrow(this.context);
     } catch (error) {
       throw new HyperagentError(
         `Failed to create new page: ${this.formatLifecycleDiagnostic(error)}`,
@@ -1674,7 +1696,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const currentPage = this.currentPage;
     if (!currentPage || this.safeIsPageClosed(currentPage)) {
       try {
-        this._currentPage = await this.context.newPage();
+        this._currentPage = await this.createContextPageOrThrow(this.context);
       } catch (error) {
         throw new HyperagentError(
           `Failed to create current page: ${this.formatLifecycleDiagnostic(error)}`,

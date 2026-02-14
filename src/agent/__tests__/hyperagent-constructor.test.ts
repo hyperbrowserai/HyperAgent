@@ -1863,6 +1863,48 @@ describe("HyperAgent constructor and task controls", () => {
     );
   });
 
+  it("surfaces readable errors when context.newPage getter traps", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: unknown;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === "newPage") {
+            throw new Error("newPage getter trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    await expect(agent.newPage()).rejects.toThrow(
+      "Failed to create new page: failed to read context.newPage: newPage getter trap"
+    );
+  });
+
+  it("surfaces explicit error when context.newPage is unavailable", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: Record<string, unknown> | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {};
+
+    await expect(agent.newPage()).rejects.toThrow(
+      "Failed to create new page: context.newPage is unavailable"
+    );
+  });
+
   it("initBrowser surfaces readable errors when browser provider start fails", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

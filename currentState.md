@@ -217,6 +217,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
   - `getPages()` now preserves readable page entries even when some context page-array indexes trap,
   - `getCurrentPage()` polling now reuses the same trap-safe context page read path.
   - context page-method getter traps now surface explicit lifecycle diagnostics in `getPages()` failures (`failed to read context.pages: ...`) instead of generic unavailable-method fallbacks.
+- Hardened context.newPage creation path in `HyperAgent`:
+  - introduced `createContextPageOrThrow()` for trap-safe `context.newPage` method reads and invocation,
+  - `newPage()` and `getCurrentPage()` now share deterministic diagnostics for unavailable/trap-prone `context.newPage` access.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
 - Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.
