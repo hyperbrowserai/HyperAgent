@@ -336,6 +336,44 @@ fn agent_ops_request_shape_schema() -> serde_json::Value {
     })
 }
 
+fn endpoint_http_methods_from_openapi(
+    schema: &serde_json::Value,
+    openapi_spec: &serde_json::Value,
+) -> serde_json::Value {
+    let mut method_index = std::collections::HashMap::<String, Vec<String>>::new();
+    if let Some(path_entries) = openapi_spec.get("paths").and_then(serde_json::Value::as_object) {
+        for (path, methods) in path_entries {
+            let Some(method_map) = methods.as_object() else {
+                continue;
+            };
+            let mut method_names = method_map
+                .keys()
+                .map(|value| value.trim().to_ascii_uppercase())
+                .filter(|value| !value.is_empty())
+                .collect::<Vec<_>>();
+            method_names.sort();
+            method_names.dedup();
+            method_index.insert(path.clone(), method_names);
+        }
+    }
+
+    let mut endpoint_methods = serde_json::Map::new();
+    if let Some(schema_object) = schema.as_object() {
+        for (key, value) in schema_object {
+            if key != "endpoint" && !key.ends_with("_endpoint") {
+                continue;
+            }
+            let Some(endpoint) = value.as_str() else {
+                continue;
+            };
+            let normalized = endpoint.split('?').next().unwrap_or(endpoint);
+            let methods = method_index.get(normalized).cloned().unwrap_or_default();
+            endpoint_methods.insert(key.clone(), json!(methods));
+        }
+    }
+    serde_json::Value::Object(endpoint_methods)
+}
+
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -783,7 +821,7 @@ async fn run_agent_wizard_json(
 
 async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
     let agent_ops_request_shape = agent_ops_request_shape_schema();
-    Json(json!({
+    let mut schema = json!({
       "health_endpoint": "/health",
       "openapi_endpoint": "/v1/openapi",
       "endpoint": "/v1/agent/wizard/run",
@@ -1079,7 +1117,12 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
       "scenarios": scenario_catalog(),
       "presets": preset_catalog()
-    }))
+    });
+    let endpoint_http_methods = endpoint_http_methods_from_openapi(&schema, &openapi().await.0);
+    if let Some(schema_object) = schema.as_object_mut() {
+        schema_object.insert("endpoint_http_methods".to_string(), endpoint_http_methods);
+    }
+    Json(schema)
 }
 
 async fn list_wizard_presets() -> Json<serde_json::Value> {
@@ -1545,7 +1588,7 @@ async fn get_agent_schema(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state.get_workbook(workbook_id).await?;
     let agent_ops_request_shape = agent_ops_request_shape_schema();
-    Ok(Json(json!({
+    let mut schema = json!({
       "health_endpoint": "/health",
       "openapi_endpoint": "/v1/openapi",
       "endpoint": "/v1/workbooks/{id}/agent/ops",
@@ -1941,7 +1984,12 @@ async fn get_agent_schema(
         "include_file_base64 (optional boolean)",
         "expected_operations_signature (optional string from scenario preview endpoint)"
       ]
-    })))
+    });
+    let endpoint_http_methods = endpoint_http_methods_from_openapi(&schema, &openapi().await.0);
+    if let Some(schema_object) = schema.as_object_mut() {
+        schema_object.insert("endpoint_http_methods".to_string(), endpoint_http_methods);
+    }
+    Ok(Json(schema))
 }
 
 async fn execute_agent_operations(
@@ -3122,6 +3170,34 @@ mod tests {
             Some(&json!("/v1/openapi")),
             "{schema_name} should advertise /v1/openapi as openapi_endpoint",
         );
+        assert_eq!(
+            schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("health_endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["GET"]),
+            "{schema_name} should expose GET method metadata for health endpoint",
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("openapi_endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["GET"]),
+            "{schema_name} should expose GET method metadata for openapi endpoint",
+        );
     }
 
     fn assert_schema_endpoint_fields_are_normalized(
@@ -3158,6 +3234,79 @@ mod tests {
             assert!(
                 !endpoint.contains("  "),
                 "{schema_name} endpoint field '{key}' should not contain double spaces",
+            );
+        }
+    }
+
+    fn endpoint_method_list_from_openapi_path(
+        paths: &serde_json::Map<String, serde_json::Value>,
+        path: &str,
+    ) -> Vec<String> {
+        let mut methods = paths
+            .get(path)
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi endpoint entry should be an object")
+            .keys()
+            .map(|value| value.trim().to_ascii_uppercase())
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>();
+        methods.sort();
+        methods.dedup();
+        methods
+    }
+
+    fn parse_advertised_endpoint_methods(value: &serde_json::Value) -> Vec<String> {
+        let mut methods = value
+            .as_array()
+            .expect("endpoint_http_methods entries should be arrays")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .map(|value| value.trim().to_ascii_uppercase())
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>();
+        methods.sort();
+        methods.dedup();
+        methods
+    }
+
+    fn assert_endpoint_http_methods_match_openapi_paths(
+        schema: &serde_json::Value,
+        schema_name: &str,
+        paths: &serde_json::Map<String, serde_json::Value>,
+    ) {
+        let schema_object = schema
+            .as_object()
+            .expect("schema should be encoded as object");
+        let endpoint_entries = schema_object
+            .iter()
+            .filter_map(|(key, value)| {
+                if key == "endpoint" || key.ends_with("_endpoint") {
+                    value.as_str().map(|endpoint| (key.as_str(), endpoint))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let endpoint_http_methods = schema
+            .get("endpoint_http_methods")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_http_methods object");
+        assert_eq!(
+            endpoint_http_methods.len(),
+            endpoint_entries.len(),
+            "{schema_name} endpoint_http_methods should cover every endpoint field",
+        );
+
+        for (key, endpoint) in endpoint_entries {
+            let normalized = endpoint.split('?').next().unwrap_or(endpoint);
+            let advertised_methods = endpoint_http_methods
+                .get(key)
+                .map(parse_advertised_endpoint_methods)
+                .unwrap_or_default();
+            let expected_methods = endpoint_method_list_from_openapi_path(paths, normalized);
+            assert_eq!(
+                advertised_methods, expected_methods,
+                "{schema_name} endpoint_http_methods for '{key}' should match openapi path '{normalized}'",
             );
         }
     }
@@ -8084,6 +8233,32 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["POST"]),
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("openapi_endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["GET"]),
+        );
+        assert_eq!(
+            schema
                 .get("operation_payloads")
                 .and_then(|value| value.get("duckdb_query"))
                 .and_then(|value| value.get("sql"))
@@ -8869,6 +9044,32 @@ mod tests {
                 .get("openapi_endpoint")
                 .and_then(serde_json::Value::as_str),
             Some("/v1/openapi"),
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["POST"]),
+        );
+        assert_eq!(
+            schema
+                .get("endpoint_http_methods")
+                .and_then(|value| value.get("openapi_endpoint"))
+                .and_then(serde_json::Value::as_array)
+                .map(|methods| {
+                    methods
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                }),
+            Some(vec!["GET"]),
         );
         assert_eq!(
             schema
@@ -9914,6 +10115,7 @@ mod tests {
                 "agent schema endpoint '{key}' -> '{normalized}' should map to exactly one HTTP method",
             );
         }
+        assert_endpoint_http_methods_match_openapi_paths(&agent_schema, "agent schema", paths);
     }
 
     #[tokio::test]
@@ -9958,5 +10160,6 @@ mod tests {
                 "wizard schema endpoint '{key}' -> '{normalized}' should map to exactly one HTTP method",
             );
         }
+        assert_endpoint_http_methods_match_openapi_paths(&wizard_schema, "wizard schema", paths);
     }
 }

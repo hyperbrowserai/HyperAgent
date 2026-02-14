@@ -147,6 +147,32 @@ function collectSchemaEndpointMetadata(
     .sort((left, right) => left.key.localeCompare(right.key));
 }
 
+function normalizeEndpointMethodList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const methods = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim().toUpperCase())
+    .filter((entry) => entry.length > 0);
+  return Array.from(new Set(methods)).sort();
+}
+
+function normalizeEndpointMethodsByKey(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value as Record<string, unknown>).reduce<
+    Record<string, string[]>
+  >((accumulator, [key, methods]) => {
+    const normalizedMethods = normalizeEndpointMethodList(methods);
+    if (normalizedMethods.length > 0) {
+      accumulator[key] = normalizedMethods;
+    }
+    return accumulator;
+  }, {});
+}
+
 function collectOpenApiMethodsByPath(
   spec: unknown,
 ): Record<string, string[]> {
@@ -168,7 +194,7 @@ function collectOpenApiMethodsByPath(
       .filter((method) => method.length > 0)
       .sort();
     if (methodNames.length > 0) {
-      accumulator[path] = methodNames;
+      accumulator[path] = Array.from(new Set(methodNames));
     }
     return accumulator;
   }, {});
@@ -1176,6 +1202,10 @@ export function SpreadsheetApp() {
     () => collectSchemaEndpointMetadata(wizardSchemaQuery.data),
     [wizardSchemaQuery.data],
   );
+  const wizardEndpointMethodsByKey = useMemo(
+    () => normalizeEndpointMethodsByKey(wizardSchemaQuery.data?.endpoint_http_methods),
+    [wizardSchemaQuery.data?.endpoint_http_methods],
+  );
   const openApiMethodsByPath = useMemo(
     () => collectOpenApiMethodsByPath(openApiSpecQuery.data),
     [openApiSpecQuery.data],
@@ -1184,9 +1214,12 @@ export function SpreadsheetApp() {
     () =>
       wizardSchemaEndpoints.map((entry) => ({
         ...entry,
-        methods: openApiMethodsByPath[entry.openApiPath] ?? [],
+        methods:
+          wizardEndpointMethodsByKey[entry.key]
+            ?? openApiMethodsByPath[entry.openApiPath]
+            ?? [],
       })),
-    [openApiMethodsByPath, wizardSchemaEndpoints],
+    [openApiMethodsByPath, wizardEndpointMethodsByKey, wizardSchemaEndpoints],
   );
   const wizardUnmappedSchemaEndpointKeys = useMemo(
     () =>
@@ -1394,13 +1427,20 @@ export function SpreadsheetApp() {
     () => collectSchemaEndpointMetadata(agentSchemaQuery.data),
     [agentSchemaQuery.data],
   );
+  const agentEndpointMethodsByKey = useMemo(
+    () => normalizeEndpointMethodsByKey(agentSchemaQuery.data?.endpoint_http_methods),
+    [agentSchemaQuery.data?.endpoint_http_methods],
+  );
   const agentSchemaEndpointsWithMethods = useMemo(
     () =>
       agentSchemaEndpoints.map((entry) => ({
         ...entry,
-        methods: openApiMethodsByPath[entry.openApiPath] ?? [],
+        methods:
+          agentEndpointMethodsByKey[entry.key]
+            ?? openApiMethodsByPath[entry.openApiPath]
+            ?? [],
       })),
-    [agentSchemaEndpoints, openApiMethodsByPath],
+    [agentEndpointMethodsByKey, agentSchemaEndpoints, openApiMethodsByPath],
   );
   const agentUnmappedSchemaEndpointKeys = useMemo(
     () =>
