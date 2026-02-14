@@ -1905,6 +1905,32 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("sanitizes control characters in session-read diagnostics", () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+    });
+    const internalAgent = agent as unknown as {
+      browserProvider: { getSession: () => unknown };
+    };
+    internalAgent.browserProvider = {
+      getSession: () => {
+        throw new Error("session\u0000\ntrap");
+      },
+    };
+
+    try {
+      expect(agent.getSession()).toBeNull();
+      const warnedMessage = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(warnedMessage).toContain("session trap");
+      expect(warnedMessage).not.toContain("\u0000");
+      expect(warnedMessage).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("normalizes MCP server ids and handles invalid values", () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
@@ -3028,6 +3054,44 @@ describe("HyperAgent constructor and task controls", () => {
       expect(warnedMessages.some((message) => message.includes("[truncated"))).toBe(
         true
       );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("closeAgent sanitizes control characters in lifecycle diagnostics", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browserProvider: {
+        close: () => Promise<void>;
+        getSession: () => unknown;
+      };
+      browser: null;
+      context: null;
+    };
+    internalAgent.browserProvider = {
+      close: async () => {
+        throw new Error("close\u0000\ntrap");
+      },
+      getSession: () => ({ id: "session-1" }),
+    };
+    internalAgent.browser = null;
+    internalAgent.context = null;
+
+    try {
+      await expect(agent.closeAgent()).resolves.toBeUndefined();
+      const warnedMessages = warnSpy.mock.calls.map((call) => String(call[0] ?? ""));
+      expect(
+        warnedMessages.some(
+          (message) =>
+            message.includes("close trap") &&
+            !message.includes("\u0000") &&
+            !message.includes("\n")
+        )
+      ).toBe(true);
     } finally {
       warnSpy.mockRestore();
     }
