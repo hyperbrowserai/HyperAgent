@@ -97,6 +97,9 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Added compact omitted-history summaries in prompt building to preserve context while respecting prompt budgets.
 - Made repeated-success stuck detection progress-aware by incorporating bounded DOM-state signatures.
 - Reduced first-party frame false positives in ad/tracking filtering with same-site weak-signal safeguards.
+- Centralized page URL normalization into shared utility (`normalizePageUrl`) and reused it across agent loop, perform, and prompt-builder paths.
+- Hardened frame metadata normalization in `FrameContextManager` (sanitized/bounded frame URLs and names, trap-safe OOPIF metadata reads).
+- Hardened a11y frame resolution fallback logic to keep XPath traversal working when frame enumeration is trap-prone.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.
