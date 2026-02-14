@@ -596,6 +596,54 @@ pub fn parse_atanh_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_acot_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ACOT" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_asec_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ASEC" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_acsc_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ACSC" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_acoth_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ACOTH" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_asech_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ASECH" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_acsch_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "ACSCH" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_asin_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "ASIN" && args.len() == 1 {
@@ -1669,8 +1717,10 @@ mod tests {
     parse_cot_formula, parse_sec_formula, parse_csc_formula,
     parse_sinh_formula, parse_cosh_formula, parse_tanh_formula,
     parse_coth_formula, parse_sech_formula, parse_csch_formula,
-    parse_asin_formula,
     parse_asinh_formula, parse_acosh_formula, parse_atanh_formula,
+    parse_acot_formula, parse_asec_formula, parse_acsc_formula,
+    parse_acoth_formula, parse_asech_formula, parse_acsch_formula,
+    parse_asin_formula,
     parse_acos_formula, parse_atan_formula, parse_atan2_formula, parse_degrees_formula,
     parse_radians_formula, parse_lower_formula,
     parse_match_formula, parse_maxifs_formula,
@@ -1922,6 +1972,12 @@ mod tests {
     assert_eq!(parse_asinh_formula("=ASINH(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_acosh_formula("=ACOSH(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_atanh_formula("=ATANH(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_acot_formula("=ACOT(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_asec_formula("=ASEC(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_acsc_formula("=ACSC(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_acoth_formula("=ACOTH(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_asech_formula("=ASECH(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_acsch_formula("=ACSCH(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_asin_formula("=ASIN(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_acos_formula("=ACOS(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_atan_formula("=ATAN(A1)").as_deref(), Some("A1"));

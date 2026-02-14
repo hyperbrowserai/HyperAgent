@@ -32,6 +32,8 @@ use crate::{
     parse_cosh_formula, parse_tanh_formula,
     parse_coth_formula, parse_sech_formula, parse_csch_formula,
     parse_asinh_formula, parse_acosh_formula, parse_atanh_formula,
+    parse_acot_formula, parse_asec_formula, parse_acsc_formula,
+    parse_acoth_formula, parse_asech_formula, parse_acsch_formula,
     parse_asin_formula, parse_acos_formula,
     parse_atan_formula, parse_atan2_formula,
     parse_degrees_formula, parse_radians_formula,
@@ -1797,6 +1799,57 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(value.atanh().to_string()));
+  }
+
+  if let Some(acot_arg) = parse_acot_formula(formula) {
+    let value = parse_required_float(connection, sheet, &acot_arg)?;
+    let acot = if value.abs() < f64::EPSILON {
+      std::f64::consts::FRAC_PI_2
+    } else {
+      (1.0 / value).atan()
+    };
+    return Ok(Some(acot.to_string()));
+  }
+
+  if let Some(asec_arg) = parse_asec_formula(formula) {
+    let value = parse_required_float(connection, sheet, &asec_arg)?;
+    if value.abs() < 1.0 {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / value).acos().to_string()));
+  }
+
+  if let Some(acsc_arg) = parse_acsc_formula(formula) {
+    let value = parse_required_float(connection, sheet, &acsc_arg)?;
+    if value.abs() < 1.0 {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / value).asin().to_string()));
+  }
+
+  if let Some(acoth_arg) = parse_acoth_formula(formula) {
+    let value = parse_required_float(connection, sheet, &acoth_arg)?;
+    if value.abs() <= 1.0 {
+      return Ok(None);
+    }
+    let acoth = 0.5 * ((value + 1.0) / (value - 1.0)).ln();
+    return Ok(Some(acoth.to_string()));
+  }
+
+  if let Some(asech_arg) = parse_asech_formula(formula) {
+    let value = parse_required_float(connection, sheet, &asech_arg)?;
+    if !(value > 0.0 && value <= 1.0) {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / value).acosh().to_string()));
+  }
+
+  if let Some(acsch_arg) = parse_acsch_formula(formula) {
+    let value = parse_required_float(connection, sheet, &acsch_arg)?;
+    if value.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / value).asinh().to_string()));
   }
 
   if let Some(asin_arg) = parse_asin_formula(formula) {
@@ -5109,12 +5162,48 @@ mod tests {
         value: None,
         formula: Some("=CSCH(1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 201,
+        value: None,
+        formula: Some("=ACOT(1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 202,
+        value: None,
+        formula: Some("=ASEC(2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 203,
+        value: None,
+        formula: Some("=ACSC(2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 204,
+        value: None,
+        formula: Some("=ACOTH(2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 205,
+        value: None,
+        formula: Some("=ASECH(0.5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 206,
+        value: None,
+        formula: Some("=ACSCH(2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 198);
+    assert_eq!(updated_cells, 204);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5128,7 +5217,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 200,
+        end_col: 206,
       },
     )
     .expect("cells should be fetched");
@@ -5810,6 +5899,66 @@ mod tests {
     assert!(
       (csch - 0.850_918_128_239_321_6).abs() < 1e-9,
       "csch should be 0.850918..., got {csch}",
+    );
+    let acot = by_position(1, 201)
+      .evaluated_value
+      .as_deref()
+      .expect("acot should evaluate")
+      .parse::<f64>()
+      .expect("acot should be numeric");
+    assert!(
+      (acot - 0.785_398_163_397_448_3).abs() < 1e-9,
+      "acot should be pi/4, got {acot}",
+    );
+    let asec = by_position(1, 202)
+      .evaluated_value
+      .as_deref()
+      .expect("asec should evaluate")
+      .parse::<f64>()
+      .expect("asec should be numeric");
+    assert!(
+      (asec - 1.047_197_551_196_597_9).abs() < 1e-9,
+      "asec should be pi/3, got {asec}",
+    );
+    let acsc = by_position(1, 203)
+      .evaluated_value
+      .as_deref()
+      .expect("acsc should evaluate")
+      .parse::<f64>()
+      .expect("acsc should be numeric");
+    assert!(
+      (acsc - 0.523_598_775_598_298_9).abs() < 1e-9,
+      "acsc should be pi/6, got {acsc}",
+    );
+    let acoth = by_position(1, 204)
+      .evaluated_value
+      .as_deref()
+      .expect("acoth should evaluate")
+      .parse::<f64>()
+      .expect("acoth should be numeric");
+    assert!(
+      (acoth - 0.549_306_144_334_054_9).abs() < 1e-9,
+      "acoth should be 0.549306..., got {acoth}",
+    );
+    let asech = by_position(1, 205)
+      .evaluated_value
+      .as_deref()
+      .expect("asech should evaluate")
+      .parse::<f64>()
+      .expect("asech should be numeric");
+    assert!(
+      (asech - 1.316_957_896_924_816_6).abs() < 1e-9,
+      "asech should be 1.316957..., got {asech}",
+    );
+    let acsch = by_position(1, 206)
+      .evaluated_value
+      .as_deref()
+      .expect("acsch should evaluate")
+      .parse::<f64>()
+      .expect("acsch should be numeric");
+    assert!(
+      (acsch - 0.481_211_825_059_603_47).abs() < 1e-9,
+      "acsch should be 0.481211..., got {acsch}",
     );
   }
 
@@ -6933,6 +7082,36 @@ mod tests {
         value: None,
         formula: Some("=ATANH(1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 5,
+        value: None,
+        formula: Some("=ACOTH(1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 6,
+        value: None,
+        formula: Some("=ASEC(0.5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 7,
+        value: None,
+        formula: Some("=ACSC(0.5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 8,
+        value: None,
+        formula: Some("=ASECH(1.5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 9,
+        value: None,
+        formula: Some("=ACSCH(0)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
@@ -6945,6 +7124,11 @@ mod tests {
         "=ACOS(-2)".to_string(),
         "=ACOSH(0.5)".to_string(),
         "=ATANH(1)".to_string(),
+        "=ACOTH(1)".to_string(),
+        "=ASEC(0.5)".to_string(),
+        "=ACSC(0.5)".to_string(),
+        "=ASECH(1.5)".to_string(),
+        "=ACSCH(0)".to_string(),
       ],
     );
   }
