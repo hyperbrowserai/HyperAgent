@@ -2784,9 +2784,8 @@ async fn openapi() -> Json<serde_json::Value> {
 #[cfg(test)]
 mod tests {
   use axum::{extract::Path, extract::Query, extract::State, Json};
-  use rust_xlsxwriter::{Formula, Workbook};
   use serde_json::json;
-  use std::time::Duration;
+  use std::{fs, path::PathBuf, time::Duration};
   use tempfile::tempdir;
   use tokio::time::timeout;
 
@@ -2866,113 +2865,28 @@ mod tests {
     }
   }
 
+  fn workbook_fixture_bytes(file_name: &str) -> Vec<u8> {
+    let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+      .join("fixtures")
+      .join(file_name);
+    fs::read(&fixture_path).unwrap_or_else(|error| {
+      panic!(
+        "fixture {} should be readable: {error}",
+        fixture_path.display(),
+      )
+    })
+  }
+
   fn workbook_import_fixture_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let inputs_sheet = workbook.add_worksheet();
-    inputs_sheet.set_name("Inputs").expect("sheet should be renamed");
-    inputs_sheet
-      .write_string(0, 0, "Region")
-      .expect("header should write");
-    inputs_sheet
-      .write_string(1, 0, "North")
-      .expect("text should write");
-    inputs_sheet
-      .write_string(2, 0, "South")
-      .expect("text should write");
-    inputs_sheet
-      .write_string(0, 1, "Sales")
-      .expect("header should write");
-    inputs_sheet
-      .write_number(1, 1, 120.0)
-      .expect("number should write");
-    inputs_sheet
-      .write_number(2, 1, 80.0)
-      .expect("number should write");
-    inputs_sheet
-      .write_string(0, 2, "Total")
-      .expect("header should write");
-    inputs_sheet
-      .write_formula(1, 2, Formula::new("=SUM(B2:B3)"))
-      .expect("formula should write");
-    inputs_sheet
-      .write_string(0, 3, "Active")
-      .expect("header should write");
-    inputs_sheet
-      .write_boolean(1, 3, true)
-      .expect("boolean should write");
-
-    let notes_sheet = workbook.add_worksheet();
-    notes_sheet.set_name("Notes").expect("sheet should be renamed");
-    notes_sheet
-      .write_string(0, 0, "Generated from fixture workbook")
-      .expect("notes text should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("fixture workbook should serialize")
+    workbook_fixture_bytes("compat_baseline.xlsx")
   }
 
   fn workbook_import_normalized_formula_fixture_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let inputs_sheet = workbook.add_worksheet();
-    inputs_sheet.set_name("Inputs").expect("sheet should be renamed");
-    inputs_sheet
-      .write_string(0, 0, "Region")
-      .expect("header should write");
-    inputs_sheet
-      .write_string(1, 0, "North")
-      .expect("text should write");
-    inputs_sheet
-      .write_string(2, 0, "South")
-      .expect("text should write");
-    inputs_sheet
-      .write_string(0, 1, "Sales")
-      .expect("header should write");
-    inputs_sheet
-      .write_number(1, 1, 120.0)
-      .expect("number should write");
-    inputs_sheet
-      .write_number(2, 1, 80.0)
-      .expect("number should write");
-    inputs_sheet
-      .write_formula(1, 2, Formula::new("=+@_xlfn.SUM(B2:B3)").set_result("200"))
-      .expect("formula should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("normalized fixture workbook should serialize")
+    workbook_fixture_bytes("compat_normalization_single.xlsx")
   }
 
   fn workbook_import_comprehensive_normalization_fixture_bytes() -> Vec<u8> {
-    let mut workbook = Workbook::new();
-    let inputs_sheet = workbook.add_worksheet();
-    inputs_sheet
-      .set_name("Comprehensive")
-      .expect("sheet should be renamed");
-    inputs_sheet
-      .write_number(0, 0, 3.0)
-      .expect("first number should write");
-    inputs_sheet
-      .write_number(1, 0, 4.0)
-      .expect("second number should write");
-    inputs_sheet
-      .write_formula(0, 1, Formula::new("= +@_xlfn.SUM(A1:A2)").set_result("7"))
-      .expect("first formula should write");
-    inputs_sheet
-      .write_formula(1, 1, Formula::new("=_xlpm.MIN(A1:A2)").set_result("3"))
-      .expect("second formula should write");
-    inputs_sheet
-      .write_formula(
-        2,
-        1,
-        Formula::new(r#"=+@IF(A1=3,"_xlfn.literal ""@_xlws.keep""","nope")"#)
-          .set_result(r#"_xlfn.literal "@_xlws.keep""#),
-      )
-      .expect("third formula should write");
-
-    workbook
-      .save_to_buffer()
-      .expect("comprehensive normalized fixture workbook should serialize")
+    workbook_fixture_bytes("compat_normalization.xlsx")
   }
 
   #[test]
@@ -3183,7 +3097,7 @@ mod tests {
     .expect("fixture import should succeed");
 
     assert_eq!(import_result.sheets_imported, 2);
-    assert_eq!(import_result.cells_imported, 11);
+    assert_eq!(import_result.cells_imported, 9);
     assert_eq!(
       import_result.formula_cells_imported,
       import_result.formula_cells_with_cached_values
