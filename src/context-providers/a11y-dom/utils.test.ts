@@ -121,6 +121,43 @@ describe("resolveFrameByXPath URL matching", () => {
     }
   });
 
+  it("keeps URL matching when one frame entry getter traps", async () => {
+    const mainFrame = {
+      url: () => "https://example.com",
+    } as unknown as Frame;
+    const matchedFrame = {
+      url: () => "https://example.com/frame",
+    } as unknown as Frame;
+    const frames = new Proxy([{}, matchedFrame], {
+      get: (target, prop, receiver) => {
+        if (prop === "0") {
+          throw new Error("frame entry trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const page = createPage({
+      mainFrame: () => mainFrame,
+      frames: () => frames as unknown as Frame[],
+    });
+
+    const frameMap = new Map<number, IframeInfo>([
+      [
+        1,
+        {
+          frameIndex: 1,
+          siblingPosition: 0,
+          src: "https://example.com/frame",
+          xpath: "//iframe[1]",
+          parentFrameIndex: 0,
+        },
+      ],
+    ]);
+
+    const resolved = await resolveFrameByXPath(page, frameMap, 1);
+    expect(resolved).toBe(matchedFrame);
+  });
+
   it("sanitizes traversal diagnostics when locator traversal throws", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     const mainFrame = {

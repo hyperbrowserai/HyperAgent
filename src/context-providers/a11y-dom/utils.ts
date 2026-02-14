@@ -28,6 +28,34 @@ function formatFrameResolutionDiagnostic(error: unknown): string {
   )}... [truncated ${omitted} chars]`;
 }
 
+function safeArrayLength(value: unknown): number {
+  try {
+    if (Array.isArray(value)) {
+      return value.length;
+    }
+    if (value && typeof value === "object") {
+      const length = (value as { length?: unknown }).length;
+      if (typeof length === "number" && Number.isFinite(length) && length >= 0) {
+        return Math.floor(length);
+      }
+    }
+  } catch {
+    // ignore trap-prone length getter reads
+  }
+  return 0;
+}
+
+function safeReadArrayItem(value: unknown, index: number): unknown {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  try {
+    return (value as Record<number, unknown>)[index];
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Clean text by removing private-use unicode characters and normalizing whitespace
  */
@@ -402,15 +430,27 @@ export async function resolveFrameByXPath(
       if (targetSrc.length > 0) {
         try {
           const frames = page.frames();
-          for (const frame of frames) {
+          const frameCount = safeArrayLength(frames);
+          for (let i = 0; i < frameCount; i++) {
+            const frame = safeReadArrayItem(frames, i);
+            if (!frame || typeof frame !== "object") {
+              continue;
+            }
             let frameUrl = "";
             try {
-              frameUrl = normalizePageUrl(frame.url(), { fallback: "" });
+              const frameUrlMethod = (frame as { url?: unknown }).url;
+              if (typeof frameUrlMethod !== "function") {
+                continue;
+              }
+              frameUrl = normalizePageUrl(
+                (frameUrlMethod as (this: unknown) => unknown).call(frame),
+                { fallback: "" }
+              );
             } catch {
               frameUrl = "";
             }
             if (frameUrl === targetSrc) {
-              return frame;
+              return frame as Frame;
             }
           }
         } catch (error) {
