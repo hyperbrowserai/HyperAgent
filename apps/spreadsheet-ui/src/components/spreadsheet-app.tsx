@@ -4829,8 +4829,9 @@ export function SpreadsheetApp() {
                     </button>
                   </div>
                   <p className="mb-2 text-[10px] text-slate-500">
-                    rerun request_id is optional; leave blank to auto-generate. Reusing a
-                    request_id with a different operation signature returns{" "}
+                    rerun request_id is optional; values are trimmed before submit (blank
+                    after trim auto-generates). Reusing a request_id with a different
+                    operation signature returns{" "}
                     <span className="font-mono text-slate-300">REQUEST_ID_CONFLICT</span>.
                   </p>
                   {hasInvalidCacheEntriesMaxAgeInput ? (
