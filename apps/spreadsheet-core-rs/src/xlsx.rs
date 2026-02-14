@@ -29,6 +29,7 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
   let mut cells_imported = 0usize;
   let mut formula_cells_imported = 0usize;
   let mut formula_cells_with_cached_values = 0usize;
+  let mut normalized_formula_cells = 0usize;
 
   for sheet_name in &sheet_names {
     let Ok(range) = workbook.worksheet_range(sheet_name) else {
@@ -59,7 +60,18 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
             let formula_col = col_index - formula_start_col;
             formula_grid.get((formula_row, formula_col))
           })
-          .and_then(|value| normalize_imported_formula(value.to_string().as_str()));
+          .and_then(|value| {
+            let original_formula = value.to_string();
+            let normalized_formula =
+              normalize_imported_formula(original_formula.as_str())?;
+            if is_formula_normalized_for_compatibility(
+              original_formula.as_str(),
+              normalized_formula.as_str(),
+            ) {
+              normalized_formula_cells += 1;
+            }
+            Some(normalized_formula)
+          });
         if formula.is_some() {
           formula_cells_imported += 1;
         }
@@ -93,6 +105,14 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
 
   let formula_cells_without_cached_values =
     formula_cells_imported.saturating_sub(formula_cells_with_cached_values);
+  let mut warnings = vec![
+    "Charts, VBA/macros, and pivot artifacts are not imported in v1; formulas and cells are imported best-effort.".to_string(),
+  ];
+  if normalized_formula_cells > 0 {
+    warnings.push(format!(
+      "{normalized_formula_cells} formula(s) were normalized during import for compatibility (_xlfn/_xlws/_xlpm prefixes, implicit '@', unary '+').",
+    ));
+  }
 
   Ok(ImportResult {
     sheet_names: sheet_names.clone(),
@@ -101,9 +121,7 @@ pub fn import_xlsx(db_path: &PathBuf, bytes: &[u8]) -> Result<ImportResult, ApiE
     formula_cells_imported,
     formula_cells_with_cached_values,
     formula_cells_without_cached_values,
-    warnings: vec![
-      "Charts, VBA/macros, and pivot artifacts are not imported in v1; formulas and cells are imported best-effort.".to_string(),
-    ],
+    warnings,
   })
 }
 
@@ -219,6 +237,26 @@ fn normalize_imported_formula(formula: &str) -> Option<String> {
   }
 
   Some(format!("={normalized_body}"))
+}
+
+fn is_formula_normalized_for_compatibility(
+  original_formula: &str,
+  normalized_formula: &str,
+) -> bool {
+  canonicalize_formula_text(original_formula)
+    .is_some_and(|canonical| canonical != normalized_formula)
+}
+
+fn canonicalize_formula_text(formula: &str) -> Option<String> {
+  let trimmed = formula.trim();
+  if trimmed.is_empty() {
+    return None;
+  }
+  Some(if trimmed.starts_with('=') {
+    trimmed.to_string()
+  } else {
+    format!("={trimmed}")
+  })
 }
 
 fn strip_known_formula_prefixes(formula_body: &str) -> String {
@@ -426,7 +464,10 @@ fn map_data_to_json(value: &Data) -> Option<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
-  use super::{export_xlsx, import_xlsx, normalize_imported_formula};
+  use super::{
+    canonicalize_formula_text, export_xlsx, import_xlsx,
+    is_formula_normalized_for_compatibility, normalize_imported_formula,
+  };
   use crate::{
     models::{ChartSpec, ChartType, WorkbookSummary},
     state::AppState,
@@ -707,6 +748,24 @@ mod tests {
       Some("=SUM(A1:A3)"),
     );
     assert_eq!(normalize_imported_formula("  "), None);
+  }
+
+  #[test]
+  fn should_detect_when_formula_normalization_changes_expression() {
+    let normalized =
+      normalize_imported_formula("=+@_xlfn.SUM(A1:A3)").expect("formula should normalize");
+    assert!(
+      is_formula_normalized_for_compatibility("=+@_xlfn.SUM(A1:A3)", normalized.as_str()),
+      "compatibility normalization should be detected for prefixed operators",
+    );
+    assert_eq!(
+      canonicalize_formula_text(" SUM(A1:A3) ").as_deref(),
+      Some("=SUM(A1:A3)"),
+    );
+    assert!(
+      !is_formula_normalized_for_compatibility(" SUM(A1:A3) ", "=SUM(A1:A3)"),
+      "whitespace/leading-equals canonicalization alone should not count as compatibility normalization",
+    );
   }
 
   #[tokio::test]
@@ -1244,6 +1303,13 @@ mod tests {
       import_xlsx(&db_path, &fixture_bytes).expect("fixture workbook should import");
     assert_eq!(import_result.sheets_imported, 1);
     assert_eq!(import_result.formula_cells_imported, 1);
+    assert!(
+      import_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("1 formula(s) were normalized")),
+      "normalization warning should report transformed formula count",
+    );
 
     let (_, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should complete");
