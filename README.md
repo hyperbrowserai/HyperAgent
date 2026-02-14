@@ -135,6 +135,7 @@ task.result.catch((error) => {
 
 - **`page.perform()` is the canonical single-action API.**
   - `page.aiAction()` is still available as a compatibility alias.
+  - Calling `page.aiAction()` emits a one-time deprecation warning per agent instance.
   - Prefer `perform` for all new code and docs.
 - **`executeTaskAsync()` now has a first-class completion promise.**
   - Use `task.result` to await the final output deterministically.
@@ -142,6 +143,8 @@ task.result.catch((error) => {
   - You can import common task/cache/config types from the package root instead of internal paths.
 - **CDP remains configurable per agent.**
   - If needed for a workflow, disable CDP with `cdpActions: false` to force Playwright fallback.
+- **Single-action debug artifacts use canonical perform naming.**
+  - `executeSingleAction` debug output is written under `debug/perform/...`.
 
 ### Importing Public Types
 

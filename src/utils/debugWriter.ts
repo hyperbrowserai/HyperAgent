@@ -1,5 +1,5 @@
 /**
- * Debug writer utility for aiAction debugging
+ * Debug writer utility for single-action debugging
  * Creates a debug folder structure similar to the agent task debugging
  */
 
@@ -347,7 +347,8 @@ function getSessionId(): string {
 }
 
 /**
- * Write debug data for an aiAction call
+ * Write debug data for a single-action call.
+ * @deprecated Prefer canonical page.perform() naming at call sites.
  */
 export async function writeAiActionDebug(
   debugData: DebugData,
