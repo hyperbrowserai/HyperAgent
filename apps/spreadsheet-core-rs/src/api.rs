@@ -165,6 +165,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "SYD",
   "DB",
   "DDB",
+  "RRI",
+  "PDURATION",
   "SIN",
   "COS",
   "TAN",

@@ -35,6 +35,7 @@ use crate::{
     parse_ipmt_formula, parse_ppmt_formula,
     parse_sln_formula, parse_syd_formula,
     parse_db_formula, parse_ddb_formula,
+    parse_rri_formula, parse_pduration_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1946,6 +1947,38 @@ fn evaluate_formula(
       None => return Ok(None),
     };
     return Ok(Some(depreciation.to_string()));
+  }
+
+  if let Some((periods_arg, present_value_arg, future_value_arg)) = parse_rri_formula(formula) {
+    let periods = parse_required_float(connection, sheet, &periods_arg)?;
+    let present_value = parse_required_float(connection, sheet, &present_value_arg)?;
+    let future_value = parse_required_float(connection, sheet, &future_value_arg)?;
+    if periods <= 0.0 || present_value <= 0.0 || future_value <= 0.0 {
+      return Ok(None);
+    }
+    let rate = (future_value / present_value).powf(1.0 / periods) - 1.0;
+    if !rate.is_finite() {
+      return Ok(None);
+    }
+    return Ok(Some(rate.to_string()));
+  }
+
+  if let Some((rate_arg, present_value_arg, future_value_arg)) = parse_pduration_formula(formula) {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    let present_value = parse_required_float(connection, sheet, &present_value_arg)?;
+    let future_value = parse_required_float(connection, sheet, &future_value_arg)?;
+    if rate <= -1.0 || present_value <= 0.0 || future_value <= 0.0 || (rate + 1.0) <= 0.0 {
+      return Ok(None);
+    }
+    let denominator = (1.0 + rate).ln();
+    if denominator.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    let periods = (future_value / present_value).ln() / denominator;
+    if !periods.is_finite() {
+      return Ok(None);
+    }
+    return Ok(Some(periods.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -7256,12 +7289,24 @@ mod tests {
         value: None,
         formula: Some("=DDB(1000,100,5,1)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 264,
+        value: None,
+        formula: Some("=RRI(2,100,121)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 265,
+        value: None,
+        formula: Some("=PDURATION(0.1,100,121)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 261);
+    assert_eq!(updated_cells, 263);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7275,7 +7320,7 @@ mod tests {
         start_row: 1,
         end_row: 20,
         start_col: 1,
-        end_col: 263,
+        end_col: 265,
       },
     )
     .expect("cells should be fetched");
@@ -8368,6 +8413,26 @@ mod tests {
       Some("400"),
       "ddb should compute declining balance depreciation",
     );
+    let rri_value = by_position(1, 264)
+      .evaluated_value
+      .as_deref()
+      .expect("rri should evaluate")
+      .parse::<f64>()
+      .expect("rri should be numeric");
+    assert!(
+      (rri_value - 0.1).abs() < 1e-9,
+      "rri should compute equivalent growth rate, got {rri_value}",
+    );
+    let pduration_value = by_position(1, 265)
+      .evaluated_value
+      .as_deref()
+      .expect("pduration should evaluate")
+      .parse::<f64>()
+      .expect("pduration should be numeric");
+    assert!(
+      (pduration_value - 2.0).abs() < 1e-9,
+      "pduration should compute periods to target value, got {pduration_value}",
+    );
   }
 
   #[test]
@@ -8774,6 +8839,33 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=DB(1000,100,5,1,0)".to_string(), "=DDB(1000,100,5,1,0)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_rri_pduration_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=RRI(0,100,121)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=PDURATION(0,100,121)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec!["=RRI(0,100,121)".to_string(), "=PDURATION(0,100,121)".to_string()],
     );
   }
 
