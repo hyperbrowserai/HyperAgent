@@ -19,6 +19,7 @@ const MAX_ACTION_ARGS = 50;
 const MAX_ACTION_ARG_CHARS = 20_000;
 const MAX_ACTION_METHOD_CHARS = 128;
 const MAX_ACTION_TEXT_CHARS = 1_000;
+const MAX_ACTION_DIAGNOSTIC_CHARS = 400;
 
 function sanitizeActionText(value: string): string {
   if (value.length === 0) {
@@ -66,6 +67,18 @@ function normalizeMethodInput(value: unknown): string {
   return normalizeTextInput(value, "click", MAX_ACTION_METHOD_CHARS);
 }
 
+function formatPerformActionDiagnostic(value: unknown): string {
+  const normalized = sanitizeActionText(formatUnknownError(value));
+  if (normalized.length === 0) {
+    return "unknown error";
+  }
+  if (normalized.length <= MAX_ACTION_DIAGNOSTIC_CHARS) {
+    return normalized;
+  }
+  const omittedChars = normalized.length - MAX_ACTION_DIAGNOSTIC_CHARS;
+  return `${normalized.slice(0, MAX_ACTION_DIAGNOSTIC_CHARS)}... [truncated ${omittedChars} chars]`;
+}
+
 function normalizeActionArguments(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, MAX_ACTION_ARGS).map((arg) =>
@@ -94,12 +107,18 @@ function readVariables(ctx: ActionContext): Array<{ key: string; value: string }
   return normalized;
 }
 
-function buildFailureMessage(instruction: string, error: unknown): string {
+function buildFailureMessage(
+  instruction: string,
+  error: unknown,
+  details?: string
+): string {
+  const diagnostic = formatPerformActionDiagnostic(error);
+  const suffix = details ? `${details}: ${diagnostic}` : diagnostic;
   return `Failed to execute "${normalizeTextInput(
     instruction,
     "task",
     MAX_ACTION_TEXT_CHARS
-  )}": ${normalizeTextInput(formatUnknownError(error), "unknown error", MAX_ACTION_TEXT_CHARS)}`;
+  )}": ${suffix}`;
 }
 
 function interpolateVariables(value: string, ctx: ActionContext): string {
@@ -158,10 +177,7 @@ export async function performAction(
   } catch (error) {
     return {
       success: false,
-      message: buildFailureMessage(
-        resolvedInstruction,
-        `DOM element lookup failed: ${formatUnknownError(error)}`
-      ),
+      message: buildFailureMessage(resolvedInstruction, error, "DOM element lookup failed"),
     };
   }
   if (!elementMetadata) {

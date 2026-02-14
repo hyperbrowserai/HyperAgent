@@ -152,7 +152,7 @@ describe("performAction variable interpolation", () => {
     expect(result.success).toBe(false);
     expect(result.message).not.toContain("\u0000");
     expect(result.message).not.toContain("\n");
-    expect(result.message).toContain("…");
+    expect(result.message).toContain("[truncated");
     expect(result.message.length).toBeLessThan(1_200);
   });
 
@@ -224,6 +224,41 @@ describe("performAction variable interpolation", () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toContain("current DOM elements are unavailable");
+  });
+
+  it("sanitizes and truncates DOM lookup trap diagnostics", async () => {
+    const trappedElements = new Proxy(new Map(), {
+      get: (target, prop, receiver) => {
+        if (prop === "get") {
+          return () => {
+            throw new Error(`lookup\u0000\n${"x".repeat(10_000)}`);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as unknown as Map<string, unknown>;
+    const baseContext = createContext();
+    const context = createContext({
+      domState: {
+        ...baseContext.domState,
+        elements:
+          trappedElements as unknown as ActionContext["domState"]["elements"],
+      } as ActionContext["domState"],
+    });
+
+    const result = await performAction(context, {
+      elementId: "0-1",
+      method: "click",
+      arguments: [],
+      instruction: "Click submit",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("DOM element lookup failed");
+    expect(result.message).toContain("[truncated");
+    expect(result.message).not.toContain("\u0000");
+    expect(result.message).not.toContain("\n");
+    expect(result.message.length).toBeLessThan(700);
   });
 
   it("falls back to Playwright when CDP hooks are invalid", async () => {
