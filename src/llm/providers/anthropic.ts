@@ -192,7 +192,10 @@ export class AnthropicClient implements HyperAgentLLM {
 
     const response = await this.client.messages.create({
       model: this.model,
-      messages: anthropicMessages as any,
+      messages:
+        anthropicMessages as unknown as Parameters<
+          typeof this.client.messages.create
+        >[0]["messages"],
       system,
       temperature: options?.temperature ?? this.temperature,
       max_tokens: options?.maxTokens ?? this.maxTokens,
@@ -295,8 +298,13 @@ export class AnthropicClient implements HyperAgentLLM {
       ...(system ? { system } : {}),
       temperature: request.options?.temperature ?? this.temperature,
       max_tokens: request.options?.maxTokens ?? this.maxTokens,
-      tools: tools as any,
-      tool_choice: toolChoice as any,
+      tools: tools as unknown as Parameters<
+        typeof this.client.messages.create
+      >[0]["tools"],
+      tool_choice:
+        toolChoice as unknown as Parameters<
+          typeof this.client.messages.create
+        >[0]["tool_choice"],
       ...providerOptions,
     });
 
@@ -399,8 +407,13 @@ export class AnthropicClient implements HyperAgentLLM {
       ...(system ? { system } : {}),
       temperature: request.options?.temperature ?? this.temperature,
       max_tokens: request.options?.maxTokens ?? this.maxTokens,
-      tools: [tool as any],
-      tool_choice: toolChoice as any,
+      tools: [tool] as unknown as Parameters<
+        typeof this.client.messages.create
+      >[0]["tools"],
+      tool_choice:
+        toolChoice as unknown as Parameters<
+          typeof this.client.messages.create
+        >[0]["tool_choice"],
       ...sanitizeProviderOptions(
         request.options?.providerOptions,
         RESERVED_ANTHROPIC_PROVIDER_OPTION_KEYS

@@ -187,7 +187,10 @@ export class OpenAIClient implements HyperAgentLLM {
 
     const response = await this.client.chat.completions.create({
       model: this.model,
-      messages: openAIMessages as any,
+      messages:
+        openAIMessages as unknown as Parameters<
+          typeof this.client.chat.completions.create
+        >[0]["messages"],
       ...(shouldIncludeTemperature ? { temperature } : {}),
       max_tokens: options?.maxTokens ?? this.maxTokens,
       ...providerOptions,
@@ -247,10 +250,16 @@ export class OpenAIClient implements HyperAgentLLM {
 
     const response = await this.client.chat.completions.create({
       model: this.model,
-      messages: openAIMessages as any,
+      messages:
+        openAIMessages as unknown as Parameters<
+          typeof this.client.chat.completions.create
+        >[0]["messages"],
       ...(shouldIncludeTemperature ? { temperature } : {}),
       max_tokens: request.options?.maxTokens ?? this.maxTokens,
-      response_format: responseFormat as any,
+      response_format:
+        responseFormat as unknown as Parameters<
+          typeof this.client.chat.completions.create
+        >[0]["response_format"],
       ...providerOptions,
     });
 

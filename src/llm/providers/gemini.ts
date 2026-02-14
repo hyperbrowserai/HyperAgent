@@ -137,7 +137,10 @@ export class GeminiClient implements HyperAgentLLM {
 
     const response = await this.client.models.generateContent({
       model: this.model,
-      contents: geminiMessages as any,
+      contents:
+        geminiMessages as Parameters<
+          typeof this.client.models.generateContent
+        >[0]["contents"],
       config: this.buildGeminiConfig(options, systemInstruction),
     });
 
@@ -176,7 +179,10 @@ export class GeminiClient implements HyperAgentLLM {
 
     const response = await this.client.models.generateContent({
       model: this.model,
-      contents: geminiMessages as any,
+      contents:
+        geminiMessages as Parameters<
+          typeof this.client.models.generateContent
+        >[0]["contents"],
       config: {
         ...this.buildGeminiConfig(request.options, systemInstruction),
         responseMimeType: "application/json",
