@@ -1316,6 +1316,31 @@ describe("runFromActionCache hardening", () => {
     expect(replay.steps[0]?.message).toContain("[truncated");
   });
 
+  it("sanitizes control characters in cached-step read diagnostics", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      cdpActions: false,
+    });
+    const page = {} as import("@/types/agent/types").HyperPage;
+    const cache = {
+      taskId: "cache-task",
+      createdAt: new Date().toISOString(),
+      status: TaskStatus.COMPLETED,
+      get steps(): unknown[] {
+        throw new Error(`steps\u0000\n${"x".repeat(2_000)}`);
+      },
+    } as unknown as ActionCacheOutput;
+
+    const replay = await agent.runFromActionCache(cache, page);
+
+    expect(replay.status).toBe(TaskStatus.FAILED);
+    const message = replay.steps[0]?.message ?? "";
+    expect(message).toContain("Failed to read cached steps");
+    expect(message).toContain("[truncated");
+    expect(message).not.toContain("\u0000");
+    expect(message).not.toContain("\n");
+  });
+
   it("fails replay step cleanly when page getter throws", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
