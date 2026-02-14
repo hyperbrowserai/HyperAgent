@@ -529,6 +529,10 @@ export function SpreadsheetApp() {
   const [isCopyingScenarioRunPayload, setIsCopyingScenarioRunPayload] = useState(false);
   const [isCopyingPresetOps, setIsCopyingPresetOps] = useState(false);
   const [isCopyingPreviewOps, setIsCopyingPreviewOps] = useState(false);
+  const [isCopyingWizardEndpointCatalog, setIsCopyingWizardEndpointCatalog] =
+    useState(false);
+  const [isCopyingAgentEndpointCatalog, setIsCopyingAgentEndpointCatalog] =
+    useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
   const [newSheetName, setNewSheetName] = useState("Sheet2");
@@ -1455,6 +1459,27 @@ export function SpreadsheetApp() {
         .map((entry) => entry.key),
     [wizardSchemaEndpointsWithMethods],
   );
+  const wizardEndpointCatalogPayload = useMemo(
+    () =>
+      wizardSchemaEndpointsWithMethods.map((entry) => ({
+        key: entry.key,
+        endpoint: entry.endpoint,
+        openapi_path: entry.openApiPath,
+        methods: entry.methods,
+        summary: entry.summary,
+        sources: {
+          path: entry.openApiPathSource,
+          methods: entry.methodSource,
+          summary: entry.summarySource,
+        },
+        mismatches: {
+          path: entry.hasPathMismatch,
+          methods: entry.hasMethodMismatch,
+          summary: entry.hasSummaryMismatch,
+        },
+      })),
+    [wizardSchemaEndpointsWithMethods],
+  );
   const agentWorkbookImportResponseFields = useMemo(
     () =>
       flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_response_shape),
@@ -1769,6 +1794,27 @@ export function SpreadsheetApp() {
       agentSchemaEndpointsWithMethods
         .filter((entry) => entry.hasSummaryMismatch)
         .map((entry) => entry.key),
+    [agentSchemaEndpointsWithMethods],
+  );
+  const agentEndpointCatalogPayload = useMemo(
+    () =>
+      agentSchemaEndpointsWithMethods.map((entry) => ({
+        key: entry.key,
+        endpoint: entry.endpoint,
+        openapi_path: entry.openApiPath,
+        methods: entry.methods,
+        summary: entry.summary,
+        sources: {
+          path: entry.openApiPathSource,
+          methods: entry.methodSource,
+          summary: entry.summarySource,
+        },
+        mismatches: {
+          path: entry.hasPathMismatch,
+          methods: entry.hasMethodMismatch,
+          summary: entry.hasSummaryMismatch,
+        },
+      })),
     [agentSchemaEndpointsWithMethods],
   );
   const agentWorkbookImportEventFields = useMemo(
@@ -2700,6 +2746,62 @@ export function SpreadsheetApp() {
       setNotice(`Copied ${label} endpoint ${endpoint}.`);
     } catch (error) {
       applyUiError(error, `Failed to copy ${label} endpoint.`);
+    }
+  }
+
+  async function handleCopyWizardEndpointCatalog() {
+    if (wizardEndpointCatalogPayload.length === 0) {
+      return;
+    }
+    setIsCopyingWizardEndpointCatalog(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            schema: "wizard",
+            endpoint_count: wizardEndpointCatalogPayload.length,
+            endpoints: wizardEndpointCatalogPayload,
+          },
+          null,
+          2,
+        ),
+      );
+      clearUiError();
+      setNotice(
+        `Copied wizard endpoint catalog metadata (${wizardEndpointCatalogPayload.length} endpoints).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy wizard endpoint catalog metadata.");
+    } finally {
+      setIsCopyingWizardEndpointCatalog(false);
+    }
+  }
+
+  async function handleCopyAgentEndpointCatalog() {
+    if (agentEndpointCatalogPayload.length === 0) {
+      return;
+    }
+    setIsCopyingAgentEndpointCatalog(true);
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            schema: "agent",
+            endpoint_count: agentEndpointCatalogPayload.length,
+            endpoints: agentEndpointCatalogPayload,
+          },
+          null,
+          2,
+        ),
+      );
+      clearUiError();
+      setNotice(
+        `Copied agent endpoint catalog metadata (${agentEndpointCatalogPayload.length} endpoints).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy agent endpoint catalog metadata.");
+    } finally {
+      setIsCopyingAgentEndpointCatalog(false);
     }
   }
 
@@ -3778,6 +3880,17 @@ export function SpreadsheetApp() {
                 <summary className="cursor-pointer text-[11px] text-slate-400">
                   discovered endpoint catalog ({wizardSchemaEndpointsWithMethods.length})
                 </summary>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={handleCopyWizardEndpointCatalog}
+                    disabled={isCopyingWizardEndpointCatalog}
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingWizardEndpointCatalog
+                      ? "Copying..."
+                      : "Copy endpoint catalog JSON"}
+                  </button>
+                </div>
                 {wizardUnmappedSchemaEndpointKeys.length > 0 ? (
                   <p className="mt-2 text-[11px] text-amber-300">
                     openapi method mapping missing for:{" "}
@@ -4782,6 +4895,17 @@ export function SpreadsheetApp() {
                 <summary className="cursor-pointer text-xs text-slate-400">
                   discovered endpoint catalog ({agentSchemaEndpointsWithMethods.length})
                 </summary>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={handleCopyAgentEndpointCatalog}
+                    disabled={isCopyingAgentEndpointCatalog}
+                    className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    {isCopyingAgentEndpointCatalog
+                      ? "Copying..."
+                      : "Copy endpoint catalog JSON"}
+                  </button>
+                </div>
                 {agentUnmappedSchemaEndpointKeys.length > 0 ? (
                   <p className="mt-2 text-xs text-amber-300">
                     openapi method mapping missing for:{" "}
