@@ -1171,6 +1171,42 @@ pub fn parse_correl_formula(
   Some((left_start, left_end, right_start, right_end))
 }
 
+pub fn parse_slope_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "SLOPE" || args.len() != 2 {
+    return None;
+  }
+  let (known_y_start, known_y_end) = parse_range_reference(&args[0])?;
+  let (known_x_start, known_x_end) = parse_range_reference(&args[1])?;
+  Some((known_y_start, known_y_end, known_x_start, known_x_end))
+}
+
+pub fn parse_intercept_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "INTERCEPT" || args.len() != 2 {
+    return None;
+  }
+  let (known_y_start, known_y_end) = parse_range_reference(&args[0])?;
+  let (known_x_start, known_x_end) = parse_range_reference(&args[1])?;
+  Some((known_y_start, known_y_end, known_x_start, known_x_end))
+}
+
+pub fn parse_rsq_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), (u32, u32), (u32, u32))> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "RSQ" || args.len() != 2 {
+    return None;
+  }
+  let (known_y_start, known_y_end) = parse_range_reference(&args[0])?;
+  let (known_x_start, known_x_end) = parse_range_reference(&args[1])?;
+  Some((known_y_start, known_y_end, known_x_start, known_x_end))
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1460,6 +1496,7 @@ mod tests {
     parse_averagea_formula, parse_stdeva_formula, parse_stdevpa_formula,
     parse_vara_formula, parse_varpa_formula,
     parse_covariance_formula, parse_correl_formula,
+    parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -1950,6 +1987,22 @@ mod tests {
     assert_eq!(correl.1, (5, 1));
     assert_eq!(correl.2, (1, 2));
     assert_eq!(correl.3, (5, 2));
+    let slope = parse_slope_formula("=SLOPE(B1:B5,A1:A5)").expect("slope should parse");
+    assert_eq!(slope.0, (1, 2));
+    assert_eq!(slope.1, (5, 2));
+    assert_eq!(slope.2, (1, 1));
+    assert_eq!(slope.3, (5, 1));
+    let intercept = parse_intercept_formula("=INTERCEPT(B1:B5,A1:A5)")
+      .expect("intercept should parse");
+    assert_eq!(intercept.0, (1, 2));
+    assert_eq!(intercept.1, (5, 2));
+    assert_eq!(intercept.2, (1, 1));
+    assert_eq!(intercept.3, (5, 1));
+    let rsq = parse_rsq_formula("=RSQ(B1:B5,A1:A5)").expect("rsq should parse");
+    assert_eq!(rsq.0, (1, 2));
+    assert_eq!(rsq.1, (5, 2));
+    assert_eq!(rsq.2, (1, 1));
+    assert_eq!(rsq.3, (5, 1));
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");
