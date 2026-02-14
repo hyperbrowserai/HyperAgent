@@ -26,7 +26,9 @@ use crate::{
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
-    parse_sin_formula, parse_cos_formula, parse_tan_formula, parse_sinh_formula,
+    parse_sin_formula, parse_cos_formula, parse_tan_formula,
+    parse_cot_formula, parse_sec_formula, parse_csc_formula,
+    parse_sinh_formula,
     parse_cosh_formula, parse_tanh_formula, parse_asin_formula, parse_acos_formula,
     parse_atan_formula, parse_atan2_formula,
     parse_degrees_formula, parse_radians_formula,
@@ -1702,6 +1704,33 @@ fn evaluate_formula(
   if let Some(tan_arg) = parse_tan_formula(formula) {
     let value = parse_required_float(connection, sheet, &tan_arg)?;
     return Ok(Some(value.tan().to_string()));
+  }
+
+  if let Some(cot_arg) = parse_cot_formula(formula) {
+    let value = parse_required_float(connection, sheet, &cot_arg)?;
+    let tan_value = value.tan();
+    if tan_value.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / tan_value).to_string()));
+  }
+
+  if let Some(sec_arg) = parse_sec_formula(formula) {
+    let value = parse_required_float(connection, sheet, &sec_arg)?;
+    let cos_value = value.cos();
+    if cos_value.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / cos_value).to_string()));
+  }
+
+  if let Some(csc_arg) = parse_csc_formula(formula) {
+    let value = parse_required_float(connection, sheet, &csc_arg)?;
+    let sin_value = value.sin();
+    if sin_value.abs() < f64::EPSILON {
+      return Ok(None);
+    }
+    return Ok(Some((1.0 / sin_value).to_string()));
   }
 
   if let Some(sinh_arg) = parse_sinh_formula(formula) {
@@ -4975,12 +5004,30 @@ mod tests {
         value: None,
         formula: Some("=COMBINA(4,2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 192,
+        value: None,
+        formula: Some("=COT(0.7853981633974483)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 193,
+        value: None,
+        formula: Some("=SEC(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 194,
+        value: None,
+        formula: Some("=CSC(1.5707963267948966)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 189);
+    assert_eq!(updated_cells, 192);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4994,7 +5041,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 191,
+        end_col: 194,
       },
     )
     .expect("cells should be fetched");
@@ -5632,6 +5679,27 @@ mod tests {
     assert_eq!(by_position(1, 189).evaluated_value.as_deref(), Some("60"));
     assert_eq!(by_position(1, 190).evaluated_value.as_deref(), Some("105"));
     assert_eq!(by_position(1, 191).evaluated_value.as_deref(), Some("10"));
+    let cot = by_position(1, 192)
+      .evaluated_value
+      .as_deref()
+      .expect("cot should evaluate")
+      .parse::<f64>()
+      .expect("cot should be numeric");
+    assert!((cot - 1.0).abs() < 1e-9, "cot should be 1.0, got {cot}");
+    let sec = by_position(1, 193)
+      .evaluated_value
+      .as_deref()
+      .expect("sec should evaluate")
+      .parse::<f64>()
+      .expect("sec should be numeric");
+    assert!((sec - 1.0).abs() < 1e-9, "sec should be 1.0, got {sec}");
+    let csc = by_position(1, 194)
+      .evaluated_value
+      .as_deref()
+      .expect("csc should evaluate")
+      .parse::<f64>()
+      .expect("csc should be numeric");
+    assert!((csc - 1.0).abs() < 1e-9, "csc should be 1.0, got {csc}");
   }
 
   #[test]
@@ -6750,6 +6818,43 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec!["=ASIN(2)".to_string(), "=ACOS(-2)".to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_reciprocal_trig_zero_denominator_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=COT(0)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=SEC(1.5707963267948966)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=CSC(0)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=COT(0)".to_string(),
+        "=SEC(1.5707963267948966)".to_string(),
+        "=CSC(0)".to_string(),
+      ],
     );
   }
 

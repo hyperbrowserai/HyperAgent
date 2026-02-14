@@ -500,6 +500,30 @@ pub fn parse_tan_formula(formula: &str) -> Option<String> {
   None
 }
 
+pub fn parse_cot_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "COT" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_sec_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "SEC" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_csc_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "CSC" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_sinh_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "SINH" && args.len() == 1 {
@@ -1594,6 +1618,7 @@ mod tests {
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
     parse_sin_formula, parse_cos_formula, parse_tan_formula,
+    parse_cot_formula, parse_sec_formula, parse_csc_formula,
     parse_sinh_formula, parse_cosh_formula, parse_tanh_formula, parse_asin_formula,
     parse_acos_formula, parse_atan_formula, parse_atan2_formula, parse_degrees_formula,
     parse_radians_formula, parse_lower_formula,
@@ -1834,6 +1859,9 @@ mod tests {
     assert_eq!(parse_sin_formula("=SIN(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_cos_formula("=COS(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_tan_formula("=TAN(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_cot_formula("=COT(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_sec_formula("=SEC(A1)").as_deref(), Some("A1"));
+    assert_eq!(parse_csc_formula("=CSC(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_sinh_formula("=SINH(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_cosh_formula("=COSH(A1)").as_deref(), Some("A1"));
     assert_eq!(parse_tanh_formula("=TANH(A1)").as_deref(), Some("A1"));
