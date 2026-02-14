@@ -24,9 +24,52 @@ import { getDebugOptions } from "@/debug/options";
 const NETWORK_IDLE_THRESHOLD_MS = 500;
 const STALLED_REQUEST_MS = 2000;
 const STALLED_SWEEP_INTERVAL_MS = 500;
+const MAX_WAIT_DIAGNOSTIC_CHARS = 400;
+const MAX_WAIT_IDENTIFIER_CHARS = 200;
 const ENV_TRACE_WAIT =
   process.env.HYPERAGENT_TRACE_WAIT === "1" ||
   process.env.HYPERAGENT_TRACE_WAIT === "true";
+
+function sanitizeWaitDiagnosticText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateWaitDiagnostic(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omittedChars = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omittedChars} chars]`;
+}
+
+function formatWaitIdentifier(value: unknown): string {
+  if (typeof value !== "string") {
+    return "unknown";
+  }
+  const normalized = sanitizeWaitDiagnosticText(value);
+  if (normalized.length === 0) {
+    return "unknown";
+  }
+  return truncateWaitDiagnostic(normalized, MAX_WAIT_IDENTIFIER_CHARS);
+}
+
+function formatWaitUrl(value: unknown): string {
+  if (typeof value !== "string") {
+    return "unknown";
+  }
+  const normalized = sanitizeWaitDiagnosticText(value);
+  if (normalized.length === 0) {
+    return "unknown";
+  }
+  return truncateWaitDiagnostic(normalized, MAX_WAIT_DIAGNOSTIC_CHARS);
+}
 
 export interface LifecycleOptions {
   waitUntil?: Array<"domcontentloaded" | "load" | "networkidle">;
@@ -211,7 +254,11 @@ async function waitForNetworkIdle(
             stats.forcedDrops += 1;
             if (trace) {
               console.warn(
-                `[waitForSettledDOM] Forcing completion of stalled request ${id} (age=${now - meta.start}ms url=${meta.url ?? "unknown"})`
+                `[waitForSettledDOM] Forcing completion of stalled request ${formatWaitIdentifier(
+                  id
+                )} (age=${now - meta.start}ms url=${formatWaitUrl(
+                  meta.url
+                )})`
               );
             }
             requestMeta.delete(id);
