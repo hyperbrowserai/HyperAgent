@@ -14,7 +14,7 @@
  * 6. Global timeout ensures we don't wait forever
  */
 
-import type { BrowserContext, Page } from "playwright-core";
+import type { Page } from "playwright-core";
 import { getCDPClient, getOrCreateFrameContextManager } from "@/cdp";
 import type { CDPSession } from "@/cdp";
 import { Protocol } from "devtools-protocol";
@@ -207,6 +207,51 @@ function readWaitDebugOptions(): { enabled: boolean; traceWait: boolean } {
   }
 }
 
+function hasRecordingVideoContext(page: Page): boolean {
+  let contextMethod: unknown;
+  try {
+    contextMethod = (
+      page as unknown as { context?: unknown }
+    ).context;
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to read page context method: ${formatWaitDiagnostic(
+        error
+      )}`
+    );
+    return false;
+  }
+  if (typeof contextMethod !== "function") {
+    return false;
+  }
+
+  let context: unknown;
+  try {
+    context = (contextMethod as (this: Page) => unknown).call(page);
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to read page context: ${formatWaitDiagnostic(
+        error
+      )}`
+    );
+    return false;
+  }
+  if (!context || typeof context !== "object") {
+    return false;
+  }
+  try {
+    const options = (context as { _options?: { recordVideo?: unknown } })._options;
+    return !!options?.recordVideo;
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to read context options: ${formatWaitDiagnostic(
+        error
+      )}`
+    );
+    return false;
+  }
+}
+
 function safeReadWaitOptionField(
   options: unknown,
   field: keyof WaitForSettledOptions
@@ -235,13 +280,10 @@ export async function waitForSettledDOM(
     typeof filterAdTrackingFramesOption === "boolean"
       ? filterAdTrackingFramesOption
       : undefined;
-  const ctx = page.context() as BrowserContext & {
-    _options?: { recordVideo?: unknown };
-  };
   const debugOptions = readWaitDebugOptions();
   const traceWaitFlag =
     (debugOptions.enabled && debugOptions.traceWait) || ENV_TRACE_WAIT;
-  const traceWait = traceWaitFlag || !!ctx._options?.recordVideo;
+  const traceWait = traceWaitFlag || hasRecordingVideoContext(page);
   const totalStart = performance.now();
 
   // Currently we only wait for network idle (historical behavior). Hook exists if we add DOM states later.

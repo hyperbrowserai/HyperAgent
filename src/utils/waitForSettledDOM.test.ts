@@ -260,6 +260,89 @@ describe("waitForSettledDOM diagnostics", () => {
     }
   });
 
+  it("continues when page.context() getter throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => {
+        throw new Error(`context\u0000\n${"x".repeat(2_000)}`);
+      },
+    } as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 600);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(700);
+      const stats = await waitPromise;
+
+      expect(stats.resolvedByTimeout).toBe(false);
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read page context")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not warn when page.context method is unavailable", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {} as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 600);
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(700);
+      const stats = await waitPromise;
+
+      expect(stats.resolvedByTimeout).toBe(false);
+      expect(
+        warnSpy.mock.calls.some((call) =>
+          String(call[0] ?? "").includes("Failed to read page context")
+        )
+      ).toBe(false);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("applies frame filtering option when provided", async () => {
     const { session } = createSessionWithEvents();
     const cdpClient: CDPClient = {
