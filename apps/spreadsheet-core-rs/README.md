@@ -136,7 +136,7 @@ Response includes:
   - `OPERATION_SIGNATURE_MISMATCH`
   - `EMPTY_OPERATION_LIST`
   - `REQUEST_ID_CONFLICT` (same `request_id` reused with a different operation signature)
-- `expected_operations_signature` accepts blank/whitespace values and treats them as "not provided" for backward compatibility.
+- `expected_operations_signature` trims surrounding whitespace before validation; blank/whitespace-only values are treated as "not provided" for backward compatibility.
 - Cache-management validation error codes:
   - `INVALID_REQUEST_ID`
   - `INVALID_NEW_REQUEST_ID`
