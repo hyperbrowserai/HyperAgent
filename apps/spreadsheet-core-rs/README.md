@@ -192,7 +192,10 @@ The in-memory request-id idempotency cache keeps up to **256** recent `agent/ops
   "endpoint_catalog_diagnostics": {
     "status": "healthy",
     "issue_count": 0,
+    "mismatch_count": 0,
     "operation_fallback_count": 0,
+    "unmapped_endpoint_count": 0,
+    "openapi_sync_issue_count": 0,
     "missing_operation_entries": 0,
     "openapi_sync_available": true
   }

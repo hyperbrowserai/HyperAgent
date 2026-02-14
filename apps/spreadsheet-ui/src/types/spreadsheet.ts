@@ -218,9 +218,12 @@ export interface EndpointCatalogCoverage {
 }
 
 export interface EndpointCatalogDiagnostics {
-  status: "healthy" | "warning";
+  status: "healthy" | "warning" | "error";
   issue_count: number;
+  mismatch_count: number;
   operation_fallback_count: number;
+  unmapped_endpoint_count: number;
+  openapi_sync_issue_count: number;
   missing_operation_entries: number;
   openapi_sync_available: boolean;
 }

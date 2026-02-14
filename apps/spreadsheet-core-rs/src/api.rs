@@ -619,6 +619,14 @@ fn endpoint_catalog_coverage_from_operations(
 fn endpoint_catalog_diagnostics_from_coverage(
     endpoint_coverage: &serde_json::Value,
 ) -> serde_json::Value {
+    let total = endpoint_coverage
+        .get("total")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let method_operation_backed = endpoint_coverage
+        .get("method_operation_backed")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
     let operation_fallback = endpoint_coverage
         .get("operation_fallback")
         .and_then(serde_json::Value::as_u64)
@@ -627,15 +635,25 @@ fn endpoint_catalog_diagnostics_from_coverage(
         .get("missing_operation_entries")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    let status = if operation_fallback == 0 {
+    let unmapped_endpoint_count = total.saturating_sub(method_operation_backed);
+    let mismatch_count = 0u64;
+    let openapi_sync_issue_count = 0u64;
+    let issue_count =
+        operation_fallback + unmapped_endpoint_count + mismatch_count + openapi_sync_issue_count;
+    let status = if mismatch_count > 0 || openapi_sync_issue_count > 0 {
+        "error"
+    } else if issue_count == 0 {
         "healthy"
     } else {
         "warning"
     };
     json!({
       "status": status,
-      "issue_count": operation_fallback,
+      "issue_count": issue_count,
+      "mismatch_count": mismatch_count,
       "operation_fallback_count": operation_fallback,
+      "unmapped_endpoint_count": unmapped_endpoint_count,
+      "openapi_sync_issue_count": openapi_sync_issue_count,
       "missing_operation_entries": missing_operation_entries,
       "openapi_sync_available": true
     })
@@ -4190,10 +4208,22 @@ mod tests {
             .get("issue_count")
             .and_then(serde_json::Value::as_u64)
             .expect("endpoint_catalog_diagnostics.issue_count should be an integer");
+        let mismatch_count = endpoint_catalog_diagnostics
+            .get("mismatch_count")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_diagnostics.mismatch_count should be an integer");
         let operation_fallback_count = endpoint_catalog_diagnostics
             .get("operation_fallback_count")
             .and_then(serde_json::Value::as_u64)
             .expect("endpoint_catalog_diagnostics.operation_fallback_count should be an integer");
+        let unmapped_endpoint_count = endpoint_catalog_diagnostics
+            .get("unmapped_endpoint_count")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_diagnostics.unmapped_endpoint_count should be an integer");
+        let openapi_sync_issue_count = endpoint_catalog_diagnostics
+            .get("openapi_sync_issue_count")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_diagnostics.openapi_sync_issue_count should be an integer");
         let diagnostics_missing_entries = endpoint_catalog_diagnostics
             .get("missing_operation_entries")
             .and_then(serde_json::Value::as_u64)
@@ -4207,8 +4237,22 @@ mod tests {
             "{schema_name} endpoint_catalog_diagnostics should report openapi sync as available",
         );
         assert_eq!(
-            issue_count, operation_fallback,
-            "{schema_name} endpoint_catalog_diagnostics.issue_count should match endpoint_catalog_coverage.operation_fallback",
+            mismatch_count, 0,
+            "{schema_name} endpoint_catalog_diagnostics mismatch_count should stay zero for openapi-derived metadata",
+        );
+        assert_eq!(
+            unmapped_endpoint_count,
+            coverage_total.saturating_sub(method_operation_backed),
+            "{schema_name} endpoint_catalog_diagnostics.unmapped_endpoint_count should match endpoints without operation-backed methods",
+        );
+        assert_eq!(
+            openapi_sync_issue_count, 0,
+            "{schema_name} endpoint_catalog_diagnostics.openapi_sync_issue_count should stay zero when openapi metadata is embedded",
+        );
+        assert_eq!(
+            issue_count,
+            operation_fallback + unmapped_endpoint_count + mismatch_count + openapi_sync_issue_count,
+            "{schema_name} endpoint_catalog_diagnostics.issue_count should match aggregated diagnostic issue counters",
         );
         assert_eq!(
             operation_fallback_count, operation_fallback,
@@ -4218,7 +4262,9 @@ mod tests {
             diagnostics_missing_entries, missing_operation_entries,
             "{schema_name} endpoint_catalog_diagnostics.missing_operation_entries should match coverage missing_operation_entries",
         );
-        let expected_status = if operation_fallback == 0 {
+        let expected_status = if mismatch_count > 0 || openapi_sync_issue_count > 0 {
+            "error"
+        } else if issue_count == 0 {
             "healthy"
         } else {
             "warning"
@@ -10828,8 +10874,6 @@ mod tests {
             "agent_ops_cache_remove_stale_request_shape",
             "agent_ops_cache_remove_stale_response_shape",
             "agent_ops_idempotency_cache_max_entries",
-            "endpoint_catalog_coverage",
-            "endpoint_catalog_diagnostics",
         ];
 
         for key in parity_keys {
@@ -10839,6 +10883,22 @@ mod tests {
                 "wizard schema should keep '{key}' in sync with agent schema",
             );
         }
+        assert!(
+            agent_schema.get("endpoint_catalog_coverage").is_some(),
+            "agent schema should expose endpoint_catalog_coverage",
+        );
+        assert!(
+            wizard_schema.get("endpoint_catalog_coverage").is_some(),
+            "wizard schema should expose endpoint_catalog_coverage",
+        );
+        assert!(
+            agent_schema.get("endpoint_catalog_diagnostics").is_some(),
+            "agent schema should expose endpoint_catalog_diagnostics",
+        );
+        assert!(
+            wizard_schema.get("endpoint_catalog_diagnostics").is_some(),
+            "wizard schema should expose endpoint_catalog_diagnostics",
+        );
 
         let agent_cache_keys = agent_schema
             .as_object()

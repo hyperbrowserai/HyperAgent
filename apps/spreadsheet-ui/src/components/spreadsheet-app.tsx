@@ -104,7 +104,10 @@ interface EndpointCatalogSchemaCoverage {
 interface EndpointCatalogSchemaDiagnostics {
   status: "healthy" | "warning" | "error";
   issueCount: number;
+  mismatchCount: number;
   operationFallbackCount: number;
+  unmappedEndpointCount: number;
+  openApiSyncIssueCount: number;
   missingOperationEntries: number;
   isOpenApiSyncAvailable: boolean;
 }
@@ -122,7 +125,10 @@ interface EndpointCatalogDiagnosticsDrift {
   hasDrift: boolean;
   status: boolean;
   issueCount: boolean;
+  mismatchCount: boolean;
   operationFallbackCount: boolean;
+  unmappedEndpointCount: boolean;
+  openApiSyncIssueCount: boolean;
   openApiSyncAvailable: boolean;
 }
 
@@ -610,13 +616,19 @@ function normalizeSchemaEndpointCatalogDiagnostics(
   const diagnosticsValue = value as Record<string, unknown>;
   const status = diagnosticsValue.status;
   const issueCount = diagnosticsValue.issue_count;
+  const mismatchCount = diagnosticsValue.mismatch_count;
   const operationFallbackCount = diagnosticsValue.operation_fallback_count;
+  const unmappedEndpointCount = diagnosticsValue.unmapped_endpoint_count;
+  const openApiSyncIssueCount = diagnosticsValue.openapi_sync_issue_count;
   const missingOperationEntries = diagnosticsValue.missing_operation_entries;
   const openApiSyncAvailable = diagnosticsValue.openapi_sync_available;
   if (
     (status !== "healthy" && status !== "warning" && status !== "error")
     || typeof issueCount !== "number"
+    || typeof mismatchCount !== "number"
     || typeof operationFallbackCount !== "number"
+    || typeof unmappedEndpointCount !== "number"
+    || typeof openApiSyncIssueCount !== "number"
     || typeof missingOperationEntries !== "number"
     || typeof openApiSyncAvailable !== "boolean"
   ) {
@@ -625,7 +637,10 @@ function normalizeSchemaEndpointCatalogDiagnostics(
   return {
     status,
     issueCount,
+    mismatchCount,
     operationFallbackCount,
+    unmappedEndpointCount,
+    openApiSyncIssueCount,
     missingOperationEntries,
     isOpenApiSyncAvailable: openApiSyncAvailable,
   };
@@ -663,27 +678,38 @@ function buildEndpointCatalogCoverageDrift(
 }
 
 function buildEndpointCatalogDiagnosticsDrift(
-  computedCoverage: EndpointCatalogCoverageStats,
+  computedDiagnostics: EndpointCatalogDiagnostics,
   schemaDiagnostics: EndpointCatalogSchemaDiagnostics | null,
-  isOpenApiSyncAvailable: boolean,
 ): EndpointCatalogDiagnosticsDrift | null {
   if (!schemaDiagnostics) {
     return null;
   }
-  const expectedStatus = schemaDiagnostics.operationFallbackCount === 0
-    ? "healthy"
-    : "warning";
-  const status = schemaDiagnostics.status !== expectedStatus;
-  const issueCount = schemaDiagnostics.issueCount !== schemaDiagnostics.operationFallbackCount;
+  const status = schemaDiagnostics.status !== computedDiagnostics.level;
+  const issueCount = schemaDiagnostics.issueCount !== computedDiagnostics.issueCount;
+  const mismatchCount = schemaDiagnostics.mismatchCount !== computedDiagnostics.mismatchCount;
   const operationFallbackCount =
-    schemaDiagnostics.operationFallbackCount !== computedCoverage.operationFallback;
+    schemaDiagnostics.operationFallbackCount !== computedDiagnostics.fallbackCount;
+  const unmappedEndpointCount =
+    schemaDiagnostics.unmappedEndpointCount !== computedDiagnostics.unmappedCount;
+  const openApiSyncIssueCount =
+    schemaDiagnostics.openApiSyncIssueCount !== computedDiagnostics.openApiSyncIssueCount;
   const openApiSyncAvailable =
-    schemaDiagnostics.isOpenApiSyncAvailable !== isOpenApiSyncAvailable;
+    schemaDiagnostics.isOpenApiSyncAvailable !== computedDiagnostics.isOpenApiSyncAvailable;
   return {
-    hasDrift: status || issueCount || operationFallbackCount || openApiSyncAvailable,
+    hasDrift:
+      status
+      || issueCount
+      || mismatchCount
+      || operationFallbackCount
+      || unmappedEndpointCount
+      || openApiSyncIssueCount
+      || openApiSyncAvailable,
     status,
     issueCount,
+    mismatchCount,
     operationFallbackCount,
+    unmappedEndpointCount,
+    openApiSyncIssueCount,
     openApiSyncAvailable,
   };
 }
@@ -1846,13 +1872,11 @@ export function SpreadsheetApp() {
   const wizardEndpointDiagnosticsDrift = useMemo(
     () =>
       buildEndpointCatalogDiagnosticsDrift(
-        wizardEndpointCoverageStats,
+        wizardEndpointCatalogDiagnostics,
         wizardSchemaEndpointDiagnostics,
-        !openApiSpecQuery.isError,
       ),
     [
-      openApiSpecQuery.isError,
-      wizardEndpointCoverageStats,
+      wizardEndpointCatalogDiagnostics,
       wizardSchemaEndpointDiagnostics,
     ],
   );
@@ -2293,14 +2317,12 @@ export function SpreadsheetApp() {
   const agentEndpointDiagnosticsDrift = useMemo(
     () =>
       buildEndpointCatalogDiagnosticsDrift(
-        agentEndpointCoverageStats,
+        agentEndpointCatalogDiagnostics,
         agentSchemaEndpointDiagnostics,
-        !openApiSpecQuery.isError,
       ),
     [
-      agentEndpointCoverageStats,
+      agentEndpointCatalogDiagnostics,
       agentSchemaEndpointDiagnostics,
-      openApiSpecQuery.isError,
     ],
   );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
@@ -4576,8 +4598,11 @@ export function SpreadsheetApp() {
                     <span className="font-mono text-slate-300">
                       {wizardSchemaEndpointDiagnostics.status}
                     </span>{" "}
-                    ({wizardSchemaEndpointDiagnostics.issueCount} issues, fallback{" "}
-                    {wizardSchemaEndpointDiagnostics.operationFallbackCount}, missing{" "}
+                    ({wizardSchemaEndpointDiagnostics.issueCount} issues, mismatch{" "}
+                    {wizardSchemaEndpointDiagnostics.mismatchCount}, fallback{" "}
+                    {wizardSchemaEndpointDiagnostics.operationFallbackCount}, unmapped{" "}
+                    {wizardSchemaEndpointDiagnostics.unmappedEndpointCount}, openapi sync
+                    issues {wizardSchemaEndpointDiagnostics.openApiSyncIssueCount}, missing{" "}
                     {wizardSchemaEndpointDiagnostics.missingOperationEntries}, openapi sync{" "}
                     {wizardSchemaEndpointDiagnostics.isOpenApiSyncAvailable
                       ? "available"
@@ -4620,8 +4645,17 @@ export function SpreadsheetApp() {
                       {[
                         wizardEndpointDiagnosticsDrift.status ? "status" : null,
                         wizardEndpointDiagnosticsDrift.issueCount ? "issue_count" : null,
+                        wizardEndpointDiagnosticsDrift.mismatchCount
+                          ? "mismatch_count"
+                          : null,
                         wizardEndpointDiagnosticsDrift.operationFallbackCount
                           ? "operation_fallback_count"
+                          : null,
+                        wizardEndpointDiagnosticsDrift.unmappedEndpointCount
+                          ? "unmapped_endpoint_count"
+                          : null,
+                        wizardEndpointDiagnosticsDrift.openApiSyncIssueCount
+                          ? "openapi_sync_issue_count"
                           : null,
                         wizardEndpointDiagnosticsDrift.openApiSyncAvailable
                           ? "openapi_sync_available"
@@ -5810,8 +5844,11 @@ export function SpreadsheetApp() {
                     <span className="font-mono text-slate-300">
                       {agentSchemaEndpointDiagnostics.status}
                     </span>{" "}
-                    ({agentSchemaEndpointDiagnostics.issueCount} issues, fallback{" "}
-                    {agentSchemaEndpointDiagnostics.operationFallbackCount}, missing{" "}
+                    ({agentSchemaEndpointDiagnostics.issueCount} issues, mismatch{" "}
+                    {agentSchemaEndpointDiagnostics.mismatchCount}, fallback{" "}
+                    {agentSchemaEndpointDiagnostics.operationFallbackCount}, unmapped{" "}
+                    {agentSchemaEndpointDiagnostics.unmappedEndpointCount}, openapi sync
+                    issues {agentSchemaEndpointDiagnostics.openApiSyncIssueCount}, missing{" "}
                     {agentSchemaEndpointDiagnostics.missingOperationEntries}, openapi sync{" "}
                     {agentSchemaEndpointDiagnostics.isOpenApiSyncAvailable
                       ? "available"
@@ -5854,8 +5891,17 @@ export function SpreadsheetApp() {
                       {[
                         agentEndpointDiagnosticsDrift.status ? "status" : null,
                         agentEndpointDiagnosticsDrift.issueCount ? "issue_count" : null,
+                        agentEndpointDiagnosticsDrift.mismatchCount
+                          ? "mismatch_count"
+                          : null,
                         agentEndpointDiagnosticsDrift.operationFallbackCount
                           ? "operation_fallback_count"
+                          : null,
+                        agentEndpointDiagnosticsDrift.unmappedEndpointCount
+                          ? "unmapped_endpoint_count"
+                          : null,
+                        agentEndpointDiagnosticsDrift.openApiSyncIssueCount
+                          ? "openapi_sync_issue_count"
                           : null,
                         agentEndpointDiagnosticsDrift.openApiSyncAvailable
                           ? "openapi_sync_available"
