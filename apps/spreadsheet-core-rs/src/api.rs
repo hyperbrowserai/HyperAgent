@@ -5179,6 +5179,18 @@ mod tests {
         .map(|entries| entries.len()),
       Some(FORMULA_VALIDATION_ERROR_CODES.len()),
     );
+    let formula_validation_error_codes = schema
+      .get("formula_capabilities")
+      .and_then(|value| value.get("validation_error_codes"))
+      .and_then(serde_json::Value::as_array)
+      .expect("validation_error_codes should be an array")
+      .iter()
+      .filter_map(serde_json::Value::as_str)
+      .collect::<Vec<_>>();
+    assert!(
+      formula_validation_error_codes.contains(&"INVALID_FORMULA"),
+      "agent schema should advertise formula validation error codes",
+    );
     assert_eq!(
       schema
         .get("workbook_import_response_shape")
