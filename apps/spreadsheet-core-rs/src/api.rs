@@ -659,6 +659,34 @@ fn endpoint_catalog_diagnostics_from_coverage(
     })
 }
 
+fn endpoint_openapi_fingerprint(openapi_spec: &serde_json::Value) -> String {
+    let mut operations = Vec::<String>::new();
+    if let Some(paths) = openapi_spec.get("paths").and_then(serde_json::Value::as_object) {
+        for (path, methods_value) in paths {
+            let Some(methods) = methods_value.as_object() else {
+                continue;
+            };
+            for (method, metadata) in methods {
+                let normalized_method = method.trim().to_ascii_uppercase();
+                if normalized_method.is_empty() {
+                    continue;
+                }
+                let summary = metadata
+                    .get("summary")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .unwrap_or("");
+                operations.push(format!("{normalized_method}|{path}|{summary}"));
+            }
+        }
+    }
+    operations.sort();
+    let joined = operations.join("\n");
+    let mut hasher = Sha256::new();
+    hasher.update(joined.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -1409,6 +1437,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
     let endpoint_http_methods = endpoint_http_methods_from_openapi(&schema, &openapi_spec);
     let endpoint_openapi_paths = endpoint_openapi_paths_from_schema(&schema);
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
+    let endpoint_openapi_fingerprint = endpoint_openapi_fingerprint(&openapi_spec);
     let endpoint_catalog_coverage =
         endpoint_catalog_coverage_from_operations(&schema, &endpoint_openapi_operations);
     let endpoint_catalog_diagnostics =
@@ -1428,6 +1457,10 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         schema_object.insert(
             "endpoint_catalog_diagnostics".to_string(),
             endpoint_catalog_diagnostics,
+        );
+        schema_object.insert(
+            "endpoint_catalog_openapi_fingerprint".to_string(),
+            json!(endpoint_openapi_fingerprint),
         );
     }
     Json(schema)
@@ -2299,6 +2332,7 @@ async fn get_agent_schema(
     let endpoint_http_methods = endpoint_http_methods_from_openapi(&schema, &openapi_spec);
     let endpoint_openapi_paths = endpoint_openapi_paths_from_schema(&schema);
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
+    let endpoint_openapi_fingerprint = endpoint_openapi_fingerprint(&openapi_spec);
     let endpoint_catalog_coverage =
         endpoint_catalog_coverage_from_operations(&schema, &endpoint_openapi_operations);
     let endpoint_catalog_diagnostics =
@@ -2318,6 +2352,10 @@ async fn get_agent_schema(
         schema_object.insert(
             "endpoint_catalog_diagnostics".to_string(),
             endpoint_catalog_diagnostics,
+        );
+        schema_object.insert(
+            "endpoint_catalog_openapi_fingerprint".to_string(),
+            json!(endpoint_openapi_fingerprint),
         );
     }
     Ok(Json(schema))
@@ -3438,7 +3476,8 @@ mod tests {
         agent_ops_cache_stats, build_export_artifacts, build_preset_operations,
         build_scenario_operations, clear_agent_ops_cache, duckdb_query,
         ensure_non_empty_operations, export_workbook, formula_supported_functions_summary,
-        formula_unsupported_behaviors_summary, get_agent_schema, get_agent_wizard_schema,
+        endpoint_openapi_fingerprint, formula_unsupported_behaviors_summary, get_agent_schema,
+        get_agent_wizard_schema,
         import_bytes_into_workbook, normalize_sheet_name, openapi, operations_signature,
         parse_optional_bool, preview_remove_agent_ops_cache_entries_by_prefix,
         reexecute_agent_ops_cache_entry, remove_agent_ops_cache_entries_by_prefix,
@@ -4315,6 +4354,45 @@ mod tests {
                 "{schema_name} endpoint_http_methods for '{key}' should match openapi path '{normalized}'",
             );
         }
+    }
+
+    fn assert_endpoint_openapi_fingerprint_is_consistent(
+        schema: &serde_json::Value,
+        schema_name: &str,
+        openapi_spec: &serde_json::Value,
+    ) {
+        let fingerprint = schema
+            .get("endpoint_catalog_openapi_fingerprint")
+            .and_then(serde_json::Value::as_str)
+            .expect("schema should expose endpoint_catalog_openapi_fingerprint");
+        assert!(
+            !fingerprint.trim().is_empty(),
+            "{schema_name} endpoint_catalog_openapi_fingerprint should not be blank",
+        );
+        assert_eq!(
+            fingerprint,
+            fingerprint.trim(),
+            "{schema_name} endpoint_catalog_openapi_fingerprint should be trimmed",
+        );
+        assert_eq!(
+            fingerprint.len(),
+            64,
+            "{schema_name} endpoint_catalog_openapi_fingerprint should be 64-char sha256 hex",
+        );
+        assert!(
+            fingerprint.chars().all(|ch| ch.is_ascii_hexdigit()),
+            "{schema_name} endpoint_catalog_openapi_fingerprint should be lowercase hex",
+        );
+        assert_eq!(
+            fingerprint,
+            fingerprint.to_ascii_lowercase(),
+            "{schema_name} endpoint_catalog_openapi_fingerprint should be normalized lowercase",
+        );
+        let expected = endpoint_openapi_fingerprint(openapi_spec);
+        assert_eq!(
+            fingerprint, expected,
+            "{schema_name} endpoint_catalog_openapi_fingerprint should match openapi-derived fingerprint",
+        );
     }
 
     #[test]
@@ -9236,6 +9314,7 @@ mod tests {
             .await
             .expect("schema should resolve")
             .0;
+        let openapi_spec = openapi().await.0;
 
         assert_eq!(
             schema
@@ -9362,6 +9441,11 @@ mod tests {
                 .and_then(|value| value.get("openapi_endpoint"))
                 .and_then(serde_json::Value::as_str),
             Some("Get OpenAPI specification document"),
+        );
+        assert_endpoint_openapi_fingerprint_is_consistent(
+            &schema,
+            "agent schema",
+            &openapi_spec,
         );
         assert_endpoint_catalog_coverage_is_consistent(&schema, "agent schema");
         assert_eq!(
@@ -10131,6 +10215,7 @@ mod tests {
     #[tokio::test]
     async fn should_expose_response_shapes_in_wizard_schema() {
         let schema = get_agent_wizard_schema().await.0;
+        let openapi_spec = openapi().await.0;
 
         assert_eq!(
             schema.get("endpoint").and_then(serde_json::Value::as_str),
@@ -10263,6 +10348,11 @@ mod tests {
                 .and_then(|value| value.get("openapi_endpoint"))
                 .and_then(serde_json::Value::as_str),
             Some("Get OpenAPI specification document"),
+        );
+        assert_endpoint_openapi_fingerprint_is_consistent(
+            &schema,
+            "wizard schema",
+            &openapi_spec,
         );
         assert_endpoint_catalog_coverage_is_consistent(&schema, "wizard schema");
         assert_eq!(
@@ -10874,6 +10964,7 @@ mod tests {
             "agent_ops_cache_remove_stale_request_shape",
             "agent_ops_cache_remove_stale_response_shape",
             "agent_ops_idempotency_cache_max_entries",
+            "endpoint_catalog_openapi_fingerprint",
         ];
 
         for key in parity_keys {
@@ -11368,6 +11459,11 @@ mod tests {
             "agent schema",
             paths,
         );
+        assert_endpoint_openapi_fingerprint_is_consistent(
+            &agent_schema,
+            "agent schema",
+            &spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&agent_schema, "agent schema");
     }
 
@@ -11421,6 +11517,11 @@ mod tests {
             "wizard schema",
             paths,
         );
+        assert_endpoint_openapi_fingerprint_is_consistent(
+            &wizard_schema,
+            "wizard schema",
+            &spec,
+        );
         assert_endpoint_catalog_coverage_is_consistent(&wizard_schema, "wizard schema");
     }
 
@@ -11437,6 +11538,7 @@ mod tests {
             .expect("agent schema should resolve")
             .0;
         let wizard_schema = get_agent_wizard_schema().await.0;
+        let openapi_spec = openapi().await.0;
 
         let agent_endpoint_http_methods = agent_schema
             .get("endpoint_http_methods")
@@ -11479,6 +11581,21 @@ mod tests {
         );
         assert_endpoint_summaries_map_is_normalized(agent_endpoint_summaries, "agent schema");
         assert_endpoint_summaries_map_is_normalized(wizard_endpoint_summaries, "wizard schema");
+        assert_endpoint_openapi_fingerprint_is_consistent(
+            &agent_schema,
+            "agent schema",
+            &openapi_spec,
+        );
+        assert_endpoint_openapi_fingerprint_is_consistent(
+            &wizard_schema,
+            "wizard schema",
+            &openapi_spec,
+        );
+        assert_eq!(
+            agent_schema.get("endpoint_catalog_openapi_fingerprint"),
+            wizard_schema.get("endpoint_catalog_openapi_fingerprint"),
+            "wizard and agent schemas should advertise identical openapi fingerprint metadata",
+        );
 
         let agent_method_map = agent_endpoint_http_methods
             .as_object()

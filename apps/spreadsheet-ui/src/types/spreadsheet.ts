@@ -241,6 +241,7 @@ export interface AgentSchemaInfo {
   endpoint_summaries?: Record<string, string>;
   endpoint_catalog_coverage?: EndpointCatalogCoverage;
   endpoint_catalog_diagnostics?: EndpointCatalogDiagnostics;
+  endpoint_catalog_openapi_fingerprint?: string;
   request_shape?: Record<string, unknown>;
   agent_ops_request_shape?: Record<string, unknown>;
   workbook_import_endpoint?: string;
@@ -374,6 +375,7 @@ export interface AgentWizardSchemaInfo {
   endpoint_summaries?: Record<string, string>;
   endpoint_catalog_coverage?: EndpointCatalogCoverage;
   endpoint_catalog_diagnostics?: EndpointCatalogDiagnostics;
+  endpoint_catalog_openapi_fingerprint?: string;
   json_endpoint?: string;
   presets_endpoint?: string;
   preset_operations_endpoint?: string;

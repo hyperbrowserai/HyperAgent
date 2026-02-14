@@ -1904,6 +1904,33 @@ export function SpreadsheetApp() {
   const hasWizardSchemaEndpointDrift = Boolean(
     wizardEndpointCoverageDrift?.hasDrift || wizardEndpointDiagnosticsDrift?.hasDrift,
   );
+  const wizardEndpointCatalogOpenApiFingerprint = useMemo(
+    () => {
+      const fingerprint = wizardSchemaQuery.data?.endpoint_catalog_openapi_fingerprint;
+      if (typeof fingerprint !== "string") {
+        return null;
+      }
+      const normalized = fingerprint.trim();
+      return normalized.length > 0 ? normalized : null;
+    },
+    [wizardSchemaQuery.data?.endpoint_catalog_openapi_fingerprint],
+  );
+  const agentEndpointCatalogOpenApiFingerprint = useMemo(
+    () => {
+      const fingerprint = agentSchemaQuery.data?.endpoint_catalog_openapi_fingerprint;
+      if (typeof fingerprint !== "string") {
+        return null;
+      }
+      const normalized = fingerprint.trim();
+      return normalized.length > 0 ? normalized : null;
+    },
+    [agentSchemaQuery.data?.endpoint_catalog_openapi_fingerprint],
+  );
+  const hasEndpointCatalogFingerprintMismatch = Boolean(
+    wizardEndpointCatalogOpenApiFingerprint
+    && agentEndpointCatalogOpenApiFingerprint
+    && wizardEndpointCatalogOpenApiFingerprint !== agentEndpointCatalogOpenApiFingerprint,
+  );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntries(
@@ -1928,6 +1955,8 @@ export function SpreadsheetApp() {
         coverage_in_sync: hasWizardSchemaCoverageInSync,
         schema_metadata_available: hasWizardSchemaEndpointMetadata,
         schema_drift_detected: hasWizardSchemaEndpointDrift,
+        openapi_fingerprint: wizardEndpointCatalogOpenApiFingerprint,
+        fingerprint_mismatch_with_agent_schema: hasEndpointCatalogFingerprintMismatch,
         diagnostics: {
           status: wizardEndpointCatalogDiagnostics.level,
           issue_count: wizardEndpointCatalogDiagnostics.issueCount,
@@ -1984,6 +2013,8 @@ export function SpreadsheetApp() {
       hasWizardSchemaDiagnosticsInSync,
       hasWizardSchemaEndpointDrift,
       hasWizardSchemaEndpointMetadata,
+      hasEndpointCatalogFingerprintMismatch,
+      wizardEndpointCatalogOpenApiFingerprint,
       wizardSchemaEndpointCoverage,
       wizardSchemaEndpointDiagnostics,
       wizardSchemaEndpointsWithMethods,
@@ -2395,6 +2426,8 @@ export function SpreadsheetApp() {
         coverage_in_sync: hasAgentSchemaCoverageInSync,
         schema_metadata_available: hasAgentSchemaEndpointMetadata,
         schema_drift_detected: hasAgentSchemaEndpointDrift,
+        openapi_fingerprint: agentEndpointCatalogOpenApiFingerprint,
+        fingerprint_mismatch_with_wizard_schema: hasEndpointCatalogFingerprintMismatch,
         diagnostics: {
           status: agentEndpointCatalogDiagnostics.level,
           issue_count: agentEndpointCatalogDiagnostics.issueCount,
@@ -2451,6 +2484,8 @@ export function SpreadsheetApp() {
       hasAgentSchemaDiagnosticsInSync,
       hasAgentSchemaEndpointDrift,
       hasAgentSchemaEndpointMetadata,
+      agentEndpointCatalogOpenApiFingerprint,
+      hasEndpointCatalogFingerprintMismatch,
       agentSchemaEndpointCoverage,
       agentSchemaEndpointDiagnostics,
       agentSchemaEndpointsWithMethods,
@@ -4689,6 +4724,38 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_diagnostics metadata missing.
                   </p>
                 )}
+                {wizardEndpointCatalogOpenApiFingerprint ? (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    openapi fingerprint:{" "}
+                    <span className="font-mono text-slate-300">
+                      {wizardEndpointCatalogOpenApiFingerprint}
+                    </span>
+                    <button
+                      onClick={() => {
+                        void handleCopyEndpoint(
+                          wizardEndpointCatalogOpenApiFingerprint,
+                          "wizard openapi fingerprint",
+                        );
+                      }}
+                      className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                    >
+                      copy
+                    </button>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-amber-300">
+                    schema endpoint_catalog_openapi_fingerprint metadata missing.
+                  </p>
+                )}
+                {hasEndpointCatalogFingerprintMismatch ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    openapi fingerprint mismatch between wizard and agent schemas.
+                  </p>
+                ) : wizardEndpointCatalogOpenApiFingerprint ? (
+                  <p className="mt-1 text-[11px] text-emerald-300">
+                    openapi fingerprint matches agent schema.
+                  </p>
+                ) : null}
                 {hasWizardSchemaDiagnosticsInSync ? (
                   <p className="mt-1 text-[11px] text-emerald-300">
                     schema/local diagnostics counters are in sync.
@@ -5961,6 +6028,38 @@ export function SpreadsheetApp() {
                     schema endpoint_catalog_diagnostics metadata missing.
                   </p>
                 )}
+                {agentEndpointCatalogOpenApiFingerprint ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    openapi fingerprint:{" "}
+                    <span className="font-mono text-slate-300">
+                      {agentEndpointCatalogOpenApiFingerprint}
+                    </span>
+                    <button
+                      onClick={() => {
+                        void handleCopyEndpoint(
+                          agentEndpointCatalogOpenApiFingerprint,
+                          "agent openapi fingerprint",
+                        );
+                      }}
+                      className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                    >
+                      copy
+                    </button>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-amber-300">
+                    schema endpoint_catalog_openapi_fingerprint metadata missing.
+                  </p>
+                )}
+                {hasEndpointCatalogFingerprintMismatch ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    openapi fingerprint mismatch between wizard and agent schemas.
+                  </p>
+                ) : agentEndpointCatalogOpenApiFingerprint ? (
+                  <p className="mt-1 text-xs text-emerald-300">
+                    openapi fingerprint matches wizard schema.
+                  </p>
+                ) : null}
                 {hasAgentSchemaDiagnosticsInSync ? (
                   <p className="mt-1 text-xs text-emerald-300">
                     schema/local diagnostics counters are in sync.
