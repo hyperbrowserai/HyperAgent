@@ -101,7 +101,17 @@ const TRACKING_PARAMS = [
 
 const MIN_FILTER_SCORE = 2;
 
-const HAS_PROTOCOL_PATTERN = /^[a-z][a-z0-9+\-.]*:/i;
+const HAS_SCHEME_WITH_SLASHES_PATTERN = /^[a-z][a-z0-9+\-.]*:\/\//i;
+const SPECIAL_SCHEME_PREFIXES = [
+  "about:",
+  "data:",
+  "blob:",
+  "file:",
+  "javascript:",
+  "mailto:",
+  "chrome:",
+  "devtools:",
+];
 
 function normalizeUrlForParsing(value: string): string {
   const trimmed = value.trim();
@@ -111,7 +121,12 @@ function normalizeUrlForParsing(value: string): string {
   if (trimmed.startsWith("//")) {
     return `https:${trimmed}`;
   }
-  if (HAS_PROTOCOL_PATTERN.test(trimmed)) {
+  if (
+    HAS_SCHEME_WITH_SLASHES_PATTERN.test(trimmed) ||
+    SPECIAL_SCHEME_PREFIXES.some((prefix) =>
+      trimmed.toLowerCase().startsWith(prefix)
+    )
+  ) {
     return trimmed;
   }
   if (trimmed.startsWith("/")) {

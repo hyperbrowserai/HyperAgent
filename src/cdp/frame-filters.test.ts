@@ -42,6 +42,14 @@ describe("isAdOrTrackingFrame", () => {
     ).toBe(true);
   });
 
+  it("filters known ad domains with host:port urls missing explicit protocol", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "securepubads.g.doubleclick.net:443/pagead/ads",
+      })
+    ).toBe(true);
+  });
+
   it("filters obvious pixel-style tracking frames", () => {
     expect(
       isAdOrTrackingFrame({
