@@ -8080,6 +8080,11 @@ mod tests {
             Some("/v1/workbooks/{id}/agent/ops"),
         );
         assert_eq!(
+            schema.get("endpoint"),
+            schema.get("agent_ops_endpoint"),
+            "agent schema endpoint alias should stay in sync with agent_ops_endpoint",
+        );
+        assert_eq!(
             schema
                 .get("agent_ops_request_shape")
                 .and_then(|value| value.get("expected_operations_signature"))
@@ -9280,6 +9285,11 @@ mod tests {
             agent_schema.get("request_shape"),
             agent_schema.get("agent_ops_request_shape"),
             "agent schema request_shape alias should stay in sync with agent_ops_request_shape",
+        );
+        assert_eq!(
+            agent_schema.get("endpoint"),
+            agent_schema.get("agent_ops_endpoint"),
+            "agent schema endpoint alias should stay in sync with agent_ops_endpoint",
         );
 
         let parity_keys = [
