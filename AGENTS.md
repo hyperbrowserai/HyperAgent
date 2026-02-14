@@ -25,7 +25,7 @@
 - `yarn test` launches Jest; set `CI=true` for coverage and deterministic snapshots.
 - `yarn cli -c "..." [--debug --hyperbrowser --mcp <path>]` runs the agent; `--hyperbrowser` switches to the remote provider and `--debug` drops artifacts into `debug/`.
 - `yarn example <path>` (backed by `ts-node -r tsconfig-paths/register`) is the quickest way to execute flows in `examples/` or `scripts/`.
-- DOM metadata builds at runtime via the a11y provider; the legacy `build-dom-tree-script` entry points at a removed file—avoid relying on it until refreshed.
+- DOM metadata builds at runtime via the a11y provider; use runtime capture flows and `yarn example` probes rather than any removed legacy DOM-builder entrypoint.
 
 ## Agent Runtime & Integrations
 - The agent loop (`agent/tools/agent.ts`) captures the accessibility tree via `captureDOMState` (text-first, optional streaming and snapshot cache). Visual overlays/screenshots are opt-in (`enableVisualMode`) and composited with CDP screenshots for `page.ai`.
