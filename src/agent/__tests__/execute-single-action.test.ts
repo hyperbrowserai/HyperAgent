@@ -467,6 +467,40 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     }
   });
 
+  it("sanitizes control characters in debug URL metadata", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: true,
+      cdpActions: false,
+    });
+    const page = {
+      url: () => "https://example.com/\u0000debug\npath",
+      screenshot: jest.fn().mockResolvedValue(Buffer.from("screenshot")),
+    } as unknown as Page;
+    performAction.mockRejectedValueOnce({ reason: "perform crashed" });
+    writePerformDebug.mockResolvedValue(undefined);
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(
+        agent.executeSingleAction("click login", page, {
+          maxElementRetries: 1,
+        })
+      ).rejects.toThrow('Failed to execute action: {"reason":"perform crashed"}');
+
+      expect(writePerformDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "https://example.com/ debug path",
+        }),
+        "debug/perform"
+      );
+    } finally {
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("continues debug-data writes when screenshot accessor traps throw", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),

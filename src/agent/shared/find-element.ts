@@ -78,7 +78,18 @@ function normalizeRetryDelayMs(value: unknown): number {
 
 function safeGetPageUrl(page: Page): string {
   try {
-    return page.url();
+    const url = page.url();
+    if (typeof url !== "string") {
+      return "about:blank";
+    }
+    const normalized = Array.from(url, (char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    })
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+    return normalized.length > 0 ? normalized : "about:blank";
   } catch {
     return "about:blank";
   }

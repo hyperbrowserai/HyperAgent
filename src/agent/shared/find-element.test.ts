@@ -157,6 +157,29 @@ describe("findElementWithInstruction", () => {
     );
   });
 
+  it("sanitizes control characters in page URL passed to examineDom", async () => {
+    const page = {
+      url: () => "https://example.com/\u0000path\nsegment",
+    } as unknown as import("playwright-core").Page;
+    examineDom.mockResolvedValue({
+      elements: [],
+      llmResponse: { rawText: "{}", parsed: null },
+    });
+
+    await findElementWithInstruction("click login", page, createMockLLM(), {
+      maxRetries: 1,
+      retryDelayMs: 0,
+    });
+
+    expect(examineDom).toHaveBeenCalledWith(
+      "click login",
+      expect.objectContaining({
+        url: "https://example.com/ path segment",
+      }),
+      expect.any(Object)
+    );
+  });
+
   it("truncates oversized debug retry diagnostics", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     const page = {

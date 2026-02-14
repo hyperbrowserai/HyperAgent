@@ -136,7 +136,13 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (typeof url !== "string") {
         return "about:blank";
       }
-      const normalized = url.replace(/\s+/g, " ").trim();
+      const normalized = Array.from(url, (char) => {
+        const code = char.charCodeAt(0);
+        return (code >= 0 && code < 32) || code === 127 ? " " : char;
+      })
+        .join("")
+        .replace(/\s+/g, " ")
+        .trim();
       return normalized.length > 0 ? normalized : "about:blank";
     } catch {
       return "about:blank";
