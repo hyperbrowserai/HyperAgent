@@ -171,6 +171,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "ISPMT",
   "CUMIPMT",
   "CUMPRINC",
+  "XNPV",
   "SIN",
   "COS",
   "TAN",

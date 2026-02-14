@@ -768,6 +768,14 @@ pub fn parse_cumprinc_formula(
   ))
 }
 
+pub fn parse_xnpv_formula(formula: &str) -> Option<(String, String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "XNPV" || args.len() != 3 {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args[2].clone()))
+}
+
 pub fn parse_fact_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "FACT" && args.len() == 1 {
@@ -2261,6 +2269,7 @@ mod tests {
     parse_rri_formula, parse_pduration_formula,
     parse_fvschedule_formula, parse_ispmt_formula,
     parse_cumipmt_formula, parse_cumprinc_formula,
+    parse_xnpv_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_permut_formula, parse_permutationa_formula, parse_multinomial_formula,
@@ -2647,6 +2656,10 @@ mod tests {
     assert_eq!(cumprinc_args.3, "D1");
     assert_eq!(cumprinc_args.4, "E1");
     assert_eq!(cumprinc_args.5, "F1");
+    let xnpv_args = parse_xnpv_formula("=XNPV(A1,B1:B2,C1:C2)").expect("xnpv should parse");
+    assert_eq!(xnpv_args.0, "A1");
+    assert_eq!(xnpv_args.1, "B1:B2");
+    assert_eq!(xnpv_args.2, "C1:C2");
     assert_eq!(parse_fact_formula("=FACT(A1)").as_deref(), Some("A1"));
     assert_eq!(
       parse_factdouble_formula("=FACTDOUBLE(A1)").as_deref(),

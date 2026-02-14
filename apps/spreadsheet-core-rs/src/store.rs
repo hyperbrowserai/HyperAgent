@@ -38,6 +38,7 @@ use crate::{
     parse_rri_formula, parse_pduration_formula,
     parse_fvschedule_formula, parse_ispmt_formula,
     parse_cumipmt_formula, parse_cumprinc_formula,
+    parse_xnpv_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -2061,6 +2062,31 @@ fn evaluate_formula(
       None => return Ok(None),
     };
     return Ok(Some(principal_total.to_string()));
+  }
+
+  if let Some((rate_arg, values_arg, dates_arg)) = parse_xnpv_formula(formula) {
+    let rate = parse_required_float(connection, sheet, &rate_arg)?;
+    if rate <= -1.0 {
+      return Ok(None);
+    }
+    let values = resolve_numeric_values_for_operand(connection, sheet, &values_arg)?;
+    let dates = match resolve_date_values_for_operand(connection, sheet, &dates_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    if values.is_empty() || dates.is_empty() || values.len() != dates.len() {
+      return Ok(None);
+    }
+    let origin = dates[0];
+    let mut xnpv = 0.0f64;
+    for (value, date_value) in values.iter().zip(dates.iter()) {
+      let day_diff = (*date_value - origin).num_days() as f64;
+      xnpv += value / (1.0 + rate).powf(day_diff / 365.0);
+    }
+    if !xnpv.is_finite() {
+      return Ok(None);
+    }
+    return Ok(Some(xnpv.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -4195,6 +4221,39 @@ fn resolve_numeric_values_for_operand(
     .parse::<f64>()
     .map(|parsed| vec![parsed])
     .unwrap_or_default())
+}
+
+fn resolve_date_values_for_operand(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<Option<Vec<NaiveDate>>, ApiError> {
+  if let Some((start, end)) = parse_operand_range_bounds(operand) {
+    let bounds = normalized_range_bounds(start, end);
+    let mut values = Vec::new();
+    for row_offset in 0..bounds.height {
+      for col_offset in 0..bounds.width {
+        let raw_value = load_cell_scalar(
+          connection,
+          sheet,
+          bounds.start_row + row_offset,
+          bounds.start_col + col_offset,
+        )?;
+        let trimmed = raw_value.trim();
+        if trimmed.is_empty() {
+          continue;
+        }
+        let Some(parsed) = parse_date_text(trimmed) else {
+          return Ok(None);
+        };
+        values.push(parsed);
+      }
+    }
+    return Ok(Some(values));
+  }
+
+  let parsed = parse_date_operand(connection, sheet, operand)?;
+  Ok(parsed.map(|date_value| vec![date_value]))
 }
 
 fn calculate_rate(
@@ -7438,12 +7497,42 @@ mod tests {
         value: None,
         formula: Some("=CUMPRINC(0.1,2,100,1,2,0)".to_string()),
       },
+      CellMutation {
+        row: 21,
+        col: 1,
+        value: Some(json!("2023-01-01")),
+        formula: None,
+      },
+      CellMutation {
+        row: 21,
+        col: 2,
+        value: Some(json!("2024-01-01")),
+        formula: None,
+      },
+      CellMutation {
+        row: 22,
+        col: 1,
+        value: Some(json!(-1000)),
+        formula: None,
+      },
+      CellMutation {
+        row: 22,
+        col: 2,
+        value: Some(json!(1100)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 270,
+        value: None,
+        formula: Some("=XNPV(0.1,A22:B22,A21:B21)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 267);
+    assert_eq!(updated_cells, 268);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -7455,9 +7544,9 @@ mod tests {
       "Sheet1",
       &CellRange {
         start_row: 1,
-        end_row: 20,
+        end_row: 22,
         start_col: 1,
-        end_col: 269,
+        end_col: 270,
       },
     )
     .expect("cells should be fetched");
@@ -8610,6 +8699,16 @@ mod tests {
       (cumprinc_value + 100.0).abs() < 1e-9,
       "cumprinc should sum principal payments across periods, got {cumprinc_value}",
     );
+    let xnpv_value = by_position(1, 270)
+      .evaluated_value
+      .as_deref()
+      .expect("xnpv should evaluate")
+      .parse::<f64>()
+      .expect("xnpv should be numeric");
+    assert!(
+      xnpv_value.abs() < 1e-9,
+      "xnpv should discount irregular cashflows by exact day difference, got {xnpv_value}",
+    );
   }
 
   #[test]
@@ -9104,6 +9203,48 @@ mod tests {
         "=CUMPRINC(0.1,2,100,1,2,2)".to_string(),
       ],
     );
+  }
+
+  #[test]
+  fn should_leave_invalid_xnpv_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(-1000)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: Some(json!(1100)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!("2023-01-01")),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: Some(json!("2024-01-01")),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=XNPV(0.1,A1:B1,A2:A2)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=XNPV(0.1,A1:B1,A2:A2)".to_string()]);
   }
 
   #[test]
