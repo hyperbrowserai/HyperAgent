@@ -1442,6 +1442,22 @@ pub fn parse_oct2bin_formula(formula: &str) -> Option<(String, Option<String>)> 
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_delta_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "DELTA" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
+pub fn parse_gestep_formula(formula: &str) -> Option<(String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "GESTEP" || !(args.len() == 1 || args.len() == 2) {
+    return None;
+  }
+  Some((args[0].clone(), args.get(1).cloned()))
+}
+
 pub fn parse_char_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "CHAR" && args.len() == 1 {
@@ -2416,7 +2432,8 @@ mod tests {
     parse_dec2hex_formula, parse_hex2dec_formula,
     parse_dec2oct_formula, parse_oct2dec_formula,
     parse_bin2hex_formula, parse_hex2bin_formula,
-    parse_bin2oct_formula, parse_oct2bin_formula, parse_char_formula,
+    parse_bin2oct_formula, parse_oct2bin_formula,
+    parse_delta_formula, parse_gestep_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_cell_address,
@@ -3031,6 +3048,12 @@ mod tests {
       parse_oct2bin_formula(r#"=OCT2BIN("377",8)"#).expect("oct2bin should parse");
     assert_eq!(oct2bin_args.0, r#""377""#);
     assert_eq!(oct2bin_args.1.as_deref(), Some("8"));
+    let delta_args = parse_delta_formula("=DELTA(A1,10)").expect("delta should parse");
+    assert_eq!(delta_args.0, "A1");
+    assert_eq!(delta_args.1.as_deref(), Some("10"));
+    let gestep_args = parse_gestep_formula("=GESTEP(A1,5)").expect("gestep should parse");
+    assert_eq!(gestep_args.0, "A1");
+    assert_eq!(gestep_args.1.as_deref(), Some("5"));
     assert_eq!(parse_char_formula("=CHAR(65)").as_deref(), Some("65"));
     assert_eq!(
       parse_code_formula(r#"=CODE("Apple")"#).as_deref(),

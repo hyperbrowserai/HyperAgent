@@ -78,6 +78,7 @@ use crate::{
     parse_dec2oct_formula, parse_oct2dec_formula,
     parse_bin2hex_formula, parse_hex2bin_formula,
     parse_bin2oct_formula, parse_oct2bin_formula, parse_char_formula,
+    parse_delta_formula, parse_gestep_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_even_formula, parse_odd_formula,
@@ -1858,6 +1859,24 @@ fn evaluate_formula(
       return Ok(Some(format!("{:0>width$}", converted, width = width)));
     }
     return Ok(Some(converted));
+  }
+
+  if let Some((number_arg, number_two_arg)) = parse_delta_formula(formula) {
+    let number = parse_required_float(connection, sheet, &number_arg)?;
+    let number_two = match number_two_arg {
+      Some(raw_number_two) => parse_required_float(connection, sheet, &raw_number_two)?,
+      None => 0.0,
+    };
+    return Ok(Some(((number == number_two) as u8).to_string()));
+  }
+
+  if let Some((number_arg, step_arg)) = parse_gestep_formula(formula) {
+    let number = parse_required_float(connection, sheet, &number_arg)?;
+    let step = match step_arg {
+      Some(raw_step) => parse_required_float(connection, sheet, &raw_step)?,
+      None => 0.0,
+    };
+    return Ok(Some(((number >= step) as u8).to_string()));
   }
 
   if let Some(char_arg) = parse_char_formula(formula) {
@@ -8118,12 +8137,24 @@ mod tests {
         value: None,
         formula: Some(r#"=OCT2BIN("377",8)"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 286,
+        value: None,
+        formula: Some("=DELTA(5,5)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 287,
+        value: None,
+        formula: Some("=GESTEP(5,4)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 283);
+    assert_eq!(updated_cells, 285);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -8137,7 +8168,7 @@ mod tests {
         start_row: 1,
         end_row: 22,
         start_col: 1,
-        end_col: 285,
+        end_col: 287,
       },
     )
     .expect("cells should be fetched");
@@ -9389,6 +9420,16 @@ mod tests {
       by_position(1, 285).evaluated_value.as_deref(),
       Some("11111111"),
       "oct2bin should convert octal text to binary",
+    );
+    assert_eq!(
+      by_position(1, 286).evaluated_value.as_deref(),
+      Some("1"),
+      "delta should return 1 when values are equal",
+    );
+    assert_eq!(
+      by_position(1, 287).evaluated_value.as_deref(),
+      Some("1"),
+      "gestep should return 1 when number is greater than or equal to step",
     );
   }
 

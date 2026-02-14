@@ -241,6 +241,8 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "HEX2BIN",
   "BIN2OCT",
   "OCT2BIN",
+  "DELTA",
+  "GESTEP",
   "CHAR",
   "CODE",
   "UNICHAR",
