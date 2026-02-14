@@ -1115,6 +1115,16 @@ pub fn parse_days_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_days360_formula(
+  formula: &str,
+) -> Option<(String, String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "DAYS360" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  Some((args[0].clone(), args[1].clone(), args.get(2).cloned()))
+}
+
 pub fn parse_datevalue_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "DATEVALUE" && args.len() == 1 {
@@ -1919,7 +1929,8 @@ mod tests {
     parse_averageif_formula, parse_averageifs_formula,
     parse_abs_formula, parse_concat_formula, parse_textjoin_formula,
     parse_date_formula, parse_edate_formula,
-    parse_eomonth_formula, parse_days_formula, parse_datevalue_formula,
+    parse_eomonth_formula, parse_days_formula, parse_days360_formula,
+    parse_datevalue_formula,
     parse_timevalue_formula, parse_time_formula, parse_datedif_formula,
     parse_networkdays_formula,
     parse_workday_formula, parse_networkdays_intl_formula, parse_workday_intl_formula,
@@ -2416,6 +2427,11 @@ mod tests {
     assert_eq!(eomonth_args, ("A1".to_string(), "-1".to_string()));
     let days_args = parse_days_formula("=DAYS(B1,A1)").expect("days should parse");
     assert_eq!(days_args, ("B1".to_string(), "A1".to_string()));
+    let days360_args =
+      parse_days360_formula("=DAYS360(A1,B1,TRUE)").expect("days360 should parse");
+    assert_eq!(days360_args.0, "A1");
+    assert_eq!(days360_args.1, "B1");
+    assert_eq!(days360_args.2.as_deref(), Some("TRUE"));
     assert_eq!(
       parse_datevalue_formula(r#"=DATEVALUE("2024-02-29")"#).as_deref(),
       Some(r#""2024-02-29""#),

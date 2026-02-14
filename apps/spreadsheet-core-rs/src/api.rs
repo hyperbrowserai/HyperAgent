@@ -228,6 +228,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "EDATE",
   "EOMONTH",
   "DAYS",
+  "DAYS360",
   "DATEVALUE",
   "TIMEVALUE",
   "DATEDIF",

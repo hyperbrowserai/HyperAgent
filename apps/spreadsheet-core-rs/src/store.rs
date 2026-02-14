@@ -21,7 +21,7 @@ use crate::{
     parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
-    parse_days_formula, parse_datevalue_formula, parse_timevalue_formula,
+    parse_days_formula, parse_days360_formula, parse_datevalue_formula, parse_timevalue_formula,
     parse_time_formula, parse_datedif_formula, parse_networkdays_formula,
     parse_workday_formula, parse_networkdays_intl_formula, parse_workday_intl_formula,
     parse_day_formula,
@@ -2407,6 +2407,23 @@ fn evaluate_formula(
     return Ok(Some(delta_days.to_string()));
   }
 
+  if let Some((start_date_arg, end_date_arg, method_arg)) = parse_days360_formula(formula) {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let end_date = parse_date_operand(connection, sheet, &end_date_arg)?;
+    let (Some(start_value), Some(end_value)) = (start_date, end_date) else {
+      return Ok(None);
+    };
+    let use_european_method = match method_arg {
+      Some(raw_method) => {
+        let method_value = resolve_scalar_operand(connection, sheet, &raw_method)?;
+        resolve_truthy_operand(&method_value)
+      }
+      None => false,
+    };
+    let days360 = days360_diff(start_value, end_value, use_european_method);
+    return Ok(Some(days360.to_string()));
+  }
+
   if let Some(date_value_arg) = parse_datevalue_formula(formula) {
     let parsed_date = parse_date_operand(connection, sheet, &date_value_arg)?;
     let Some(date_value) = parsed_date else {
@@ -3968,6 +3985,53 @@ fn date_with_clamped_day(year: i32, month: u32, day: u32) -> Option<NaiveDate> {
   let month_end = next_month_start - Duration::days(1);
   let clamped_day = day.min(month_end.day()).max(month_start.day());
   NaiveDate::from_ymd_opt(year, month, clamped_day)
+}
+
+fn days360_diff(start: NaiveDate, end: NaiveDate, use_european_method: bool) -> i64 {
+  let mut start_day = start.day() as i32;
+  let mut end_day = end.day() as i32;
+  let start_month = start.month() as i32;
+  let start_year = start.year();
+  let mut end_month = end.month() as i32;
+  let mut end_year = end.year();
+
+  if use_european_method {
+    if start_day == 31 {
+      start_day = 30;
+    }
+    if end_day == 31 {
+      end_day = 30;
+    }
+  } else {
+    if start_day == 31 || is_last_day_of_february(start) {
+      start_day = 30;
+    }
+    if end_day == 31 || is_last_day_of_february(end) {
+      if start_day < 30 {
+        end_day = 1;
+        if end_month == 12 {
+          end_month = 1;
+          end_year += 1;
+        } else {
+          end_month += 1;
+        }
+      } else {
+        end_day = 30;
+      }
+    }
+  }
+
+  i64::from((end_year - start_year) * 360 + (end_month - start_month) * 30 + (end_day - start_day))
+}
+
+fn is_last_day_of_february(date: NaiveDate) -> bool {
+  if date.month() != 2 {
+    return false;
+  }
+  let Some(next_day) = date.checked_add_signed(Duration::days(1)) else {
+    return false;
+  };
+  next_day.month() != 2
 }
 
 fn excel_serial_origin() -> Option<NaiveDate> {
@@ -6179,12 +6243,24 @@ mod tests {
         value: None,
         formula: Some("=CLEAN(A3)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 243,
+        value: None,
+        formula: Some(r#"=DAYS360("2024-02-29","2024-03-31")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 244,
+        value: None,
+        formula: Some(r#"=DAYS360("2024-02-29","2024-03-31",TRUE)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 240);
+    assert_eq!(updated_cells, 242);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6198,7 +6274,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 242,
+        end_col: 244,
       },
     )
     .expect("cells should be fetched");
@@ -7130,6 +7206,16 @@ mod tests {
       by_position(1, 242).evaluated_value.as_deref(),
       Some("ok"),
       "clean should remove non-printable characters",
+    );
+    assert_eq!(
+      by_position(1, 243).evaluated_value.as_deref(),
+      Some("30"),
+      "days360 should use US 30/360 method by default",
+    );
+    assert_eq!(
+      by_position(1, 244).evaluated_value.as_deref(),
+      Some("31"),
+      "days360 should support European method when method is TRUE",
     );
   }
 
@@ -8717,6 +8803,25 @@ mod tests {
         r#"=DATEDIF("2024-03-15","2024-01-31","D")"#.to_string(),
         r#"=DATEDIF("2024-01-31","2024-03-15","BAD")"#.to_string(),
       ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_days360_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some(r#"=DAYS360("bad","2024-03-31")"#.to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![r#"=DAYS360("bad","2024-03-31")"#.to_string()],
     );
   }
 
