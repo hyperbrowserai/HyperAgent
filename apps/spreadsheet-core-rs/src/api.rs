@@ -9479,4 +9479,66 @@ mod tests {
             "remove-stale summary should mention stale cache entries",
         );
     }
+
+    #[tokio::test]
+    async fn should_expose_openapi_paths_for_wizard_and_agent_discovery_endpoints() {
+        let spec = openapi().await.0;
+        let paths = spec
+            .get("paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi spec should include paths");
+        let expected_discovery_paths = [
+            "/v1/agent/wizard/schema",
+            "/v1/agent/wizard/presets",
+            "/v1/agent/wizard/presets/{preset}/operations",
+            "/v1/agent/wizard/scenarios",
+            "/v1/agent/wizard/scenarios/{scenario}/operations",
+            "/v1/workbooks/{id}/agent/schema",
+            "/v1/workbooks/{id}/agent/presets",
+            "/v1/workbooks/{id}/agent/presets/{preset}/operations",
+            "/v1/workbooks/{id}/agent/scenarios",
+            "/v1/workbooks/{id}/agent/scenarios/{scenario}/operations",
+            "/v1/workbooks/{id}/events",
+        ];
+
+        for path in expected_discovery_paths {
+            assert!(
+                paths.contains_key(path),
+                "openapi spec should advertise discovery path '{path}'",
+            );
+        }
+
+        let wizard_schema_summary = paths
+            .get("/v1/agent/wizard/schema")
+            .and_then(|value| value.get("get"))
+            .and_then(|value| value.get("summary"))
+            .and_then(serde_json::Value::as_str)
+            .expect("wizard schema path should expose get summary");
+        assert!(
+            wizard_schema_summary.contains("wizard orchestration"),
+            "wizard schema summary should mention orchestration",
+        );
+
+        let agent_schema_summary = paths
+            .get("/v1/workbooks/{id}/agent/schema")
+            .and_then(|value| value.get("get"))
+            .and_then(|value| value.get("summary"))
+            .and_then(serde_json::Value::as_str)
+            .expect("agent schema path should expose get summary");
+        assert!(
+            agent_schema_summary.contains("AI agent callers"),
+            "agent schema summary should mention AI agent callers",
+        );
+
+        let events_summary = paths
+            .get("/v1/workbooks/{id}/events")
+            .and_then(|value| value.get("get"))
+            .and_then(|value| value.get("summary"))
+            .and_then(serde_json::Value::as_str)
+            .expect("events path should expose get summary");
+        assert!(
+            events_summary.contains("SSE"),
+            "events summary should mention SSE",
+        );
+    }
 }
