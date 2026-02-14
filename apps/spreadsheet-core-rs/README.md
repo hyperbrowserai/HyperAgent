@@ -8,6 +8,19 @@ Embedded DuckDB backend for an Excel-like spreadsheet experience with:
 - Chart metadata endpoints
 - Real-time SSE event stream for UI synchronization
 
+## Compatibility matrix (v1)
+
+| Tier | Status | Coverage |
+| --- | --- | --- |
+| Tier A | Strong support | Workbook/sheet/cell CRUD, bulk cell APIs, formula recalculation for major arithmetic/statistical/logical/text/date/financial/engineering families, SSE change stream, XLSX import/export with compatibility telemetry. |
+| Tier B | Best effort | Formula normalization on import (`_xlfn.` / `_xlws.` / `_xlpm.`, implicit `@`, unary `+`), unsupported formula preservation with surfaced `unsupported_formulas`, chart metadata persistence, offset-range XLSX imports. |
+| Tier C | Not guaranteed | VBA/macros, pivot charts/tables, external workbook links, full-fidelity rendering for every Excel-specific edge feature. |
+
+Compatibility telemetry is available via:
+- import response fields (`formula_cells_imported`, `formula_cells_with_cached_values`, `formula_cells_without_cached_values`, `formula_cells_normalized`, `warnings`),
+- `workbook.imported` event payloads with mirrored import metrics + warnings,
+- export `x-export-meta` compatibility report (`preserved`, `transformed`, `unsupported`).
+
 ## Run
 
 ```bash
