@@ -21,7 +21,8 @@ use crate::{
     parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_edate_formula, parse_eomonth_formula,
-    parse_days_formula, parse_day_formula,
+    parse_days_formula, parse_datevalue_formula, parse_timevalue_formula,
+    parse_day_formula,
     parse_if_formula, parse_ifs_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_factdouble_formula,
@@ -2348,6 +2349,25 @@ fn evaluate_formula(
     return Ok(Some(delta_days.to_string()));
   }
 
+  if let Some(date_value_arg) = parse_datevalue_formula(formula) {
+    let parsed_date = parse_date_operand(connection, sheet, &date_value_arg)?;
+    let Some(date_value) = parsed_date else {
+      return Ok(None);
+    };
+    return Ok(Some(excel_serial_from_date(date_value).to_string()));
+  }
+
+  if let Some(time_value_arg) = parse_timevalue_formula(formula) {
+    let parsed_time = parse_time_operand(connection, sheet, &time_value_arg)?;
+    let Some(time_value) = parsed_time else {
+      return Ok(None);
+    };
+    let elapsed_seconds = f64::from(time_value.num_seconds_from_midnight())
+      + (f64::from(time_value.nanosecond()) / 1_000_000_000.0);
+    let fraction = elapsed_seconds / 86_400.0;
+    return Ok(Some(fraction.to_string()));
+  }
+
   if let Some(year_arg) = parse_year_formula(formula) {
     let date = parse_date_operand(connection, sheet, &year_arg)?;
     return Ok(Some(date.map(|value| value.year().to_string()).unwrap_or_default()));
@@ -3659,6 +3679,40 @@ fn shift_date_by_months(date: NaiveDate, months_delta: i32) -> Option<NaiveDate>
   NaiveDate::from_ymd_opt(month_start.year(), month_start.month(), clamped_day)
 }
 
+fn excel_serial_origin() -> Option<NaiveDate> {
+  NaiveDate::from_ymd_opt(1899, 12, 30)
+}
+
+fn excel_serial_from_date(date: NaiveDate) -> i64 {
+  let Some(origin) = excel_serial_origin() else {
+    return 0;
+  };
+  date.signed_duration_since(origin).num_days()
+}
+
+fn excel_serial_to_date(serial: f64) -> Option<NaiveDate> {
+  let Some(origin) = excel_serial_origin() else {
+    return None;
+  };
+  if !serial.is_finite() {
+    return None;
+  }
+  let whole_days = serial.trunc() as i64;
+  origin.checked_add_signed(Duration::days(whole_days))
+}
+
+fn excel_serial_to_time(serial: f64) -> Option<NaiveTime> {
+  if !serial.is_finite() {
+    return None;
+  }
+  let fraction = serial.rem_euclid(1.0);
+  let total_nanos = (fraction * 86_400_000_000_000.0).round() as i64;
+  let normalized_nanos = total_nanos.rem_euclid(86_400_000_000_000);
+  let seconds = normalized_nanos.div_euclid(1_000_000_000);
+  let nanos = normalized_nanos.rem_euclid(1_000_000_000);
+  NaiveTime::from_num_seconds_from_midnight_opt(seconds as u32, nanos as u32)
+}
+
 fn parse_date_operand(
   connection: &Connection,
   sheet: &str,
@@ -3670,9 +3724,23 @@ fn parse_date_operand(
     return Ok(None);
   }
 
+  if let Ok(serial_value) = trimmed.parse::<f64>() {
+    return Ok(excel_serial_to_date(serial_value));
+  }
+
   let iso_parsed = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d").ok();
   if iso_parsed.is_some() {
     return Ok(iso_parsed);
+  }
+
+  if let Ok(parsed) = DateTime::parse_from_rfc3339(trimmed) {
+    return Ok(Some(parsed.date_naive()));
+  }
+  if let Ok(parsed) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S") {
+    return Ok(Some(parsed.date()));
+  }
+  if let Ok(parsed) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S") {
+    return Ok(Some(parsed.date()));
   }
 
   Ok(NaiveDate::parse_from_str(trimmed, "%m/%d/%Y").ok())
@@ -3687,6 +3755,10 @@ fn parse_time_operand(
   let trimmed = resolved.trim();
   if trimmed.is_empty() {
     return Ok(None);
+  }
+
+  if let Ok(serial_value) = trimmed.parse::<f64>() {
+    return Ok(excel_serial_to_time(serial_value));
   }
 
   if let Ok(parsed) = DateTime::parse_from_rfc3339(trimmed) {
@@ -5512,12 +5584,24 @@ mod tests {
         value: None,
         formula: Some(r#"=SWITCH(E1,"north","N","south","S","other")"#.to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 218,
+        value: None,
+        formula: Some(r#"=DATEVALUE("2024-02-29")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 219,
+        value: None,
+        formula: Some(r#"=TIMEVALUE("13:45:30")"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 215);
+    assert_eq!(updated_cells, 217);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5531,7 +5615,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 217,
+        end_col: 219,
       },
     )
     .expect("cells should be fetched");
@@ -6328,6 +6412,21 @@ mod tests {
       by_position(1, 217).evaluated_value.as_deref(),
       Some("N"),
       "switch should return matching branch result",
+    );
+    assert_eq!(
+      by_position(1, 218).evaluated_value.as_deref(),
+      Some("45351"),
+      "datevalue should return Excel serial day number",
+    );
+    let timevalue = by_position(1, 219)
+      .evaluated_value
+      .as_deref()
+      .expect("timevalue should evaluate")
+      .parse::<f64>()
+      .expect("timevalue should be numeric");
+    assert!(
+      (timevalue - 0.573_263_888_888_888_9).abs() < 1e-12,
+      "timevalue should return day fraction, got {timevalue}",
     );
   }
 
@@ -7839,6 +7938,36 @@ mod tests {
     assert_eq!(
       unsupported_formulas,
       vec![r#"=SWITCH("west","north","N","south","S")"#.to_string()],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_datevalue_and_timevalue_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some(r#"=DATEVALUE("not-a-date")"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some(r#"=TIMEVALUE("bad-time")"#.to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        r#"=DATEVALUE("not-a-date")"#.to_string(),
+        r#"=TIMEVALUE("bad-time")"#.to_string(),
+      ],
     );
   }
 

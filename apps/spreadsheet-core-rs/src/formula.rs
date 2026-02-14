@@ -1091,6 +1091,22 @@ pub fn parse_days_formula(formula: &str) -> Option<(String, String)> {
   None
 }
 
+pub fn parse_datevalue_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "DATEVALUE" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
+pub fn parse_timevalue_formula(formula: &str) -> Option<String> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "TIMEVALUE" && args.len() == 1 {
+    return Some(args[0].clone());
+  }
+  None
+}
+
 pub fn parse_year_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "YEAR" && args.len() == 1 {
@@ -1804,7 +1820,8 @@ mod tests {
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
     parse_abs_formula, parse_concat_formula, parse_date_formula, parse_edate_formula,
-    parse_eomonth_formula, parse_days_formula, parse_day_formula,
+    parse_eomonth_formula, parse_days_formula, parse_datevalue_formula,
+    parse_timevalue_formula, parse_day_formula,
     parse_ceiling_formula, parse_ceiling_math_formula, parse_floor_formula,
     parse_floor_math_formula,
     parse_exact_formula,
@@ -1867,7 +1884,8 @@ mod tests {
     parse_randbetween_formula, parse_true_formula,
     parse_false_formula, parse_pi_formula, parse_vlookup_formula,
     parse_xlookup_formula, parse_countif_formula, parse_hlookup_formula,
-    parse_year_formula, parse_weekday_formula, parse_weeknum_formula,
+    parse_year_formula,
+    parse_weekday_formula, parse_weeknum_formula,
     parse_upper_formula, parse_trim_formula,
   };
 
@@ -2285,6 +2303,14 @@ mod tests {
     assert_eq!(eomonth_args, ("A1".to_string(), "-1".to_string()));
     let days_args = parse_days_formula("=DAYS(B1,A1)").expect("days should parse");
     assert_eq!(days_args, ("B1".to_string(), "A1".to_string()));
+    assert_eq!(
+      parse_datevalue_formula(r#"=DATEVALUE("2024-02-29")"#).as_deref(),
+      Some(r#""2024-02-29""#),
+    );
+    assert_eq!(
+      parse_timevalue_formula(r#"=TIMEVALUE("13:45:30")"#).as_deref(),
+      Some(r#""13:45:30""#),
+    );
 
     assert_eq!(
       parse_year_formula("=YEAR(A1)").as_deref(),
