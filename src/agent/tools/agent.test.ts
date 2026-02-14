@@ -977,6 +977,34 @@ describe("runAgentTask completion behavior", () => {
     }
   });
 
+  it("sanitizes control characters in active-page debug URL logging", async () => {
+    const page = createMockPage();
+    const nextPage = {
+      on: jest.fn(),
+      off: jest.fn(),
+      url: () => "https://example.com/\u0000bad\npath",
+    } as unknown as Page;
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.debug = true;
+    ctx.activePage = jest.fn().mockResolvedValueOnce(nextPage).mockResolvedValue(nextPage);
+
+    try {
+      const result = await runAgentTask(ctx, createTaskState(page));
+      expect(result.status).toBe(TaskStatus.COMPLETED);
+      expect(result.output).toBe("final answer");
+
+      const matchingLog = logSpy.mock.calls
+        .map((call) => String(call[0] ?? ""))
+        .find((entry) => entry.includes("Switching active page context"));
+      expect(matchingLog).toContain("https://example.com/ bad path");
+      expect(matchingLog).not.toContain("\u0000");
+      expect(matchingLog).not.toContain("\n");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
   it("throws readable errors for invalid task state input", async () => {
     await expect(
       runAgentTask(

@@ -145,7 +145,13 @@ function safeGetPageUrl(page: Page): string {
     if (typeof url !== "string") {
       return "about:blank";
     }
-    const normalized = url.replace(/\s+/g, " ").trim();
+    const normalized = Array.from(url, (char) => {
+      const code = char.charCodeAt(0);
+      return (code >= 0 && code < 32) || code === 127 ? " " : char;
+    })
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
     if (normalized.length === 0) {
       return "about:blank";
     }
