@@ -6536,6 +6536,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_reexecute_cached_failed_entry_with_structured_errors() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-failed".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-failed-reexecute-1".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::DuckdbQuery {
+                    sql: "DELETE FROM cells".to_string(),
+                    row_limit: Some(10),
+                }],
+            }),
+        )
+        .await
+        .expect("initial failed request should still be cached");
+
+        let reexecute = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-failed-reexecute-1".to_string(),
+                new_request_id: Some("reexecute-failed-1".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+            }),
+        )
+        .await
+        .expect("failed cached entry reexecute should succeed with error payload")
+        .0;
+
+        assert_eq!(reexecute.response.request_id.as_deref(), Some("reexecute-failed-1"));
+        assert_eq!(reexecute.response.results.len(), 1);
+        assert!(!reexecute.response.results[0].ok);
+        assert_eq!(
+            reexecute.response.results[0]
+                .data
+                .get("error_code")
+                .and_then(serde_json::Value::as_str),
+            Some("INVALID_QUERY_SQL"),
+        );
+        assert!(
+            reexecute.response.results[0]
+                .data
+                .get("error_message")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|message| message.contains("read-only")),
+            "reexecute should preserve structured error details for failed cached operations",
+        );
+    }
+
+    #[tokio::test]
     async fn should_reject_blank_new_request_id_when_reexecuting_cache_entry() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
