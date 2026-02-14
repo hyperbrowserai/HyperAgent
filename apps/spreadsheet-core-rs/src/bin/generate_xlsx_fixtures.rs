@@ -40,7 +40,8 @@ fn resolve_output_dir(args: &[String]) -> Result<PathBuf, Box<dyn Error>> {
 mod tests {
   use super::fixture_corpus;
   use super::resolve_output_dir;
-  use std::path::PathBuf;
+  use std::{collections::HashSet, fs, path::PathBuf};
+  use tempfile::tempdir;
 
   #[test]
   fn should_generate_fixture_workbooks_deterministically() {
@@ -97,5 +98,46 @@ mod tests {
         .contains("Supported args: --output-dir <path>"),
       "error should describe supported args",
     );
+  }
+
+  #[test]
+  fn should_write_expected_fixture_files_to_custom_output_dir() {
+    let output_dir = tempdir()
+      .expect("temp dir should create")
+      .path()
+      .join("generated-fixtures");
+    let written_files = fixture_corpus::write_fixture_corpus(&output_dir)
+      .expect("fixture corpus should write");
+    let written_set = written_files
+      .iter()
+      .copied()
+      .collect::<HashSet<_>>();
+
+    let expected_set = [
+      fixture_corpus::COMPAT_BASELINE_FILE_NAME,
+      fixture_corpus::COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
+      fixture_corpus::COMPAT_NORMALIZATION_FILE_NAME,
+      fixture_corpus::COMPAT_OFFSET_RANGE_FILE_NAME,
+      fixture_corpus::COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
+      fixture_corpus::COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
+      fixture_corpus::COMPAT_PREFIX_OPERATOR_FILE_NAME,
+    ]
+    .into_iter()
+    .collect::<HashSet<_>>();
+    assert_eq!(
+      written_set, expected_set,
+      "generator should emit the complete fixture corpus",
+    );
+
+    for file_name in expected_set {
+      let fixture_path = output_dir.join(file_name);
+      let metadata = fs::metadata(&fixture_path)
+        .unwrap_or_else(|error| panic!("fixture {} should exist: {error}", fixture_path.display()));
+      assert!(
+        metadata.len() > 0,
+        "fixture {} should be non-empty",
+        fixture_path.display(),
+      );
+    }
   }
 }
