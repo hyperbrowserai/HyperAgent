@@ -3515,6 +3515,75 @@ mod tests {
         methods
     }
 
+    fn assert_endpoint_openapi_operations_map_is_normalized(
+        endpoint_openapi_operations: &serde_json::Value,
+        schema_name: &str,
+    ) {
+        let entries = endpoint_openapi_operations
+            .as_object()
+            .expect("endpoint_openapi_operations should be an object");
+        assert!(
+            !entries.is_empty(),
+            "{schema_name} endpoint_openapi_operations should not be empty",
+        );
+        for (key, value) in entries {
+            let operation = value
+                .as_object()
+                .expect("endpoint_openapi_operations entries should be objects");
+            let path = operation
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .expect("endpoint_openapi_operations.path should be string");
+            assert!(
+                !path.trim().is_empty(),
+                "{schema_name} endpoint_openapi_operations '{key}' path should not be blank",
+            );
+            assert_eq!(
+                path,
+                path.trim(),
+                "{schema_name} endpoint_openapi_operations '{key}' path should be trimmed",
+            );
+            assert!(
+                path.starts_with('/'),
+                "{schema_name} endpoint_openapi_operations '{key}' path should start with '/'",
+            );
+            assert!(
+                !path.contains('?'),
+                "{schema_name} endpoint_openapi_operations '{key}' path should be normalized without query",
+            );
+
+            let methods = operation
+                .get("methods")
+                .map(parse_advertised_endpoint_methods)
+                .unwrap_or_default();
+            assert!(
+                !methods.is_empty(),
+                "{schema_name} endpoint_openapi_operations '{key}' methods should not be empty",
+            );
+            let mut sorted_methods = methods.clone();
+            sorted_methods.sort();
+            sorted_methods.dedup();
+            assert_eq!(
+                methods, sorted_methods,
+                "{schema_name} endpoint_openapi_operations '{key}' methods should be unique and sorted",
+            );
+
+            let summary = operation
+                .get("summary")
+                .and_then(serde_json::Value::as_str)
+                .expect("endpoint_openapi_operations.summary should be string");
+            assert!(
+                !summary.trim().is_empty(),
+                "{schema_name} endpoint_openapi_operations '{key}' summary should not be blank",
+            );
+            assert_eq!(
+                summary,
+                summary.trim(),
+                "{schema_name} endpoint_openapi_operations '{key}' summary should be trimmed",
+            );
+        }
+    }
+
     fn assert_endpoint_openapi_paths_match_schema_endpoints(
         schema: &serde_json::Value,
         schema_name: &str,
@@ -10954,6 +11023,14 @@ mod tests {
         );
         assert_endpoint_openapi_paths_match_schema_endpoints(&agent_schema, "agent schema");
         assert_endpoint_openapi_paths_match_schema_endpoints(&wizard_schema, "wizard schema");
+        assert_endpoint_openapi_operations_map_is_normalized(
+            agent_endpoint_openapi_operations,
+            "agent schema",
+        );
+        assert_endpoint_openapi_operations_map_is_normalized(
+            wizard_endpoint_openapi_operations,
+            "wizard schema",
+        );
         assert_endpoint_summaries_map_is_normalized(agent_endpoint_summaries, "agent schema");
         assert_endpoint_summaries_map_is_normalized(wizard_endpoint_summaries, "wizard schema");
 
