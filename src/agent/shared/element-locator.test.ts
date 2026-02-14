@@ -188,4 +188,44 @@ describe("getElementLocator", () => {
     expect(frame.locator).toHaveBeenCalledWith("xpath=//button[1]");
     expect(result.xpath).toBe("//button[1]");
   });
+
+  it("keeps debug logging resilient when frame metadata access traps throw", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const frame = {
+      waitForLoadState: jest.fn().mockResolvedValue(undefined),
+      locator: jest.fn((selector: string) => ({ selector })),
+      url: jest.fn(() => {
+        throw new Error("frame url trap");
+      }),
+      name: jest.fn(() => {
+        throw new Error("frame name trap");
+      }),
+    };
+    const page = createPage({
+      frames: jest.fn(() => [frame]),
+    });
+    toEncodedId.mockReturnValue("1-10");
+    resolveFrameByXPath.mockResolvedValue(frame);
+    const frameMap = new Map<number, unknown>([
+      [1, { xpath: "//iframe[1]" }],
+    ]) as unknown as Map<number, never>;
+
+    try {
+      const result = await getElementLocator(
+        "1-10",
+        { "1-10": "//button[1]" },
+        page,
+        frameMap,
+        true
+      );
+      expect(result.xpath).toBe("//button[1]");
+      expect(frame.locator).toHaveBeenCalledWith("xpath=//button[1]");
+    } finally {
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
 });

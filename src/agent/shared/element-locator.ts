@@ -57,6 +57,41 @@ function formatElementLocatorIdentifier(value: unknown, fallback: string): strin
   );
 }
 
+function safeReadFrameText(
+  frame: unknown,
+  methodName: "url" | "name",
+  fallback: string
+): string {
+  if (!frame || (typeof frame !== "object" && typeof frame !== "function")) {
+    return fallback;
+  }
+  try {
+    const method = (frame as Record<string, unknown>)[methodName];
+    if (typeof method !== "function") {
+      return fallback;
+    }
+    const value = (method as () => unknown)();
+    return formatElementLocatorIdentifier(value, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+function safeFrameMetadata(frame: unknown): { url: string; name: string } {
+  return {
+    url: safeReadFrameText(frame, "url", "about:blank (url unavailable)"),
+    name: safeReadFrameText(frame, "name", "(name unavailable)"),
+  };
+}
+
+function safeListFrameMetadata(page: Page): Array<{ url: string; name: string }> {
+  try {
+    return page.frames().map((frame) => safeFrameMetadata(frame));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Get a Playwright locator for an element by its encoded ID
  *
@@ -220,17 +255,16 @@ export async function getElementLocator(
       });
       console.error(
         `[getElementLocator] Available frames:`,
-        page
-          .frames()
-          .map((f) => ({ url: f.url(), name: f.name() }))
+        safeListFrameMetadata(page)
       );
     }
     throw new HyperagentError(errorMsg, 404);
   }
 
   if (debug) {
+    const frameInfo = safeFrameMetadata(targetFrame);
     console.log(
-      `[getElementLocator] Using Playwright Frame ${frameIndex}: ${targetFrame.url()}`
+      `[getElementLocator] Using Playwright Frame ${frameIndex}: ${frameInfo.url}`
     );
   }
 
@@ -247,11 +281,12 @@ export async function getElementLocator(
   }
 
   if (debug) {
+    const frameInfo = safeFrameMetadata(targetFrame);
     console.log(
       `[getElementLocator] Using frame ${frameIndex} locator for element ${normalizedElementId}`
     );
     console.log(
-      `[getElementLocator] Frame URL: ${targetFrame.url()}, Name: ${targetFrame.name()}`
+      `[getElementLocator] Frame URL: ${frameInfo.url}, Name: ${frameInfo.name}`
     );
   }
 
