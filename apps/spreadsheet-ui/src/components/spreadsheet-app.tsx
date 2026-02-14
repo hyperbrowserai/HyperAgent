@@ -1881,6 +1881,32 @@ export function SpreadsheetApp() {
     () => collectOpenApiStats(openApiSpecQuery.data),
     [openApiSpecQuery.data],
   );
+  const openApiSpecFingerprint = useMemo(
+    () => {
+      const fingerprint = openApiSpecQuery.data?.["x-endpoint-catalog-openapi-fingerprint"];
+      if (typeof fingerprint !== "string") {
+        return null;
+      }
+      const normalized = fingerprint.trim();
+      return normalized.length > 0 ? normalized : null;
+    },
+    [openApiSpecQuery.data],
+  );
+  const openApiSpecExtensionStats = useMemo(
+    () =>
+      normalizeSchemaEndpointCatalogOpenApiStats(
+        openApiSpecQuery.data?.["x-endpoint-catalog-openapi-stats"],
+      ),
+    [openApiSpecQuery.data],
+  );
+  const openApiSpecExtensionStatsDrift = useMemo(
+    () =>
+      buildEndpointCatalogOpenApiStatsDrift({
+        schemaStats: openApiSpecExtensionStats,
+        openApiStats,
+      }),
+    [openApiSpecExtensionStats, openApiStats],
+  );
   const wizardSchemaEndpointsWithMethods = useMemo(
     () =>
       wizardSchemaEndpoints.map((entry) => {
@@ -2087,6 +2113,21 @@ export function SpreadsheetApp() {
     && agentEndpointCatalogOpenApiFingerprint
     && wizardEndpointCatalogOpenApiFingerprint !== agentEndpointCatalogOpenApiFingerprint,
   );
+  const hasWizardFingerprintVsOpenApiMismatch = Boolean(
+    wizardEndpointCatalogOpenApiFingerprint
+    && openApiSpecFingerprint
+    && wizardEndpointCatalogOpenApiFingerprint !== openApiSpecFingerprint,
+  );
+  const hasAgentFingerprintVsOpenApiMismatch = Boolean(
+    agentEndpointCatalogOpenApiFingerprint
+    && openApiSpecFingerprint
+    && agentEndpointCatalogOpenApiFingerprint !== openApiSpecFingerprint,
+  );
+  const hasWizardEndpointCatalogDrift = Boolean(
+    hasWizardSchemaEndpointDrift
+    || hasWizardFingerprintVsOpenApiMismatch
+    || openApiSpecExtensionStatsDrift?.hasDrift,
+  );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntriesByMode(
@@ -2119,9 +2160,13 @@ export function SpreadsheetApp() {
         openapi_stats: wizardSchemaEndpointOpenApiStats,
         openapi_stats_drift: wizardOpenApiStatsDrift,
         schema_metadata_available: hasWizardSchemaEndpointMetadata,
-        schema_drift_detected: hasWizardSchemaEndpointDrift,
+        schema_drift_detected: hasWizardEndpointCatalogDrift,
         openapi_fingerprint: wizardEndpointCatalogOpenApiFingerprint,
         fingerprint_mismatch_with_agent_schema: hasEndpointCatalogFingerprintMismatch,
+        fingerprint_mismatch_with_openapi_spec: hasWizardFingerprintVsOpenApiMismatch,
+        openapi_spec_fingerprint: openApiSpecFingerprint,
+        openapi_spec_stats: openApiSpecExtensionStats,
+        openapi_spec_stats_drift: openApiSpecExtensionStatsDrift,
         diagnostics: {
           status: wizardEndpointCatalogDiagnostics.level,
           issue_count: wizardEndpointCatalogDiagnostics.issueCount,
@@ -2179,9 +2224,13 @@ export function SpreadsheetApp() {
       wizardEndpointDiagnosticsDrift,
       hasWizardSchemaCoverageInSync,
       hasWizardSchemaDiagnosticsInSync,
-      hasWizardSchemaEndpointDrift,
+      hasWizardEndpointCatalogDrift,
       hasWizardSchemaEndpointMetadata,
       hasEndpointCatalogFingerprintMismatch,
+      hasWizardFingerprintVsOpenApiMismatch,
+      openApiSpecExtensionStats,
+      openApiSpecExtensionStatsDrift,
+      openApiSpecFingerprint,
       wizardOpenApiStatsDrift,
       wizardEndpointCatalogOpenApiFingerprint,
       wizardSchemaEndpointCoverage,
@@ -2591,6 +2640,11 @@ export function SpreadsheetApp() {
     || agentEndpointDiagnosticsDrift?.hasDrift
     || agentOpenApiStatsDrift?.hasDrift,
   );
+  const hasAgentEndpointCatalogDrift = Boolean(
+    hasAgentSchemaEndpointDrift
+    || hasAgentFingerprintVsOpenApiMismatch
+    || openApiSpecExtensionStatsDrift?.hasDrift,
+  );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
       filterEndpointCatalogEntriesByMode(
@@ -2623,9 +2677,13 @@ export function SpreadsheetApp() {
         openapi_stats: agentSchemaEndpointOpenApiStats,
         openapi_stats_drift: agentOpenApiStatsDrift,
         schema_metadata_available: hasAgentSchemaEndpointMetadata,
-        schema_drift_detected: hasAgentSchemaEndpointDrift,
+        schema_drift_detected: hasAgentEndpointCatalogDrift,
         openapi_fingerprint: agentEndpointCatalogOpenApiFingerprint,
         fingerprint_mismatch_with_wizard_schema: hasEndpointCatalogFingerprintMismatch,
+        fingerprint_mismatch_with_openapi_spec: hasAgentFingerprintVsOpenApiMismatch,
+        openapi_spec_fingerprint: openApiSpecFingerprint,
+        openapi_spec_stats: openApiSpecExtensionStats,
+        openapi_spec_stats_drift: openApiSpecExtensionStatsDrift,
         diagnostics: {
           status: agentEndpointCatalogDiagnostics.level,
           issue_count: agentEndpointCatalogDiagnostics.issueCount,
@@ -2683,12 +2741,16 @@ export function SpreadsheetApp() {
       agentEndpointDiagnosticsDrift,
       hasAgentSchemaCoverageInSync,
       hasAgentSchemaDiagnosticsInSync,
-      hasAgentSchemaEndpointDrift,
+      hasAgentEndpointCatalogDrift,
       hasAgentSchemaEndpointMetadata,
       agentEndpointCatalogOpenApiFingerprint,
       agentOpenApiStatsDrift,
       agentSchemaEndpointOpenApiStats,
+      hasAgentFingerprintVsOpenApiMismatch,
       hasEndpointCatalogFingerprintMismatch,
+      openApiSpecExtensionStats,
+      openApiSpecExtensionStatsDrift,
+      openApiSpecFingerprint,
       agentSchemaEndpointCoverage,
       agentSchemaEndpointDiagnostics,
       agentSchemaEndpointsWithMethods,
@@ -4770,12 +4832,12 @@ export function SpreadsheetApp() {
                   {hasWizardSchemaEndpointMetadata ? (
                     <span
                       className={`ml-1 rounded border px-1.5 py-0.5 text-[10px] ${
-                        hasWizardSchemaEndpointDrift
+                        hasWizardEndpointCatalogDrift
                           ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
                           : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
                       }`}
                     >
-                      {hasWizardSchemaEndpointDrift ? "schema drift" : "schema in-sync"}
+                      {hasWizardEndpointCatalogDrift ? "schema drift" : "schema in-sync"}
                     </span>
                   ) : (
                     <span className="ml-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200">
@@ -5017,6 +5079,57 @@ export function SpreadsheetApp() {
                 ) : wizardEndpointCatalogOpenApiFingerprint ? (
                   <p className="mt-1 text-[11px] text-emerald-300">
                     openapi fingerprint matches agent schema.
+                  </p>
+                ) : null}
+                {hasWizardFingerprintVsOpenApiMismatch ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    openapi fingerprint mismatch between wizard schema and /v1/openapi extension metadata.
+                  </p>
+                ) : (
+                  wizardEndpointCatalogOpenApiFingerprint && openApiSpecFingerprint
+                    ? (
+                      <p className="mt-1 text-[11px] text-emerald-300">
+                        openapi fingerprint matches /v1/openapi extension metadata.
+                      </p>
+                    )
+                    : null
+                )}
+                {openApiSpecExtensionStats ? (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    openapi extension stats: paths{" "}
+                    <span className="font-mono text-slate-300">
+                      {openApiSpecExtensionStats.pathCount}
+                    </span>
+                    , operations{" "}
+                    <span className="font-mono text-slate-300">
+                      {openApiSpecExtensionStats.operationCount}
+                    </span>
+                    , summarized{" "}
+                    <span className="font-mono text-slate-300">
+                      {openApiSpecExtensionStats.summarizedOperationCount}
+                    </span>
+                  </p>
+                ) : null}
+                {openApiSpecExtensionStatsDrift?.hasDrift ? (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    /v1/openapi extension stats drift:{" "}
+                    <span className="font-mono">
+                      {[
+                        openApiSpecExtensionStatsDrift.pathCount ? "path_count" : null,
+                        openApiSpecExtensionStatsDrift.operationCount
+                          ? "operation_count"
+                          : null,
+                        openApiSpecExtensionStatsDrift.summarizedOperationCount
+                          ? "summarized_operation_count"
+                          : null,
+                      ]
+                        .filter((value): value is string => Boolean(value))
+                        .join(", ")}
+                    </span>
+                  </p>
+                ) : openApiSpecExtensionStats ? (
+                  <p className="mt-1 text-[11px] text-emerald-300">
+                    /v1/openapi extension stats are internally consistent.
                   </p>
                 ) : null}
                 {hasWizardSchemaDiagnosticsInSync ? (
@@ -6134,12 +6247,12 @@ export function SpreadsheetApp() {
                   {hasAgentSchemaEndpointMetadata ? (
                     <span
                       className={`ml-1 rounded border px-1.5 py-0.5 text-[10px] ${
-                        hasAgentSchemaEndpointDrift
+                        hasAgentEndpointCatalogDrift
                           ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
                           : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
                       }`}
                     >
-                      {hasAgentSchemaEndpointDrift ? "schema drift" : "schema in-sync"}
+                      {hasAgentEndpointCatalogDrift ? "schema drift" : "schema in-sync"}
                     </span>
                   ) : (
                     <span className="ml-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200">
@@ -6381,6 +6494,57 @@ export function SpreadsheetApp() {
                 ) : agentEndpointCatalogOpenApiFingerprint ? (
                   <p className="mt-1 text-xs text-emerald-300">
                     openapi fingerprint matches wizard schema.
+                  </p>
+                ) : null}
+                {hasAgentFingerprintVsOpenApiMismatch ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    openapi fingerprint mismatch between agent schema and /v1/openapi extension metadata.
+                  </p>
+                ) : (
+                  agentEndpointCatalogOpenApiFingerprint && openApiSpecFingerprint
+                    ? (
+                      <p className="mt-1 text-xs text-emerald-300">
+                        openapi fingerprint matches /v1/openapi extension metadata.
+                      </p>
+                    )
+                    : null
+                )}
+                {openApiSpecExtensionStats ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    openapi extension stats: paths{" "}
+                    <span className="font-mono text-slate-300">
+                      {openApiSpecExtensionStats.pathCount}
+                    </span>
+                    , operations{" "}
+                    <span className="font-mono text-slate-300">
+                      {openApiSpecExtensionStats.operationCount}
+                    </span>
+                    , summarized{" "}
+                    <span className="font-mono text-slate-300">
+                      {openApiSpecExtensionStats.summarizedOperationCount}
+                    </span>
+                  </p>
+                ) : null}
+                {openApiSpecExtensionStatsDrift?.hasDrift ? (
+                  <p className="mt-1 text-xs text-rose-300">
+                    /v1/openapi extension stats drift:{" "}
+                    <span className="font-mono">
+                      {[
+                        openApiSpecExtensionStatsDrift.pathCount ? "path_count" : null,
+                        openApiSpecExtensionStatsDrift.operationCount
+                          ? "operation_count"
+                          : null,
+                        openApiSpecExtensionStatsDrift.summarizedOperationCount
+                          ? "summarized_operation_count"
+                          : null,
+                      ]
+                        .filter((value): value is string => Boolean(value))
+                        .join(", ")}
+                    </span>
+                  </p>
+                ) : openApiSpecExtensionStats ? (
+                  <p className="mt-1 text-xs text-emerald-300">
+                    /v1/openapi extension stats are internally consistent.
                   </p>
                 ) : null}
                 {hasAgentSchemaDiagnosticsInSync ? (

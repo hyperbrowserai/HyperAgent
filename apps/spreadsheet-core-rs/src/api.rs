@@ -3446,7 +3446,7 @@ async fn workbook_events(
 }
 
 async fn openapi() -> Json<serde_json::Value> {
-    Json(json!({
+    let mut spec = json!({
       "openapi": "3.1.0",
       "info": {
         "title": "DuckDB Spreadsheet API",
@@ -3494,7 +3494,17 @@ async fn openapi() -> Json<serde_json::Value> {
         "/v1/workbooks/{id}/export": {"post": {"summary": "Export workbook as .xlsx"}},
         "/v1/workbooks/{id}/events": {"get": {"summary": "SSE change stream"}}
       }
-    }))
+    });
+    let fingerprint = endpoint_openapi_fingerprint(&spec);
+    let stats = endpoint_openapi_stats(&spec);
+    if let Some(spec_object) = spec.as_object_mut() {
+        spec_object.insert(
+            "x-endpoint-catalog-openapi-fingerprint".to_string(),
+            json!(fingerprint),
+        );
+        spec_object.insert("x-endpoint-catalog-openapi-stats".to_string(), stats);
+    }
+    Json(spec)
 }
 
 #[cfg(test)]
@@ -11477,6 +11487,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[tokio::test]
+    async fn should_expose_endpoint_catalog_openapi_metadata_in_openapi_spec() {
+        let spec = openapi().await.0;
+        let fingerprint = spec
+            .get("x-endpoint-catalog-openapi-fingerprint")
+            .and_then(serde_json::Value::as_str)
+            .expect("openapi spec should expose endpoint catalog fingerprint extension");
+        assert_eq!(
+            fingerprint.len(),
+            64,
+            "openapi endpoint catalog fingerprint extension should be 64-char sha256 hex",
+        );
+        assert!(
+            fingerprint.chars().all(|ch| ch.is_ascii_hexdigit()),
+            "openapi endpoint catalog fingerprint extension should be hex",
+        );
+        assert_eq!(
+            fingerprint,
+            endpoint_openapi_fingerprint(&spec),
+            "openapi endpoint catalog fingerprint extension should match recomputed fingerprint",
+        );
+
+        let stats = spec
+            .get("x-endpoint-catalog-openapi-stats")
+            .expect("openapi spec should expose endpoint catalog stats extension");
+        assert_eq!(
+            Some(stats),
+            Some(&endpoint_openapi_stats(&spec)),
+            "openapi endpoint catalog stats extension should match recomputed stats",
+        );
     }
 
     #[tokio::test]

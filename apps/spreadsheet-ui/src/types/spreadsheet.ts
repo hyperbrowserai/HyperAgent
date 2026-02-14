@@ -366,6 +366,12 @@ export interface DuckdbQueryResponse {
 
 export interface OpenApiSpec {
   paths?: Record<string, Record<string, { summary?: string }>>;
+  "x-endpoint-catalog-openapi-fingerprint"?: string;
+  "x-endpoint-catalog-openapi-stats"?: {
+    path_count?: number;
+    operation_count?: number;
+    summarized_operation_count?: number;
+  };
   [key: string]: unknown;
 }
 
