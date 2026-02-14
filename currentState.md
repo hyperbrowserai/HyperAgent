@@ -143,6 +143,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Added constructor regression coverage for trap-prone `llm` config getters, ensuring fallback failure paths stay deterministic and readable.
 - Hardened CDP frame-filter URL normalization to support protocol-relative and scheme-less frame URLs while avoiding path-only false positives in host-based ad-domain detection.
 - Hardened prompt base-message materialization with trap-safe array reads so malformed/trap-prone seed message arrays no longer crash message assembly and readable entries are preserved.
+- Hardened constructor custom-action ingestion with trap-safe array reads so unreadable custom-action entries are skipped while valid entries continue to register.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.

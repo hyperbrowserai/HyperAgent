@@ -365,6 +365,40 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
   }
 
+  private safeArrayLength(value: unknown): number {
+    if (!Array.isArray(value)) {
+      return 0;
+    }
+    try {
+      const length = value.length;
+      if (!Number.isFinite(length) || length < 0) {
+        return 0;
+      }
+      return Math.floor(length);
+    } catch {
+      return 0;
+    }
+  }
+
+  private safeArrayValues<T>(value: unknown): T[] {
+    const length = this.safeArrayLength(value);
+    if (length === 0 || !Array.isArray(value)) {
+      return [];
+    }
+    const values: T[] = [];
+    for (let index = 0; index < length; index += 1) {
+      try {
+        const item = value[index] as T | undefined;
+        if (typeof item !== "undefined") {
+          values.push(item);
+        }
+      } catch {
+        continue;
+      }
+    }
+    return values;
+  }
+
   private async startBrowserProvider(): Promise<Browser> {
     const startMethod = this.safeReadField(this.browserProvider, "start");
     if (typeof startMethod !== "function") {
@@ -1198,8 +1232,10 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
           )
     ) as T extends "Hyperbrowser" ? HyperbrowserProvider : LocalBrowserProvider;
 
-    const customActions = this.safeReadField(params, "customActions");
-    if (Array.isArray(customActions)) {
+    const customActions = this.safeArrayValues<AgentActionDefinition>(
+      this.safeReadField(params, "customActions")
+    );
+    if (customActions.length > 0) {
       customActions.forEach((action) => {
         this.registerAction(action);
       });

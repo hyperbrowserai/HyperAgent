@@ -134,6 +134,62 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("continues constructor when customActions length getter traps", () => {
+    const trappedCustomActions = new Proxy(
+      [
+        {
+          type: "trappedAction",
+          actionParams: z.object({}),
+          run: async () => ({ success: true, message: "noop" }),
+        },
+      ],
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "length") {
+            throw new Error("customActions length trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    );
+
+    expect(
+      () =>
+        new HyperAgent({
+          llm: createMockLLM(),
+          customActions: trappedCustomActions as unknown as AgentActionDefinition[],
+        })
+    ).not.toThrow();
+  });
+
+  it("registers readable custom actions when some customActions entries trap", () => {
+    const safeAction: AgentActionDefinition = {
+      type: "safeAction",
+      actionParams: z.object({}),
+      run: async () => ({ success: true, message: "ok" }),
+    };
+    const trappedCustomActions = new Proxy([{}, safeAction], {
+      get: (target, prop, receiver) => {
+        if (prop === "0") {
+          throw new Error("customActions item trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      customActions: trappedCustomActions as unknown as AgentActionDefinition[],
+    });
+    const internalAgent = agent as unknown as {
+      actions: Array<{ type?: string }>;
+    };
+
+    expect(
+      internalAgent.actions.some((action) => action.type === "safeAction")
+    ).toBe(true);
+  });
+
   it("throws synchronously for reserved custom action names", () => {
     const reservedAction: AgentActionDefinition = {
       type: "complete",
