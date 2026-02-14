@@ -31,6 +31,43 @@ export interface ResolvedCDPElement {
 const sessionCache = new WeakMap<CDPClient, Map<number, CDPSession>>();
 const domEnabledSessions = new WeakSet<CDPSession>();
 const runtimeEnabledSessions = new WeakSet<CDPSession>();
+const MAX_ELEMENT_RESOLVER_IDENTIFIER_CHARS = 128;
+
+function sanitizeElementResolverText(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncateElementResolverText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const omittedChars = value.length - maxChars;
+  return `${value.slice(0, maxChars)}... [truncated ${omittedChars} chars]`;
+}
+
+function formatElementResolverIdentifier(
+  value: unknown,
+  fallback: string = "unknown"
+): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = sanitizeElementResolverText(value);
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncateElementResolverText(
+    normalized,
+    MAX_ELEMENT_RESOLVER_IDENTIFIER_CHARS
+  );
+}
 
 export async function resolveElement(
   encodedId: EncodedId,
@@ -43,7 +80,9 @@ export async function resolveElement(
 
   if (frameIndex !== 0 && !frameInfo) {
     throw new Error(
-      `Frame metadata not found for frameIndex ${frameIndex} (encodedId ${encodedId})`
+      `Frame metadata not found for frameIndex ${frameIndex} (encodedId ${formatElementResolverIdentifier(
+        encodedId
+      )})`
     );
   }
 
@@ -157,7 +196,10 @@ async function resolveFrameSession(
     return { session: managedSession, frameId };
   }
   throw new Error(
-    `[CDP][ElementResolver] Session not registered for frameIndex=${frameIndex} (frameId=${frameId})`
+    `[CDP][ElementResolver] Session not registered for frameIndex=${frameIndex} (frameId=${formatElementResolverIdentifier(
+      frameId,
+      "unknown-frame"
+    )})`
   );
 }
 
@@ -219,7 +261,11 @@ async function recoverBackendNodeId(
 ): Promise<number> {
   const xpath = ctx.xpathMap[encodedId];
   if (!xpath) {
-    throw new Error(`XPath not found for encodedId ${encodedId}`);
+    throw new Error(
+      `XPath not found for encodedId ${formatElementResolverIdentifier(
+        encodedId
+      )}`
+    );
   }
 
   let executionContextId =
@@ -246,7 +292,10 @@ async function recoverBackendNodeId(
       );
     }
     console.warn(
-      `[CDP][ElementResolver] executionContextId missing for frame ${frameIndex} (${frameId}). ` +
+      `[CDP][ElementResolver] executionContextId missing for frame ${frameIndex} (${formatElementResolverIdentifier(
+        frameId,
+        "unknown-frame"
+      )}). ` +
         `XPath evaluation may fail or evaluate in wrong context. ` +
         `This can happen if execution context collection timed out. ` +
         `Consider increasing DEFAULT_CONTEXT_COLLECTION_TIMEOUT_MS in a11y-dom/index.ts`
@@ -268,7 +317,9 @@ async function recoverBackendNodeId(
   const objectId = evalResponse.result.objectId;
   if (!objectId) {
     throw new Error(
-      `Failed to recover node for ${encodedId} (frame ${frameIndex}) via XPath`
+      `Failed to recover node for ${formatElementResolverIdentifier(
+        encodedId
+      )} (frame ${frameIndex}) via XPath`
     );
   }
 
@@ -281,7 +332,9 @@ async function recoverBackendNodeId(
     const backendNodeId = description.node?.backendNodeId;
     if (typeof backendNodeId !== "number") {
       throw new Error(
-        `DOM.describeNode did not return backendNodeId for ${encodedId} (frame ${frameIndex})`
+        `DOM.describeNode did not return backendNodeId for ${formatElementResolverIdentifier(
+          encodedId
+        )} (frame ${frameIndex})`
       );
     }
 
