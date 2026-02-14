@@ -158,6 +158,7 @@ const FORMULA_SUPPORTED_FUNCTION_LIST: &[&str] = &[
   "IRR",
   "MIRR",
   "NPER",
+  "RATE",
   "SIN",
   "COS",
   "TAN",

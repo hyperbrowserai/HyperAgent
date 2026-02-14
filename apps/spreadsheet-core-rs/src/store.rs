@@ -31,7 +31,7 @@ use crate::{
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_effect_formula, parse_nominal_formula,
     parse_npv_formula, parse_pv_formula, parse_fv_formula, parse_pmt_formula,
-    parse_irr_formula, parse_mirr_formula, parse_nper_formula,
+    parse_irr_formula, parse_mirr_formula, parse_nper_formula, parse_rate_formula,
     parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
     parse_pi_formula,
@@ -1806,6 +1806,30 @@ fn evaluate_formula(
       return Ok(None);
     }
     return Ok(Some(periods.to_string()));
+  }
+
+  if let Some((nper_arg, pmt_arg, pv_arg, fv_arg, type_arg, guess_arg)) = parse_rate_formula(formula)
+  {
+    let periods = parse_required_float(connection, sheet, &nper_arg)?;
+    if periods <= 0.0 {
+      return Ok(None);
+    }
+    let payment = parse_required_float(connection, sheet, &pmt_arg)?;
+    let present_value = parse_required_float(connection, sheet, &pv_arg)?;
+    let future_value = match fv_arg {
+      Some(raw_fv) => parse_required_float(connection, sheet, &raw_fv)?,
+      None => 0.0,
+    };
+    let payment_type = match parse_payment_type(connection, sheet, type_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let guess = match guess_arg {
+      Some(raw_guess) => parse_required_float(connection, sheet, &raw_guess)?,
+      None => 0.1,
+    };
+    let rate = calculate_rate(periods, payment, present_value, future_value, payment_type, guess);
+    return Ok(rate.map(|value| value.to_string()));
   }
 
   if let Some((value_args, guess_arg)) = parse_irr_formula(formula) {
@@ -3940,6 +3964,190 @@ fn resolve_numeric_values_for_operand(
     .parse::<f64>()
     .map(|parsed| vec![parsed])
     .unwrap_or_default())
+}
+
+fn calculate_rate(
+  periods: f64,
+  payment: f64,
+  present_value: f64,
+  future_value: f64,
+  payment_type: f64,
+  guess: f64,
+) -> Option<f64> {
+  if periods <= 0.0 {
+    return None;
+  }
+  let mut rate = if guess.is_finite() { guess } else { 0.1 };
+  rate = rate.max(-0.999_999_999);
+  let tolerance = 1e-10;
+
+  for _ in 0..100 {
+    let npv = rate_npv(
+      periods,
+      payment,
+      present_value,
+      future_value,
+      payment_type,
+      rate,
+    )?;
+    if npv.abs() < tolerance {
+      return Some(rate);
+    }
+    let step = (rate.abs() * 1e-6).max(1e-6);
+    let lower = (rate - step).max(-0.999_999_999);
+    let upper = rate + step;
+    let lower_npv = rate_npv(
+      periods,
+      payment,
+      present_value,
+      future_value,
+      payment_type,
+      lower,
+    )?;
+    let upper_npv = rate_npv(
+      periods,
+      payment,
+      present_value,
+      future_value,
+      payment_type,
+      upper,
+    )?;
+    let derivative = (upper_npv - lower_npv) / (upper - lower);
+    if derivative.abs() < tolerance {
+      break;
+    }
+    let next_rate = rate - (npv / derivative);
+    if !next_rate.is_finite() || next_rate <= -0.999_999_999 {
+      break;
+    }
+    if (next_rate - rate).abs() < tolerance {
+      return Some(next_rate);
+    }
+    rate = next_rate;
+  }
+
+  let bracket_candidates = [-0.9, -0.5, -0.1, 0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0];
+  for index in 0..(bracket_candidates.len() - 1) {
+    let low = bracket_candidates[index];
+    let high = bracket_candidates[index + 1];
+    let low_npv = rate_npv(
+      periods,
+      payment,
+      present_value,
+      future_value,
+      payment_type,
+      low,
+    )?;
+    let high_npv = rate_npv(
+      periods,
+      payment,
+      present_value,
+      future_value,
+      payment_type,
+      high,
+    )?;
+    if low_npv.abs() < tolerance {
+      return Some(low);
+    }
+    if high_npv.abs() < tolerance {
+      return Some(high);
+    }
+    if low_npv.signum() == high_npv.signum() {
+      continue;
+    }
+    return bisection_rate(
+      periods,
+      payment,
+      present_value,
+      future_value,
+      payment_type,
+      low,
+      high,
+    );
+  }
+
+  None
+}
+
+fn rate_npv(
+  periods: f64,
+  payment: f64,
+  present_value: f64,
+  future_value: f64,
+  payment_type: f64,
+  rate: f64,
+) -> Option<f64> {
+  if !rate.is_finite() || rate <= -1.0 {
+    return None;
+  }
+  if rate.abs() < f64::EPSILON {
+    return Some(present_value + (payment * periods) + future_value);
+  }
+  let growth = (1.0 + rate).powf(periods);
+  if !growth.is_finite() {
+    return None;
+  }
+  Some(
+    (present_value * growth)
+      + (payment * (1.0 + (rate * payment_type)) * ((growth - 1.0) / rate))
+      + future_value,
+  )
+}
+
+fn bisection_rate(
+  periods: f64,
+  payment: f64,
+  present_value: f64,
+  future_value: f64,
+  payment_type: f64,
+  mut low: f64,
+  mut high: f64,
+) -> Option<f64> {
+  let mut low_npv = rate_npv(
+    periods,
+    payment,
+    present_value,
+    future_value,
+    payment_type,
+    low,
+  )?;
+  let mut high_npv = rate_npv(
+    periods,
+    payment,
+    present_value,
+    future_value,
+    payment_type,
+    high,
+  )?;
+  if low_npv.signum() == high_npv.signum() {
+    return None;
+  }
+  for _ in 0..100 {
+    let mid = (low + high) / 2.0;
+    let mid_npv = rate_npv(
+      periods,
+      payment,
+      present_value,
+      future_value,
+      payment_type,
+      mid,
+    )?;
+    if mid_npv.abs() < 1e-10 || (high - low).abs() < 1e-10 {
+      return Some(mid);
+    }
+    if low_npv.signum() == mid_npv.signum() {
+      low = mid;
+      low_npv = mid_npv;
+    } else {
+      high = mid;
+      high_npv = mid_npv;
+    }
+  }
+  if low_npv.abs() <= high_npv.abs() {
+    Some(low)
+  } else {
+    Some(high)
+  }
 }
 
 fn calculate_irr(cash_flows: &[f64], guess: f64) -> Option<f64> {
@@ -6784,12 +6992,18 @@ mod tests {
         value: None,
         formula: Some("=NPER(0,-100,1000)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 257,
+        value: None,
+        formula: Some("=RATE(1,0,-100,110)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 254);
+    assert_eq!(updated_cells, 255);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -6803,7 +7017,7 @@ mod tests {
         start_row: 1,
         end_row: 20,
         start_col: 1,
-        end_col: 256,
+        end_col: 257,
       },
     )
     .expect("cells should be fetched");
@@ -7846,6 +8060,16 @@ mod tests {
       Some("10"),
       "nper should compute number of payment periods",
     );
+    let rate_value = by_position(1, 257)
+      .evaluated_value
+      .as_deref()
+      .expect("rate should evaluate")
+      .parse::<f64>()
+      .expect("rate should be numeric");
+    assert!(
+      (rate_value - 0.1).abs() < 1e-9,
+      "rate should solve interest rate from payment terms, got {rate_value}",
+    );
   }
 
   #[test]
@@ -8153,6 +8377,22 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=NPER(0,0,1000)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_rate_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![CellMutation {
+      row: 1,
+      col: 1,
+      value: None,
+      formula: Some("=RATE(0,0,1000)".to_string()),
+    }];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(unsupported_formulas, vec!["=RATE(0,0,1000)".to_string()]);
   }
 
   #[test]
