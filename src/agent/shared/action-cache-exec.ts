@@ -9,6 +9,7 @@ import { formatUnknownError } from "@/utils";
 
 const DEFAULT_MAX_STEPS = 3;
 const MAX_PERFORM_MAX_STEPS = 20;
+const MAX_PERFORM_FRAME_INDEX = 1_000;
 const MAX_PERFORM_VALUE_CHARS = 20_000;
 const MAX_PERFORM_HELPER_DIAGNOSTIC_CHARS = 400;
 
@@ -192,7 +193,7 @@ function normalizeFrameIndex(value: unknown): number | null {
   if (value < 0) {
     return null;
   }
-  return Math.floor(value);
+  return Math.min(Math.floor(value), MAX_PERFORM_FRAME_INDEX);
 }
 
 function runCachedAction(

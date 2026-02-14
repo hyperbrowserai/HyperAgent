@@ -246,6 +246,31 @@ describe("action-cache perform helper dispatch", () => {
     );
   });
 
+  it("caps oversized frameIndex passed to attached perform helpers", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+
+    await page.performClick("//button[1]", {
+      frameIndex: 50_000,
+      maxSteps: 2,
+    });
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cachedAction: expect.objectContaining({
+          frameIndex: 1_000,
+        }),
+      })
+    );
+  });
+
   it("sanitizes control characters in perform options and text arguments", async () => {
     const agentDeps: AgentDeps = {
       llm: createMockLLM(),
