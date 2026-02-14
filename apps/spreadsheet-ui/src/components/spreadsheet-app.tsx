@@ -65,6 +65,7 @@ const ChartPreview = dynamic(
 );
 
 const CACHE_ENTRIES_PREVIEW_LIMIT = 6;
+const CACHE_PREVIEW_MAX_SAMPLE_LIMIT = 100;
 const CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT = "12";
 const CACHE_PREFIX_SUGGESTIONS_DEFAULT_SORT: "count" | "recent" | "alpha" | "span" =
   "count";
@@ -477,12 +478,18 @@ export function SpreadsheetApp() {
   const hasInvalidCacheRemovePreviewSampleLimitInput =
     cacheRemovePreviewSampleLimit.trim().length > 0
     && typeof normalizedCacheRemovePreviewSampleLimit !== "number";
+  const isCacheRemovePreviewSampleLimitCapped =
+    typeof normalizedCacheRemovePreviewSampleLimit === "number"
+    && normalizedCacheRemovePreviewSampleLimit > CACHE_PREVIEW_MAX_SAMPLE_LIMIT;
   const normalizedCacheStalePreviewSampleLimit = parsePositiveIntegerInput(
     cacheStalePreviewSampleLimit,
   );
   const hasInvalidCacheStalePreviewSampleLimitInput =
     cacheStalePreviewSampleLimit.trim().length > 0
     && typeof normalizedCacheStalePreviewSampleLimit !== "number";
+  const isCacheStalePreviewSampleLimitCapped =
+    typeof normalizedCacheStalePreviewSampleLimit === "number"
+    && normalizedCacheStalePreviewSampleLimit > CACHE_PREVIEW_MAX_SAMPLE_LIMIT;
   const normalizedCacheStaleMaxAgeSeconds = parsePositiveIntegerInput(
     cacheStaleMaxAgeSeconds,
   );
@@ -2222,7 +2229,7 @@ export function SpreadsheetApp() {
     }
     const normalizedSampleLimit =
       typeof normalizedCacheRemovePreviewSampleLimit === "number"
-        ? Math.min(normalizedCacheRemovePreviewSampleLimit, 100)
+        ? Math.min(normalizedCacheRemovePreviewSampleLimit, CACHE_PREVIEW_MAX_SAMPLE_LIMIT)
         : undefined;
     setIsPreviewingCacheByPrefix(true);
     try {
@@ -2291,7 +2298,7 @@ export function SpreadsheetApp() {
     const normalizedPrefix = cacheRequestIdPrefix.trim() || undefined;
     const normalizedSampleLimit =
       typeof normalizedCacheStalePreviewSampleLimit === "number"
-        ? Math.min(normalizedCacheStalePreviewSampleLimit, 100)
+        ? Math.min(normalizedCacheStalePreviewSampleLimit, CACHE_PREVIEW_MAX_SAMPLE_LIMIT)
         : undefined;
     setIsPreviewingStaleCache(true);
     try {
@@ -2351,7 +2358,7 @@ export function SpreadsheetApp() {
     const normalizedPrefix = cacheRequestIdPrefix.trim() || undefined;
     const normalizedSampleLimit =
       typeof normalizedCacheStalePreviewSampleLimit === "number"
-        ? Math.min(normalizedCacheStalePreviewSampleLimit, 100)
+        ? Math.min(normalizedCacheStalePreviewSampleLimit, CACHE_PREVIEW_MAX_SAMPLE_LIMIT)
         : undefined;
     setIsRemovingStaleCache(true);
     try {
@@ -4055,6 +4062,12 @@ export function SpreadsheetApp() {
                       prefix preview sample limit must be a positive integer.
                     </p>
                   ) : null}
+                  {isCacheRemovePreviewSampleLimitCapped ? (
+                    <p className="mb-2 text-[10px] text-amber-300">
+                      prefix preview sample limit will be capped to{" "}
+                      {CACHE_PREVIEW_MAX_SAMPLE_LIMIT}.
+                    </p>
+                  ) : null}
                   {hasInvalidCacheStaleMaxAgeInput ? (
                     <p className="mb-2 text-[10px] text-rose-300">
                       stale age filter must be a positive integer (seconds).
@@ -4063,6 +4076,11 @@ export function SpreadsheetApp() {
                   {hasInvalidCacheStalePreviewSampleLimitInput ? (
                     <p className="mb-2 text-[10px] text-rose-300">
                       stale sample limit must be a positive integer.
+                    </p>
+                  ) : null}
+                  {isCacheStalePreviewSampleLimitCapped ? (
+                    <p className="mb-2 text-[10px] text-amber-300">
+                      stale sample limit will be capped to {CACHE_PREVIEW_MAX_SAMPLE_LIMIT}.
                     </p>
                   ) : null}
                   {cachePrefixRemovalPreview ? (
