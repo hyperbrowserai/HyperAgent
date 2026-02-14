@@ -13,6 +13,8 @@ pub const COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME: &str =
 pub const COMPAT_PREFIX_OPERATOR_FILE_NAME: &str =
   "compat_prefix_operator.xlsx";
 pub const COMPAT_FORMULA_MATRIX_FILE_NAME: &str = "compat_formula_matrix.xlsx";
+pub const COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME: &str =
+  "compat_default_cached_formula.xlsx";
 
 pub fn generate_fixture_corpus(
 ) -> Result<Vec<(&'static str, Vec<u8>)>, XlsxError> {
@@ -48,6 +50,10 @@ pub fn generate_fixture_corpus(
     (
       COMPAT_FORMULA_MATRIX_FILE_NAME,
       build_compat_formula_matrix_fixture_bytes()?,
+    ),
+    (
+      COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
+      build_compat_default_cached_formula_fixture_bytes()?,
     ),
   ])
 }
@@ -196,6 +202,18 @@ fn build_compat_formula_matrix_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
   calc_sheet.write_number(6, 0, -2.0)?;
   calc_sheet.write_formula(4, 1, Formula::new("=MINA(A5:A7)").set_result("-2"))?;
   calc_sheet.write_formula(5, 1, Formula::new("=MAXA(A5:A7)").set_result("1"))?;
+
+  workbook.save_to_buffer()
+}
+
+fn build_compat_default_cached_formula_fixture_bytes() -> Result<Vec<u8>, XlsxError> {
+  let mut workbook = Workbook::new();
+  apply_deterministic_fixture_properties(&mut workbook)?;
+  let sheet = workbook.add_worksheet();
+  sheet.set_name("NoCache")?;
+  sheet.write_number(0, 0, 4.0)?;
+  sheet.write_number(1, 0, 6.0)?;
+  sheet.write_formula(0, 1, Formula::new("=SUM(A1:A2)"))?;
 
   workbook.save_to_buffer()
 }

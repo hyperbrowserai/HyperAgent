@@ -325,6 +325,7 @@ Fixture corpus inventory:
 | --- | --- |
 | `compat_baseline.xlsx` | Canonical workbook import/export baseline with formulas + mixed value types. |
 | `compat_formula_matrix.xlsx` | Supported formula matrix for engineering/financial/statistical function roundtrip checks. |
+| `compat_default_cached_formula.xlsx` | Formula import metric scenario showing default cached scalar values from generated formulas (`formula_cells_with_cached_values`). |
 | `compat_normalization_single.xlsx` | Single-formula normalization telemetry scenario (`_xlfn.` + implicit `@` + unary `+`). |
 | `compat_normalization.xlsx` | Comprehensive normalization scenario with quoted literal preservation. |
 | `compat_offset_range.xlsx` | Non-`A1` used-range coordinate preservation scenario. |
@@ -361,5 +362,5 @@ XLSX compatibility regression coverage includes:
 - non-`A1` used-range import fixtures (coordinate offset preservation),
 - formula-token normalization fixtures (`_xlfn.`/`_xlws.`/`_xlpm.`, implicit `@`, unary `+`, and quoted-literal edge cases),
 - comprehensive normalization roundtrip fixtures validating telemetry + canonical replay after export/re-import,
-- file-based fixture corpus regression coverage (`fixtures/compat_baseline.xlsx`, `fixtures/compat_formula_matrix.xlsx`, `fixtures/compat_normalization_single.xlsx`, `fixtures/compat_normalization.xlsx`, `fixtures/compat_offset_range.xlsx`, `fixtures/compat_unsupported_formula.xlsx`, `fixtures/compat_mixed_literal_prefix.xlsx`, `fixtures/compat_prefix_operator.xlsx`) to validate import behavior against generated workbook artifacts,
+- file-based fixture corpus regression coverage (`fixtures/compat_baseline.xlsx`, `fixtures/compat_formula_matrix.xlsx`, `fixtures/compat_default_cached_formula.xlsx`, `fixtures/compat_normalization_single.xlsx`, `fixtures/compat_normalization.xlsx`, `fixtures/compat_offset_range.xlsx`, `fixtures/compat_unsupported_formula.xlsx`, `fixtures/compat_mixed_literal_prefix.xlsx`, `fixtures/compat_prefix_operator.xlsx`) to validate import behavior against generated workbook artifacts,
 - generator-sync regression coverage to ensure committed fixture binaries stay byte-identical with deterministic generated output.
