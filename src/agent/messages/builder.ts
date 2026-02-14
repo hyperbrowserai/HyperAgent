@@ -5,7 +5,7 @@ import { getScrollInfo } from "./utils";
 import { retry } from "@/utils/retry";
 import { A11yDOMState } from "@/context-providers/a11y-dom/types";
 import { HyperVariable } from "@/types/agent/types";
-import { formatUnknownError } from "@/utils";
+import { formatUnknownError, normalizePageUrl } from "@/utils";
 
 const MAX_HISTORY_STEPS = 10;
 const MAX_SERIALIZED_PROMPT_VALUE_CHARS = 2000;
@@ -29,16 +29,15 @@ function truncatePromptText(value: string): string {
 }
 
 function truncateTabUrl(url: string): string {
-  const normalized = Array.from(url)
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      return (code >= 0 && code < 32) || code === 127 ? " " : char;
-    })
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim();
+  const fallback = "about:blank (url unavailable)";
+  const normalized = normalizePageUrl(url, {
+    fallback,
+  });
   if (normalized.length === 0) {
-    return "about:blank (url unavailable)";
+    return fallback;
+  }
+  if (normalized === fallback) {
+    return fallback;
   }
 
   if (normalized.length <= MAX_TAB_URL_CHARS) {
