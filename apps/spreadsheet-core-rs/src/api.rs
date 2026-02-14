@@ -9646,4 +9646,46 @@ mod tests {
             "openapi spec should expose schema-advertised openapi endpoint",
         );
     }
+
+    #[tokio::test]
+    async fn should_expose_expected_http_methods_for_openapi_paths() {
+        let spec = openapi().await.0;
+        let paths = spec
+            .get("paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi spec should include paths");
+
+        let expected_methods = [
+            ("/health", vec!["get"]),
+            ("/v1/openapi", vec!["get"]),
+            ("/v1/workbooks", vec!["post"]),
+            ("/v1/workbooks/{id}/sheets", vec!["get", "post"]),
+            ("/v1/workbooks/{id}/duckdb/query", vec!["post"]),
+            ("/v1/workbooks/{id}/events", vec!["get"]),
+            ("/v1/workbooks/{id}/agent/schema", vec!["get"]),
+            ("/v1/workbooks/{id}/agent/ops", vec!["post"]),
+            ("/v1/workbooks/{id}/agent/ops/cache", vec!["get"]),
+            ("/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}", vec!["get"]),
+            ("/v1/workbooks/{id}/agent/ops/cache/clear", vec!["post"]),
+            ("/v1/agent/wizard/schema", vec!["get"]),
+            ("/v1/agent/wizard/run", vec!["post"]),
+            ("/v1/agent/wizard/run-json", vec!["post"]),
+        ];
+
+        for (path, methods) in expected_methods {
+            let actual_methods = paths
+                .get(path)
+                .and_then(serde_json::Value::as_object)
+                .map(|map| map.keys().cloned().collect::<std::collections::BTreeSet<_>>())
+                .expect("openapi path should exist and expose method map");
+            let expected_method_set = methods
+                .into_iter()
+                .map(str::to_string)
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(
+                actual_methods, expected_method_set,
+                "openapi path '{path}' should expose expected HTTP methods",
+            );
+        }
+    }
 }
