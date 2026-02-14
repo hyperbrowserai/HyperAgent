@@ -17,7 +17,7 @@ use crate::{
     parse_covariance_formula, parse_correl_formula,
     parse_slope_formula, parse_intercept_formula, parse_rsq_formula,
     parse_forecast_linear_formula, parse_steyx_formula,
-    parse_sumx_formula, parse_skew_formula, parse_kurt_formula,
+    parse_sumx_formula, parse_skew_formula, parse_skew_p_formula, parse_kurt_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -1073,6 +1073,35 @@ fn evaluate_formula(
       .sum::<f64>();
     let skew = (n / ((n - 1.0) * (n - 2.0))) * third_moment;
     return Ok(Some(skew.to_string()));
+  }
+
+  if let Some((start, end)) = parse_skew_p_formula(formula) {
+    let values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    let n = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / n;
+    let sum_squares = values
+      .iter()
+      .map(|value| {
+        let delta = *value - mean;
+        delta * delta
+      })
+      .sum::<f64>();
+    if sum_squares <= 0.0 {
+      return Ok(None);
+    }
+    let population_std = (sum_squares / n).sqrt();
+    if population_std <= 0.0 {
+      return Ok(None);
+    }
+    let skew_p = values
+      .iter()
+      .map(|value| ((*value - mean) / population_std).powi(3))
+      .sum::<f64>()
+      / n;
+    return Ok(Some(skew_p.to_string()));
   }
 
   if let Some((start, end)) = parse_kurt_formula(formula) {
@@ -3623,6 +3652,36 @@ mod tests {
         formula: None,
       },
       CellMutation {
+        row: 10,
+        col: 22,
+        value: Some(json!(1)),
+        formula: None,
+      },
+      CellMutation {
+        row: 11,
+        col: 22,
+        value: Some(json!(2)),
+        formula: None,
+      },
+      CellMutation {
+        row: 12,
+        col: 22,
+        value: Some(json!(3)),
+        formula: None,
+      },
+      CellMutation {
+        row: 13,
+        col: 22,
+        value: Some(json!(4)),
+        formula: None,
+      },
+      CellMutation {
+        row: 14,
+        col: 22,
+        value: Some(json!(6)),
+        formula: None,
+      },
+      CellMutation {
         row: 1,
         col: 2,
         value: None,
@@ -4746,12 +4805,18 @@ mod tests {
         value: None,
         formula: Some("=KURT(T10:T14)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 184,
+        value: None,
+        formula: Some("=SKEW.P(V10:V14)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 181);
+    assert_eq!(updated_cells, 182);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -4765,7 +4830,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 183,
+        end_col: 184,
       },
     )
     .expect("cells should be fetched");
@@ -5367,6 +5432,16 @@ mod tests {
     assert!(
       (kurt + 1.2).abs() < 1e-9,
       "kurt should be -1.2, got {kurt}",
+    );
+    let skew_p = by_position(1, 184)
+      .evaluated_value
+      .as_deref()
+      .expect("skew.p should evaluate")
+      .parse::<f64>()
+      .expect("skew.p should be numeric");
+    assert!(
+      (skew_p - 0.395_870_337_343_816_44).abs() < 1e-9,
+      "skew.p should be 0.395870..., got {skew_p}",
     );
   }
 
@@ -6324,6 +6399,12 @@ mod tests {
         value: None,
         formula: Some("=KURT(A1:A4)".to_string()),
       },
+      CellMutation {
+        row: 3,
+        col: 2,
+        value: None,
+        formula: Some("=SKEW.P(A1:A4)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
@@ -6331,7 +6412,11 @@ mod tests {
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(
       unsupported_formulas,
-      vec!["=SKEW(A1:A4)".to_string(), "=KURT(A1:A4)".to_string()],
+      vec![
+        "=SKEW(A1:A4)".to_string(),
+        "=KURT(A1:A4)".to_string(),
+        "=SKEW.P(A1:A4)".to_string(),
+      ],
     );
   }
 
