@@ -142,6 +142,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Added an additional open-tab fallback path: when the tab array becomes unreadable (e.g. trapped `length`), prompt assembly now still emits the current tab line instead of a blank/no-tabs summary.
 - Added constructor regression coverage for trap-prone `llm` config getters, ensuring fallback failure paths stay deterministic and readable.
 - Hardened CDP frame-filter URL normalization to support protocol-relative and scheme-less frame URLs while avoiding path-only false positives in host-based ad-domain detection.
+- Hardened prompt base-message materialization with trap-safe array reads so malformed/trap-prone seed message arrays no longer crash message assembly and readable entries are preserved.
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.

@@ -213,6 +213,24 @@ function safeReadArrayItem<T>(value: unknown, index: number): T | undefined {
   }
 }
 
+function materializeSafeBaseMessages(
+  baseMessages: HyperAgentMessage[]
+): HyperAgentMessage[] {
+  const total = safeArrayLength(baseMessages);
+  if (total === 0) {
+    return [];
+  }
+
+  const normalizedMessages: HyperAgentMessage[] = [];
+  for (let index = 0; index < total; index += 1) {
+    const message = safeReadArrayItem<HyperAgentMessage>(baseMessages, index);
+    if (typeof message !== "undefined") {
+      normalizedMessages.push(message);
+    }
+  }
+  return normalizedMessages;
+}
+
 function getBoundedVariables(variables: HyperVariable[]): {
   visibleVariables: HyperVariable[];
   omittedCount: number;
@@ -439,7 +457,7 @@ export const buildAgentStepMessages = async (
   screenshot: string | undefined,
   variables: HyperVariable[]
 ): Promise<HyperAgentMessage[]> => {
-  const messages = [...baseMessages];
+  const messages = materializeSafeBaseMessages(baseMessages);
   const normalizedSteps = materializeSafeSteps(steps);
 
   // Add the final goal section

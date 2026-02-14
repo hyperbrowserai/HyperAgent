@@ -252,6 +252,98 @@ describe("buildAgentStepMessages", () => {
     expect(joined).toContain("=== Final Goal ===");
   });
 
+  it("continues when base message array length getter traps", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const trappedBaseMessages = new Proxy(
+      [{ role: "system", content: "seed message" }],
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "length") {
+            throw new Error("base message length trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    ) as unknown as Parameters<typeof buildAgentStepMessages>[0];
+
+    const messages = await buildAgentStepMessages(
+      trappedBaseMessages,
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+    expect(joined).toContain("=== Final Goal ===");
+    expect(joined).not.toContain("seed message");
+  });
+
+  it("keeps readable base messages when base message entry getter traps", async () => {
+    const page = createFakePage("https://example.com/current", [
+      "https://example.com/current",
+    ]);
+    const trappedBaseMessages = new Proxy(
+      [
+        { role: "system", content: "trapped message" },
+        { role: "system", content: "safe message" },
+      ],
+      {
+        get: (target, prop, receiver) => {
+          if (prop === "0") {
+            throw new Error("base message item trap");
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }
+    ) as unknown as Parameters<typeof buildAgentStepMessages>[0];
+
+    const messages = await buildAgentStepMessages(
+      trappedBaseMessages,
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          content: "safe message",
+        }),
+      ])
+    );
+    expect(messages).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          content: "trapped message",
+        }),
+      ])
+    );
+  });
+
   it("ignores unreadable step array entries when index getter traps", async () => {
     const page = createFakePage("https://example.com/current", [
       "https://example.com/current",
