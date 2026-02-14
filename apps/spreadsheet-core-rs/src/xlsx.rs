@@ -221,24 +221,41 @@ fn normalize_imported_formula(formula: &str) -> Option<String> {
 
 fn strip_known_formula_prefixes(formula_body: &str) -> String {
   let mut normalized = String::with_capacity(formula_body.len());
-  let mut byte_index = 0usize;
+  let chars = formula_body.chars().collect::<Vec<_>>();
+  let mut index = 0usize;
+  let mut in_string = false;
 
-  while byte_index < formula_body.len() {
-    let remaining = &formula_body[byte_index..];
-    if remaining.len() >= 6 {
-      let maybe_prefix = &remaining[..6];
-      if maybe_prefix.eq_ignore_ascii_case("_xlfn.")
-        || maybe_prefix.eq_ignore_ascii_case("_xlws.")
-      {
-        byte_index += 6;
+  while index < chars.len() {
+    let ch = chars[index];
+
+    if ch == '"' {
+      normalized.push(ch);
+      if in_string && index + 1 < chars.len() && chars[index + 1] == '"' {
+        normalized.push(chars[index + 1]);
+        index += 2;
         continue;
+      }
+      in_string = !in_string;
+      index += 1;
+      continue;
+    }
+
+    if !in_string {
+      if index + 6 <= chars.len() {
+        let maybe_prefix = chars[index..index + 6]
+          .iter()
+          .collect::<String>();
+        if maybe_prefix.eq_ignore_ascii_case("_xlfn.")
+          || maybe_prefix.eq_ignore_ascii_case("_xlws.")
+        {
+          index += 6;
+          continue;
+        }
       }
     }
 
-    let mut chars = remaining.chars();
-    let ch = chars.next().expect("remaining string should contain a char");
     normalized.push(ch);
-    byte_index += ch.len_utf8();
+    index += 1;
   }
 
   normalized
@@ -478,6 +495,14 @@ mod tests {
     assert_eq!(
       normalize_imported_formula("=IF(_XLFN.BITAND(6,3)=2,1,0)").as_deref(),
       Some("=IF(BITAND(6,3)=2,1,0)"),
+    );
+    assert_eq!(
+      normalize_imported_formula(r#"="keep _xlfn. literal""#).as_deref(),
+      Some(r#"="keep _xlfn. literal""#),
+    );
+    assert_eq!(
+      normalize_imported_formula(r#"=IF(A1=1,"_XLWS.keep",_xlfn.BITAND(6,3))"#).as_deref(),
+      Some(r#"=IF(A1=1,"_XLWS.keep",BITAND(6,3))"#),
     );
     assert_eq!(
       normalize_imported_formula("=@SUM(A1:A3)").as_deref(),
