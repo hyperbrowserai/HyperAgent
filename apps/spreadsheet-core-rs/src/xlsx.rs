@@ -207,17 +207,39 @@ fn normalize_imported_formula(formula: &str) -> Option<String> {
     return None;
   }
 
-  let normalized_body = trimmed
-    .strip_prefix('=')
-    .unwrap_or(trimmed)
-    .replace("_xlfn.", "")
-    .replace("_xlws.", "");
+  let normalized_body =
+    strip_known_formula_prefixes(trimmed.strip_prefix('=').unwrap_or(trimmed));
   let normalized_body = normalized_body.trim();
   if normalized_body.is_empty() {
     return None;
   }
 
   Some(format!("={normalized_body}"))
+}
+
+fn strip_known_formula_prefixes(formula_body: &str) -> String {
+  let mut normalized = String::with_capacity(formula_body.len());
+  let mut byte_index = 0usize;
+
+  while byte_index < formula_body.len() {
+    let remaining = &formula_body[byte_index..];
+    if remaining.len() >= 6 {
+      let maybe_prefix = &remaining[..6];
+      if maybe_prefix.eq_ignore_ascii_case("_xlfn.")
+        || maybe_prefix.eq_ignore_ascii_case("_xlws.")
+      {
+        byte_index += 6;
+        continue;
+      }
+    }
+
+    let mut chars = remaining.chars();
+    let ch = chars.next().expect("remaining string should contain a char");
+    normalized.push(ch);
+    byte_index += ch.len_utf8();
+  }
+
+  normalized
 }
 
 fn map_data_to_json(value: &Data) -> Option<serde_json::Value> {
@@ -353,8 +375,20 @@ mod tests {
       Some("=BITAND(6,3)"),
     );
     assert_eq!(
+      normalize_imported_formula("=_XLFN.BITAND(6,3)").as_deref(),
+      Some("=BITAND(6,3)"),
+    );
+    assert_eq!(
       normalize_imported_formula("=_xlws.SUM(A1:A3)").as_deref(),
       Some("=SUM(A1:A3)"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=_XLWS.SUM(A1:A3)").as_deref(),
+      Some("=SUM(A1:A3)"),
+    );
+    assert_eq!(
+      normalize_imported_formula("=IF(_XLFN.BITAND(6,3)=2,1,0)").as_deref(),
+      Some("=IF(BITAND(6,3)=2,1,0)"),
     );
     assert_eq!(
       normalize_imported_formula("  SUM(A1:A3)  ").as_deref(),
