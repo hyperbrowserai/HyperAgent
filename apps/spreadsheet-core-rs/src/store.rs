@@ -9,6 +9,7 @@ use crate::{
     parse_columns_formula,
     parse_large_formula, parse_small_formula, parse_rank_formula,
     parse_percentile_inc_formula, parse_quartile_inc_formula,
+    parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_combin_formula, parse_gcd_formula,
@@ -554,19 +555,8 @@ fn evaluate_formula(
       return Ok(None);
     }
     values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
-    if values.len() == 1 {
-      return Ok(Some(values[0].to_string()));
-    }
-    let position = percentile * (values.len() as f64 - 1.0);
-    let lower_index = position.floor() as usize;
-    let upper_index = position.ceil() as usize;
-    if lower_index == upper_index {
-      return Ok(Some(values[lower_index].to_string()));
-    }
-    let fraction = position - lower_index as f64;
-    let interpolated = values[lower_index]
-      + (values[upper_index] - values[lower_index]) * fraction;
-    return Ok(Some(interpolated.to_string()));
+    let interpolated = interpolate_percentile_from_sorted_values(&values, percentile);
+    return Ok(interpolated.map(|value| value.to_string()));
   }
 
   if let Some((start, end, quartile_arg)) = parse_quartile_inc_formula(formula) {
@@ -584,19 +574,52 @@ fn evaluate_formula(
       return Ok(None);
     }
     values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
-    if values.len() == 1 {
-      return Ok(Some(values[0].to_string()));
+    let interpolated = interpolate_percentile_from_sorted_values(&values, percentile);
+    return Ok(interpolated.map(|value| value.to_string()));
+  }
+
+  if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_inc_formula(formula)
+  {
+    let target = parse_required_float(connection, sheet, &target_arg)?;
+    let significance = match significance_arg {
+      Some(raw_significance) => {
+        Some(parse_required_unsigned(connection, sheet, &raw_significance)?)
+      }
+      None => None,
+    };
+    let mut values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.len() < 2 {
+      return Ok(None);
     }
-    let position = percentile * (values.len() as f64 - 1.0);
-    let lower_index = position.floor() as usize;
-    let upper_index = position.ceil() as usize;
-    if lower_index == upper_index {
-      return Ok(Some(values[lower_index].to_string()));
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let Some(position) = interpolate_sorted_position(&values, target) else {
+      return Ok(None);
+    };
+    let rank = position / (values.len() as f64 - 1.0);
+    let rounded = round_to_significance(rank, significance);
+    return Ok(rounded.map(|value| value.to_string()));
+  }
+
+  if let Some((start, end, target_arg, significance_arg)) = parse_percentrank_exc_formula(formula)
+  {
+    let target = parse_required_float(connection, sheet, &target_arg)?;
+    let significance = match significance_arg {
+      Some(raw_significance) => {
+        Some(parse_required_unsigned(connection, sheet, &raw_significance)?)
+      }
+      None => None,
+    };
+    let mut values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.len() < 2 {
+      return Ok(None);
     }
-    let fraction = position - lower_index as f64;
-    let interpolated = values[lower_index]
-      + (values[upper_index] - values[lower_index]) * fraction;
-    return Ok(Some(interpolated.to_string()));
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    let Some(position) = interpolate_sorted_position(&values, target) else {
+      return Ok(None);
+    };
+    let rank = (position + 1.0) / (values.len() as f64 + 1.0);
+    let rounded = round_to_significance(rank, significance);
+    return Ok(rounded.map(|value| value.to_string()));
   }
 
   if let Some(sumif_formula) = parse_sumif_formula(formula) {
@@ -1738,6 +1761,89 @@ fn collect_numeric_range_values(
     }
   }
   Ok(values)
+}
+
+fn interpolate_percentile_from_sorted_values(
+  sorted_values: &[f64],
+  percentile: f64,
+) -> Option<f64> {
+  if sorted_values.is_empty() {
+    return None;
+  }
+  if sorted_values.len() == 1 {
+    return Some(sorted_values[0]);
+  }
+
+  let position = percentile * (sorted_values.len() as f64 - 1.0);
+  let lower_index = position.floor() as usize;
+  let upper_index = position.ceil() as usize;
+  if lower_index >= sorted_values.len() || upper_index >= sorted_values.len() {
+    return None;
+  }
+  if lower_index == upper_index {
+    return Some(sorted_values[lower_index]);
+  }
+  let fraction = position - lower_index as f64;
+  Some(
+    sorted_values[lower_index]
+      + (sorted_values[upper_index] - sorted_values[lower_index]) * fraction,
+  )
+}
+
+fn interpolate_sorted_position(sorted_values: &[f64], target: f64) -> Option<f64> {
+  if sorted_values.len() < 2 {
+    return None;
+  }
+
+  let first = *sorted_values.first()?;
+  let last = *sorted_values.last()?;
+  if target < first || target > last {
+    return None;
+  }
+
+  if (target - first).abs() < f64::EPSILON {
+    return Some(0.0);
+  }
+  if (target - last).abs() < f64::EPSILON {
+    return Some((sorted_values.len() - 1) as f64);
+  }
+
+  for index in 0..(sorted_values.len() - 1) {
+    let left = sorted_values[index];
+    let right = sorted_values[index + 1];
+
+    if target < left || target > right {
+      continue;
+    }
+
+    if (target - left).abs() < f64::EPSILON {
+      return Some(index as f64);
+    }
+    if (target - right).abs() < f64::EPSILON {
+      return Some((index + 1) as f64);
+    }
+
+    if (right - left).abs() < f64::EPSILON {
+      continue;
+    }
+
+    let fraction = (target - left) / (right - left);
+    return Some(index as f64 + fraction);
+  }
+
+  None
+}
+
+fn round_to_significance(value: f64, significance: Option<u32>) -> Option<f64> {
+  let Some(digits_u32) = significance else {
+    return Some(value);
+  };
+  if digits_u32 == 0 {
+    return None;
+  }
+  let digits = i32::try_from(digits_u32).ok()?;
+  let scale = 10f64.powi(digits);
+  Some((value * scale).round() / scale)
 }
 
 fn evaluate_countifs_formula(
@@ -3669,12 +3775,24 @@ mod tests {
         value: None,
         formula: Some("=QUARTILE.INC(A1:A2,3)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 146,
+        value: None,
+        formula: Some("=PERCENTRANK.INC(A1:A2,120)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 147,
+        value: None,
+        formula: Some("=PERCENTRANK.EXC(A1:A2,120)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 143);
+    assert_eq!(updated_cells, 145);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3688,7 +3806,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 145,
+        end_col: 147,
       },
     )
     .expect("cells should be fetched");
@@ -3955,6 +4073,26 @@ mod tests {
     assert!(
       (quartile - 110.0).abs() < 1e-9,
       "quartile should be 110.0, got {quartile}",
+    );
+    let percentrank_inc = by_position(1, 146)
+      .evaluated_value
+      .as_deref()
+      .expect("percentrank.inc should evaluate")
+      .parse::<f64>()
+      .expect("percentrank.inc should be numeric");
+    assert!(
+      (percentrank_inc - 1.0).abs() < 1e-9,
+      "percentrank.inc should be 1.0, got {percentrank_inc}",
+    );
+    let percentrank_exc = by_position(1, 147)
+      .evaluated_value
+      .as_deref()
+      .expect("percentrank.exc should evaluate")
+      .parse::<f64>()
+      .expect("percentrank.exc should be numeric");
+    assert!(
+      (percentrank_exc - (2.0 / 3.0)).abs() < 1e-9,
+      "percentrank.exc should be 2/3, got {percentrank_exc}",
     );
   }
 
@@ -4275,6 +4413,55 @@ mod tests {
       vec![
         "=PERCENTILE.INC(A1:A2,1.5)".to_string(),
         "=QUARTILE.INC(A1:A2,5)".to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_percentrank_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=PERCENTRANK.INC(A1:A2,200)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=PERCENTRANK.EXC(A1:A2,60)".to_string()),
+      },
+      CellMutation {
+        row: 3,
+        col: 2,
+        value: None,
+        formula: Some("=PERCENTRANK.INC(A1:A2,100,0)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=PERCENTRANK.INC(A1:A2,200)".to_string(),
+        "=PERCENTRANK.EXC(A1:A2,60)".to_string(),
+        "=PERCENTRANK.INC(A1:A2,100,0)".to_string(),
       ],
     );
   }

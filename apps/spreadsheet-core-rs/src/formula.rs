@@ -1030,6 +1030,28 @@ pub fn parse_quartile_inc_formula(
   Some((start, end, args[1].clone()))
 }
 
+pub fn parse_percentrank_inc_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "PERCENTRANK.INC" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[0])?;
+  Some((start, end, args[1].clone(), args.get(2).cloned()))
+}
+
+pub fn parse_percentrank_exc_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "PERCENTRANK.EXC" || !(args.len() == 2 || args.len() == 3) {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[0])?;
+  Some((start, end, args[1].clone(), args.get(2).cloned()))
+}
+
 pub fn parse_sumproduct_formula(
   formula: &str,
 ) -> Option<Vec<((u32, u32), (u32, u32))>> {
@@ -1288,6 +1310,7 @@ mod tests {
     parse_rows_formula, parse_columns_formula,
     parse_large_formula, parse_small_formula, parse_rank_formula,
     parse_percentile_inc_formula, parse_quartile_inc_formula,
+    parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
     parse_today_formula, parse_now_formula, parse_rand_formula,
@@ -1694,6 +1717,20 @@ mod tests {
     assert_eq!(quartile.0, (1, 1));
     assert_eq!(quartile.1, (5, 1));
     assert_eq!(quartile.2, "3");
+    let percentrank_inc =
+      parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
+        .expect("percentrank inc should parse");
+    assert_eq!(percentrank_inc.0, (1, 1));
+    assert_eq!(percentrank_inc.1, (5, 1));
+    assert_eq!(percentrank_inc.2, "3");
+    assert_eq!(percentrank_inc.3.as_deref(), Some("4"));
+    let percentrank_exc =
+      parse_percentrank_exc_formula("=PERCENTRANK.EXC(A1:A5,3)")
+        .expect("percentrank exc should parse");
+    assert_eq!(percentrank_exc.0, (1, 1));
+    assert_eq!(percentrank_exc.1, (5, 1));
+    assert_eq!(percentrank_exc.2, "3");
+    assert_eq!(percentrank_exc.3.as_deref(), None);
 
     let sumproduct =
       parse_sumproduct_formula("=SUMPRODUCT(A1:A5,B1:B5)")
