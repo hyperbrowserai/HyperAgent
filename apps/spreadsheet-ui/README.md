@@ -115,7 +115,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Stale-cache controls support age-threshold preview/removal (`max_age_seconds`) backed by server-side `cached_at` cutoff
 - Stale-cache preview/removal responses include cutoff timestamp and sample IDs for safe cleanup workflows (with independent stale sample-limit input)
 - Cache preview/removal sample limits are normalized to backend-safe `1..100` bounds, with inline cap warnings when user-entered limits exceed max
-- Cache controls include optional rerun `request_id` override used by per-entry rerun action
+- Cache controls include optional rerun `request_id` override used by per-entry rerun action (blank generates server-side id; conflicting signatures surface `REQUEST_ID_CONFLICT`)
 - Success/info notice banner surfaces non-error outcomes (workbook import/create, cache clear, replay cache hit/miss)
 - Event stream viewer with per-event-type filtering
 

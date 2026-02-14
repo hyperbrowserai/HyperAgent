@@ -4194,6 +4194,11 @@ export function SpreadsheetApp() {
                       {isRemovingStaleCache ? "Removing stale..." : "Remove stale"}
                     </button>
                   </div>
+                  <p className="mb-2 text-[10px] text-slate-500">
+                    rerun request_id is optional; leave blank to auto-generate. Reusing a
+                    request_id with a different operation signature returns{" "}
+                    <span className="font-mono text-slate-300">REQUEST_ID_CONFLICT</span>.
+                  </p>
                   {hasInvalidCacheEntriesMaxAgeInput ? (
                     <p className="mb-2 text-[10px] text-rose-300">
                       older-than filter must be a positive integer (seconds). Cache
