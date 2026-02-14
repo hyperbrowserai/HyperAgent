@@ -6,6 +6,7 @@ Embedded DuckDB backend for an Excel-like spreadsheet experience with:
 - Formula recalculation (`SUM`, `SUMA`, `AVERAGE`, `MIN`, `MAX`, `MINA`, `MAXA`, `STDEV`, `STDEVP`, `STDEV.P`, `STDEV.S`, `VAR`, `VARP`, `VAR.P`, `VAR.S`, `COUNT`, `MEDIAN`, `COUNTA`, `COUNTBLANK`, `COUNTIF`, `COUNTIFS`, `RANK`/`RANK.EQ`, `LARGE`, `SMALL`, `PERCENTILE`, `PERCENTILE.INC`, `PERCENTILE.EXC`, `QUARTILE`, `QUARTILE.INC`, `QUARTILE.EXC`, `MODE.SNGL`, `GEOMEAN`, `HARMEAN`, `TRIMMEAN`, `DEVSQ`, `AVEDEV`, `AVERAGEA`, `STDEVA`, `STDEVPA`, `VARA`, `VARPA`, `COVARIANCE.P`, `COVARIANCE.S`, `COVAR`, `CORREL`, `PEARSON`, `SLOPE`, `INTERCEPT`, `RSQ`, `FORECAST.LINEAR`, `FORECAST`, `STEYX`, `PERCENTRANK`, `PERCENTRANK.INC`, `PERCENTRANK.EXC`, `PRODUCT`, `SUMSQ`, `SUMPRODUCT`, `SUMXMY2`, `SUMX2MY2`, `SUMX2PY2`, `SERIESSUM`, `SKEW`, `SKEW.P`, `KURT`, `FISHER`, `FISHERINV`, `SUMIF`, `SUMIFS`, `MINIFS`, `MAXIFS`, `AVERAGEIF`, `AVERAGEIFS`, direct refs, arithmetic refs, `IF`, `IFS`, `IFERROR`, `IFNA`, `NA`, `CHOOSE`, `SWITCH`, `TRUE`, `FALSE`, `AND`/`OR`/`XOR`/`NOT`, `CONCAT`/`CONCATENATE`, `TEXTJOIN`, `LEN`, `PI`, `ABS`, `FACT`, `FACTDOUBLE`, `COMBIN`, `COMBINA`, `PERMUT`, `PERMUTATIONA`, `MULTINOMIAL`, `GCD`, `LCM`, `LN`, `EXP`, `LOG`, `LOG10`, `DOLLARDE`, `DOLLARFR`, `EFFECT`, `NOMINAL`, `NPV`, `PV`, `FV`, `PMT`, `IRR`, `MIRR`, `NPER`, `RATE`, `IPMT`, `PPMT`, `SLN`, `SYD`, `DB`, `DDB`, `RRI`, `PDURATION`, `FVSCHEDULE`, `ISPMT`, `CUMIPMT`, `CUMPRINC`, `XNPV`, `XIRR`, `SIN`/`COS`/`TAN`/`COT`/`SEC`/`CSC`, `SINH`/`COSH`/`TANH`/`COTH`/`SECH`/`CSCH`, `ASINH`/`ACOSH`/`ATANH`/`ACOTH`/`ASECH`/`ACSCH`, `ASIN`/`ACOS`/`ATAN`/`ATAN2`/`ACOT`/`ASEC`/`ACSC`, `DEGREES`/`RADIANS`, `ROUND`/`ROUNDUP`/`ROUNDDOWN`, `CEILING`/`CEILING.MATH`, `FLOOR`/`FLOOR.MATH`, `SQRT`, `POWER`, `MOD`, `QUOTIENT`, `MROUND`, `SIGN`, `INT`, `EVEN`, `ODD`, `TRUNC`, `EXACT`, `LEFT`/`RIGHT`/`MID`, `REPT`, `REPLACE`, `SUBSTITUTE`, `VALUE`, `N`, `T`, `BASE`, `DECIMAL`, `DEC2BIN`, `BIN2DEC`, `DEC2HEX`, `HEX2DEC`, `DEC2OCT`, `OCT2DEC`, `BIN2HEX`, `HEX2BIN`, `BIN2OCT`, `OCT2BIN`, `DELTA`, `GESTEP`, `BITAND`, `BITOR`, `BITXOR`, `BITLSHIFT`, `BITRSHIFT`, `CHAR`, `CODE`, `UNICHAR`, `UNICODE`, `ROMAN`, `ARABIC`, `SEARCH`, `FIND`, `UPPER`/`LOWER`/`TRIM`/`PROPER`/`CLEAN`, `ISBLANK`/`ISNUMBER`/`ISTEXT`/`ISEVEN`/`ISODD`, `TODAY`, `NOW`, `RAND`, `RANDBETWEEN`, `DATE`, `TIME`, `EDATE`, `EOMONTH`, `DAYS`, `DAYS360`, `YEARFRAC`, `DATEVALUE`, `TIMEVALUE`, `DATEDIF`, `NETWORKDAYS`, `WORKDAY`, `NETWORKDAYS.INTL`, `WORKDAY.INTL`, `YEAR`/`MONTH`/`DAY`, `WEEKDAY`, `WEEKNUM`, `ISOWEEKNUM`, `ROW`/`COLUMN`/`ROWS`/`COLUMNS`, `HOUR`/`MINUTE`/`SECOND`, `VLOOKUP` exact-match mode, `HLOOKUP` exact-match mode, `XLOOKUP` exact-match mode, `MATCH` exact-match mode, `INDEX`)
 - XLSX import/export
 - Chart metadata endpoints
+- Read-only DuckDB query endpoint for tabular inspection
 - Real-time SSE event stream for UI synchronization
 
 ## Compatibility matrix (v1)
@@ -72,6 +73,7 @@ Server defaults to `http://localhost:8787`.
 - `POST /v1/workbooks/{id}/cells/get`
 - `POST /v1/workbooks/{id}/formulas/recalculate`
 - `POST /v1/workbooks/{id}/charts/upsert`
+- `POST /v1/workbooks/{id}/duckdb/query`
 - `POST /v1/workbooks/{id}/export`
 - `GET /v1/workbooks/{id}/events`
 - `GET /v1/openapi`
@@ -98,7 +100,16 @@ Import behavior notes:
 - Cell coordinates are imported using worksheet range offsets, so sheets with first used cells outside `A1` preserve their original row/column placement.
 - Unsupported formulas are preserved as formula text and returned via `/v1/workbooks/{id}/formulas/recalculate` `unsupported_formulas` for explicit compatibility surfacing.
 
-> Note: `/v1/workbooks/{id}/duckdb/query` currently returns a guarded `400` response in this build to avoid a known upstream panic in the underlying DuckDB Rust wrapper for ad-hoc SQL execution paths.
+`POST /v1/workbooks/{id}/duckdb/query` supports scoped read-only SQL inspection with response shape:
+- `columns`: selected column names in query order
+- `rows`: row-array payload (`string | null` values)
+- `row_count`: rows returned after truncation
+- `row_limit`: applied row limit (default `200`, max `1000`)
+- `truncated`: true when additional rows were available beyond `row_limit`
+
+Query guardrails:
+- `sql` must be a single read-only `SELECT` or `WITH` statement (semicolons and mutating keywords are rejected with `INVALID_QUERY_SQL`).
+- `row_limit`, when provided, must be > 0 (`INVALID_QUERY_ROW_LIMIT`), and is clamped to a maximum of `1000`.
 
 `POST /v1/workbooks/{id}/export` responds with the XLSX file body and an `x-export-meta` header containing JSON compatibility-report metadata (`preserved`, `transformed`, `unsupported`).
 
