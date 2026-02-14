@@ -5293,6 +5293,116 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_accept_trimmed_valid_signature_for_preset_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("preset-signature-trimmed".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let signature = operations_signature(
+            &build_preset_operations("export_snapshot", Some(false))
+                .expect("preset operations should build"),
+        )
+        .expect("signature should build");
+
+        let response = run_agent_preset(
+            State(state),
+            Path((workbook.id, "export_snapshot".to_string())),
+            Json(AgentPresetRunRequest {
+                request_id: Some("preset-trimmed-signature".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some(format!("  {signature}  ")),
+            }),
+        )
+        .await
+        .expect("trimmed signature should be accepted")
+        .0;
+
+        assert_eq!(
+            response
+                .get("request_id")
+                .and_then(serde_json::Value::as_str),
+            Some("preset-trimmed-signature"),
+        );
+    }
+
+    #[tokio::test]
+    async fn should_accept_trimmed_valid_signature_for_scenario_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("scenario-signature-trimmed".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let signature = operations_signature(
+            &build_scenario_operations("refresh_and_export", Some(false))
+                .expect("scenario operations should build"),
+        )
+        .expect("signature should build");
+
+        let response = run_agent_scenario(
+            State(state),
+            Path((workbook.id, "refresh_and_export".to_string())),
+            Json(AgentScenarioRunRequest {
+                request_id: Some("scenario-trimmed-signature".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some(format!("\n{signature}\n")),
+            }),
+        )
+        .await
+        .expect("trimmed signature should be accepted")
+        .0;
+
+        assert_eq!(
+            response
+                .get("request_id")
+                .and_then(serde_json::Value::as_str),
+            Some("scenario-trimmed-signature"),
+        );
+    }
+
+    #[tokio::test]
+    async fn should_accept_trimmed_valid_signature_for_wizard_json_runs() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let signature = operations_signature(
+            &build_scenario_operations("refresh_and_export", Some(false))
+                .expect("scenario operations should build"),
+        )
+        .expect("signature should build");
+
+        let response = run_agent_wizard_json(
+            State(state),
+            Json(AgentWizardRunJsonRequest {
+                scenario: "refresh_and_export".to_string(),
+                request_id: Some("wizard-trimmed-signature".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                include_file_base64: Some(false),
+                expected_operations_signature: Some(format!(" {signature}\t")),
+                workbook_name: Some("wizard-signature-trimmed".to_string()),
+                file_name: None,
+                file_base64: None,
+            }),
+        )
+        .await
+        .expect("trimmed signature should be accepted")
+        .0;
+
+        assert_eq!(
+            response.request_id.as_deref(),
+            Some("wizard-trimmed-signature"),
+        );
+    }
+
+    #[tokio::test]
     async fn should_round_trip_cache_stats_and_clear_via_handlers() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
