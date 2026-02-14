@@ -325,6 +325,26 @@ function collectOpenApiMethodsByPath(
   }, {});
 }
 
+function filterEndpointCatalogEntries<
+  T extends { key: string; endpoint: string; openApiPath: string; summary: string | null },
+>(
+  entries: T[],
+  rawFilterValue: string,
+): T[] {
+  const normalizedFilterValue = rawFilterValue.trim().toLowerCase();
+  if (!normalizedFilterValue) {
+    return entries;
+  }
+  return entries.filter((entry) =>
+    [
+      entry.key,
+      entry.endpoint,
+      entry.openApiPath,
+      entry.summary ?? "",
+    ].some((value) => value.toLowerCase().includes(normalizedFilterValue))
+  );
+}
+
 function flattenSchemaShapeEntries(
   value: unknown,
   parentKey?: string,
@@ -594,6 +614,7 @@ export function SpreadsheetApp() {
   const [wizardPresetPreview, setWizardPresetPreview] = useState("export_snapshot");
   const [wizardIncludeFileBase64, setWizardIncludeFileBase64] = useState(false);
   const [wizardWorkbookName, setWizardWorkbookName] = useState("Wizard Workbook");
+  const [wizardEndpointCatalogFilter, setWizardEndpointCatalogFilter] = useState("");
   const [wizardFile, setWizardFile] = useState<File | null>(null);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [uiError, setUiError] = useState<string | null>(null);
@@ -638,6 +659,7 @@ export function SpreadsheetApp() {
   const [cacheEntriesOffset, setCacheEntriesOffset] = useState(0);
   const [cachePrefixSuggestionsOffset, setCachePrefixSuggestionsOffset] = useState(0);
   const [cacheRequestIdPrefix, setCacheRequestIdPrefix] = useState("");
+  const [agentEndpointCatalogFilter, setAgentEndpointCatalogFilter] = useState("");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
   const [cachePrefixSuggestionLimit, setCachePrefixSuggestionLimit] = useState(
     CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT,
@@ -1519,6 +1541,15 @@ export function SpreadsheetApp() {
     () => buildEndpointCatalogCoverageStats(wizardSchemaEndpointsWithMethods),
     [wizardSchemaEndpointsWithMethods],
   );
+  const wizardVisibleSchemaEndpointsWithMethods = useMemo(
+    () =>
+      filterEndpointCatalogEntries(
+        wizardSchemaEndpointsWithMethods,
+        wizardEndpointCatalogFilter,
+      ),
+    [wizardEndpointCatalogFilter, wizardSchemaEndpointsWithMethods],
+  );
+  const isWizardEndpointCatalogFilterActive = wizardEndpointCatalogFilter.trim().length > 0;
   const wizardEndpointCatalogPayload = useMemo(
     () =>
       ({
@@ -1876,6 +1907,15 @@ export function SpreadsheetApp() {
     () => buildEndpointCatalogCoverageStats(agentSchemaEndpointsWithMethods),
     [agentSchemaEndpointsWithMethods],
   );
+  const agentVisibleSchemaEndpointsWithMethods = useMemo(
+    () =>
+      filterEndpointCatalogEntries(
+        agentSchemaEndpointsWithMethods,
+        agentEndpointCatalogFilter,
+      ),
+    [agentEndpointCatalogFilter, agentSchemaEndpointsWithMethods],
+  );
+  const isAgentEndpointCatalogFilterActive = agentEndpointCatalogFilter.trim().length > 0;
   const agentEndpointCatalogPayload = useMemo(
     () =>
       ({
@@ -3972,18 +4012,40 @@ export function SpreadsheetApp() {
             {wizardSchemaEndpointsWithMethods.length > 0 ? (
               <details className="mb-2 rounded border border-slate-800 bg-slate-950/60 p-2">
                 <summary className="cursor-pointer text-[11px] text-slate-400">
-                  discovered endpoint catalog ({wizardSchemaEndpointsWithMethods.length})
+                  discovered endpoint catalog ({wizardVisibleSchemaEndpointsWithMethods.length}
+                  {isWizardEndpointCatalogFilterActive
+                    ? ` of ${wizardSchemaEndpointsWithMethods.length}`
+                    : ""}
+                  )
                 </summary>
-                <div className="mt-2 flex justify-end">
-                  <button
-                    onClick={handleCopyWizardEndpointCatalog}
-                    disabled={isCopyingWizardEndpointCatalog}
-                    className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-                  >
-                    {isCopyingWizardEndpointCatalog
-                      ? "Copying..."
-                      : "Copy endpoint catalog JSON"}
-                  </button>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                    filter:
+                    <input
+                      type="text"
+                      value={wizardEndpointCatalogFilter}
+                      onChange={(event) => {
+                        setWizardEndpointCatalogFilter(event.target.value);
+                      }}
+                      placeholder="key, endpoint, path, summary"
+                      className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-500 sm:w-72"
+                    />
+                  </label>
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <span className="text-[10px] text-slate-500">
+                      showing {wizardVisibleSchemaEndpointsWithMethods.length}
+                      /{wizardSchemaEndpointsWithMethods.length}
+                    </span>
+                    <button
+                      onClick={handleCopyWizardEndpointCatalog}
+                      disabled={isCopyingWizardEndpointCatalog}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingWizardEndpointCatalog
+                        ? "Copying..."
+                        : "Copy endpoint catalog JSON"}
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-2 text-[11px] text-slate-400">
                   coverage: operation methods{" "}
@@ -4054,109 +4116,115 @@ export function SpreadsheetApp() {
                   </p>
                 ) : null}
                 <div className="mt-2 space-y-1">
-                  {wizardSchemaEndpointsWithMethods.map((entry) => (
-                    <div
-                      key={`wizard-endpoint-catalog-${entry.key}`}
-                      className="text-[11px] text-slate-500"
-                    >
-                      <p>
-                        {entry.methods.length > 0 ? (
-                          <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                            {entry.methods.join("|")}
+                  {wizardVisibleSchemaEndpointsWithMethods.length > 0 ? (
+                    wizardVisibleSchemaEndpointsWithMethods.map((entry) => (
+                      <div
+                        key={`wizard-endpoint-catalog-${entry.key}`}
+                        className="text-[11px] text-slate-500"
+                      >
+                        <p>
+                          {entry.methods.length > 0 ? (
+                            <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                              {entry.methods.join("|")}
+                            </span>
+                          ) : null}
+                          {entry.key}:{" "}
+                          <span className="font-mono text-slate-300">{entry.endpoint}</span>
+                          <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                            {entry.methodSource}
                           </span>
+                          <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                            {entry.summarySource}
+                          </span>
+                          <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                            {entry.openApiPathSource}
+                          </span>
+                          {entry.hasMethodMismatch ? (
+                            <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                              method mismatch
+                            </span>
+                          ) : null}
+                          {entry.hasPathMismatch ? (
+                            <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                              path mismatch
+                            </span>
+                          ) : null}
+                          {entry.hasSummaryMismatch ? (
+                            <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                              summary mismatch
+                            </span>
+                          ) : null}
+                          <button
+                            onClick={() => {
+                              void handleCopyEndpoint(entry.endpoint, `wizard ${entry.key}`);
+                            }}
+                            className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          >
+                            copy
+                          </button>
+                        </p>
+                        {entry.summary ? (
+                          <p className="ml-1 text-[10px] text-slate-400">
+                            summary: {entry.summary}
+                          </p>
                         ) : null}
-                        {entry.key}:{" "}
-                        <span className="font-mono text-slate-300">{entry.endpoint}</span>
-                        <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                          {entry.methodSource}
-                        </span>
-                        <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                          {entry.summarySource}
-                        </span>
-                        <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                          {entry.openApiPathSource}
-                        </span>
                         {entry.hasMethodMismatch ? (
-                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
-                            method mismatch
-                          </span>
-                        ) : null}
-                        {entry.hasPathMismatch ? (
-                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
-                            path mismatch
-                          </span>
+                          <p className="ml-1 text-[10px] text-rose-300">
+                            methods (schema vs openapi):{" "}
+                            <span className="font-mono">
+                              {(entry.schemaMethods.length > 0
+                                ? entry.schemaMethods
+                                : ["∅"]).join("|")}
+                            </span>{" "}
+                            vs{" "}
+                            <span className="font-mono">
+                              {(entry.openApiMethods.length > 0
+                                ? entry.openApiMethods
+                                : ["∅"]).join("|")}
+                            </span>
+                          </p>
                         ) : null}
                         {entry.hasSummaryMismatch ? (
-                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
-                            summary mismatch
-                          </span>
+                          <p className="ml-1 text-[10px] text-rose-300">
+                            summary (schema vs openapi):{" "}
+                            <span className="font-mono">
+                              {entry.summary ?? "∅"}
+                            </span>{" "}
+                            vs{" "}
+                            <span className="font-mono">
+                              {entry.openApiSummary ?? "∅"}
+                            </span>
+                          </p>
                         ) : null}
-                        <button
-                          onClick={() => {
-                            void handleCopyEndpoint(entry.endpoint, `wizard ${entry.key}`);
-                          }}
-                          className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-                        >
-                          copy
-                        </button>
-                      </p>
-                      {entry.summary ? (
-                        <p className="ml-1 text-[10px] text-slate-400">
-                          summary: {entry.summary}
+                        <p className="ml-1 text-[10px] text-slate-500">
+                          openapi path:{" "}
+                          <span className="font-mono text-slate-400">{entry.openApiPath}</span>
+                          <button
+                            onClick={() => {
+                              void handleCopyEndpoint(
+                                entry.openApiPath,
+                                `wizard ${entry.key} openapi path`,
+                              );
+                            }}
+                            className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          >
+                            copy path
+                          </button>
                         </p>
-                      ) : null}
-                      {entry.hasMethodMismatch ? (
-                        <p className="ml-1 text-[10px] text-rose-300">
-                          methods (schema vs openapi):{" "}
-                          <span className="font-mono">
-                            {(entry.schemaMethods.length > 0
-                              ? entry.schemaMethods
-                              : ["∅"]).join("|")}
-                          </span>{" "}
-                          vs{" "}
-                          <span className="font-mono">
-                            {(entry.openApiMethods.length > 0
-                              ? entry.openApiMethods
-                              : ["∅"]).join("|")}
-                          </span>
-                        </p>
-                      ) : null}
-                      {entry.hasSummaryMismatch ? (
-                        <p className="ml-1 text-[10px] text-rose-300">
-                          summary (schema vs openapi):{" "}
-                          <span className="font-mono">
-                            {entry.summary ?? "∅"}
-                          </span>{" "}
-                          vs{" "}
-                          <span className="font-mono">
-                            {entry.openApiSummary ?? "∅"}
-                          </span>
-                        </p>
-                      ) : null}
-                      <p className="ml-1 text-[10px] text-slate-500">
-                        openapi path:{" "}
-                        <span className="font-mono text-slate-400">{entry.openApiPath}</span>
-                        <button
-                          onClick={() => {
-                            void handleCopyEndpoint(
-                              entry.openApiPath,
-                              `wizard ${entry.key} openapi path`,
-                            );
-                          }}
-                          className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-                        >
-                          copy path
-                        </button>
-                      </p>
-                      {entry.hasPathMismatch ? (
-                        <p className="ml-1 text-[10px] text-rose-300">
-                          path (schema vs derived):{" "}
-                          <span className="font-mono">{entry.openApiPath}</span> vs{" "}
-                          <span className="font-mono">{entry.derivedOpenApiPath}</span>
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
+                        {entry.hasPathMismatch ? (
+                          <p className="ml-1 text-[10px] text-rose-300">
+                            path (schema vs derived):{" "}
+                            <span className="font-mono">{entry.openApiPath}</span> vs{" "}
+                            <span className="font-mono">{entry.derivedOpenApiPath}</span>
+                          </p>
+                        ) : null}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-[11px] text-slate-500">
+                      no endpoints match the current filter.
+                    </p>
+                  )}
                 </div>
               </details>
             ) : null}
@@ -5037,18 +5105,40 @@ export function SpreadsheetApp() {
             {agentSchemaEndpointsWithMethods.length > 0 ? (
               <details className="mb-2 rounded border border-slate-800 bg-slate-950/60 p-2">
                 <summary className="cursor-pointer text-xs text-slate-400">
-                  discovered endpoint catalog ({agentSchemaEndpointsWithMethods.length})
+                  discovered endpoint catalog ({agentVisibleSchemaEndpointsWithMethods.length}
+                  {isAgentEndpointCatalogFilterActive
+                    ? ` of ${agentSchemaEndpointsWithMethods.length}`
+                    : ""}
+                  )
                 </summary>
-                <div className="mt-2 flex justify-end">
-                  <button
-                    onClick={handleCopyAgentEndpointCatalog}
-                    disabled={isCopyingAgentEndpointCatalog}
-                    className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-                  >
-                    {isCopyingAgentEndpointCatalog
-                      ? "Copying..."
-                      : "Copy endpoint catalog JSON"}
-                  </button>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    filter:
+                    <input
+                      type="text"
+                      value={agentEndpointCatalogFilter}
+                      onChange={(event) => {
+                        setAgentEndpointCatalogFilter(event.target.value);
+                      }}
+                      placeholder="key, endpoint, path, summary"
+                      className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-500 sm:w-72"
+                    />
+                  </label>
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <span className="text-[10px] text-slate-500">
+                      showing {agentVisibleSchemaEndpointsWithMethods.length}
+                      /{agentSchemaEndpointsWithMethods.length}
+                    </span>
+                    <button
+                      onClick={handleCopyAgentEndpointCatalog}
+                      disabled={isCopyingAgentEndpointCatalog}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingAgentEndpointCatalog
+                        ? "Copying..."
+                        : "Copy endpoint catalog JSON"}
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-2 text-xs text-slate-400">
                   coverage: operation methods{" "}
@@ -5119,109 +5209,115 @@ export function SpreadsheetApp() {
                   </p>
                 ) : null}
                 <div className="mt-2 space-y-1">
-                  {agentSchemaEndpointsWithMethods.map((entry) => (
-                    <div
-                      key={`agent-endpoint-catalog-${entry.key}`}
-                      className="text-xs text-slate-400"
-                    >
-                      <p>
-                        {entry.methods.length > 0 ? (
-                          <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                            {entry.methods.join("|")}
+                  {agentVisibleSchemaEndpointsWithMethods.length > 0 ? (
+                    agentVisibleSchemaEndpointsWithMethods.map((entry) => (
+                      <div
+                        key={`agent-endpoint-catalog-${entry.key}`}
+                        className="text-xs text-slate-400"
+                      >
+                        <p>
+                          {entry.methods.length > 0 ? (
+                            <span className="mr-1.5 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                              {entry.methods.join("|")}
+                            </span>
+                          ) : null}
+                          {entry.key}:{" "}
+                          <span className="font-mono text-slate-200">{entry.endpoint}</span>
+                          <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                            {entry.methodSource}
                           </span>
+                          <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                            {entry.summarySource}
+                          </span>
+                          <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
+                            {entry.openApiPathSource}
+                          </span>
+                          {entry.hasMethodMismatch ? (
+                            <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                              method mismatch
+                            </span>
+                          ) : null}
+                          {entry.hasPathMismatch ? (
+                            <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                              path mismatch
+                            </span>
+                          ) : null}
+                          {entry.hasSummaryMismatch ? (
+                            <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
+                              summary mismatch
+                            </span>
+                          ) : null}
+                          <button
+                            onClick={() => {
+                              void handleCopyEndpoint(entry.endpoint, `agent ${entry.key}`);
+                            }}
+                            className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          >
+                            copy
+                          </button>
+                        </p>
+                        {entry.summary ? (
+                          <p className="ml-1 text-[10px] text-slate-400">
+                            summary: {entry.summary}
+                          </p>
                         ) : null}
-                        {entry.key}:{" "}
-                        <span className="font-mono text-slate-200">{entry.endpoint}</span>
-                        <span className="ml-2 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                          {entry.methodSource}
-                        </span>
-                        <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                          {entry.summarySource}
-                        </span>
-                        <span className="ml-1 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-slate-300">
-                          {entry.openApiPathSource}
-                        </span>
                         {entry.hasMethodMismatch ? (
-                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
-                            method mismatch
-                          </span>
-                        ) : null}
-                        {entry.hasPathMismatch ? (
-                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
-                            path mismatch
-                          </span>
+                          <p className="ml-1 text-[10px] text-rose-300">
+                            methods (schema vs openapi):{" "}
+                            <span className="font-mono">
+                              {(entry.schemaMethods.length > 0
+                                ? entry.schemaMethods
+                                : ["∅"]).join("|")}
+                            </span>{" "}
+                            vs{" "}
+                            <span className="font-mono">
+                              {(entry.openApiMethods.length > 0
+                                ? entry.openApiMethods
+                                : ["∅"]).join("|")}
+                            </span>
+                          </p>
                         ) : null}
                         {entry.hasSummaryMismatch ? (
-                          <span className="ml-1 rounded border border-rose-500/40 bg-rose-500/10 px-1 py-0.5 text-[10px] text-rose-200">
-                            summary mismatch
-                          </span>
+                          <p className="ml-1 text-[10px] text-rose-300">
+                            summary (schema vs openapi):{" "}
+                            <span className="font-mono">
+                              {entry.summary ?? "∅"}
+                            </span>{" "}
+                            vs{" "}
+                            <span className="font-mono">
+                              {entry.openApiSummary ?? "∅"}
+                            </span>
+                          </p>
                         ) : null}
-                        <button
-                          onClick={() => {
-                            void handleCopyEndpoint(entry.endpoint, `agent ${entry.key}`);
-                          }}
-                          className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-                        >
-                          copy
-                        </button>
-                      </p>
-                      {entry.summary ? (
-                        <p className="ml-1 text-[10px] text-slate-400">
-                          summary: {entry.summary}
+                        <p className="ml-1 text-[10px] text-slate-500">
+                          openapi path:{" "}
+                          <span className="font-mono text-slate-400">{entry.openApiPath}</span>
+                          <button
+                            onClick={() => {
+                              void handleCopyEndpoint(
+                                entry.openApiPath,
+                                `agent ${entry.key} openapi path`,
+                              );
+                            }}
+                            className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                          >
+                            copy path
+                          </button>
                         </p>
-                      ) : null}
-                      {entry.hasMethodMismatch ? (
-                        <p className="ml-1 text-[10px] text-rose-300">
-                          methods (schema vs openapi):{" "}
-                          <span className="font-mono">
-                            {(entry.schemaMethods.length > 0
-                              ? entry.schemaMethods
-                              : ["∅"]).join("|")}
-                          </span>{" "}
-                          vs{" "}
-                          <span className="font-mono">
-                            {(entry.openApiMethods.length > 0
-                              ? entry.openApiMethods
-                              : ["∅"]).join("|")}
-                          </span>
-                        </p>
-                      ) : null}
-                      {entry.hasSummaryMismatch ? (
-                        <p className="ml-1 text-[10px] text-rose-300">
-                          summary (schema vs openapi):{" "}
-                          <span className="font-mono">
-                            {entry.summary ?? "∅"}
-                          </span>{" "}
-                          vs{" "}
-                          <span className="font-mono">
-                            {entry.openApiSummary ?? "∅"}
-                          </span>
-                        </p>
-                      ) : null}
-                      <p className="ml-1 text-[10px] text-slate-500">
-                        openapi path:{" "}
-                        <span className="font-mono text-slate-400">{entry.openApiPath}</span>
-                        <button
-                          onClick={() => {
-                            void handleCopyEndpoint(
-                              entry.openApiPath,
-                              `agent ${entry.key} openapi path`,
-                            );
-                          }}
-                          className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
-                        >
-                          copy path
-                        </button>
-                      </p>
-                      {entry.hasPathMismatch ? (
-                        <p className="ml-1 text-[10px] text-rose-300">
-                          path (schema vs derived):{" "}
-                          <span className="font-mono">{entry.openApiPath}</span> vs{" "}
-                          <span className="font-mono">{entry.derivedOpenApiPath}</span>
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
+                        {entry.hasPathMismatch ? (
+                          <p className="ml-1 text-[10px] text-rose-300">
+                            path (schema vs derived):{" "}
+                            <span className="font-mono">{entry.openApiPath}</span> vs{" "}
+                            <span className="font-mono">{entry.derivedOpenApiPath}</span>
+                          </p>
+                        ) : null}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      no endpoints match the current filter.
+                    </p>
+                  )}
                 </div>
               </details>
             ) : null}
