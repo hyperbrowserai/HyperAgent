@@ -5,6 +5,28 @@
 import { Page, Frame } from "playwright-core";
 import { AccessibilityNode, EncodedId, AXNode, IframeInfo } from "./types";
 import { normalizePageUrl } from "@/utils/page-url";
+import { formatUnknownError } from "@/utils";
+
+const MAX_FRAME_RESOLUTION_DIAGNOSTIC_CHARS = 400;
+
+function formatFrameResolutionDiagnostic(error: unknown): string {
+  const normalized = Array.from(formatUnknownError(error), (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallback = normalized.length > 0 ? normalized : "unknown error";
+  if (fallback.length <= MAX_FRAME_RESOLUTION_DIAGNOSTIC_CHARS) {
+    return fallback;
+  }
+  const omitted = fallback.length - MAX_FRAME_RESOLUTION_DIAGNOSTIC_CHARS;
+  return `${fallback.slice(
+    0,
+    MAX_FRAME_RESOLUTION_DIAGNOSTIC_CHARS
+  )}... [truncated ${omitted} chars]`;
+}
 
 /**
  * Clean text by removing private-use unicode characters and normalizing whitespace
@@ -378,17 +400,26 @@ export async function resolveFrameByXPath(
         fallback: "",
       });
       if (targetSrc.length > 0) {
-        const frames = page.frames();
-        for (const frame of frames) {
-          let frameUrl = "";
-          try {
-            frameUrl = normalizePageUrl(frame.url(), { fallback: "" });
-          } catch {
-            frameUrl = "";
+        try {
+          const frames = page.frames();
+          for (const frame of frames) {
+            let frameUrl = "";
+            try {
+              frameUrl = normalizePageUrl(frame.url(), { fallback: "" });
+            } catch {
+              frameUrl = "";
+            }
+            if (frameUrl === targetSrc) {
+              return frame;
+            }
           }
-          if (frameUrl === targetSrc) {
-            return frame;
-          }
+        } catch (error) {
+          console.warn(
+            `[A11y] Failed to enumerate frames for URL matching: ${formatFrameResolutionDiagnostic(
+              error
+            )}`
+          );
+          // Continue with XPath traversal fallback.
         }
       }
     }
@@ -447,8 +478,9 @@ export async function resolveFrameByXPath(
         currentFrame = nextFrame;
       } catch (error) {
         console.warn(
-          `[A11y] Error traversing frame ${frameIndex}:`,
-          error
+          `[A11y] Error traversing frame ${frameIndex}: ${formatFrameResolutionDiagnostic(
+            error
+          )}`
         );
         return null;
       }
@@ -457,8 +489,9 @@ export async function resolveFrameByXPath(
     return currentFrame;
   } catch (error) {
     console.error(
-      `[A11y] Failed to resolve frame ${targetFrameIndex}:`,
-      error
+      `[A11y] Failed to resolve frame ${targetFrameIndex}: ${formatFrameResolutionDiagnostic(
+        error
+      )}`
     );
     return null;
   }
