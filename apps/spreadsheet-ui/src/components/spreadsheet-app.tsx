@@ -1094,6 +1094,8 @@ export function SpreadsheetApp() {
     useState(false);
   const [isCopyingVisibleWizardEndpointUrls, setIsCopyingVisibleWizardEndpointUrls] =
     useState(false);
+  const [isCopyingVisibleWizardOpenApiPaths, setIsCopyingVisibleWizardOpenApiPaths] =
+    useState(false);
   const [isCopyingAgentEndpointCatalog, setIsCopyingAgentEndpointCatalog] =
     useState(false);
   const [isCopyingVisibleAgentEndpointCatalog, setIsCopyingVisibleAgentEndpointCatalog] =
@@ -1101,6 +1103,8 @@ export function SpreadsheetApp() {
   const [isCopyingVisibleAgentEndpointKeys, setIsCopyingVisibleAgentEndpointKeys] =
     useState(false);
   const [isCopyingVisibleAgentEndpointUrls, setIsCopyingVisibleAgentEndpointUrls] =
+    useState(false);
+  const [isCopyingVisibleAgentOpenApiPaths, setIsCopyingVisibleAgentOpenApiPaths] =
     useState(false);
   const [isRunningWizard, setIsRunningWizard] = useState(false);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
@@ -4009,6 +4013,27 @@ export function SpreadsheetApp() {
     }
   }
 
+  async function handleCopyVisibleWizardOpenApiPaths() {
+    if (wizardVisibleSchemaEndpointsWithMethods.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleWizardOpenApiPaths(true);
+    try {
+      const payload = wizardVisibleSchemaEndpointsWithMethods
+        .map((entry) => `${entry.key}: ${entry.openApiPath}`)
+        .join("\n");
+      await navigator.clipboard.writeText(payload);
+      clearUiError();
+      setNotice(
+        `Copied visible wizard OpenAPI paths (${wizardVisibleSchemaEndpointsWithMethods.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible wizard OpenAPI paths.");
+    } finally {
+      setIsCopyingVisibleWizardOpenApiPaths(false);
+    }
+  }
+
   async function handleCopyAgentEndpointCatalog() {
     if (agentEndpointCatalogPayload.endpoints.length === 0) {
       return;
@@ -4116,6 +4141,27 @@ export function SpreadsheetApp() {
       applyUiError(error, "Failed to copy visible agent endpoint URLs.");
     } finally {
       setIsCopyingVisibleAgentEndpointUrls(false);
+    }
+  }
+
+  async function handleCopyVisibleAgentOpenApiPaths() {
+    if (agentVisibleSchemaEndpointsWithMethods.length === 0) {
+      return;
+    }
+    setIsCopyingVisibleAgentOpenApiPaths(true);
+    try {
+      const payload = agentVisibleSchemaEndpointsWithMethods
+        .map((entry) => `${entry.key}: ${entry.openApiPath}`)
+        .join("\n");
+      await navigator.clipboard.writeText(payload);
+      clearUiError();
+      setNotice(
+        `Copied visible agent OpenAPI paths (${agentVisibleSchemaEndpointsWithMethods.length}).`,
+      );
+    } catch (error) {
+      applyUiError(error, "Failed to copy visible agent OpenAPI paths.");
+    } finally {
+      setIsCopyingVisibleAgentOpenApiPaths(false);
     }
   }
 
@@ -5378,6 +5424,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleWizardEndpointUrls
                         ? "Copying..."
                         : "Copy visible URLs"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleWizardOpenApiPaths}
+                      disabled={isCopyingVisibleWizardOpenApiPaths}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleWizardOpenApiPaths
+                        ? "Copying..."
+                        : "Copy visible paths"}
                     </button>
                     <button
                       onClick={handleCopyWizardEndpointCatalog}
@@ -6945,6 +7000,15 @@ export function SpreadsheetApp() {
                       {isCopyingVisibleAgentEndpointUrls
                         ? "Copying..."
                         : "Copy visible URLs"}
+                    </button>
+                    <button
+                      onClick={handleCopyVisibleAgentOpenApiPaths}
+                      disabled={isCopyingVisibleAgentOpenApiPaths}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                    >
+                      {isCopyingVisibleAgentOpenApiPaths
+                        ? "Copying..."
+                        : "Copy visible paths"}
                     </button>
                     <button
                       onClick={handleCopyAgentEndpointCatalog}
