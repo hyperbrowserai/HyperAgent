@@ -2846,6 +2846,26 @@ mod tests {
     }
   }
 
+  #[test]
+  fn should_keep_formula_validation_error_codes_unique_and_trimmed() {
+    let mut seen = std::collections::HashSet::new();
+    for error_code in FORMULA_VALIDATION_ERROR_CODES {
+      assert!(
+        !error_code.trim().is_empty(),
+        "formula validation error codes should not be blank",
+      );
+      assert_eq!(
+        error_code.trim(),
+        *error_code,
+        "formula validation error codes should be trimmed",
+      );
+      assert!(
+        seen.insert(*error_code),
+        "formula validation error codes should not contain duplicates: {error_code}",
+      );
+    }
+  }
+
   fn workbook_import_fixture_bytes() -> Vec<u8> {
     let mut workbook = Workbook::new();
     let inputs_sheet = workbook.add_worksheet();
