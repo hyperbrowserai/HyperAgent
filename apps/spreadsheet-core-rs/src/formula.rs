@@ -1076,6 +1076,17 @@ pub fn parse_harmean_formula(formula: &str) -> Option<((u32, u32), (u32, u32))> 
   parse_range_reference(&args[0])
 }
 
+pub fn parse_trimmean_formula(
+  formula: &str,
+) -> Option<((u32, u32), (u32, u32), String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function != "TRIMMEAN" || args.len() != 2 {
+    return None;
+  }
+  let (start, end) = parse_range_reference(&args[0])?;
+  Some((start, end, args[1].clone()))
+}
+
 pub fn parse_percentrank_inc_formula(
   formula: &str,
 ) -> Option<((u32, u32), (u32, u32), String, Option<String>)> {
@@ -1358,6 +1369,7 @@ mod tests {
     parse_percentile_inc_formula, parse_quartile_inc_formula,
     parse_percentile_exc_formula, parse_quartile_exc_formula,
     parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
+    parse_trimmean_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_counta_formula, parse_countblank_formula,
     parse_if_formula, parse_iferror_formula, parse_choose_formula,
@@ -1788,6 +1800,11 @@ mod tests {
       parse_harmean_formula("=HARMEAN(A1:A5)").expect("harmean should parse");
     assert_eq!(harmean.0, (1, 1));
     assert_eq!(harmean.1, (5, 1));
+    let trimmean = parse_trimmean_formula("=TRIMMEAN(A1:A5,0.4)")
+      .expect("trimmean should parse");
+    assert_eq!(trimmean.0, (1, 1));
+    assert_eq!(trimmean.1, (5, 1));
+    assert_eq!(trimmean.2, "0.4");
     let percentrank_inc =
       parse_percentrank_inc_formula("=PERCENTRANK.INC(A1:A5,3,4)")
         .expect("percentrank inc should parse");

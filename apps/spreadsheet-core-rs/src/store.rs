@@ -11,6 +11,7 @@ use crate::{
     parse_percentile_inc_formula, parse_quartile_inc_formula,
     parse_percentile_exc_formula, parse_quartile_exc_formula,
     parse_mode_sngl_formula, parse_geomean_formula, parse_harmean_formula,
+    parse_trimmean_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
     parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
@@ -671,6 +672,37 @@ fn evaluate_formula(
       return Ok(None);
     }
     let mean = values.len() as f64 / reciprocal_sum;
+    return Ok(Some(mean.to_string()));
+  }
+
+  if let Some((start, end, trim_percent_arg)) = parse_trimmean_formula(formula) {
+    let trim_percent = parse_required_float(connection, sheet, &trim_percent_arg)?;
+    if !(0.0..1.0).contains(&trim_percent) {
+      return Ok(None);
+    }
+    let mut values = collect_numeric_range_values(connection, sheet, start, end)?;
+    if values.is_empty() {
+      return Ok(None);
+    }
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut trim_count = ((values.len() as f64) * trim_percent).floor() as usize;
+    if trim_count % 2 != 0 {
+      trim_count -= 1;
+    }
+    if trim_count >= values.len() {
+      return Ok(None);
+    }
+
+    let trim_each_side = trim_count / 2;
+    let start_index = trim_each_side;
+    let end_index = values.len().saturating_sub(trim_each_side);
+    if start_index >= end_index {
+      return Ok(None);
+    }
+    let trimmed_values = &values[start_index..end_index];
+    let mean =
+      trimmed_values.iter().sum::<f64>() / trimmed_values.len() as f64;
     return Ok(Some(mean.to_string()));
   }
 
@@ -3026,6 +3058,18 @@ mod tests {
         formula: None,
       },
       CellMutation {
+        row: 5,
+        col: 1,
+        value: Some(json!(40)),
+        formula: None,
+      },
+      CellMutation {
+        row: 6,
+        col: 1,
+        value: Some(json!(200)),
+        formula: None,
+      },
+      CellMutation {
         row: 1,
         col: 2,
         value: None,
@@ -3951,12 +3995,18 @@ mod tests {
         value: None,
         formula: Some("=HARMEAN(A1:A2)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 153,
+        value: None,
+        formula: Some("=TRIMMEAN(A1:A6,0.4)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 150);
+    assert_eq!(updated_cells, 151);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -3970,7 +4020,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 152,
+        end_col: 153,
       },
     )
     .expect("cells should be fetched");
@@ -4298,6 +4348,16 @@ mod tests {
     assert!(
       (harmean - 96.0).abs() < 1e-9,
       "harmean should be 96.0, got {harmean}",
+    );
+    let trimmean = by_position(1, 153)
+      .evaluated_value
+      .as_deref()
+      .expect("trimmean should evaluate")
+      .parse::<f64>()
+      .expect("trimmean should be numeric");
+    assert!(
+      (trimmean - 106.666_666_666_666_67).abs() < 1e-9,
+      "trimmean should be 106.666..., got {trimmean}",
     );
   }
 
@@ -4773,6 +4833,48 @@ mod tests {
     let (_updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
     assert_eq!(unsupported_formulas, vec!["=HARMEAN(A1:A2)".to_string()]);
+  }
+
+  #[test]
+  fn should_leave_invalid_trimmean_percent_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: Some(json!(120)),
+        formula: None,
+      },
+      CellMutation {
+        row: 2,
+        col: 1,
+        value: Some(json!(80)),
+        formula: None,
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=TRIMMEAN(A1:A2,1)".to_string()),
+      },
+      CellMutation {
+        row: 2,
+        col: 2,
+        value: None,
+        formula: Some("=TRIMMEAN(A1:A2,-0.1)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=TRIMMEAN(A1:A2,1)".to_string(),
+        "=TRIMMEAN(A1:A2,-0.1)".to_string(),
+      ],
+    );
   }
 
   #[test]
