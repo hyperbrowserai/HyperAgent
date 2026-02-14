@@ -223,4 +223,26 @@ describe("action-cache perform helper dispatch", () => {
     ).cachedAction;
     expect(cachedAction?.arguments?.[0]?.length).toBe(20_000);
   });
+
+  it("caps oversized maxSteps passed to attached perform helpers", async () => {
+    const agentDeps: AgentDeps = {
+      llm: createMockLLM(),
+      debug: false,
+      tokenLimit: 1000,
+      variables: [],
+      cdpActionsEnabled: false,
+    };
+    const page = createMockHyperPage();
+    attachCachedActionHelpers(agentDeps, page);
+
+    await page.performClick("//button[1]", {
+      maxSteps: 999,
+    });
+
+    expect(runCachedStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxSteps: 20,
+      })
+    );
+  });
 });

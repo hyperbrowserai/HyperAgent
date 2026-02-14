@@ -8,6 +8,7 @@ import * as cachedRunner from "./run-cached-action";
 import { formatUnknownError } from "@/utils";
 
 const DEFAULT_MAX_STEPS = 3;
+const MAX_PERFORM_MAX_STEPS = 20;
 const MAX_PERFORM_VALUE_CHARS = 20_000;
 const MAX_PERFORM_HELPER_DIAGNOSTIC_CHARS = 400;
 
@@ -171,7 +172,7 @@ function normalizeMaxSteps(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return DEFAULT_MAX_STEPS;
   }
-  return Math.floor(value);
+  return Math.min(Math.floor(value), MAX_PERFORM_MAX_STEPS);
 }
 
 function normalizeFrameIndex(value: unknown): number | null {
