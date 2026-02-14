@@ -2261,6 +2261,14 @@ export function SpreadsheetApp() {
       }),
     [wizardSchemaEndpointsWithMethods, wizardVisibleSchemaEndpointsWithMethods],
   );
+  const wizardEndpointCatalogOverallStats = useMemo(
+    () =>
+      buildEndpointCatalogViewStats({
+        allEntries: wizardSchemaEndpointsWithMethods,
+        visibleEntries: wizardSchemaEndpointsWithMethods,
+      }),
+    [wizardSchemaEndpointsWithMethods],
+  );
   const wizardEndpointCatalogPayload = useMemo(
     () =>
       ({
@@ -2813,6 +2821,14 @@ export function SpreadsheetApp() {
         visibleEntries: agentVisibleSchemaEndpointsWithMethods,
       }),
     [agentSchemaEndpointsWithMethods, agentVisibleSchemaEndpointsWithMethods],
+  );
+  const agentEndpointCatalogOverallStats = useMemo(
+    () =>
+      buildEndpointCatalogViewStats({
+        allEntries: agentSchemaEndpointsWithMethods,
+        visibleEntries: agentSchemaEndpointsWithMethods,
+      }),
+    [agentSchemaEndpointsWithMethods],
   );
   const agentEndpointCatalogPayload = useMemo(
     () =>
@@ -5129,6 +5145,66 @@ export function SpreadsheetApp() {
                         <option value="fallback">fallback only</option>
                       </select>
                     </label>
+                    <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+                      <button
+                        onClick={() => {
+                          setWizardEndpointCatalogViewMode("all");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          wizardEndpointCatalogViewMode === "all"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        all ({wizardEndpointCatalogOverallStats.totalEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setWizardEndpointCatalogViewMode("issues");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          wizardEndpointCatalogViewMode === "issues"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        issues ({wizardEndpointCatalogOverallStats.visibleIssueEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setWizardEndpointCatalogViewMode("mismatches");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          wizardEndpointCatalogViewMode === "mismatches"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        mismatches ({wizardEndpointCatalogOverallStats.visibleMismatchEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setWizardEndpointCatalogViewMode("fallback");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          wizardEndpointCatalogViewMode === "fallback"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        fallback ({wizardEndpointCatalogOverallStats.visibleFallbackEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setWizardEndpointCatalogFilter("");
+                          setWizardEndpointCatalogSort("key_asc");
+                          setWizardEndpointCatalogViewMode("all");
+                        }}
+                        className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800"
+                      >
+                        reset controls
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 self-end sm:self-auto">
                     <span className="text-[10px] text-slate-500">
@@ -6605,6 +6681,66 @@ export function SpreadsheetApp() {
                         <option value="fallback">fallback only</option>
                       </select>
                     </label>
+                    <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+                      <button
+                        onClick={() => {
+                          setAgentEndpointCatalogViewMode("all");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          agentEndpointCatalogViewMode === "all"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        all ({agentEndpointCatalogOverallStats.totalEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAgentEndpointCatalogViewMode("issues");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          agentEndpointCatalogViewMode === "issues"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        issues ({agentEndpointCatalogOverallStats.visibleIssueEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAgentEndpointCatalogViewMode("mismatches");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          agentEndpointCatalogViewMode === "mismatches"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        mismatches ({agentEndpointCatalogOverallStats.visibleMismatchEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAgentEndpointCatalogViewMode("fallback");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          agentEndpointCatalogViewMode === "fallback"
+                            ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-100"
+                            : "border-slate-700 text-slate-300 hover:bg-slate-800"
+                        }`}
+                      >
+                        fallback ({agentEndpointCatalogOverallStats.visibleFallbackEntries})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAgentEndpointCatalogFilter("");
+                          setAgentEndpointCatalogSort("key_asc");
+                          setAgentEndpointCatalogViewMode("all");
+                        }}
+                        className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800"
+                      >
+                        reset controls
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 self-end sm:self-auto">
                     <span className="text-[10px] text-slate-500">
