@@ -20,7 +20,8 @@ use crate::{
     parse_sumx_formula, parse_skew_formula, parse_skew_p_formula, parse_kurt_formula,
     parse_fisher_formula, parse_fisherinv_formula,
     parse_percentrank_inc_formula, parse_percentrank_exc_formula,
-    parse_date_formula, parse_day_formula, parse_if_formula, parse_iferror_formula,
+    parse_date_formula, parse_edate_formula, parse_eomonth_formula, parse_day_formula,
+    parse_if_formula, parse_iferror_formula,
     parse_abs_formula, parse_exp_formula, parse_ln_formula, parse_log10_formula,
     parse_log_formula, parse_fact_formula, parse_factdouble_formula,
     parse_combin_formula, parse_combina_formula, parse_gcd_formula, parse_lcm_formula,
@@ -76,7 +77,9 @@ use crate::{
   },
   models::{CellMutation, CellRange, CellSnapshot},
 };
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
+use chrono::{
+  DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc,
+};
 use duckdb::{params, Connection};
 use regex::Regex;
 use serde_json::Value;
@@ -2279,6 +2282,38 @@ fn evaluate_formula(
     return Ok(Some(value));
   }
 
+  if let Some((start_date_arg, month_arg)) = parse_edate_formula(formula) {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let Some(base_date) = start_date else {
+      return Ok(Some(String::new()));
+    };
+    let months = parse_required_integer(connection, sheet, &month_arg)?;
+    let Some(shifted_date) = shift_date_by_months(base_date, months) else {
+      return Ok(None);
+    };
+    return Ok(Some(shifted_date.to_string()));
+  }
+
+  if let Some((start_date_arg, month_arg)) = parse_eomonth_formula(formula) {
+    let start_date = parse_date_operand(connection, sheet, &start_date_arg)?;
+    let Some(base_date) = start_date else {
+      return Ok(Some(String::new()));
+    };
+    let months = parse_required_integer(connection, sheet, &month_arg)?;
+    let Some((target_year, target_month)) =
+      shift_year_month(base_date.year(), base_date.month(), months)
+    else {
+      return Ok(None);
+    };
+    let Some(next_month_start) = shift_year_month(target_year, target_month, 1)
+      .and_then(|(year, month)| NaiveDate::from_ymd_opt(year, month, 1))
+    else {
+      return Ok(None);
+    };
+    let end_of_month = next_month_start - Duration::days(1);
+    return Ok(Some(end_of_month.to_string()));
+  }
+
   if let Some(year_arg) = parse_year_formula(formula) {
     let date = parse_date_operand(connection, sheet, &year_arg)?;
     return Ok(Some(date.map(|value| value.year().to_string()).unwrap_or_default()));
@@ -3559,6 +3594,35 @@ fn parse_required_unsigned(
     .map(|number| number.max(0.0) as u32)
     .unwrap_or_default();
   Ok(value)
+}
+
+fn shift_year_month(
+  year: i32,
+  month: u32,
+  months_delta: i32,
+) -> Option<(i32, u32)> {
+  if !(1..=12).contains(&month) {
+    return None;
+  }
+  let month_index = year
+    .checked_mul(12)?
+    .checked_add(i32::try_from(month).ok()?)?
+    .checked_sub(1)?
+    .checked_add(months_delta)?;
+  let shifted_year = month_index.div_euclid(12);
+  let shifted_month = month_index.rem_euclid(12) + 1;
+  Some((shifted_year, shifted_month as u32))
+}
+
+fn shift_date_by_months(date: NaiveDate, months_delta: i32) -> Option<NaiveDate> {
+  let (shifted_year, shifted_month) =
+    shift_year_month(date.year(), date.month(), months_delta)?;
+  let month_start = NaiveDate::from_ymd_opt(shifted_year, shifted_month, 1)?;
+  let (next_year, next_month) = shift_year_month(shifted_year, shifted_month, 1)?;
+  let next_month_start = NaiveDate::from_ymd_opt(next_year, next_month, 1)?;
+  let month_end = next_month_start - Duration::days(1);
+  let clamped_day = date.day().min(month_end.day());
+  NaiveDate::from_ymd_opt(month_start.year(), month_start.month(), clamped_day)
 }
 
 fn parse_date_operand(
@@ -5384,12 +5448,24 @@ mod tests {
         value: None,
         formula: Some("=FLOOR.MATH(12.31)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 213,
+        value: None,
+        formula: Some(r#"=EDATE("2024-01-31",1)"#.to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 214,
+        value: None,
+        formula: Some(r#"=EOMONTH("2024-01-15",1)"#.to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 210);
+    assert_eq!(updated_cells, 212);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -5403,7 +5479,7 @@ mod tests {
         start_row: 1,
         end_row: 2,
         start_col: 1,
-        end_col: 212,
+        end_col: 214,
       },
     )
     .expect("cells should be fetched");
@@ -6175,6 +6251,16 @@ mod tests {
       by_position(1, 212).evaluated_value.as_deref(),
       Some("12"),
       "floor.math should default significance to one",
+    );
+    assert_eq!(
+      by_position(1, 213).evaluated_value.as_deref(),
+      Some("2024-02-29"),
+      "edate should shift months and clamp to end-of-month",
+    );
+    assert_eq!(
+      by_position(1, 214).evaluated_value.as_deref(),
+      Some("2024-02-29"),
+      "eomonth should resolve end-of-month for shifted month",
     );
   }
 

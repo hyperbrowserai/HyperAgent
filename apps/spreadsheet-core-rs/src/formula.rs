@@ -1026,6 +1026,22 @@ pub fn parse_date_formula(formula: &str) -> Option<(String, String, String)> {
   None
 }
 
+pub fn parse_edate_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "EDATE" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_eomonth_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "EOMONTH" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_year_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "YEAR" && args.len() == 1 {
@@ -1738,7 +1754,8 @@ mod tests {
   use super::{
     address_from_row_col, parse_aggregate_formula, parse_and_formula,
     parse_averageif_formula, parse_averageifs_formula,
-    parse_abs_formula, parse_concat_formula, parse_date_formula, parse_day_formula,
+    parse_abs_formula, parse_concat_formula, parse_date_formula, parse_edate_formula,
+    parse_eomonth_formula, parse_day_formula,
     parse_ceiling_formula, parse_ceiling_math_formula, parse_floor_formula,
     parse_floor_math_formula,
     parse_exact_formula,
@@ -2186,6 +2203,11 @@ mod tests {
 
     let date_parts = parse_date_formula("=DATE(2026,2,13)").expect("date should parse");
     assert_eq!(date_parts, ("2026".to_string(), "2".to_string(), "13".to_string()));
+    let edate_args = parse_edate_formula("=EDATE(A1,2)").expect("edate should parse");
+    assert_eq!(edate_args, ("A1".to_string(), "2".to_string()));
+    let eomonth_args =
+      parse_eomonth_formula("=EOMONTH(A1,-1)").expect("eomonth should parse");
+    assert_eq!(eomonth_args, ("A1".to_string(), "-1".to_string()));
 
     assert_eq!(
       parse_year_formula("=YEAR(A1)").as_deref(),
