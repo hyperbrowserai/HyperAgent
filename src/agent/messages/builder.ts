@@ -410,11 +410,28 @@ function normalizeScrollInfo(value: unknown): [number, number] {
 }
 
 function getOpenTabsSummary(page: Page): string {
+  const currentTabFallback = (() => {
+    try {
+      return `[0] ${truncateTabUrl(page.url() || "about:blank")} (current)`;
+    } catch {
+      return "[0] about:blank (url unavailable) (current)";
+    }
+  })();
   try {
-    const pages = page.context().pages();
+    const context = page.context();
+    if (!context || typeof context !== "object") {
+      return currentTabFallback;
+    }
+    const pagesMethod = (context as { pages?: unknown }).pages;
+    if (typeof pagesMethod !== "function") {
+      return currentTabFallback;
+    }
+    const pages = pagesMethod.call(context) as ReturnType<
+      ReturnType<Page["context"]>["pages"]
+    >;
     const pageEntries = materializeSafePages(pages);
     if (pageEntries.length === 0) {
-      return `[0] ${truncateTabUrl(page.url() || "about:blank")} (current)`;
+      return currentTabFallback;
     }
     let visibleEntries = pageEntries.slice(0, MAX_OPEN_TAB_ENTRIES);
     const currentEntry = pageEntries.find((entry) => entry.openPage === page);
@@ -447,7 +464,7 @@ function getOpenTabsSummary(page: Page): string {
     }
     return tabLines.join("\n");
   } catch {
-    return "Open tabs unavailable";
+    return currentTabFallback;
   }
 }
 

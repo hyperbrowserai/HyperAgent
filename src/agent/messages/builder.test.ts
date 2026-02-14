@@ -451,7 +451,7 @@ describe("buildAgentStepMessages", () => {
     expect(joined.length).toBeLessThan(6000);
   });
 
-  it("falls back to placeholder text when open tabs cannot be listed", async () => {
+  it("falls back to current-tab line when open tabs cannot be listed", async () => {
     const page = {
       url: () => "https://example.com/current",
       context: () => {
@@ -481,7 +481,46 @@ describe("buildAgentStepMessages", () => {
       .join("\n");
 
     expect(joined).toContain("=== Open Tabs ===");
-    expect(joined).toContain("Open tabs unavailable");
+    expect(joined).toContain("[0] https://example.com/current (current)");
+    expect(joined).not.toContain("Open tabs unavailable");
+  });
+
+  it("falls back to current-tab line when context pages method getter traps", async () => {
+    const context = {};
+    Object.defineProperty(context, "pages", {
+      get: () => {
+        throw new Error("pages getter trap");
+      },
+      configurable: true,
+    });
+    const page = {
+      url: () => "https://example.com/current",
+      context: () => context as ReturnType<Page["context"]>,
+    } as unknown as Page;
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[0] https://example.com/current (current)");
+    expect(joined).not.toContain("Open tabs unavailable");
   });
 
   it("falls back to placeholder text when current URL cannot be read", async () => {
