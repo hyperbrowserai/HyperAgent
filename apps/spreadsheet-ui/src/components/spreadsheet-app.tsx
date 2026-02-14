@@ -1295,6 +1295,7 @@ export function SpreadsheetApp() {
     setIsRunningAgentFlow(true);
     try {
       clearUiError();
+      const escapedActiveSheet = activeSheet.replaceAll("'", "''");
       const operations: AgentOperationPreview[] = [
         {
           op_type: "set_cells",
@@ -1310,6 +1311,11 @@ export function SpreadsheetApp() {
           ],
         },
         { op_type: "recalculate" },
+        {
+          op_type: "duckdb_query",
+          sql: `SELECT row_index, col_index, raw_value, formula, evaluated_value FROM cells WHERE sheet='${escapedActiveSheet}' ORDER BY row_index, col_index`,
+          row_limit: 20,
+        },
         {
           op_type: "upsert_chart",
           chart: {
@@ -1339,6 +1345,17 @@ export function SpreadsheetApp() {
       setLastPreset(null);
       setLastScenario(null);
       setLastWizardImportSummary(null);
+      const duckdbQueryRowCount = response.results
+        .find((result) => result.op_type === "duckdb_query" && result.ok)
+        ?.data
+        .row_count;
+      if (typeof duckdbQueryRowCount === "number") {
+        setNotice(
+          `Agent demo flow completed. DuckDB query sampled ${duckdbQueryRowCount} row${
+            duckdbQueryRowCount === 1 ? "" : "s"
+          }.`,
+        );
+      }
       await refreshWorkbookRunQueries(workbook.id, activeSheet);
     } catch (error) {
       if (
