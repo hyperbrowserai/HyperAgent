@@ -9061,4 +9061,82 @@ mod tests {
             "wizard schema should advertise cache-entry-not-found validation code",
         );
     }
+
+    #[tokio::test]
+    async fn should_keep_wizard_cache_schema_contracts_in_sync_with_agent_schema() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("wizard-agent-schema-cache-parity".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let agent_schema = get_agent_schema(State(state), Path(workbook.id))
+            .await
+            .expect("agent schema should resolve")
+            .0;
+        let wizard_schema = get_agent_wizard_schema().await.0;
+
+        let parity_keys = [
+            "agent_ops_cache_stats_endpoint",
+            "agent_ops_cache_entries_endpoint",
+            "agent_ops_cache_entry_detail_endpoint",
+            "agent_ops_cache_prefixes_endpoint",
+            "agent_ops_cache_clear_endpoint",
+            "agent_ops_cache_stats_query_shape",
+            "agent_ops_cache_entries_query_shape",
+            "agent_ops_cache_prefixes_query_shape",
+            "agent_ops_cache_stats_response_shape",
+            "agent_ops_cache_entries_response_shape",
+            "agent_ops_cache_prefixes_response_shape",
+            "agent_ops_cache_entry_detail_response_shape",
+            "agent_ops_cache_clear_response_shape",
+            "agent_ops_cache_replay_endpoint",
+            "agent_ops_cache_reexecute_endpoint",
+            "agent_ops_cache_remove_endpoint",
+            "agent_ops_cache_remove_by_prefix_endpoint",
+            "agent_ops_cache_remove_by_prefix_preview_endpoint",
+            "agent_ops_cache_remove_stale_endpoint",
+            "agent_ops_cache_replay_request_shape",
+            "agent_ops_cache_replay_response_shape",
+            "agent_ops_cache_reexecute_request_shape",
+            "agent_ops_cache_reexecute_response_shape",
+            "agent_ops_cache_remove_request_shape",
+            "agent_ops_cache_remove_response_shape",
+            "agent_ops_cache_remove_by_prefix_request_shape",
+            "agent_ops_cache_remove_by_prefix_response_shape",
+            "agent_ops_cache_remove_by_prefix_preview_request_shape",
+            "agent_ops_cache_remove_by_prefix_preview_response_shape",
+            "agent_ops_cache_remove_stale_request_shape",
+            "agent_ops_cache_remove_stale_response_shape",
+            "agent_ops_idempotency_cache_max_entries",
+        ];
+
+        for key in parity_keys {
+            assert_eq!(
+                agent_schema.get(key),
+                wizard_schema.get(key),
+                "wizard schema should keep '{key}' in sync with agent schema",
+            );
+        }
+
+        let agent_cache_codes = agent_schema
+            .get("cache_validation_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("agent schema cache_validation_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        let wizard_cache_codes = wizard_schema
+            .get("cache_validation_error_codes")
+            .and_then(serde_json::Value::as_array)
+            .expect("wizard schema cache_validation_error_codes should be an array")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            agent_cache_codes, wizard_cache_codes,
+            "wizard schema cache validation codes should stay in lockstep with agent schema",
+        );
+    }
 }
