@@ -312,6 +312,8 @@ Generate file-based XLSX compatibility fixtures (stored under `fixtures/`):
 cargo run --bin generate_xlsx_fixtures
 ```
 
+The fixture generator is deterministic (fixed workbook document metadata) and covered by `cargo test --bin generate_xlsx_fixtures`.
+
 Performance baseline probe (manual, ignored by default):
 
 ```bash
