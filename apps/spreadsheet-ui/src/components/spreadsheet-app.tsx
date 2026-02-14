@@ -2471,6 +2471,13 @@ export function SpreadsheetApp() {
       }),
     [wizardSchemaEndpointsWithMethods],
   );
+  const wizardEndpointIssueReasonCounts = useMemo(
+    () =>
+      buildEndpointIssueReasonCounts(
+        buildEndpointIssueReportEntries(wizardSchemaEndpointsWithMethods),
+      ),
+    [wizardSchemaEndpointsWithMethods],
+  );
   const wizardEndpointCatalogPayload = useMemo(
     () =>
       ({
@@ -3107,6 +3114,13 @@ export function SpreadsheetApp() {
         allEntries: agentSchemaEndpointsWithMethods,
         visibleEntries: agentSchemaEndpointsWithMethods,
       }),
+    [agentSchemaEndpointsWithMethods],
+  );
+  const agentEndpointIssueReasonCounts = useMemo(
+    () =>
+      buildEndpointIssueReasonCounts(
+        buildEndpointIssueReportEntries(agentSchemaEndpointsWithMethods),
+      ),
     [agentSchemaEndpointsWithMethods],
   );
   const agentEndpointCatalogPayload = useMemo(
@@ -6186,6 +6200,35 @@ export function SpreadsheetApp() {
                       >
                         unmapped ({wizardEndpointCatalogOverallStats.visibleUnmappedEntries})
                       </button>
+                      <span className="ml-1 text-[10px] text-amber-300/80">reason:</span>
+                      <button
+                        onClick={() => {
+                          setWizardEndpointCatalogIssueReasonFilter("all_reasons");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          wizardEndpointCatalogIssueReasonFilter === "all_reasons"
+                            ? "border-amber-500/60 bg-amber-500/15 text-amber-100"
+                            : "border-amber-700/60 text-amber-200 hover:bg-amber-500/10"
+                        }`}
+                      >
+                        all
+                      </button>
+                      {ENDPOINT_ISSUE_REASONS.map((reason) => (
+                        <button
+                          key={`wizard-reason-chip-${reason}`}
+                          onClick={() => {
+                            setWizardEndpointCatalogIssueReasonFilter(reason);
+                          }}
+                          className={`rounded border px-1.5 py-0.5 ${
+                            wizardEndpointCatalogIssueReasonFilter === reason
+                              ? "border-amber-500/60 bg-amber-500/15 text-amber-100"
+                              : "border-amber-700/60 text-amber-200 hover:bg-amber-500/10"
+                          }`}
+                          disabled={wizardEndpointIssueReasonCounts[reason] === 0}
+                        >
+                          {getEndpointIssueReasonLabel(reason)} ({wizardEndpointIssueReasonCounts[reason]})
+                        </button>
+                      ))}
                       <button
                         onClick={() => {
                           setWizardEndpointCatalogFilter("");
@@ -7897,6 +7940,35 @@ export function SpreadsheetApp() {
                       >
                         unmapped ({agentEndpointCatalogOverallStats.visibleUnmappedEntries})
                       </button>
+                      <span className="ml-1 text-[10px] text-amber-300/80">reason:</span>
+                      <button
+                        onClick={() => {
+                          setAgentEndpointCatalogIssueReasonFilter("all_reasons");
+                        }}
+                        className={`rounded border px-1.5 py-0.5 ${
+                          agentEndpointCatalogIssueReasonFilter === "all_reasons"
+                            ? "border-amber-500/60 bg-amber-500/15 text-amber-100"
+                            : "border-amber-700/60 text-amber-200 hover:bg-amber-500/10"
+                        }`}
+                      >
+                        all
+                      </button>
+                      {ENDPOINT_ISSUE_REASONS.map((reason) => (
+                        <button
+                          key={`agent-reason-chip-${reason}`}
+                          onClick={() => {
+                            setAgentEndpointCatalogIssueReasonFilter(reason);
+                          }}
+                          className={`rounded border px-1.5 py-0.5 ${
+                            agentEndpointCatalogIssueReasonFilter === reason
+                              ? "border-amber-500/60 bg-amber-500/15 text-amber-100"
+                              : "border-amber-700/60 text-amber-200 hover:bg-amber-500/10"
+                          }`}
+                          disabled={agentEndpointIssueReasonCounts[reason] === 0}
+                        >
+                          {getEndpointIssueReasonLabel(reason)} ({agentEndpointIssueReasonCounts[reason]})
+                        </button>
+                      ))}
                       <button
                         onClick={() => {
                           setAgentEndpointCatalogFilter("");
