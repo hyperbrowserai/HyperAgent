@@ -1458,6 +1458,46 @@ pub fn parse_gestep_formula(formula: &str) -> Option<(String, Option<String>)> {
   Some((args[0].clone(), args.get(1).cloned()))
 }
 
+pub fn parse_bitand_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "BITAND" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_bitor_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "BITOR" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_bitxor_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "BITXOR" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_bitlshift_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "BITLSHIFT" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
+pub fn parse_bitrshift_formula(formula: &str) -> Option<(String, String)> {
+  let (function, args) = parse_function_arguments(formula)?;
+  if function == "BITRSHIFT" && args.len() == 2 {
+    return Some((args[0].clone(), args[1].clone()));
+  }
+  None
+}
+
 pub fn parse_char_formula(formula: &str) -> Option<String> {
   let (function, args) = parse_function_arguments(formula)?;
   if function == "CHAR" && args.len() == 1 {
@@ -2433,7 +2473,9 @@ mod tests {
     parse_dec2oct_formula, parse_oct2dec_formula,
     parse_bin2hex_formula, parse_hex2bin_formula,
     parse_bin2oct_formula, parse_oct2bin_formula,
-    parse_delta_formula, parse_gestep_formula, parse_char_formula,
+    parse_delta_formula, parse_gestep_formula,
+    parse_bitand_formula, parse_bitor_formula, parse_bitxor_formula,
+    parse_bitlshift_formula, parse_bitrshift_formula, parse_char_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_cell_address,
@@ -3054,6 +3096,23 @@ mod tests {
     let gestep_args = parse_gestep_formula("=GESTEP(A1,5)").expect("gestep should parse");
     assert_eq!(gestep_args.0, "A1");
     assert_eq!(gestep_args.1.as_deref(), Some("5"));
+    let bitand_args = parse_bitand_formula("=BITAND(A1,7)").expect("bitand should parse");
+    assert_eq!(bitand_args.0, "A1");
+    assert_eq!(bitand_args.1, "7");
+    let bitor_args = parse_bitor_formula("=BITOR(A1,7)").expect("bitor should parse");
+    assert_eq!(bitor_args.0, "A1");
+    assert_eq!(bitor_args.1, "7");
+    let bitxor_args = parse_bitxor_formula("=BITXOR(A1,7)").expect("bitxor should parse");
+    assert_eq!(bitxor_args.0, "A1");
+    assert_eq!(bitxor_args.1, "7");
+    let bitlshift_args =
+      parse_bitlshift_formula("=BITLSHIFT(A1,2)").expect("bitlshift should parse");
+    assert_eq!(bitlshift_args.0, "A1");
+    assert_eq!(bitlshift_args.1, "2");
+    let bitrshift_args =
+      parse_bitrshift_formula("=BITRSHIFT(A1,1)").expect("bitrshift should parse");
+    assert_eq!(bitrshift_args.0, "A1");
+    assert_eq!(bitrshift_args.1, "1");
     assert_eq!(parse_char_formula("=CHAR(65)").as_deref(), Some("65"));
     assert_eq!(
       parse_code_formula(r#"=CODE("Apple")"#).as_deref(),

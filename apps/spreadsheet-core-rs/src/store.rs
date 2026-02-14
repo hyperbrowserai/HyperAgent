@@ -79,6 +79,8 @@ use crate::{
     parse_bin2hex_formula, parse_hex2bin_formula,
     parse_bin2oct_formula, parse_oct2bin_formula, parse_char_formula,
     parse_delta_formula, parse_gestep_formula,
+    parse_bitand_formula, parse_bitor_formula, parse_bitxor_formula,
+    parse_bitlshift_formula, parse_bitrshift_formula,
     parse_code_formula, parse_unichar_formula, parse_unicode_formula,
     parse_roman_formula, parse_arabic_formula,
     parse_even_formula, parse_odd_formula,
@@ -1877,6 +1879,66 @@ fn evaluate_formula(
       None => 0.0,
     };
     return Ok(Some(((number >= step) as u8).to_string()));
+  }
+
+  if let Some((left_arg, right_arg)) = parse_bitand_formula(formula) {
+    let left = match parse_required_bitwise_u64(connection, sheet, &left_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let right = match parse_required_bitwise_u64(connection, sheet, &right_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    return Ok(Some((left & right).to_string()));
+  }
+
+  if let Some((left_arg, right_arg)) = parse_bitor_formula(formula) {
+    let left = match parse_required_bitwise_u64(connection, sheet, &left_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let right = match parse_required_bitwise_u64(connection, sheet, &right_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    return Ok(Some((left | right).to_string()));
+  }
+
+  if let Some((left_arg, right_arg)) = parse_bitxor_formula(formula) {
+    let left = match parse_required_bitwise_u64(connection, sheet, &left_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let right = match parse_required_bitwise_u64(connection, sheet, &right_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    return Ok(Some((left ^ right).to_string()));
+  }
+
+  if let Some((number_arg, shift_arg)) = parse_bitlshift_formula(formula) {
+    let number = match parse_required_bitwise_u64(connection, sheet, &number_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let shift = parse_required_integer(connection, sheet, &shift_arg)?;
+    if shift < 0 || shift > 63 {
+      return Ok(None);
+    }
+    return Ok(Some((number << shift).to_string()));
+  }
+
+  if let Some((number_arg, shift_arg)) = parse_bitrshift_formula(formula) {
+    let number = match parse_required_bitwise_u64(connection, sheet, &number_arg)? {
+      Some(value) => value,
+      None => return Ok(None),
+    };
+    let shift = parse_required_integer(connection, sheet, &shift_arg)?;
+    if shift < 0 || shift > 63 {
+      return Ok(None);
+    }
+    return Ok(Some((number >> shift).to_string()));
   }
 
   if let Some(char_arg) = parse_char_formula(formula) {
@@ -5433,6 +5495,25 @@ fn parse_required_float(
   Ok(resolved.trim().parse::<f64>().unwrap_or_default())
 }
 
+fn parse_required_bitwise_u64(
+  connection: &Connection,
+  sheet: &str,
+  operand: &str,
+) -> Result<Option<u64>, ApiError> {
+  let resolved = resolve_scalar_operand(connection, sheet, operand)?;
+  let trimmed = resolved.trim();
+  if trimmed.is_empty() {
+    return Ok(None);
+  }
+  let Some(parsed) = trimmed.parse::<f64>().ok() else {
+    return Ok(None);
+  };
+  if !parsed.is_finite() || parsed < 0.0 || parsed.fract().abs() > f64::EPSILON {
+    return Ok(None);
+  }
+  Ok(Some(parsed as u64))
+}
+
 fn parse_payment_type(
   connection: &Connection,
   sheet: &str,
@@ -8149,12 +8230,42 @@ mod tests {
         value: None,
         formula: Some("=GESTEP(5,4)".to_string()),
       },
+      CellMutation {
+        row: 1,
+        col: 288,
+        value: None,
+        formula: Some("=BITAND(6,3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 289,
+        value: None,
+        formula: Some("=BITOR(6,3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 290,
+        value: None,
+        formula: Some("=BITXOR(6,3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 291,
+        value: None,
+        formula: Some("=BITLSHIFT(3,2)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 292,
+        value: None,
+        formula: Some("=BITRSHIFT(12,2)".to_string()),
+      },
     ];
     set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
 
     let (updated_cells, unsupported_formulas) =
       recalculate_formulas(&db_path).expect("recalculation should work");
-    assert_eq!(updated_cells, 285);
+    assert_eq!(updated_cells, 290);
     assert!(
       unsupported_formulas.is_empty(),
       "unexpected unsupported formulas: {:?}",
@@ -8168,7 +8279,7 @@ mod tests {
         start_row: 1,
         end_row: 22,
         start_col: 1,
-        end_col: 287,
+        end_col: 292,
       },
     )
     .expect("cells should be fetched");
@@ -9431,6 +9542,31 @@ mod tests {
       Some("1"),
       "gestep should return 1 when number is greater than or equal to step",
     );
+    assert_eq!(
+      by_position(1, 288).evaluated_value.as_deref(),
+      Some("2"),
+      "bitand should apply bitwise AND",
+    );
+    assert_eq!(
+      by_position(1, 289).evaluated_value.as_deref(),
+      Some("7"),
+      "bitor should apply bitwise OR",
+    );
+    assert_eq!(
+      by_position(1, 290).evaluated_value.as_deref(),
+      Some("5"),
+      "bitxor should apply bitwise XOR",
+    );
+    assert_eq!(
+      by_position(1, 291).evaluated_value.as_deref(),
+      Some("12"),
+      "bitlshift should left-shift bits",
+    );
+    assert_eq!(
+      by_position(1, 292).evaluated_value.as_deref(),
+      Some("3"),
+      "bitrshift should right-shift bits",
+    );
   }
 
   #[test]
@@ -10160,6 +10296,43 @@ mod tests {
         r#"=HEX2BIN("G1")"#.to_string(),
         r#"=BIN2OCT("102")"#.to_string(),
         r#"=OCT2BIN("89")"#.to_string(),
+      ],
+    );
+  }
+
+  #[test]
+  fn should_leave_invalid_bitwise_inputs_as_unsupported() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let cells = vec![
+      CellMutation {
+        row: 1,
+        col: 1,
+        value: None,
+        formula: Some("=BITAND(-1,3)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 2,
+        value: None,
+        formula: Some("=BITLSHIFT(1,-1)".to_string()),
+      },
+      CellMutation {
+        row: 1,
+        col: 3,
+        value: None,
+        formula: Some("=BITRSHIFT(1,64)".to_string()),
+      },
+    ];
+    set_cells(&db_path, "Sheet1", &cells).expect("cells should upsert");
+
+    let (_updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("recalculation should work");
+    assert_eq!(
+      unsupported_formulas,
+      vec![
+        "=BITAND(-1,3)".to_string(),
+        "=BITLSHIFT(1,-1)".to_string(),
+        "=BITRSHIFT(1,64)".to_string(),
       ],
     );
   }
