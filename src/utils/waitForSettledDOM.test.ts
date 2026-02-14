@@ -249,6 +249,54 @@ describe("waitForSettledDOM diagnostics", () => {
     expect(setFrameFilteringEnabled).toHaveBeenCalledWith(false);
   });
 
+  it("continues when frame-filter configuration throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { session } = createSessionWithEvents();
+    const cdpClient: CDPClient = {
+      rootSession: session,
+      createSession: async () => session,
+      acquireSession: async () => session,
+      dispose: async () => undefined,
+    };
+    getCDPClient.mockResolvedValue(cdpClient);
+    getOrCreateFrameContextManager.mockReturnValue({
+      setDebug: jest.fn(),
+      setFrameFilteringEnabled: jest.fn(() => {
+        throw new Error(`filter\u0000\n${"x".repeat(2_000)}`);
+      }),
+    });
+    getDebugOptions.mockReturnValue({
+      enabled: false,
+      traceWait: false,
+    });
+
+    const page = {
+      context: () => ({}),
+    } as never;
+
+    try {
+      const waitPromise = waitForSettledDOM(page, 600, {
+        filterAdTrackingFrames: false,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(700);
+      const stats = await waitPromise;
+
+      expect(stats.resolvedByTimeout).toBe(false);
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("configure frame filtering")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("falls back to timeout when network listener registration fails", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     const { session } = createSessionWithEvents({

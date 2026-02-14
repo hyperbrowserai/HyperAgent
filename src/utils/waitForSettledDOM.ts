@@ -172,12 +172,28 @@ export async function waitForSettledDOM(
 
   const cdpClient = await getCDPClient(page);
   const manager = getOrCreateFrameContextManager(cdpClient);
-  manager.setDebug(traceWait);
+  try {
+    manager.setDebug(traceWait);
+  } catch (error) {
+    console.warn(
+      `[waitForSettledDOM] Failed to configure frame manager debug flag: ${formatWaitDiagnostic(
+        error
+      )}`
+    );
+  }
   if (
     typeof manager.setFrameFilteringEnabled === "function" &&
     typeof options.filterAdTrackingFrames === "boolean"
   ) {
-    manager.setFrameFilteringEnabled(options.filterAdTrackingFrames);
+    try {
+      manager.setFrameFilteringEnabled(options.filterAdTrackingFrames);
+    } catch (error) {
+      console.warn(
+        `[waitForSettledDOM] Failed to configure frame filtering: ${formatWaitDiagnostic(
+          error
+        )}`
+      );
+    }
   }
 
   const lifecycleSession = await cdpClient.acquireSession("lifecycle");
