@@ -56,4 +56,15 @@ describe("public API exports", () => {
     const typeSmoke: PublicTypeSmoke | null = null;
     expect(typeSmoke).toBeNull();
   });
+
+  it("keeps perform retry option fields available on public PerformTaskParams", () => {
+    const performParams: PerformTaskParams = {
+      maxElementRetries: 5,
+      retryDelayMs: 250,
+      maxContextSwitchRetries: 4,
+      contextSwitchRetryDelayMs: 500,
+    };
+
+    expect(performParams.contextSwitchRetryDelayMs).toBe(500);
+  });
 });

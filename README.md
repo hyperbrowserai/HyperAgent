@@ -195,6 +195,12 @@ await page.perform("click the login button", {
 });
 ```
 
+**Perform retry options**:
+- `maxElementRetries`: attempts to refetch/find a target element before failing.
+- `retryDelayMs`: delay between element-refetch retries.
+- `maxContextSwitchRetries`: retries when a tab/context switch interrupts an in-flight action.
+- `contextSwitchRetryDelayMs`: delay between context-switch retries (defaults to 500ms, capped for safety).
+
 ### 🧠 `page.ai()` - Complex Multi-Step Tasks
 
 **Best for**: Complex workflows requiring multiple steps and visual context
