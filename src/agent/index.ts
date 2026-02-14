@@ -445,6 +445,26 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     return values;
   }
 
+  private getContextPagesOrThrow(context: BrowserContext): Page[] {
+    const pagesMethod = this.safeReadField(context, "pages");
+    if (typeof pagesMethod !== "function") {
+      throw new Error("context.pages is unavailable");
+    }
+
+    const pagesValue = (pagesMethod as (this: BrowserContext) => unknown).call(
+      context
+    );
+    return this.safeArrayValues<Page>(pagesValue);
+  }
+
+  private getContextPagesSafe(context: BrowserContext): Page[] {
+    try {
+      return this.getContextPagesOrThrow(context);
+    } catch {
+      return [];
+    }
+  }
+
   private async startBrowserProvider(): Promise<Browser> {
     const startMethod = this.safeReadField(this.browserProvider, "start");
     if (typeof startMethod !== "function") {
@@ -1512,7 +1532,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     let pages: Page[] = [];
     try {
-      pages = Array.from(this.context.pages());
+      pages = this.getContextPagesOrThrow(this.context);
     } catch (error) {
       throw new HyperagentError(
         `Failed to list pages from context: ${this.formatLifecycleDiagnostic(error)}`,
@@ -1623,12 +1643,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     // Poll context for new pages to catch any that opened since the last check
     // This handles race conditions where the 'page' event might not have fired yet
     // or where we missed it during a heavy operation.
-    let pages: Page[] = [];
-    try {
-      pages = Array.from(this.context.pages());
-    } catch {
-      pages = [];
-    }
+    const pages = this.getContextPagesSafe(this.context);
     if (pages.length > 0) {
       const lastPage = pages[pages.length - 1];
       // If the last page is different and not closed, switch to it

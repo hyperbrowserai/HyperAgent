@@ -1777,6 +1777,46 @@ describe("HyperAgent constructor and task controls", () => {
     await expect(agent.getPages()).rejects.toThrow(/\[truncated/);
   });
 
+  it("returns readable pages when context page entries are partially trap-prone", async () => {
+    let goodPage: Page;
+    const contextOn = jest.fn();
+    const contextOff = jest.fn();
+    const pageOn = jest.fn();
+    const pageOff = jest.fn();
+    goodPage = {
+      on: pageOn,
+      off: pageOff,
+      context: () => ({
+        on: contextOn,
+        off: contextOff,
+        pages: () => [goodPage],
+      }),
+      isClosed: () => false,
+    } as unknown as Page;
+    const trappedPages = new Proxy([{}, goodPage], {
+      get: (target, property, receiver) => {
+        if (property === "0") {
+          throw new Error("page entry trap");
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => unknown } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => trappedPages,
+    };
+
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+  });
+
   it("surfaces readable errors when newPage creation fails", async () => {
     const agent = new HyperAgent({
       llm: createMockLLM(),
