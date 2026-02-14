@@ -39,6 +39,19 @@ function truncateContentDiagnostic(value: string, maxChars: number): string {
   return `${value.slice(0, maxChars)}... [truncated ${omitted} chars]`;
 }
 
+function sanitizeContentDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  return Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function sanitizeToolArguments(value: unknown): unknown {
   const sanitized = sanitizeProviderOptions(
     { arguments: value },
@@ -61,16 +74,15 @@ function normalizeImageUrl(value: unknown): string {
     return "";
   }
   return truncateContentDiagnostic(
-    formatUnknownError(value),
+    sanitizeContentDiagnostic(formatUnknownError(value)),
     MAX_IMAGE_URL_CHARS
   );
 }
 
 function normalizeContentDiagnostic(value: unknown): string {
-  return truncateContentDiagnostic(
-    formatUnknownError(value),
-    MAX_CONTENT_DIAGNOSTIC_CHARS
-  );
+  const normalized = sanitizeContentDiagnostic(formatUnknownError(value));
+  const fallback = normalized.length > 0 ? normalized : "{}";
+  return truncateContentDiagnostic(fallback, MAX_CONTENT_DIAGNOSTIC_CHARS);
 }
 
 function normalizeOpenAICompatibleContentPart(
@@ -181,5 +193,5 @@ export function normalizeOpenAICompatibleContent(
     return normalizeContentDiagnostic(content);
   }
 
-  return String(content);
+  return normalizeContentDiagnostic(content);
 }

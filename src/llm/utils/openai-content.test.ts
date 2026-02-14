@@ -276,4 +276,21 @@ describe("normalizeOpenAICompatibleContent", () => {
       normalizeOpenAICompatibleContent(trappedArray)
     ).toBe("array iterator trap");
   });
+
+  it("sanitizes and truncates control-character diagnostics from traversal errors", () => {
+    const trappedArray = new Proxy([1], {
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.iterator) {
+          throw new Error(`array\u0000\n${"x".repeat(5_000)}`);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const output = normalizeOpenAICompatibleContent(trappedArray);
+    expect(typeof output).toBe("string");
+    expect(output).toContain("[truncated");
+    expect(output).not.toContain("\u0000");
+    expect(output).not.toContain("\n");
+  });
 });
