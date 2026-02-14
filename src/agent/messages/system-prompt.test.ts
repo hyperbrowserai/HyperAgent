@@ -1,4 +1,5 @@
 import { SYSTEM_PROMPT } from "@/agent/messages/system-prompt";
+import { AGENT_ELEMENT_ACTIONS } from "@/agent/shared/action-restrictions";
 
 describe("SYSTEM_PROMPT action contract", () => {
   it("does not advertise disabled navigation actions", () => {
@@ -16,5 +17,11 @@ describe("SYSTEM_PROMPT action contract", () => {
   it("references canonical selectOptionFromDropdown interaction name", () => {
     expect(SYSTEM_PROMPT).toContain("selectOptionFromDropdown");
     expect(SYSTEM_PROMPT).not.toContain("click, fill, type, press, select,");
+  });
+
+  it("stays aligned with supported element action methods", () => {
+    for (const method of AGENT_ELEMENT_ACTIONS) {
+      expect(SYSTEM_PROMPT).toContain(method);
+    }
   });
 });

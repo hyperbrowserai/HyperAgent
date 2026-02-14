@@ -3,10 +3,12 @@ import { ActionContext, ActionOutput, AgentActionDefinition } from "@/types";
 import { AGENT_ELEMENT_ACTIONS } from "../shared/action-restrictions";
 import { performAction } from "./shared/perform-action";
 
+const SUPPORTED_METHODS_TEXT = AGENT_ELEMENT_ACTIONS.join(", ");
+
 const methodSchema = z
   .enum(AGENT_ELEMENT_ACTIONS)
   .describe(
-    "Method to execute (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollToElement, scrollToPercentage, nextChunk, prevChunk)."
+    `Method to execute (${SUPPORTED_METHODS_TEXT}).`
   );
 
 const ActElementAction = z
@@ -21,7 +23,7 @@ const ActElementAction = z
         'Encoded element identifier from the DOM listing (format "frameIndex-backendNodeId", e.g., "0-5125").'
       ),
     method: methodSchema.describe(
-      "CDP/Playwright method to invoke (click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollToElement, scrollToPercentage, nextChunk, prevChunk)."
+      `CDP/Playwright method to invoke (${SUPPORTED_METHODS_TEXT}).`
     ),
     arguments: z
       .array(z.string())

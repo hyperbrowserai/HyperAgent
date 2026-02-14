@@ -1,6 +1,7 @@
 import { INPUT_FORMAT } from "./input-format";
 import { OUTPUT_FORMAT } from "./output-format";
 import { EXAMPLE_ACTIONS } from "./examples-actions";
+import { AGENT_ELEMENT_ACTIONS } from "@/agent/shared/action-restrictions";
 
 const DATE_STRING = new Date().toLocaleString(undefined, {
   year: "numeric",
@@ -8,6 +9,15 @@ const DATE_STRING = new Date().toLocaleString(undefined, {
   day: "2-digit",
   weekday: "long",
 });
+const SCROLL_ACTION_SET = new Set([
+  "scrollToElement",
+  "scrollToPercentage",
+  "nextChunk",
+  "prevChunk",
+]);
+const SUPPORTED_INTERACTION_METHODS = AGENT_ELEMENT_ACTIONS.filter(
+  (method) => !SCROLL_ACTION_SET.has(method)
+).join(", ");
 
 export const SYSTEM_PROMPT = `You are a web automation assistant that helps users complete tasks on websites.
 
@@ -30,7 +40,7 @@ ${OUTPUT_FORMAT}
 
 ## Element Interaction
 - actElement: Perform action on element using natural language
-  * Supported interactions: click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover
+  * Supported interactions: ${SUPPORTED_INTERACTION_METHODS}
   * Scrolling: scrollToElement (scroll the chosen element into view), scrollToPercentage (scroll the page/container to a %), nextChunk (scroll down one viewport), prevChunk (scroll up one viewport)
   * Be specific: mention element type and identifying text
   * Examples: "click the Login button", "fill 'text' into search box", "scroll to the pricing section", "scroll to 50% of the page", "scroll down one page"

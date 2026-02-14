@@ -1,3 +1,7 @@
+import { AGENT_ELEMENT_ACTIONS } from "@/agent/shared/action-restrictions";
+
+const SUPPORTED_METHODS_TEXT = AGENT_ELEMENT_ACTIONS.join(", ");
+
 export const OUTPUT_FORMAT = `Your response MUST be in this exact format:
 {
   "thoughts": "Your reasoning about the current state and what needs to be done next based on the task goal and previous actions",
@@ -13,6 +17,6 @@ export const OUTPUT_FORMAT = `Your response MUST be in this exact format:
 For actElement:
 - params.instruction -> short explanation of why the action is needed
 - params.elementId -> encoded ID from the DOM listing (e.g., "0-5125")
-- params.method -> one of click, fill, type, press, selectOptionFromDropdown, check, uncheck, hover, scrollToElement, scrollToPercentage, nextChunk, prevChunk
+- params.method -> one of ${SUPPORTED_METHODS_TEXT}
 - params.arguments -> array of arguments for the method (use [] when none are needed)
 - params.confidence -> number between 0 and 1`;
