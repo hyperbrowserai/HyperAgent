@@ -429,6 +429,14 @@ type EndpointCatalogSortOption =
   | "fallback_first";
 
 type EndpointCatalogViewMode = "all" | "issues" | "mismatches" | "fallback" | "unmapped";
+type EndpointIssueReasonFilter = "all_reasons" | EndpointIssueReason;
+
+function getEndpointIssueReasonLabel(reason: EndpointIssueReasonFilter): string {
+  if (reason === "all_reasons") {
+    return "all reasons";
+  }
+  return reason.replaceAll("_", " ");
+}
 
 function filterEndpointCatalogEntries<
   T extends { key: string; endpoint: string; openApiPath: string; summary: string | null },
@@ -468,11 +476,14 @@ function filterEndpointCatalogEntriesByMode<
     return entries;
   }
   return entries.filter((entry) => {
-    const hasMismatch = entry.hasMethodMismatch || entry.hasSummaryMismatch || entry.hasPathMismatch;
-    const hasFallback = entry.methodSource !== "operation"
-      || entry.summarySource !== "operation"
-      || entry.openApiPathSource !== "operation";
-    const hasIssue = hasMismatch || hasFallback || entry.methods.length === 0;
+    const reasons = getEndpointIssueReasons(entry);
+    const hasMismatch = reasons.includes("method_mismatch")
+      || reasons.includes("summary_mismatch")
+      || reasons.includes("path_mismatch");
+    const hasFallback = reasons.includes("method_fallback")
+      || reasons.includes("summary_fallback")
+      || reasons.includes("path_fallback");
+    const hasIssue = reasons.length > 0;
     if (viewMode === "issues") {
       return hasIssue;
     }
@@ -484,6 +495,26 @@ function filterEndpointCatalogEntriesByMode<
     }
     return hasFallback;
   });
+}
+
+function filterEndpointCatalogEntriesByIssueReason<
+  T extends {
+    hasMethodMismatch: boolean;
+    hasSummaryMismatch: boolean;
+    hasPathMismatch: boolean;
+    methodSource: string;
+    summarySource: string;
+    openApiPathSource: string;
+    methods: string[];
+  },
+>(
+  entries: T[],
+  reasonFilter: EndpointIssueReasonFilter,
+): T[] {
+  if (reasonFilter === "all_reasons") {
+    return entries;
+  }
+  return entries.filter((entry) => getEndpointIssueReasons(entry).includes(reasonFilter));
 }
 
 function sortEndpointCatalogEntries<
@@ -713,15 +744,7 @@ function buildEndpointIssueReportEntries<
 }> {
   return entries
     .map((entry) => {
-      const reasons = [
-        entry.methods.length === 0 ? "unmapped_methods" : null,
-        entry.hasMethodMismatch ? "method_mismatch" : null,
-        entry.hasSummaryMismatch ? "summary_mismatch" : null,
-        entry.hasPathMismatch ? "path_mismatch" : null,
-        entry.methodSource !== "operation" ? "method_fallback" : null,
-        entry.summarySource !== "operation" ? "summary_fallback" : null,
-        entry.openApiPathSource !== "operation" ? "path_fallback" : null,
-      ].filter((value): value is EndpointIssueReason => Boolean(value));
+      const reasons = getEndpointIssueReasons(entry);
       if (reasons.length === 0) {
         return null;
       }
@@ -735,6 +758,28 @@ function buildEndpointIssueReportEntries<
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+}
+
+function getEndpointIssueReasons<
+  T extends {
+    hasMethodMismatch: boolean;
+    hasSummaryMismatch: boolean;
+    hasPathMismatch: boolean;
+    methodSource: string;
+    summarySource: string;
+    openApiPathSource: string;
+    methods: string[];
+  },
+>(entry: T): EndpointIssueReason[] {
+  return [
+    entry.methods.length === 0 ? "unmapped_methods" : null,
+    entry.hasMethodMismatch ? "method_mismatch" : null,
+    entry.hasSummaryMismatch ? "summary_mismatch" : null,
+    entry.hasPathMismatch ? "path_mismatch" : null,
+    entry.methodSource !== "operation" ? "method_fallback" : null,
+    entry.summarySource !== "operation" ? "summary_fallback" : null,
+    entry.openApiPathSource !== "operation" ? "path_fallback" : null,
+  ].filter((value): value is EndpointIssueReason => Boolean(value));
 }
 
 function buildEndpointIssueReasonCounts<
@@ -1238,6 +1283,8 @@ export function SpreadsheetApp() {
     useState<EndpointCatalogSortOption>("key_asc");
   const [wizardEndpointCatalogViewMode, setWizardEndpointCatalogViewMode] =
     useState<EndpointCatalogViewMode>("all");
+  const [wizardEndpointCatalogIssueReasonFilter, setWizardEndpointCatalogIssueReasonFilter] =
+    useState<EndpointIssueReasonFilter>("all_reasons");
   const [wizardFile, setWizardFile] = useState<File | null>(null);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [uiError, setUiError] = useState<string | null>(null);
@@ -1287,6 +1334,8 @@ export function SpreadsheetApp() {
     useState<EndpointCatalogSortOption>("key_asc");
   const [agentEndpointCatalogViewMode, setAgentEndpointCatalogViewMode] =
     useState<EndpointCatalogViewMode>("all");
+  const [agentEndpointCatalogIssueReasonFilter, setAgentEndpointCatalogIssueReasonFilter] =
+    useState<EndpointIssueReasonFilter>("all_reasons");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
   const [cachePrefixSuggestionLimit, setCachePrefixSuggestionLimit] = useState(
     CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT,
@@ -2371,23 +2420,29 @@ export function SpreadsheetApp() {
   );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
-      filterEndpointCatalogEntriesByMode(
-        filterEndpointCatalogEntries(
-          wizardSchemaEndpointsWithMethods,
-          wizardEndpointCatalogFilter,
+      filterEndpointCatalogEntriesByIssueReason(
+        filterEndpointCatalogEntriesByMode(
+          filterEndpointCatalogEntries(
+            wizardSchemaEndpointsWithMethods,
+            wizardEndpointCatalogFilter,
+          ),
+          wizardEndpointCatalogViewMode,
         ),
-        wizardEndpointCatalogViewMode,
+        wizardEndpointCatalogIssueReasonFilter,
       ),
       wizardEndpointCatalogSort,
     ),
     [
       wizardEndpointCatalogFilter,
+      wizardEndpointCatalogIssueReasonFilter,
       wizardEndpointCatalogSort,
       wizardEndpointCatalogViewMode,
       wizardSchemaEndpointsWithMethods,
     ],
   );
-  const isWizardEndpointCatalogFilterActive = wizardEndpointCatalogFilter.trim().length > 0;
+  const isWizardEndpointCatalogScopeNarrowed = wizardEndpointCatalogFilter.trim().length > 0
+    || wizardEndpointCatalogViewMode !== "all"
+    || wizardEndpointCatalogIssueReasonFilter !== "all_reasons";
   const wizardEndpointCatalogViewStats = useMemo(
     () =>
       buildEndpointCatalogViewStats({
@@ -2408,6 +2463,7 @@ export function SpreadsheetApp() {
     () =>
       ({
         view_mode: wizardEndpointCatalogViewMode,
+        issue_reason_filter: wizardEndpointCatalogIssueReasonFilter,
         filter: wizardEndpointCatalogFilter.trim() || null,
         sort: wizardEndpointCatalogSort,
         view_stats: wizardEndpointCatalogViewStats,
@@ -2479,6 +2535,7 @@ export function SpreadsheetApp() {
       wizardEndpointCatalogDiagnostics.openApiSyncIssueCount,
       wizardEndpointCatalogDiagnostics.unmappedCount,
       wizardEndpointCatalogFilter,
+      wizardEndpointCatalogIssueReasonFilter,
       wizardEndpointCatalogSort,
       wizardEndpointCatalogViewMode,
       wizardEndpointCatalogViewStats,
@@ -2534,6 +2591,7 @@ export function SpreadsheetApp() {
         issue_reason_counts: buildEndpointIssueReasonCounts(issueEntries),
         issue_entries: issueEntries,
         view_mode: wizardEndpointCatalogViewMode,
+        issue_reason_filter: wizardEndpointCatalogIssueReasonFilter,
         filter: wizardEndpointCatalogFilter.trim() || null,
         sort: wizardEndpointCatalogSort,
         visible_issue_count: visibleIssueEntries.length,
@@ -2543,6 +2601,7 @@ export function SpreadsheetApp() {
     },
     [
       wizardEndpointCatalogFilter,
+      wizardEndpointCatalogIssueReasonFilter,
       wizardEndpointCatalogSort,
       wizardEndpointCatalogViewMode,
       wizardSchemaEndpointsWithMethods,
@@ -2559,6 +2618,7 @@ export function SpreadsheetApp() {
         issue_count_visible: issueEntries.length,
         issue_reason_counts_visible: buildEndpointIssueReasonCounts(issueEntries),
         view_mode: wizardEndpointCatalogViewMode,
+        issue_reason_filter: wizardEndpointCatalogIssueReasonFilter,
         filter: wizardEndpointCatalogFilter.trim() || null,
         sort: wizardEndpointCatalogSort,
         issue_entries: issueEntries,
@@ -2566,6 +2626,7 @@ export function SpreadsheetApp() {
     },
     [
       wizardEndpointCatalogFilter,
+      wizardEndpointCatalogIssueReasonFilter,
       wizardEndpointCatalogSort,
       wizardEndpointCatalogViewMode,
       wizardVisibleSchemaEndpointsWithMethods,
@@ -2997,23 +3058,29 @@ export function SpreadsheetApp() {
   );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
-      filterEndpointCatalogEntriesByMode(
-        filterEndpointCatalogEntries(
-          agentSchemaEndpointsWithMethods,
-          agentEndpointCatalogFilter,
+      filterEndpointCatalogEntriesByIssueReason(
+        filterEndpointCatalogEntriesByMode(
+          filterEndpointCatalogEntries(
+            agentSchemaEndpointsWithMethods,
+            agentEndpointCatalogFilter,
+          ),
+          agentEndpointCatalogViewMode,
         ),
-        agentEndpointCatalogViewMode,
+        agentEndpointCatalogIssueReasonFilter,
       ),
       agentEndpointCatalogSort,
     ),
     [
       agentEndpointCatalogFilter,
+      agentEndpointCatalogIssueReasonFilter,
       agentEndpointCatalogSort,
       agentEndpointCatalogViewMode,
       agentSchemaEndpointsWithMethods,
     ],
   );
-  const isAgentEndpointCatalogFilterActive = agentEndpointCatalogFilter.trim().length > 0;
+  const isAgentEndpointCatalogScopeNarrowed = agentEndpointCatalogFilter.trim().length > 0
+    || agentEndpointCatalogViewMode !== "all"
+    || agentEndpointCatalogIssueReasonFilter !== "all_reasons";
   const agentEndpointCatalogViewStats = useMemo(
     () =>
       buildEndpointCatalogViewStats({
@@ -3034,6 +3101,7 @@ export function SpreadsheetApp() {
     () =>
       ({
         view_mode: agentEndpointCatalogViewMode,
+        issue_reason_filter: agentEndpointCatalogIssueReasonFilter,
         filter: agentEndpointCatalogFilter.trim() || null,
         sort: agentEndpointCatalogSort,
         view_stats: agentEndpointCatalogViewStats,
@@ -3105,6 +3173,7 @@ export function SpreadsheetApp() {
       agentEndpointCatalogDiagnostics.openApiSyncIssueCount,
       agentEndpointCatalogDiagnostics.unmappedCount,
       agentEndpointCatalogFilter,
+      agentEndpointCatalogIssueReasonFilter,
       agentEndpointCatalogSort,
       agentEndpointCatalogViewMode,
       agentEndpointCatalogViewStats,
@@ -3160,6 +3229,7 @@ export function SpreadsheetApp() {
         issue_reason_counts: buildEndpointIssueReasonCounts(issueEntries),
         issue_entries: issueEntries,
         view_mode: agentEndpointCatalogViewMode,
+        issue_reason_filter: agentEndpointCatalogIssueReasonFilter,
         filter: agentEndpointCatalogFilter.trim() || null,
         sort: agentEndpointCatalogSort,
         visible_issue_count: visibleIssueEntries.length,
@@ -3169,6 +3239,7 @@ export function SpreadsheetApp() {
     },
     [
       agentEndpointCatalogFilter,
+      agentEndpointCatalogIssueReasonFilter,
       agentEndpointCatalogSort,
       agentEndpointCatalogViewMode,
       agentSchemaEndpointsWithMethods,
@@ -3185,6 +3256,7 @@ export function SpreadsheetApp() {
         issue_count_visible: issueEntries.length,
         issue_reason_counts_visible: buildEndpointIssueReasonCounts(issueEntries),
         view_mode: agentEndpointCatalogViewMode,
+        issue_reason_filter: agentEndpointCatalogIssueReasonFilter,
         filter: agentEndpointCatalogFilter.trim() || null,
         sort: agentEndpointCatalogSort,
         issue_entries: issueEntries,
@@ -3192,6 +3264,7 @@ export function SpreadsheetApp() {
     },
     [
       agentEndpointCatalogFilter,
+      agentEndpointCatalogIssueReasonFilter,
       agentEndpointCatalogSort,
       agentEndpointCatalogViewMode,
       agentVisibleSchemaEndpointsWithMethods,
@@ -4214,6 +4287,7 @@ export function SpreadsheetApp() {
             schema: "wizard",
             scope: "visible-endpoint-keys",
             view_mode: wizardEndpointCatalogViewMode,
+            issue_reason_filter: wizardEndpointCatalogIssueReasonFilter,
             filter: wizardEndpointCatalogFilter.trim() || null,
             keys: wizardVisibleEndpointKeys,
           },
@@ -4358,6 +4432,7 @@ export function SpreadsheetApp() {
             schema: "wizard",
             scope: "visible-issue-keys",
             view_mode: wizardEndpointCatalogViewMode,
+            issue_reason_filter: wizardEndpointCatalogIssueReasonFilter,
             filter: wizardEndpointCatalogFilter.trim() || null,
             sort: wizardEndpointCatalogSort,
             keys: wizardVisibleIssueKeys,
@@ -4498,6 +4573,7 @@ export function SpreadsheetApp() {
             schema: "agent",
             scope: "visible-endpoint-keys",
             view_mode: agentEndpointCatalogViewMode,
+            issue_reason_filter: agentEndpointCatalogIssueReasonFilter,
             filter: agentEndpointCatalogFilter.trim() || null,
             keys: agentVisibleEndpointKeys,
           },
@@ -4642,6 +4718,7 @@ export function SpreadsheetApp() {
             schema: "agent",
             scope: "visible-issue-keys",
             view_mode: agentEndpointCatalogViewMode,
+            issue_reason_filter: agentEndpointCatalogIssueReasonFilter,
             filter: agentEndpointCatalogFilter.trim() || null,
             sort: agentEndpointCatalogSort,
             keys: agentVisibleIssueKeys,
@@ -5788,7 +5865,7 @@ export function SpreadsheetApp() {
                 <summary className="cursor-pointer text-[11px] text-slate-400">
                   <span>
                     discovered endpoint catalog ({wizardVisibleSchemaEndpointsWithMethods.length}
-                    {isWizardEndpointCatalogFilterActive
+                    {isWizardEndpointCatalogScopeNarrowed
                       ? ` of ${wizardSchemaEndpointsWithMethods.length}`
                       : ""}
                     )
@@ -5865,6 +5942,25 @@ export function SpreadsheetApp() {
                         <option value="unmapped">unmapped only</option>
                       </select>
                     </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                      issue reason:
+                      <select
+                        value={wizardEndpointCatalogIssueReasonFilter}
+                        onChange={(event) => {
+                          setWizardEndpointCatalogIssueReasonFilter(
+                            event.target.value as EndpointIssueReasonFilter,
+                          );
+                        }}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                      >
+                        <option value="all_reasons">all reasons</option>
+                        {ENDPOINT_ISSUE_REASONS.map((reason) => (
+                          <option key={reason} value={reason}>
+                            {getEndpointIssueReasonLabel(reason)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
                       <button
                         onClick={() => {
@@ -5931,6 +6027,7 @@ export function SpreadsheetApp() {
                           setWizardEndpointCatalogFilter("");
                           setWizardEndpointCatalogSort("key_asc");
                           setWizardEndpointCatalogViewMode("all");
+                          setWizardEndpointCatalogIssueReasonFilter("all_reasons");
                         }}
                         className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800"
                       >
@@ -5943,7 +6040,15 @@ export function SpreadsheetApp() {
                       showing {wizardVisibleSchemaEndpointsWithMethods.length}
                       /{wizardSchemaEndpointsWithMethods.length}
                       {wizardEndpointCatalogViewMode !== "all"
-                        ? ` (${wizardEndpointCatalogViewMode})`
+                      || wizardEndpointCatalogIssueReasonFilter !== "all_reasons"
+                        ? ` (${[
+                          wizardEndpointCatalogViewMode !== "all"
+                            ? wizardEndpointCatalogViewMode
+                            : null,
+                          wizardEndpointCatalogIssueReasonFilter !== "all_reasons"
+                            ? getEndpointIssueReasonLabel(wizardEndpointCatalogIssueReasonFilter)
+                            : null,
+                        ].filter((value): value is string => Boolean(value)).join(" · ")})`
                         : ""}
                     </span>
                     <button
@@ -7435,7 +7540,7 @@ export function SpreadsheetApp() {
                 <summary className="cursor-pointer text-xs text-slate-400">
                   <span>
                     discovered endpoint catalog ({agentVisibleSchemaEndpointsWithMethods.length}
-                    {isAgentEndpointCatalogFilterActive
+                    {isAgentEndpointCatalogScopeNarrowed
                       ? ` of ${agentSchemaEndpointsWithMethods.length}`
                       : ""}
                     )
@@ -7512,6 +7617,25 @@ export function SpreadsheetApp() {
                         <option value="unmapped">unmapped only</option>
                       </select>
                     </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      issue reason:
+                      <select
+                        value={agentEndpointCatalogIssueReasonFilter}
+                        onChange={(event) => {
+                          setAgentEndpointCatalogIssueReasonFilter(
+                            event.target.value as EndpointIssueReasonFilter,
+                          );
+                        }}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                      >
+                        <option value="all_reasons">all reasons</option>
+                        {ENDPOINT_ISSUE_REASONS.map((reason) => (
+                          <option key={reason} value={reason}>
+                            {getEndpointIssueReasonLabel(reason)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
                       <button
                         onClick={() => {
@@ -7578,6 +7702,7 @@ export function SpreadsheetApp() {
                           setAgentEndpointCatalogFilter("");
                           setAgentEndpointCatalogSort("key_asc");
                           setAgentEndpointCatalogViewMode("all");
+                          setAgentEndpointCatalogIssueReasonFilter("all_reasons");
                         }}
                         className="rounded border border-slate-700 px-1.5 py-0.5 text-slate-300 hover:bg-slate-800"
                       >
@@ -7590,7 +7715,15 @@ export function SpreadsheetApp() {
                       showing {agentVisibleSchemaEndpointsWithMethods.length}
                       /{agentSchemaEndpointsWithMethods.length}
                       {agentEndpointCatalogViewMode !== "all"
-                        ? ` (${agentEndpointCatalogViewMode})`
+                      || agentEndpointCatalogIssueReasonFilter !== "all_reasons"
+                        ? ` (${[
+                          agentEndpointCatalogViewMode !== "all"
+                            ? agentEndpointCatalogViewMode
+                            : null,
+                          agentEndpointCatalogIssueReasonFilter !== "all_reasons"
+                            ? getEndpointIssueReasonLabel(agentEndpointCatalogIssueReasonFilter)
+                            : null,
+                        ].filter((value): value is string => Boolean(value)).join(" · ")})`
                         : ""}
                     </span>
                     <button
