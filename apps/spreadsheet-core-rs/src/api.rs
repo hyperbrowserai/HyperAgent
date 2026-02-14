@@ -2783,7 +2783,10 @@ async fn openapi() -> Json<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
-  use axum::{extract::Path, extract::Query, extract::State, Json};
+  use axum::{
+    body::to_bytes, extract::Path, extract::Query, extract::State,
+    http::header, response::IntoResponse, Json,
+  };
   use serde_json::json;
   use std::{fs, path::PathBuf, time::Duration};
   use tempfile::tempdir;
@@ -2805,6 +2808,7 @@ mod tests {
     set_cells_batch,
     build_export_artifacts, build_preset_operations, build_scenario_operations,
     ensure_non_empty_operations,
+    export_workbook,
     import_bytes_into_workbook,
     normalize_sheet_name, operations_signature, parse_optional_bool,
     validate_expected_operations_signature,
@@ -3359,6 +3363,132 @@ mod tests {
           "fixture {fixture_file_name} event payload should include normalization warning",
         );
       }
+    }
+  }
+
+  #[tokio::test]
+  async fn should_export_every_committed_fixture_corpus_after_api_import() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+
+    for (fixture_index, fixture_file_name) in workbook_import_fixture_file_names()
+      .iter()
+      .enumerate()
+    {
+      let workbook = state
+        .create_workbook(Some(format!(
+          "api-corpus-export-{fixture_index}-{fixture_file_name}"
+        )))
+        .await
+        .expect("workbook should be created");
+
+      import_bytes_into_workbook(
+        &state,
+        workbook.id,
+        &workbook_fixture_bytes(fixture_file_name),
+        "api-corpus-export-import",
+      )
+      .await
+      .unwrap_or_else(|error| {
+        panic!(
+          "fixture {fixture_file_name} should import before export coverage: {error:?}"
+        )
+      });
+
+      let mut events = state
+        .subscribe(workbook.id)
+        .await
+        .expect("event subscription should work");
+      let export_response = export_workbook(State(state.clone()), Path(workbook.id))
+        .await
+        .unwrap_or_else(|error| {
+          panic!(
+            "fixture {fixture_file_name} should export after import coverage: {error:?}"
+          )
+        })
+        .into_response();
+      assert!(
+        export_response.status().is_success(),
+        "fixture {fixture_file_name} export should return success status",
+      );
+      assert_eq!(
+        export_response
+          .headers()
+          .get(header::CONTENT_TYPE)
+          .and_then(|value| value.to_str().ok()),
+        Some(
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        "fixture {fixture_file_name} export should return XLSX content type",
+      );
+      assert!(
+        export_response
+          .headers()
+          .get(header::CONTENT_DISPOSITION)
+          .and_then(|value| value.to_str().ok())
+          .is_some_and(|value| value.contains("attachment; filename=\"") && value.ends_with(".xlsx\"")),
+        "fixture {fixture_file_name} export should include attachment filename",
+      );
+      let export_meta = export_response
+        .headers()
+        .get("x-export-meta")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_else(|| {
+          panic!("fixture {fixture_file_name} export should include x-export-meta header")
+        });
+      let export_meta_json: serde_json::Value =
+        serde_json::from_str(export_meta).unwrap_or_else(|error| {
+          panic!(
+            "fixture {fixture_file_name} x-export-meta should decode as json: {error}"
+          )
+        });
+      assert!(
+        export_meta_json
+          .get("preserved")
+          .and_then(serde_json::Value::as_array)
+          .is_some_and(|values| !values.is_empty()),
+        "fixture {fixture_file_name} export meta should include preserved entries",
+      );
+      assert!(
+        export_meta_json
+          .get("transformed")
+          .and_then(serde_json::Value::as_array)
+          .is_some_and(|values| !values.is_empty()),
+        "fixture {fixture_file_name} export meta should include transformed entries",
+      );
+      assert!(
+        export_meta_json
+          .get("unsupported")
+          .and_then(serde_json::Value::as_array)
+          .is_some_and(|values| !values.is_empty()),
+        "fixture {fixture_file_name} export meta should include unsupported entries",
+      );
+      let export_body = to_bytes(export_response.into_body(), usize::MAX)
+        .await
+        .expect("export body should be readable");
+      assert!(
+        export_body.len() > 1_000,
+        "fixture {fixture_file_name} export payload should be non-trivial xlsx bytes",
+      );
+
+      let emitted_event = timeout(Duration::from_secs(1), events.recv())
+        .await
+        .expect("export event should arrive")
+        .expect("event payload should decode");
+      assert_eq!(emitted_event.event_type, "workbook.exported");
+      assert!(
+        emitted_event
+          .payload
+          .get("file_name")
+          .and_then(serde_json::Value::as_str)
+          .is_some_and(|value| value.ends_with(".xlsx")),
+        "fixture {fixture_file_name} export event should include xlsx file name",
+      );
+      assert!(
+        emitted_event.payload.get("compatibility_report").is_some(),
+        "fixture {fixture_file_name} export event should include compatibility report payload",
+      );
     }
   }
 
