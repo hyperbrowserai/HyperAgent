@@ -127,6 +127,10 @@ Request options:
 Response includes:
 - `operations_signature` — sha256 signature over submitted operations.
 - `served_from_cache` — indicates whether response was reused from request-id idempotency cache.
+- Failed operation result entries include structured error fields:
+  - `error` (`CODE: message` string),
+  - `error_code` (stable machine-readable code),
+  - `error_message` (human-readable details).
 - Signature-related validation error codes:
   - `INVALID_SIGNATURE_FORMAT`
   - `OPERATION_SIGNATURE_MISMATCH`

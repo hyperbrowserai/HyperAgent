@@ -38,7 +38,11 @@ export interface AgentOperationResult {
   op_index: number;
   op_type: string;
   ok: boolean;
-  data: Record<string, unknown>;
+  data: Record<string, unknown> & {
+    error?: string;
+    error_code?: string;
+    error_message?: string;
+  };
 }
 
 export interface AgentOpsResponse {
