@@ -542,6 +542,48 @@ describe("buildAgentStepMessages", () => {
     expect(joined).not.toContain("Open tabs unavailable");
   });
 
+  it("falls back to current-tab line when open-tab array length getter traps", async () => {
+    const pages = new Proxy([{}], {
+      get: (target, prop, receiver) => {
+        if (prop === "length") {
+          throw new Error("tab length trap");
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const page = {
+      url: () => "https://example.com/current",
+      context: () =>
+        ({
+          pages: () => pages,
+        } as unknown as ReturnType<Page["context"]>),
+    } as unknown as Page;
+
+    const messages = await buildAgentStepMessages(
+      [{ role: "system", content: "system" }],
+      [],
+      "task",
+      page,
+      {
+        elements: new Map(),
+        domState: "dom",
+        xpathMap: {},
+        backendNodeMap: {},
+      },
+      undefined,
+      []
+    );
+
+    const joined = messages
+      .map((message) =>
+        typeof message.content === "string" ? message.content : ""
+      )
+      .join("\n");
+
+    expect(joined).toContain("[0] https://example.com/current (current)");
+    expect(joined).not.toContain("No open tabs");
+  });
+
   it("truncates oversized tab URLs in open-tab summary", async () => {
     const longUrl = `https://example.com/${"x".repeat(2000)}`;
     const page = createFakePage(longUrl, [longUrl]);

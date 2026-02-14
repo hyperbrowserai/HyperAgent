@@ -385,7 +385,7 @@ function getOpenTabsSummary(page: Page): string {
     const pages = page.context().pages();
     const pageEntries = materializeSafePages(pages);
     if (pageEntries.length === 0) {
-      return "No open tabs";
+      return `[0] ${truncateTabUrl(page.url() || "about:blank")} (current)`;
     }
     let visibleEntries = pageEntries.slice(0, MAX_OPEN_TAB_ENTRIES);
     const currentEntry = pageEntries.find((entry) => entry.openPage === page);
