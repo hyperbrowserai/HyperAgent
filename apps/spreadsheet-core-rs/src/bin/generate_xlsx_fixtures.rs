@@ -374,4 +374,23 @@ mod tests {
       "verification error should describe membership mismatch",
     );
   }
+
+  #[test]
+  fn should_ignore_non_xlsx_sidecar_files_during_verification() {
+    let output_dir = tempdir()
+      .expect("temp dir should create")
+      .path()
+      .join("generated-fixtures");
+    fixture_corpus::write_fixture_corpus(&output_dir)
+      .expect("fixture corpus should write");
+    fs::write(
+      output_dir.join("notes.txt"),
+      b"fixture readme sidecar",
+    )
+    .expect("sidecar file should be writable");
+
+    let verified_files = verify_fixture_corpus(&output_dir)
+      .expect("verification should ignore non-xlsx sidecar files");
+    assert_eq!(verified_files.len(), 13);
+  }
 }
