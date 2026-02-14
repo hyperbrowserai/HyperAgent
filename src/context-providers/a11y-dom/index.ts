@@ -947,6 +947,20 @@ interface GetA11yDomOptions {
   filterAdTrackingFrames?: boolean;
 }
 
+function safeReadA11yOptionField(
+  options: unknown,
+  field: keyof GetA11yDomOptions
+): unknown {
+  if (!options || (typeof options !== "object" && typeof options !== "function")) {
+    return undefined;
+  }
+  try {
+    return (options as Record<string, unknown>)[field];
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getA11yDOM(
   page: Page,
   debug = false,
@@ -975,8 +989,19 @@ export async function getA11yDOM(
     }
   };
 
-  const canUseCache = options?.useCache && !enableVisualMode;
-  const onFrameChunk = options?.onFrameChunk;
+  const canUseCache =
+    safeReadA11yOptionField(options, "useCache") === true && !enableVisualMode;
+  const onFrameChunkOption = safeReadA11yOptionField(options, "onFrameChunk");
+  const onFrameChunk =
+    typeof onFrameChunkOption === "function" ? onFrameChunkOption : undefined;
+  const filterAdTrackingFramesOption = safeReadA11yOptionField(
+    options,
+    "filterAdTrackingFrames"
+  );
+  const filterAdTrackingFrames =
+    typeof filterAdTrackingFramesOption === "boolean"
+      ? filterAdTrackingFramesOption
+      : undefined;
   if (canUseCache) {
     const cached = domSnapshotCache.get(page);
     if (cached) {
@@ -1006,12 +1031,10 @@ export async function getA11yDOM(
     }
     if (
       typeof frameContextManager.setFrameFilteringEnabled === "function" &&
-      typeof options?.filterAdTrackingFrames === "boolean"
+      typeof filterAdTrackingFrames === "boolean"
     ) {
       try {
-        frameContextManager.setFrameFilteringEnabled(
-          options.filterAdTrackingFrames
-        );
+        frameContextManager.setFrameFilteringEnabled(filterAdTrackingFrames);
       } catch (error) {
         console.warn(
           `[FrameContext] Failed to configure frame filtering: ${formatA11yDiagnostic(

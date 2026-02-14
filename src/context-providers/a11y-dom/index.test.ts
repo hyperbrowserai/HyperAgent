@@ -158,4 +158,51 @@ describe("getA11yDOM error formatting", () => {
       errorSpy.mockRestore();
     }
   });
+
+  it("continues when a11y options getters trap", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = {
+      evaluate: jest.fn().mockResolvedValue(undefined),
+    } as unknown as Page;
+    getCDPClientMock.mockResolvedValue({
+      acquireSession: jest
+        .fn()
+        .mockRejectedValue(new Error("dom session unavailable")),
+    });
+    const setFrameFilteringEnabled = jest.fn();
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest.fn(),
+      setFrameFilteringEnabled,
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+    });
+    const trappedOptions = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (
+            prop === "filterAdTrackingFrames" ||
+            prop === "useCache" ||
+            prop === "onFrameChunk"
+          ) {
+            throw new Error("a11y options trap");
+          }
+          return undefined;
+        },
+      }
+    );
+
+    try {
+      const result = await getA11yDOM(
+        page,
+        false,
+        false,
+        undefined,
+        trappedOptions as unknown as Parameters<typeof getA11yDOM>[4]
+      );
+      expect(result.domState).toBe("Error: Could not extract accessibility tree");
+      expect(setFrameFilteringEnabled).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
