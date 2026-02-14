@@ -9,12 +9,12 @@ export interface TimingEntry {
   endTime?: number;
   duration?: number;
   children: TimingEntry[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PerformanceReport {
   totalTime: number;
-  breakdown: Record<string, any>;
+  breakdown: Record<string, unknown> | number;
   bottlenecks: Array<{
     operation: string;
     time: number;
@@ -23,6 +23,53 @@ export interface PerformanceReport {
     recommendation: string;
   }>;
   rawTimings: TimingEntry[];
+}
+
+const MAX_PERFORMANCE_DIAGNOSTIC_CHARS = 240;
+
+function sanitizePerformanceDiagnostic(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+  const withoutControlChars = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return (code >= 0 && code < 32) || code === 127 ? " " : char;
+  }).join("");
+  return withoutControlChars.replace(/\s+/g, " ").trim();
+}
+
+function truncatePerformanceDiagnostic(value: string): string {
+  if (value.length <= MAX_PERFORMANCE_DIAGNOSTIC_CHARS) {
+    return value;
+  }
+  const omittedChars = value.length - MAX_PERFORMANCE_DIAGNOSTIC_CHARS;
+  return `${value.slice(0, MAX_PERFORMANCE_DIAGNOSTIC_CHARS)}... [truncated ${omittedChars} chars]`;
+}
+
+function formatPerformanceDiagnostic(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = sanitizePerformanceDiagnostic(value);
+  if (normalized.length === 0) {
+    return fallback;
+  }
+  return truncatePerformanceDiagnostic(normalized);
+}
+
+function readMetadataBoolean(
+  metadata: Record<string, unknown> | undefined,
+  key: string
+): boolean {
+  return metadata?.[key] === true;
+}
+
+function readMetadataNumber(
+  metadata: Record<string, unknown> | undefined,
+  key: string
+): number | null {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 /**
@@ -46,7 +93,7 @@ export class PerformanceTracker {
   /**
    * Start a named timer
    */
-  startTimer(name: string, metadata?: Record<string, any>): void {
+  startTimer(name: string, metadata?: Record<string, unknown>): void {
     const entry: TimingEntry = {
       name,
       startTime: performance.now(),
@@ -71,14 +118,25 @@ export class PerformanceTracker {
   stopTimer(name: string): number {
     const entry = this.timerMap.get(name);
     if (!entry) {
-      console.warn(`[Performance] Timer '${name}' not found`);
+      console.warn(
+        `[Performance] Timer '${formatPerformanceDiagnostic(
+          name,
+          "unknown timer"
+        )}' not found`
+      );
       return 0;
     }
 
     // If this timer is not the current one, something went wrong
     if (this.currentEntry !== entry) {
       console.warn(
-        `[Performance] Timer '${name}' stopped out of order (current: ${this.currentEntry.name})`
+        `[Performance] Timer '${formatPerformanceDiagnostic(
+          name,
+          "unknown timer"
+        )}' stopped out of order (current: ${formatPerformanceDiagnostic(
+          this.currentEntry.name,
+          "unknown timer"
+        )})`
       );
     }
 
@@ -96,7 +154,7 @@ export class PerformanceTracker {
   /**
    * Record a single point-in-time mark
    */
-  mark(name: string, metadata?: Record<string, any>): void {
+  mark(name: string, metadata?: Record<string, unknown>): void {
     const entry: TimingEntry = {
       name,
       startTime: performance.now(),
@@ -122,8 +180,16 @@ export class PerformanceTracker {
   /**
    * Get flattened timing data
    */
-  getFlatTimings(): Array<{ name: string; duration: number; metadata?: Record<string, any> }> {
-    const flat: Array<{ name: string; duration: number; metadata?: Record<string, any> }> = [];
+  getFlatTimings(): Array<{
+    name: string;
+    duration: number;
+    metadata?: Record<string, unknown>;
+  }> {
+    const flat: Array<{
+      name: string;
+      duration: number;
+      metadata?: Record<string, unknown>;
+    }> = [];
 
     const traverse = (entry: TimingEntry, depth: number = 0) => {
       if (entry.duration !== undefined) {
@@ -146,12 +212,12 @@ export class PerformanceTracker {
   /**
    * Build hierarchical breakdown object
    */
-  private buildBreakdown(entry: TimingEntry): any {
+  private buildBreakdown(entry: TimingEntry): Record<string, unknown> | number {
     if (entry.children.length === 0) {
       return entry.duration ?? 0;
     }
 
-    const breakdown: any = {};
+    const breakdown: Record<string, unknown> = {};
 
     // If we have both duration and children, include total
     if (entry.duration !== undefined) {
@@ -199,14 +265,18 @@ export class PerformanceTracker {
       }
 
       // Check metadata for bottleneck hints
-      if (entry.metadata?.sequential && entry.metadata?.parallelizable) {
+      if (
+        readMetadataBoolean(entry.metadata, "sequential") &&
+        readMetadataBoolean(entry.metadata, "parallelizable")
+      ) {
         severity = severity === 'low' ? 'high' : severity;
         recommendation += ' Could be parallelized.';
       }
 
-      if (entry.metadata?.cdpCallCount && entry.metadata.cdpCallCount > 10) {
+      const cdpCallCount = readMetadataNumber(entry.metadata, "cdpCallCount");
+      if (cdpCallCount !== null && cdpCallCount > 10) {
         severity = severity === 'low' ? 'medium' : severity;
-        recommendation += ` Makes ${entry.metadata.cdpCallCount} CDP calls.`;
+        recommendation += ` Makes ${cdpCallCount} CDP calls.`;
       }
 
       if (severity !== 'low') {
@@ -312,7 +382,7 @@ export async function withTiming<T>(
   tracker: PerformanceTracker,
   name: string,
   fn: () => Promise<T>,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): Promise<T> {
   tracker.startTimer(name, metadata);
   try {
@@ -329,7 +399,7 @@ export function withTimingSync<T>(
   tracker: PerformanceTracker,
   name: string,
   fn: () => T,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): T {
   tracker.startTimer(name, metadata);
   try {
