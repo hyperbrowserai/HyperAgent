@@ -759,6 +759,28 @@ describe("runAgentTask completion behavior", () => {
     expect(result.steps).toHaveLength(1);
   });
 
+  it("propagates frame-filter override into settle and DOM capture calls", async () => {
+    const page = createMockPage();
+    const ctx = createAgentCtx({ success: true, text: "final answer" });
+    ctx.filterAdTrackingFrames = false;
+
+    await runAgentTask(ctx, createTaskState(page));
+
+    expect(waitForSettledDOM).toHaveBeenCalledWith(
+      page,
+      undefined,
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
+    expect(captureDOMState).toHaveBeenCalledWith(
+      page,
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
+  });
+
   it("marks task failed when complete action signals failure", async () => {
     const page = createMockPage();
     const result = await runAgentTask(
