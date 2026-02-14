@@ -3340,6 +3340,17 @@ export function SpreadsheetApp() {
                 <span className="font-mono text-slate-300">
                   {wizardSchemaQuery.data.agent_ops_endpoint}
                 </span>
+                <button
+                  onClick={() => {
+                    void handleCopyEndpoint(
+                      wizardSchemaQuery.data?.agent_ops_endpoint ?? "",
+                      "wizard agent ops execute",
+                    );
+                  }}
+                  className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                >
+                  copy
+                </button>
               </p>
             ) : null}
             {wizardSchemaQuery.data?.agent_ops_preview_endpoint ? (
@@ -3348,6 +3359,17 @@ export function SpreadsheetApp() {
                 <span className="font-mono text-slate-300">
                   {wizardSchemaQuery.data.agent_ops_preview_endpoint}
                 </span>
+                <button
+                  onClick={() => {
+                    void handleCopyEndpoint(
+                      wizardSchemaQuery.data?.agent_ops_preview_endpoint ?? "",
+                      "wizard agent ops preview",
+                    );
+                  }}
+                  className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                >
+                  copy
+                </button>
               </p>
             ) : null}
             {wizardAgentOpsRequestFields.length > 0 ? (
@@ -4149,6 +4171,17 @@ export function SpreadsheetApp() {
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.agent_ops_endpoint}
                 </span>
+                <button
+                  onClick={() => {
+                    void handleCopyEndpoint(
+                      agentSchemaQuery.data?.agent_ops_endpoint ?? "",
+                      "agent ops execute",
+                    );
+                  }}
+                  className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                >
+                  copy
+                </button>
               </p>
             ) : null}
             {agentSchemaQuery.data?.agent_ops_preview_endpoint ? (
@@ -4157,6 +4190,17 @@ export function SpreadsheetApp() {
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.agent_ops_preview_endpoint}
                 </span>
+                <button
+                  onClick={() => {
+                    void handleCopyEndpoint(
+                      agentSchemaQuery.data?.agent_ops_preview_endpoint ?? "",
+                      "agent ops preview",
+                    );
+                  }}
+                  className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-800"
+                >
+                  copy
+                </button>
               </p>
             ) : null}
             {agentOpsPreviewRequestFields.length > 0 ? (
