@@ -123,8 +123,17 @@ class PlaywrightCDPClient implements CDPClient {
   constructor(private readonly page: Page) {}
 
   private get sessionLogging(): boolean {
-    const opts = getDebugOptions();
-    return !!(opts.enabled && opts.cdpSessions);
+    try {
+      const opts = getDebugOptions();
+      return !!(opts.enabled && opts.cdpSessions);
+    } catch (error) {
+      console.warn(
+        `[CDP][PlaywrightAdapter] Failed to read debug options: ${formatPlaywrightAdapterDiagnostic(
+          error
+        )}`
+      );
+      return false;
+    }
   }
 
   get rootSession(): CDPSession {

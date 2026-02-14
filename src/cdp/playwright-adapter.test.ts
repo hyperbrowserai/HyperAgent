@@ -5,6 +5,17 @@ import {
   getCDPClientForPage,
 } from "@/cdp/playwright-adapter";
 
+jest.mock("@/debug/options", () => ({
+  getDebugOptions: jest.fn(() => ({
+    enabled: false,
+    cdpSessions: false,
+  })),
+}));
+
+const { getDebugOptions } = jest.requireMock("@/debug/options") as {
+  getDebugOptions: jest.Mock;
+};
+
 describe("playwright adapter error formatting", () => {
   afterEach(async () => {
     await disposeAllCDPClients();
@@ -61,5 +72,41 @@ describe("playwright adapter error formatting", () => {
     expect(detachWarning).not.toContain("\u0000");
     expect(detachWarning).not.toContain("\n");
     expect(detachWarning?.length ?? 0).toBeLessThan(700);
+  });
+
+  it("continues disposing sessions when debug-options lookup traps", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const session = {
+      send: jest.fn().mockResolvedValue({}),
+      on: jest.fn(),
+      off: jest.fn(),
+      detach: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PlaywrightSession;
+    const page = {
+      context: () => ({
+        newCDPSession: jest.fn().mockResolvedValue(session),
+      }),
+      once: jest.fn(),
+    } as unknown as Page;
+    getDebugOptions.mockImplementationOnce(() => {
+      throw new Error(`debug\u0000\n${"x".repeat(2_000)}`);
+    });
+
+    try {
+      const client = await getCDPClientForPage(page);
+      await client.acquireSession("lifecycle");
+      await disposeCDPClientForPage(page);
+
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read debug options")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
