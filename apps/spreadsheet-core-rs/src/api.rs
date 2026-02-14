@@ -8148,6 +8148,27 @@ mod tests {
         assert_eq!(
             schema
                 .get("agent_ops_cache_reexecute_request_shape")
+                .and_then(|value| value.get("request_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("string (required source cache entry id)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_reexecute_request_shape")
+                .and_then(|value| value.get("new_request_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("optional string for target execution request id"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_replay_request_shape")
+                .and_then(|value| value.get("request_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("string (required)"),
+        );
+        assert_eq!(
+            schema
+                .get("agent_ops_cache_reexecute_request_shape")
                 .and_then(|value| value.get("expected_operations_signature"))
                 .and_then(serde_json::Value::as_str),
             Some("optional string guard for cached operations payload"),
