@@ -1068,7 +1068,7 @@ HyperAgent.executeSingleAction(instruction, page, params)
   ↓
 findElementWithRetry(instruction, page, llm, options)
   ↓
-Loop up to 10 retries:
+Loop up to maxElementRetries (default 10, capped):
   1. getA11yDOM(page, { mode: "a11y" })
      - Builds all maps (same as page.ai)
      - NO screenshot
@@ -1089,13 +1089,29 @@ Loop up to 10 retries:
      - Retry with fresh DOM capture (page may have changed)
 ```
 
+`page.perform()` retry options are configurable per call:
+
+```typescript
+await page.perform("click the login button", {
+  maxElementRetries: 5,
+  retryDelayMs: 250,
+  maxContextSwitchRetries: 4,
+  contextSwitchRetryDelayMs: 500,
+});
+
+// Deprecated compatibility alias (warns once per agent instance):
+await page.perform("click the login button", {
+  maxSteps: 5,
+});
+```
+
 ### Key Implementation Differences
 
 | Aspect | `page.ai()` | `page.perform()` |
 |--------|-------------|-------------------|
 | **DOM Mode** | `mode: "visual-debug"` with screenshot | `mode: "a11y"` text-only |
 | **LLM Prompt** | Full agent system prompt with action schema | Minimal "find element" prompt |
-| **Retry Logic** | Agent loop handles retries via actions | Built-in 10x retry with DOM refresh |
+| **Retry Logic** | Agent loop handles retries via actions | Built-in retry loop with configurable bounds/delays |
 | **State Management** | TaskState tracks multi-step history | Stateless single execution |
 | **Error Handling** | Can recover via `thinking` action | Fails after max retries |
 | **Debug Output** | Per-step debug directories | Single perform/ directory |
