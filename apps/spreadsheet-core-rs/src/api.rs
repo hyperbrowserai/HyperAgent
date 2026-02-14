@@ -6567,6 +6567,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_include_structured_error_fields_for_non_custom_agent_ops_failures() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("agent-ops-structured-bad-request".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let response = agent_ops(
+            State(state),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("ops-bad-request-shape".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(false),
+                expected_operations_signature: None,
+                operations: vec![
+                    AgentOperation::CreateSheet {
+                        sheet: "   ".to_string(),
+                    },
+                    AgentOperation::ListSheets,
+                ],
+            }),
+        )
+        .await
+        .expect("agent ops should return mixed success/failure result payload")
+        .0;
+
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.results[0].op_type, "create_sheet");
+        assert!(!response.results[0].ok);
+        assert_eq!(
+            response.results[0]
+                .data
+                .get("error_code")
+                .and_then(serde_json::Value::as_str),
+            Some("BAD_REQUEST"),
+        );
+        assert_eq!(
+            response.results[0]
+                .data
+                .get("error_message")
+                .and_then(serde_json::Value::as_str),
+            Some("Sheet name cannot be empty."),
+        );
+        assert_eq!(response.results[1].op_type, "list_sheets");
+        assert!(response.results[1].ok);
+    }
+
+    #[tokio::test]
     async fn should_expose_cache_and_signature_metadata_in_agent_schema() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
