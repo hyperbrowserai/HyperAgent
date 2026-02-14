@@ -58,6 +58,27 @@ function formatA11yDiagnostic(value: unknown): string {
   )}... [truncated ${omitted} chars]`;
 }
 
+function readA11yDebugOptions(): {
+  enabled: boolean;
+  profileDomCapture: boolean;
+} {
+  try {
+    const options = getDebugOptions();
+    return {
+      enabled: options.enabled === true,
+      profileDomCapture: options.profileDomCapture === true,
+    };
+  } catch (error) {
+    console.warn(
+      `[A11y] Failed to read debug options: ${formatA11yDiagnostic(error)}`
+    );
+    return {
+      enabled: false,
+      profileDomCapture: false,
+    };
+  }
+}
+
 function normalizeA11yFrameUrl(value: unknown, fallback: string = "unknown"): string {
   return normalizePageUrl(value, {
     fallback,
@@ -968,7 +989,7 @@ export async function getA11yDOM(
   debugDir?: string,
   options?: GetA11yDomOptions
 ): Promise<A11yDOMState> {
-  const debugOptions = getDebugOptions();
+  const debugOptions = readA11yDebugOptions();
   const profileDom =
     debug ||
     (debugOptions.enabled && debugOptions.profileDomCapture) ||

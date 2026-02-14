@@ -10,10 +10,24 @@ jest.mock("@/cdp", () => ({
     getOrCreateFrameContextManagerMock(...args),
 }));
 
+const getDebugOptionsMock = jest.fn(() => ({
+  enabled: false,
+  profileDomCapture: false,
+}));
+
+jest.mock("@/debug/options", () => ({
+  getDebugOptions: () => getDebugOptionsMock(),
+}));
+
 describe("getA11yDOM error formatting", () => {
   beforeEach(() => {
     getCDPClientMock.mockReset();
     getOrCreateFrameContextManagerMock.mockReset();
+    getDebugOptionsMock.mockReset();
+    getDebugOptionsMock.mockReturnValue({
+      enabled: false,
+      profileDomCapture: false,
+    });
   });
 
   it("formats non-Error failures from script injection and returns fallback state", async () => {
@@ -148,6 +162,42 @@ describe("getA11yDOM error formatting", () => {
       const warning = String(
         warnSpy.mock.calls.find((call) =>
           String(call[0] ?? "").includes("configure frame filtering")
+        )?.[0] ?? ""
+      );
+      expect(warning).toContain("[truncated");
+      expect(warning).not.toContain("\u0000");
+      expect(warning).not.toContain("\n");
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("continues when debug options lookup throws", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const page = {
+      evaluate: jest.fn().mockResolvedValue(undefined),
+    } as unknown as Page;
+    getDebugOptionsMock.mockImplementationOnce(() => {
+      throw new Error(`debug\u0000\n${"x".repeat(5_000)}`);
+    });
+    getCDPClientMock.mockResolvedValue({
+      acquireSession: jest
+        .fn()
+        .mockRejectedValue(new Error("dom session unavailable")),
+    });
+    getOrCreateFrameContextManagerMock.mockReturnValue({
+      setDebug: jest.fn(),
+      ensureInitialized: jest.fn().mockResolvedValue(undefined),
+    });
+
+    try {
+      const result = await getA11yDOM(page);
+      expect(result.domState).toBe("Error: Could not extract accessibility tree");
+      const warning = String(
+        warnSpy.mock.calls.find((call) =>
+          String(call[0] ?? "").includes("Failed to read debug options")
         )?.[0] ?? ""
       );
       expect(warning).toContain("[truncated");

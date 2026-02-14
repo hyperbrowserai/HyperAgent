@@ -153,6 +153,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Expanded settle trace regressions with cleaner log-capture coverage to ensure recording-video trace diagnostics remain validated without noisy test output.
 - Hardened settle debug-option lookup against trap-prone `getDebugOptions()` reads, with deterministic fallback trace defaults and sanitized warning diagnostics.
 - Hardened A11y DOM option ingestion (`useCache`, `onFrameChunk`, `filterAdTrackingFrames`) with trap-safe reads, so malformed option objects no longer break extraction setup.
+- Hardened A11y DOM debug-option lookup (`getDebugOptions`) with trap-safe fallback defaults and sanitized warning diagnostics.
 - Hardened OpenAI/Anthropic structured-schema debug-option reads so trap-prone debug-option access no longer interrupts structured invocation paths.
 - Hardened CDP Playwright adapter debug-option reads (`sessionLogging`) so trap-prone debug-option lookups degrade to sanitized warnings and safe non-logging defaults.
 - Hardened constructor LLM validation to reject malformed non-provider/non-client `llm` payloads instead of accepting invalid runtime objects, while preserving trap-safe config reads.
