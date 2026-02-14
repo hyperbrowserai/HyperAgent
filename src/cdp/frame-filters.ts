@@ -16,6 +16,11 @@ interface FrameRiskSignal {
   strong?: boolean;
 }
 
+interface AdDomainRule {
+  host: string;
+  path?: string;
+}
+
 const PIXEL_PATTERNS = [/\(1×1\)/i, /\(1x1\)/i];
 
 const SUSPICIOUS_PATTERNS = [
@@ -77,6 +82,15 @@ const AD_DOMAINS = [
   "amazon-adsystem.com",
 ];
 
+const AD_DOMAIN_RULES: AdDomainRule[] = AD_DOMAINS.map((entry) => {
+  const [hostPart, ...pathParts] = entry.toLowerCase().split("/");
+  const normalizedHost = hostPart?.trim() ?? "";
+  const normalizedPath = pathParts.join("/").trim();
+  return normalizedPath.length > 0
+    ? { host: normalizedHost, path: `/${normalizedPath}` }
+    : { host: normalizedHost };
+});
+
 const TRACKING_PARAMS = [
   "correlator=",
   "google_push=",
@@ -113,19 +127,29 @@ function isSameSiteFrame(url: string, parentUrl: string | undefined): boolean {
 
 function matchesKnownAdDomain(url: string): boolean {
   const urlLower = url.toLowerCase();
-  const hostname = safeGetHostname(urlLower);
-  return AD_DOMAINS.some((domainEntry) => {
-    const normalizedDomain = domainEntry.toLowerCase();
-    if (normalizedDomain.includes("/")) {
-      return urlLower.includes(normalizedDomain);
-    }
-    if (!hostname) {
+  let parsedUrl: URL | null = null;
+  try {
+    parsedUrl = new URL(urlLower);
+  } catch {
+    return false;
+  }
+
+  const hostname = parsedUrl.hostname.toLowerCase();
+  const pathAndQuery = `${parsedUrl.pathname}${parsedUrl.search}`.toLowerCase();
+
+  return AD_DOMAIN_RULES.some((rule) => {
+    if (!rule.host) {
       return false;
     }
-    return (
-      hostname === normalizedDomain ||
-      hostname.endsWith(`.${normalizedDomain}`)
-    );
+    const hostMatches =
+      hostname === rule.host || hostname.endsWith(`.${rule.host}`);
+    if (!hostMatches) {
+      return false;
+    }
+    if (!rule.path) {
+      return true;
+    }
+    return pathAndQuery.includes(rule.path);
   });
 }
 
@@ -141,6 +165,15 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
   const { url, name, parentUrl } = context;
   const urlLower = url.toLowerCase();
   const nameLower = (name || "").toLowerCase();
+  let normalizedPathSignalText = urlLower;
+  let normalizedQuerySignalText = "";
+  try {
+    const parsedUrl = new URL(urlLower);
+    normalizedPathSignalText = `${parsedUrl.hostname}${parsedUrl.pathname}`;
+    normalizedQuerySignalText = parsedUrl.search;
+  } catch {
+    // Keep whole URL fallback for non-standard URLs.
+  }
 
   // Allow empty/about:blank frames. They are often bootstrapped to real apps post-load.
   if (!url || urlLower === "about:blank") {
@@ -153,20 +186,24 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
       weight: 2,
       strong: true,
       matched: PIXEL_PATTERNS.some(
-        (pattern) => pattern.test(urlLower) || pattern.test(nameLower)
+        (pattern) =>
+          pattern.test(normalizedPathSignalText) || pattern.test(nameLower)
       ),
     },
     {
       name: "suspicious-keyword",
       weight: 1,
       matched: SUSPICIOUS_PATTERNS.some(
-        (pattern) => pattern.test(urlLower) || pattern.test(nameLower)
+        (pattern) =>
+          pattern.test(normalizedPathSignalText) || pattern.test(nameLower)
       ),
     },
     {
       name: "tracking-extension",
       weight: 1,
-      matched: TRACKING_EXTENSIONS.some((ext) => urlLower.includes(ext)),
+      matched: TRACKING_EXTENSIONS.some((ext) =>
+        normalizedPathSignalText.includes(ext)
+      ),
     },
     {
       name: "known-ad-domain",
@@ -178,7 +215,10 @@ export function isAdOrTrackingFrame(context: FrameFilterContext): boolean {
       name: "tracking-query-param",
       weight: 2,
       strong: true,
-      matched: TRACKING_PARAMS.some((param) => urlLower.includes(param)),
+      matched: TRACKING_PARAMS.some(
+        (param) =>
+          normalizedQuerySignalText.includes(param) || urlLower.includes(param)
+      ),
     },
     {
       name: "data-uri",

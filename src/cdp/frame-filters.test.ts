@@ -77,4 +77,20 @@ describe("isAdOrTrackingFrame", () => {
       })
     ).toBe(true);
   });
+
+  it("matches host+path ad-domain rules on the correct hostname only", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "https://www.yahoo.com/pixel?event=view",
+      })
+    ).toBe(true);
+  });
+
+  it("does not match host+path ad-domain rules from unrelated host query text", () => {
+    expect(
+      isAdOrTrackingFrame({
+        url: "https://example.com/redirect?next=https://yahoo.com/pixel",
+      })
+    ).toBe(false);
+  });
 });
