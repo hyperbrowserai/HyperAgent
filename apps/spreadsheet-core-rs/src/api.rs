@@ -314,6 +314,7 @@ const FORMULA_UNSUPPORTED_BEHAVIOR_LIST: &[&str] = &[
   "Unsupported formulas are surfaced via unsupported_formulas.",
 ];
 const FORMULA_FALLBACK_BEHAVIOR: &str = "unsupported formulas are preserved and reported by formula.recalculated payloads";
+const FORMULA_VALIDATION_ERROR_CODES: &[&str] = &["INVALID_FORMULA"];
 
 fn formula_supported_functions_summary() -> String {
   FORMULA_SUPPORTED_FUNCTION_LIST.join(", ")
@@ -835,6 +836,7 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
       "supported_function_list": FORMULA_SUPPORTED_FUNCTION_LIST,
       "unsupported_behaviors": formula_unsupported_behaviors_summary(),
       "unsupported_behavior_list": FORMULA_UNSUPPORTED_BEHAVIOR_LIST,
+      "validation_error_codes": FORMULA_VALIDATION_ERROR_CODES,
       "fallback_behavior": FORMULA_FALLBACK_BEHAVIOR
     },
     "scenario_operations_endpoint": "/v1/agent/wizard/scenarios/{scenario}/operations?include_file_base64=false",
@@ -1361,6 +1363,7 @@ async fn get_agent_schema(
       "supported_function_list": FORMULA_SUPPORTED_FUNCTION_LIST,
       "unsupported_behaviors": formula_unsupported_behaviors_summary(),
       "unsupported_behavior_list": FORMULA_UNSUPPORTED_BEHAVIOR_LIST,
+      "validation_error_codes": FORMULA_VALIDATION_ERROR_CODES,
       "fallback_behavior": FORMULA_FALLBACK_BEHAVIOR
     },
     "agent_ops_response_shape": {
@@ -2785,6 +2788,7 @@ mod tests {
     agent_ops_cache_stats,
     clear_agent_ops_cache, get_agent_schema, get_agent_wizard_schema,
     FORMULA_SUPPORTED_FUNCTION_LIST, FORMULA_UNSUPPORTED_BEHAVIOR_LIST,
+    FORMULA_VALIDATION_ERROR_CODES,
     formula_supported_functions_summary, formula_unsupported_behaviors_summary,
     remove_agent_ops_cache_entry,
     remove_agent_ops_cache_entries_by_prefix,
@@ -5014,6 +5018,14 @@ mod tests {
     );
     assert_eq!(
       schema
+        .get("formula_capabilities")
+        .and_then(|value| value.get("validation_error_codes"))
+        .and_then(serde_json::Value::as_array)
+        .map(|entries| entries.len()),
+      Some(FORMULA_VALIDATION_ERROR_CODES.len()),
+    );
+    assert_eq!(
+      schema
         .get("workbook_import_response_shape")
         .and_then(|value| value.get("import"))
         .and_then(|value| value.get("formula_cells_imported"))
@@ -5488,6 +5500,18 @@ mod tests {
         .and_then(serde_json::Value::as_array)
         .map(|entries| entries.len()),
       Some(FORMULA_UNSUPPORTED_BEHAVIOR_LIST.len()),
+    );
+    let formula_validation_error_codes = schema
+      .get("formula_capabilities")
+      .and_then(|value| value.get("validation_error_codes"))
+      .and_then(serde_json::Value::as_array)
+      .expect("validation_error_codes should be an array")
+      .iter()
+      .filter_map(serde_json::Value::as_str)
+      .collect::<Vec<_>>();
+    assert!(
+      formula_validation_error_codes.contains(&"INVALID_FORMULA"),
+      "wizard schema should advertise formula validation error codes",
     );
   }
 }
