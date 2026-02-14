@@ -351,6 +351,60 @@ function flattenSchemaShapeEntries(
   );
 }
 
+function buildEndpointCatalogCoverageStats(
+  entries: Array<{
+    methodSource: string;
+    summarySource: string;
+    openApiPathSource: string;
+    hasMethodMismatch: boolean;
+    hasSummaryMismatch: boolean;
+    hasPathMismatch: boolean;
+  }>,
+): {
+  total: number;
+  methodOperationBacked: number;
+  summaryOperationBacked: number;
+  pathOperationBacked: number;
+  operationFallback: number;
+  methodMismatches: number;
+  summaryMismatches: number;
+  pathMismatches: number;
+} {
+  return entries.reduce(
+    (accumulator, entry) => ({
+      total: accumulator.total + 1,
+      methodOperationBacked:
+        accumulator.methodOperationBacked + (entry.methodSource === "operation" ? 1 : 0),
+      summaryOperationBacked:
+        accumulator.summaryOperationBacked + (entry.summarySource === "operation" ? 1 : 0),
+      pathOperationBacked:
+        accumulator.pathOperationBacked + (entry.openApiPathSource === "operation" ? 1 : 0),
+      operationFallback:
+        accumulator.operationFallback
+        + (
+          entry.methodSource !== "operation"
+            || entry.summarySource !== "operation"
+            || entry.openApiPathSource !== "operation"
+            ? 1
+            : 0
+        ),
+      methodMismatches: accumulator.methodMismatches + (entry.hasMethodMismatch ? 1 : 0),
+      summaryMismatches: accumulator.summaryMismatches + (entry.hasSummaryMismatch ? 1 : 0),
+      pathMismatches: accumulator.pathMismatches + (entry.hasPathMismatch ? 1 : 0),
+    }),
+    {
+      total: 0,
+      methodOperationBacked: 0,
+      summaryOperationBacked: 0,
+      pathOperationBacked: 0,
+      operationFallback: 0,
+      methodMismatches: 0,
+      summaryMismatches: 0,
+      pathMismatches: 0,
+    },
+  );
+}
+
 function formatSchemaShapeEntries(
   entries: Array<{ key: string; description: string | null }>,
 ): string {
@@ -1461,37 +1515,44 @@ export function SpreadsheetApp() {
         .map((entry) => entry.key),
     [wizardSchemaEndpointsWithMethods],
   );
+  const wizardEndpointCoverageStats = useMemo(
+    () => buildEndpointCatalogCoverageStats(wizardSchemaEndpointsWithMethods),
+    [wizardSchemaEndpointsWithMethods],
+  );
   const wizardEndpointCatalogPayload = useMemo(
     () =>
-      wizardSchemaEndpointsWithMethods.map((entry) => ({
-        key: entry.key,
-        endpoint: entry.endpoint,
-        openapi_path: entry.openApiPath,
-        derived_openapi_path: entry.derivedOpenApiPath,
-        methods: entry.methods,
-        summary: entry.summary,
-        sources: {
-          path: entry.openApiPathSource,
-          methods: entry.methodSource,
-          summary: entry.summarySource,
-        },
-        operation_metadata: {
-          path: entry.openApiPathSource === "operation" ? entry.openApiPath : null,
-          methods: entry.schemaMethods,
-          summary: entry.summarySource === "operation" ? entry.summary : null,
-        },
-        openapi_metadata: {
-          path: entry.openApiPathSource === "derived" ? null : entry.openApiPath,
-          methods: entry.openApiMethods,
-          summary: entry.openApiSummary,
-        },
-        mismatches: {
-          path: entry.hasPathMismatch,
-          methods: entry.hasMethodMismatch,
-          summary: entry.hasSummaryMismatch,
-        },
-      })),
-    [wizardSchemaEndpointsWithMethods],
+      ({
+        coverage: wizardEndpointCoverageStats,
+        endpoints: wizardSchemaEndpointsWithMethods.map((entry) => ({
+          key: entry.key,
+          endpoint: entry.endpoint,
+          openapi_path: entry.openApiPath,
+          derived_openapi_path: entry.derivedOpenApiPath,
+          methods: entry.methods,
+          summary: entry.summary,
+          sources: {
+            path: entry.openApiPathSource,
+            methods: entry.methodSource,
+            summary: entry.summarySource,
+          },
+          operation_metadata: {
+            path: entry.openApiPathSource === "operation" ? entry.openApiPath : null,
+            methods: entry.schemaMethods,
+            summary: entry.summarySource === "operation" ? entry.summary : null,
+          },
+          openapi_metadata: {
+            path: entry.openApiPathSource === "derived" ? null : entry.openApiPath,
+            methods: entry.openApiMethods,
+            summary: entry.openApiSummary,
+          },
+          mismatches: {
+            path: entry.hasPathMismatch,
+            methods: entry.hasMethodMismatch,
+            summary: entry.hasSummaryMismatch,
+          },
+        })),
+      }),
+    [wizardEndpointCoverageStats, wizardSchemaEndpointsWithMethods],
   );
   const agentWorkbookImportResponseFields = useMemo(
     () =>
@@ -1811,37 +1872,44 @@ export function SpreadsheetApp() {
         .map((entry) => entry.key),
     [agentSchemaEndpointsWithMethods],
   );
+  const agentEndpointCoverageStats = useMemo(
+    () => buildEndpointCatalogCoverageStats(agentSchemaEndpointsWithMethods),
+    [agentSchemaEndpointsWithMethods],
+  );
   const agentEndpointCatalogPayload = useMemo(
     () =>
-      agentSchemaEndpointsWithMethods.map((entry) => ({
-        key: entry.key,
-        endpoint: entry.endpoint,
-        openapi_path: entry.openApiPath,
-        derived_openapi_path: entry.derivedOpenApiPath,
-        methods: entry.methods,
-        summary: entry.summary,
-        sources: {
-          path: entry.openApiPathSource,
-          methods: entry.methodSource,
-          summary: entry.summarySource,
-        },
-        operation_metadata: {
-          path: entry.openApiPathSource === "operation" ? entry.openApiPath : null,
-          methods: entry.schemaMethods,
-          summary: entry.summarySource === "operation" ? entry.summary : null,
-        },
-        openapi_metadata: {
-          path: entry.openApiPathSource === "derived" ? null : entry.openApiPath,
-          methods: entry.openApiMethods,
-          summary: entry.openApiSummary,
-        },
-        mismatches: {
-          path: entry.hasPathMismatch,
-          methods: entry.hasMethodMismatch,
-          summary: entry.hasSummaryMismatch,
-        },
-      })),
-    [agentSchemaEndpointsWithMethods],
+      ({
+        coverage: agentEndpointCoverageStats,
+        endpoints: agentSchemaEndpointsWithMethods.map((entry) => ({
+          key: entry.key,
+          endpoint: entry.endpoint,
+          openapi_path: entry.openApiPath,
+          derived_openapi_path: entry.derivedOpenApiPath,
+          methods: entry.methods,
+          summary: entry.summary,
+          sources: {
+            path: entry.openApiPathSource,
+            methods: entry.methodSource,
+            summary: entry.summarySource,
+          },
+          operation_metadata: {
+            path: entry.openApiPathSource === "operation" ? entry.openApiPath : null,
+            methods: entry.schemaMethods,
+            summary: entry.summarySource === "operation" ? entry.summary : null,
+          },
+          openapi_metadata: {
+            path: entry.openApiPathSource === "derived" ? null : entry.openApiPath,
+            methods: entry.openApiMethods,
+            summary: entry.openApiSummary,
+          },
+          mismatches: {
+            path: entry.hasPathMismatch,
+            methods: entry.hasMethodMismatch,
+            summary: entry.hasSummaryMismatch,
+          },
+        })),
+      }),
+    [agentEndpointCoverageStats, agentSchemaEndpointsWithMethods],
   );
   const agentWorkbookImportEventFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.workbook_import_event_shape),
@@ -2776,7 +2844,7 @@ export function SpreadsheetApp() {
   }
 
   async function handleCopyWizardEndpointCatalog() {
-    if (wizardEndpointCatalogPayload.length === 0) {
+    if (wizardEndpointCatalogPayload.endpoints.length === 0) {
       return;
     }
     setIsCopyingWizardEndpointCatalog(true);
@@ -2785,8 +2853,8 @@ export function SpreadsheetApp() {
         JSON.stringify(
           {
             schema: "wizard",
-            endpoint_count: wizardEndpointCatalogPayload.length,
-            endpoints: wizardEndpointCatalogPayload,
+            endpoint_count: wizardEndpointCatalogPayload.endpoints.length,
+            ...wizardEndpointCatalogPayload,
           },
           null,
           2,
@@ -2794,7 +2862,7 @@ export function SpreadsheetApp() {
       );
       clearUiError();
       setNotice(
-        `Copied wizard endpoint catalog metadata (${wizardEndpointCatalogPayload.length} endpoints).`,
+        `Copied wizard endpoint catalog metadata (${wizardEndpointCatalogPayload.endpoints.length} endpoints).`,
       );
     } catch (error) {
       applyUiError(error, "Failed to copy wizard endpoint catalog metadata.");
@@ -2804,7 +2872,7 @@ export function SpreadsheetApp() {
   }
 
   async function handleCopyAgentEndpointCatalog() {
-    if (agentEndpointCatalogPayload.length === 0) {
+    if (agentEndpointCatalogPayload.endpoints.length === 0) {
       return;
     }
     setIsCopyingAgentEndpointCatalog(true);
@@ -2813,8 +2881,8 @@ export function SpreadsheetApp() {
         JSON.stringify(
           {
             schema: "agent",
-            endpoint_count: agentEndpointCatalogPayload.length,
-            endpoints: agentEndpointCatalogPayload,
+            endpoint_count: agentEndpointCatalogPayload.endpoints.length,
+            ...agentEndpointCatalogPayload,
           },
           null,
           2,
@@ -2822,7 +2890,7 @@ export function SpreadsheetApp() {
       );
       clearUiError();
       setNotice(
-        `Copied agent endpoint catalog metadata (${agentEndpointCatalogPayload.length} endpoints).`,
+        `Copied agent endpoint catalog metadata (${agentEndpointCatalogPayload.endpoints.length} endpoints).`,
       );
     } catch (error) {
       applyUiError(error, "Failed to copy agent endpoint catalog metadata.");
@@ -3917,6 +3985,21 @@ export function SpreadsheetApp() {
                       : "Copy endpoint catalog JSON"}
                   </button>
                 </div>
+                <p className="mt-2 text-[11px] text-slate-400">
+                  coverage: operation methods{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCoverageStats.methodOperationBacked}
+                  </span>
+                  /{wizardEndpointCoverageStats.total}, operation summaries{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCoverageStats.summaryOperationBacked}
+                  </span>
+                  /{wizardEndpointCoverageStats.total}, operation paths{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCoverageStats.pathOperationBacked}
+                  </span>
+                  /{wizardEndpointCoverageStats.total}
+                </p>
                 {wizardUnmappedSchemaEndpointKeys.length > 0 ? (
                   <p className="mt-2 text-[11px] text-amber-300">
                     openapi method mapping missing for:{" "}
@@ -4967,6 +5050,21 @@ export function SpreadsheetApp() {
                       : "Copy endpoint catalog JSON"}
                   </button>
                 </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  coverage: operation methods{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCoverageStats.methodOperationBacked}
+                  </span>
+                  /{agentEndpointCoverageStats.total}, operation summaries{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCoverageStats.summaryOperationBacked}
+                  </span>
+                  /{agentEndpointCoverageStats.total}, operation paths{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCoverageStats.pathOperationBacked}
+                  </span>
+                  /{agentEndpointCoverageStats.total}
+                </p>
                 {agentUnmappedSchemaEndpointKeys.length > 0 ? (
                   <p className="mt-2 text-xs text-amber-300">
                     openapi method mapping missing for:{" "}
