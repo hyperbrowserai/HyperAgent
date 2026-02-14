@@ -6342,6 +6342,7 @@ mod tests {
   use duckdb::Connection;
   use serde_json::json;
   use std::path::PathBuf;
+  use std::time::Instant;
   use tempfile::{TempDir, tempdir};
 
   fn create_initialized_db_path() -> (TempDir, PathBuf) {
@@ -6450,6 +6451,139 @@ mod tests {
       }
       other => panic!("expected bad request for blank formula, got {other:?}"),
     }
+  }
+
+  #[test]
+  fn should_recalculate_large_range_aggregates_consistently() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let row_count = 2_000u32;
+    let mut cells = Vec::with_capacity((row_count as usize) + 3);
+    for row in 1..=row_count {
+      cells.push(CellMutation {
+        row,
+        col: 1,
+        value: Some(json!(row)),
+        formula: None,
+      });
+    }
+    cells.push(CellMutation {
+      row: 1,
+      col: 2,
+      value: None,
+      formula: Some(format!("=SUM(A1:A{row_count})")),
+    });
+    cells.push(CellMutation {
+      row: 2,
+      col: 2,
+      value: None,
+      formula: Some(format!("=AVERAGE(A1:A{row_count})")),
+    });
+    cells.push(CellMutation {
+      row: 3,
+      col: 2,
+      value: None,
+      formula: Some(format!("=MAX(A1:A{row_count})")),
+    });
+
+    set_cells(&db_path, "Perf", &cells).expect("large range cells should upsert");
+    let (updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("large range recalc should succeed");
+    assert!(
+      unsupported_formulas.is_empty(),
+      "large range aggregate formulas should remain supported: {:?}",
+      unsupported_formulas,
+    );
+    assert!(
+      updated_cells >= 3,
+      "aggregate formulas should be updated after recalculation",
+    );
+
+    let snapshots = get_cells(
+      &db_path,
+      "Perf",
+      &CellRange {
+        start_row: 1,
+        end_row: 3,
+        start_col: 2,
+        end_col: 2,
+      },
+    )
+    .expect("aggregate cells should be fetched");
+    let by_row = snapshots
+      .iter()
+      .map(|cell| (cell.row, cell))
+      .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+      by_row
+        .get(&1)
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(2_001_000),
+      "SUM should match arithmetic progression total",
+    );
+    let average_value = by_row
+      .get(&2)
+      .and_then(|cell| cell.evaluated_value.as_deref())
+      .and_then(|value| value.parse::<f64>().ok())
+      .expect("AVERAGE result should parse as f64");
+    assert!(
+      (average_value - 1_000.5).abs() < 1e-9,
+      "AVERAGE should match arithmetic progression midpoint",
+    );
+    assert_eq!(
+      by_row
+        .get(&3)
+        .and_then(|cell| cell.evaluated_value.as_deref())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value as i64),
+      Some(2_000),
+      "MAX should match largest seeded value",
+    );
+  }
+
+  #[test]
+  #[ignore = "manual performance baseline; run explicitly with --ignored"]
+  fn benchmark_large_range_recalculation() {
+    let (_temp_dir, db_path) = create_initialized_db_path();
+    let row_count = 10_000u32;
+    let mut cells = Vec::with_capacity((row_count as usize) + 1);
+    for row in 1..=row_count {
+      cells.push(CellMutation {
+        row,
+        col: 1,
+        value: Some(json!(row)),
+        formula: None,
+      });
+    }
+    cells.push(CellMutation {
+      row: 1,
+      col: 2,
+      value: None,
+      formula: Some(format!("=SUM(A1:A{row_count})")),
+    });
+    set_cells(&db_path, "Perf", &cells).expect("benchmark cells should upsert");
+
+    let start = Instant::now();
+    let (updated_cells, unsupported_formulas) =
+      recalculate_formulas(&db_path).expect("benchmark recalc should succeed");
+    let elapsed = start.elapsed();
+
+    assert!(
+      unsupported_formulas.is_empty(),
+      "benchmark formula should stay supported: {:?}",
+      unsupported_formulas,
+    );
+    assert!(
+      updated_cells >= 1,
+      "benchmark formula should update on recalculation",
+    );
+    println!(
+      "large_range_recalc_benchmark: {{\"rows\":{},\"elapsed_ms\":{},\"updated_cells\":{}}}",
+      row_count,
+      elapsed.as_millis(),
+      updated_cells,
+    );
   }
 
   #[test]

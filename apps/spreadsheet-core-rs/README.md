@@ -306,6 +306,14 @@ curl -X POST "http://localhost:8787/v1/agent/wizard/run-json" \
 cargo test
 ```
 
+Performance baseline probe (manual, ignored by default):
+
+```bash
+cargo test store::tests::benchmark_large_range_recalculation -- --ignored --nocapture
+```
+
+This emits a `large_range_recalc_benchmark` JSON line with row count and elapsed milliseconds.
+
 XLSX compatibility regression coverage includes:
 - supported formula roundtrip fixtures (engineering + financial families),
 - unsupported formula preservation fixtures (normalized text retained + surfaced via `unsupported_formulas`),
