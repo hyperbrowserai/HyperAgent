@@ -72,6 +72,10 @@ Server defaults to `http://localhost:8787`.
 - `import.formula_cells_without_cached_values`
 - `import.warnings`
 
+Import behavior notes:
+- Formula tokens are normalized for engine compatibility (`_xlfn.` / `_xlws.` prefixes are stripped and formulas are stored with a leading `=`).
+- Cell coordinates are imported using worksheet range offsets, so sheets with first used cells outside `A1` preserve their original row/column placement.
+
 > Note: `/v1/workbooks/{id}/duckdb/query` currently returns a guarded `400` response in this build to avoid a known upstream panic in the underlying DuckDB Rust wrapper for ad-hoc SQL execution paths.
 
 `POST /v1/workbooks/{id}/export` responds with the XLSX file body and an `x-export-meta` header containing JSON compatibility-report metadata (`preserved`, `transformed`, `unsupported`).
