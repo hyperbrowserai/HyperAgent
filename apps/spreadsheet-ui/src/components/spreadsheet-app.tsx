@@ -77,6 +77,16 @@ interface LatestImportSummary {
   warnings: string[];
 }
 
+function formatLatestImportSummary(summary: LatestImportSummary): string {
+  if (summary.formulaCellsImported <= 0) {
+    return `${summary.sheetsImported} sheets, ${summary.cellsImported} cells`;
+  }
+  const normalizedSegment = summary.formulaCellsNormalized > 0
+    ? `, ${summary.formulaCellsNormalized} normalized`
+    : "";
+  return `${summary.sheetsImported} sheets, ${summary.cellsImported} cells, ${summary.formulaCellsImported} formulas (${summary.formulaCellsWithCachedValues} cached, ${summary.formulaCellsWithoutCachedValues} uncached${normalizedSegment})`;
+}
+
 function parsePositiveIntegerInput(value: string): number | undefined {
   const normalized = value.trim();
   if (!normalized || !/^\d+$/.test(normalized)) {
@@ -444,11 +454,8 @@ export function SpreadsheetApp() {
       const importSummary = toLatestImportSummary(response.import);
       clearUiError();
       setWorkbook(importedWorkbook);
-      const formulaSummary = importSummary.formulaCellsImported > 0
-        ? `, ${importSummary.formulaCellsImported} formulas (${importSummary.formulaCellsWithCachedValues} cached, ${importSummary.formulaCellsWithoutCachedValues} uncached${importSummary.formulaCellsNormalized > 0 ? `, ${importSummary.formulaCellsNormalized} normalized` : ""})`
-        : "";
       setNotice(
-        `Imported workbook ${importedWorkbook.name} (${importSummary.sheetsImported} sheets, ${importSummary.cellsImported} cells${formulaSummary}).`,
+        `Imported workbook ${importedWorkbook.name} (${formatLatestImportSummary(importSummary)}).`,
       );
       setLastAgentRequestId(null);
       setLastPreset(null);
@@ -2305,8 +2312,14 @@ export function SpreadsheetApp() {
       setLastExecutedOperations(scenarioPlan.operations);
       setLastAgentRequestId(response.request_id ?? null);
       setLastAgentOps(response.results);
-      setLastWizardImportSummary(
-        response.import ? toLatestImportSummary(response.import) : null,
+      const latestImportSummary = response.import
+        ? toLatestImportSummary(response.import)
+        : null;
+      setLastWizardImportSummary(latestImportSummary);
+      setNotice(
+        latestImportSummary
+          ? `Wizard scenario ${response.scenario} completed for ${response.workbook.name} (${formatLatestImportSummary(latestImportSummary)}).`
+          : `Wizard scenario ${response.scenario} completed for ${response.workbook.name} (${response.results.length} operation result${response.results.length === 1 ? "" : "s"}).`,
       );
 
       await Promise.all([
