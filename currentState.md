@@ -201,6 +201,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
   - `collectExecutionContexts()` now also guards trap-prone `session.send` reads for `Runtime.enable`, preventing getter traps from aborting the context collection path.
 - Hardened frame-sync debug handling in a11y context provider:
   - `syncFrameContextManager()` now guards trap-prone frame-manager `setDebug` calls, preserving sync flow with sanitized debug warnings.
+- Refreshed remaining staged-flow wording in the CDP deep dive around OOPIF discovery to describe current execution-context sync progression without stale "Need Phase 4" phrasing.
 - Hardened CDP command dispatch in Playwright session adapter:
   - `PlaywrightSessionAdapter.send()` now guards trap-prone `session.send` method reads and wraps sync send failures with sanitized/diagnostic context.
 - Hardened Playwright session listener wrappers:

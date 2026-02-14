@@ -2952,10 +2952,10 @@ Data After OOPIF Discovery:
 ═══════════════════════════════════════════════════════════════
 ├─ [backendNodeMap]    ✅ Complete (all frames)
 ├─ [xpathMap]          ✅ Complete (all frames)
-├─ [frameMap]          ⚠️  Still incomplete:
-│                          • frameId: ✅ Now complete
-│                          • executionContextId: ❌ Still missing!
-└─ Need Phase 4 for execution contexts
+├─ [frameMap]          ⚠️  Partially enriched:
+│                          • frameId: ✅ Populated
+│                          • executionContextId: ⏳ Populated in the sync pass below
+└─ Next: run syncFrameContextManager() to merge execution-context metadata
 ```
 
 ---
