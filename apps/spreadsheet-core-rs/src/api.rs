@@ -7432,6 +7432,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_reject_request_id_conflict_when_reexecuting_into_existing_request_id() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("handler-cache-reexecute-request-id-conflict".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("source-conflict-a".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::Recalculate],
+            }),
+        )
+        .await
+        .expect("source request should succeed");
+
+        let _ = agent_ops(
+            State(state.clone()),
+            Path(workbook.id),
+            Json(AgentOpsRequest {
+                request_id: Some("existing-conflict-target".to_string()),
+                actor: Some("test".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+                operations: vec![AgentOperation::ExportWorkbook {
+                    include_file_base64: Some(false),
+                }],
+            }),
+        )
+        .await
+        .expect("existing conflicting request id should be cached");
+
+        let error = reexecute_agent_ops_cache_entry(
+            State(state),
+            Path(workbook.id),
+            Json(ReexecuteAgentOpsCacheEntryRequest {
+                request_id: "source-conflict-a".to_string(),
+                new_request_id: Some("existing-conflict-target".to_string()),
+                actor: Some("test-reexecute".to_string()),
+                stop_on_error: Some(true),
+                expected_operations_signature: None,
+            }),
+        )
+        .await
+        .expect_err("reexecute should reject conflicting existing request id");
+
+        match error {
+            ApiError::BadRequestWithCode { code, .. } => {
+                assert_eq!(code, "REQUEST_ID_CONFLICT");
+            }
+            _ => panic!("expected request-id conflict code for reexecute"),
+        }
+    }
+
+    #[tokio::test]
     async fn should_return_request_id_conflict_from_agent_ops_handler() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
