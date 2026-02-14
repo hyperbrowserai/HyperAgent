@@ -407,6 +407,8 @@ type EndpointCatalogSortOption =
   | "mismatch_first"
   | "fallback_first";
 
+type EndpointCatalogViewMode = "all" | "issues" | "mismatches" | "fallback";
+
 function filterEndpointCatalogEntries<
   T extends { key: string; endpoint: string; openApiPath: string; summary: string | null },
 >(
@@ -425,6 +427,39 @@ function filterEndpointCatalogEntries<
       entry.summary ?? "",
     ].some((value) => value.toLowerCase().includes(normalizedFilterValue))
   );
+}
+
+function filterEndpointCatalogEntriesByMode<
+  T extends {
+    hasMethodMismatch: boolean;
+    hasSummaryMismatch: boolean;
+    hasPathMismatch: boolean;
+    methodSource: string;
+    summarySource: string;
+    openApiPathSource: string;
+    methods: string[];
+  },
+>(
+  entries: T[],
+  viewMode: EndpointCatalogViewMode,
+): T[] {
+  if (viewMode === "all") {
+    return entries;
+  }
+  return entries.filter((entry) => {
+    const hasMismatch = entry.hasMethodMismatch || entry.hasSummaryMismatch || entry.hasPathMismatch;
+    const hasFallback = entry.methodSource !== "operation"
+      || entry.summarySource !== "operation"
+      || entry.openApiPathSource !== "operation";
+    const hasIssue = hasMismatch || hasFallback || entry.methods.length === 0;
+    if (viewMode === "issues") {
+      return hasIssue;
+    }
+    if (viewMode === "mismatches") {
+      return hasMismatch;
+    }
+    return hasFallback;
+  });
 }
 
 function sortEndpointCatalogEntries<
@@ -1010,6 +1045,8 @@ export function SpreadsheetApp() {
   const [wizardEndpointCatalogFilter, setWizardEndpointCatalogFilter] = useState("");
   const [wizardEndpointCatalogSort, setWizardEndpointCatalogSort] =
     useState<EndpointCatalogSortOption>("key_asc");
+  const [wizardEndpointCatalogViewMode, setWizardEndpointCatalogViewMode] =
+    useState<EndpointCatalogViewMode>("all");
   const [wizardFile, setWizardFile] = useState<File | null>(null);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [uiError, setUiError] = useState<string | null>(null);
@@ -1057,6 +1094,8 @@ export function SpreadsheetApp() {
   const [agentEndpointCatalogFilter, setAgentEndpointCatalogFilter] = useState("");
   const [agentEndpointCatalogSort, setAgentEndpointCatalogSort] =
     useState<EndpointCatalogSortOption>("key_asc");
+  const [agentEndpointCatalogViewMode, setAgentEndpointCatalogViewMode] =
+    useState<EndpointCatalogViewMode>("all");
   const [cacheEntriesMaxAgeSeconds, setCacheEntriesMaxAgeSeconds] = useState("");
   const [cachePrefixSuggestionLimit, setCachePrefixSuggestionLimit] = useState(
     CACHE_PREFIX_SUGGESTIONS_DEFAULT_LIMIT,
@@ -2050,15 +2089,19 @@ export function SpreadsheetApp() {
   );
   const wizardVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
-      filterEndpointCatalogEntries(
-        wizardSchemaEndpointsWithMethods,
-        wizardEndpointCatalogFilter,
+      filterEndpointCatalogEntriesByMode(
+        filterEndpointCatalogEntries(
+          wizardSchemaEndpointsWithMethods,
+          wizardEndpointCatalogFilter,
+        ),
+        wizardEndpointCatalogViewMode,
       ),
       wizardEndpointCatalogSort,
     ),
     [
       wizardEndpointCatalogFilter,
       wizardEndpointCatalogSort,
+      wizardEndpointCatalogViewMode,
       wizardSchemaEndpointsWithMethods,
     ],
   );
@@ -2066,6 +2109,9 @@ export function SpreadsheetApp() {
   const wizardEndpointCatalogPayload = useMemo(
     () =>
       ({
+        view_mode: wizardEndpointCatalogViewMode,
+        filter: wizardEndpointCatalogFilter.trim() || null,
+        sort: wizardEndpointCatalogSort,
         coverage: wizardEndpointCoverageStats,
         schema_coverage: wizardSchemaEndpointCoverage,
         coverage_drift: wizardEndpointCoverageDrift,
@@ -2125,6 +2171,9 @@ export function SpreadsheetApp() {
       wizardEndpointCatalogDiagnostics.mismatchCount,
       wizardEndpointCatalogDiagnostics.openApiSyncIssueCount,
       wizardEndpointCatalogDiagnostics.unmappedCount,
+      wizardEndpointCatalogFilter,
+      wizardEndpointCatalogSort,
+      wizardEndpointCatalogViewMode,
       wizardEndpointCoverageDrift,
       wizardEndpointCoverageStats,
       wizardEndpointDiagnosticsDrift,
@@ -2544,15 +2593,19 @@ export function SpreadsheetApp() {
   );
   const agentVisibleSchemaEndpointsWithMethods = useMemo(
     () => sortEndpointCatalogEntries(
-      filterEndpointCatalogEntries(
-        agentSchemaEndpointsWithMethods,
-        agentEndpointCatalogFilter,
+      filterEndpointCatalogEntriesByMode(
+        filterEndpointCatalogEntries(
+          agentSchemaEndpointsWithMethods,
+          agentEndpointCatalogFilter,
+        ),
+        agentEndpointCatalogViewMode,
       ),
       agentEndpointCatalogSort,
     ),
     [
       agentEndpointCatalogFilter,
       agentEndpointCatalogSort,
+      agentEndpointCatalogViewMode,
       agentSchemaEndpointsWithMethods,
     ],
   );
@@ -2560,6 +2613,9 @@ export function SpreadsheetApp() {
   const agentEndpointCatalogPayload = useMemo(
     () =>
       ({
+        view_mode: agentEndpointCatalogViewMode,
+        filter: agentEndpointCatalogFilter.trim() || null,
+        sort: agentEndpointCatalogSort,
         coverage: agentEndpointCoverageStats,
         schema_coverage: agentSchemaEndpointCoverage,
         coverage_drift: agentEndpointCoverageDrift,
@@ -2619,6 +2675,9 @@ export function SpreadsheetApp() {
       agentEndpointCatalogDiagnostics.mismatchCount,
       agentEndpointCatalogDiagnostics.openApiSyncIssueCount,
       agentEndpointCatalogDiagnostics.unmappedCount,
+      agentEndpointCatalogFilter,
+      agentEndpointCatalogSort,
+      agentEndpointCatalogViewMode,
       agentEndpointCoverageDrift,
       agentEndpointCoverageStats,
       agentEndpointDiagnosticsDrift,
@@ -4757,11 +4816,31 @@ export function SpreadsheetApp() {
                         <option value="fallback_first">fallback first</option>
                       </select>
                     </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                      view:
+                      <select
+                        value={wizardEndpointCatalogViewMode}
+                        onChange={(event) => {
+                          setWizardEndpointCatalogViewMode(
+                            event.target.value as EndpointCatalogViewMode,
+                          );
+                        }}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                      >
+                        <option value="all">all</option>
+                        <option value="issues">issues only</option>
+                        <option value="mismatches">mismatches only</option>
+                        <option value="fallback">fallback only</option>
+                      </select>
+                    </label>
                   </div>
                   <div className="flex items-center gap-2 self-end sm:self-auto">
                     <span className="text-[10px] text-slate-500">
                       showing {wizardVisibleSchemaEndpointsWithMethods.length}
                       /{wizardSchemaEndpointsWithMethods.length}
+                      {wizardEndpointCatalogViewMode !== "all"
+                        ? ` (${wizardEndpointCatalogViewMode})`
+                        : ""}
                     </span>
                     <button
                       onClick={handleCopyWizardEndpointCatalog}
@@ -6101,11 +6180,31 @@ export function SpreadsheetApp() {
                         <option value="fallback_first">fallback first</option>
                       </select>
                     </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      view:
+                      <select
+                        value={agentEndpointCatalogViewMode}
+                        onChange={(event) => {
+                          setAgentEndpointCatalogViewMode(
+                            event.target.value as EndpointCatalogViewMode,
+                          );
+                        }}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                      >
+                        <option value="all">all</option>
+                        <option value="issues">issues only</option>
+                        <option value="mismatches">mismatches only</option>
+                        <option value="fallback">fallback only</option>
+                      </select>
+                    </label>
                   </div>
                   <div className="flex items-center gap-2 self-end sm:self-auto">
                     <span className="text-[10px] text-slate-500">
                       showing {agentVisibleSchemaEndpointsWithMethods.length}
                       /{agentSchemaEndpointsWithMethods.length}
+                      {agentEndpointCatalogViewMode !== "all"
+                        ? ` (${agentEndpointCatalogViewMode})`
+                        : ""}
                     </span>
                     <button
                       onClick={handleCopyAgentEndpointCatalog}
