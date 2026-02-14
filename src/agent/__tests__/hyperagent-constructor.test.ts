@@ -2087,6 +2087,88 @@ describe("HyperAgent constructor and task controls", () => {
     }
   });
 
+  it("continues getPages when hyperpage context getter traps", async () => {
+    const basePage = {
+      on: jest.fn(),
+      off: jest.fn(),
+      isClosed: () => false,
+    };
+    const trappedPage = new Proxy(basePage, {
+      get: (target, property, receiver) => {
+        if (property === "context") {
+          throw new Error("context getter trap");
+        }
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+        return value;
+      },
+    }) as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [trappedPage],
+    };
+
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+  });
+
+  it("keeps child tab tracking when context pages getter traps", async () => {
+    let contextPageListener: ((newPage: Page) => Promise<void>) | undefined;
+    const contextOff = jest.fn();
+    const context = {
+      on: jest.fn(
+        (event: "page", listener: (newPage: Page) => Promise<void>) => {
+          if (event === "page") {
+            contextPageListener = listener;
+          }
+        }
+      ),
+      off: contextOff,
+      get pages() {
+        throw new Error("context pages getter trap");
+      },
+    };
+    const page = {
+      on: jest.fn(),
+      off: jest.fn(),
+      context: () => context,
+      isClosed: () => false,
+    } as unknown as Page;
+    const newPageOn = jest.fn();
+    const newPage = {
+      on: newPageOn,
+      off: jest.fn(),
+      opener: async () => page,
+      isClosed: () => false,
+    } as unknown as Page;
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+    });
+    const internalAgent = agent as unknown as {
+      browser: object | null;
+      context: { pages: () => Page[] } | null;
+    };
+    internalAgent.browser = {};
+    internalAgent.context = {
+      pages: () => [page],
+    };
+
+    await expect(agent.getPages()).resolves.toHaveLength(1);
+    expect(contextPageListener).toBeDefined();
+    await contextPageListener?.(newPage);
+
+    expect(newPageOn).toHaveBeenCalledWith("close", expect.any(Function));
+  });
+
   it("continues getPages when scoped listener cleanup getter traps", async () => {
     let trappedPage: Page;
     const basePage = {

@@ -3595,6 +3595,38 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     const scopedPage = hyperPage as HyperPage & {
       _scopeListenerCleanup?: () => void;
     };
+    const readPageContext = (targetPage: Page): BrowserContext | null => {
+      const contextMethod = this.safeReadField(targetPage, "context");
+      if (typeof contextMethod !== "function") {
+        return null;
+      }
+      try {
+        const value = (contextMethod as (this: Page) => unknown).call(targetPage);
+        return value && typeof value === "object"
+          ? (value as BrowserContext)
+          : null;
+      } catch {
+        return null;
+      }
+    };
+    const readContextPages = (targetPage: Page): Page[] => {
+      const context = readPageContext(targetPage);
+      if (!context) {
+        return [];
+      }
+      const pagesMethod = this.safeReadField(context, "pages");
+      if (typeof pagesMethod !== "function") {
+        return [];
+      }
+      try {
+        const pagesValue = (
+          pagesMethod as (this: BrowserContext) => unknown
+        ).call(context);
+        return this.safeArrayValues<Page>(pagesValue);
+      } catch {
+        return [];
+      }
+    };
 
     // Clean up existing listener if this page was already setup
     const existingScopedCleanup = this.scopeListenerCleanupByPage.get(page);
@@ -3633,12 +3665,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
         }
       }
 
-      let contextPages: Page[] = [];
-      try {
-        contextPages = Array.from(page.context().pages());
-      } catch {
-        contextPages = [];
-      }
+      const contextPages = readContextPages(page);
       for (let i = contextPages.length - 1; i >= 0; i--) {
         const candidate = contextPages[i];
         try {
@@ -3743,23 +3770,27 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     };
 
     // Attach a persistent listener to track page flow for the lifetime of this wrapper
-    let pageContext: BrowserContext | null = null;
-    try {
-      pageContext = page.context();
-    } catch {
-      pageContext = null;
-    }
+    const pageContext = readPageContext(page);
 
     if (pageContext) {
-      try {
-        pageContext.on("page", onPage);
-      } catch (error) {
-        if (this.debug) {
-          console.warn(
-            `[HyperPage] Failed to attach context page listener: ${this.formatLifecycleDiagnostic(
-              error
-            )}`
-          );
+      const contextOn = this.safeReadField(pageContext, "on");
+      if (typeof contextOn === "function") {
+        try {
+          (
+            contextOn as (
+              this: BrowserContext,
+              event: "page",
+              listener: (newPage: Page) => Promise<void>
+            ) => void
+          ).call(pageContext, "page", onPage);
+        } catch (error) {
+          if (this.debug) {
+            console.warn(
+              `[HyperPage] Failed to attach context page listener: ${this.formatLifecycleDiagnostic(
+                error
+              )}`
+            );
+          }
         }
       }
     }
@@ -3775,8 +3806,18 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       if (!pageContext) {
         return;
       }
+      const contextOff = this.safeReadField(pageContext, "off");
+      if (typeof contextOff !== "function") {
+        return;
+      }
       try {
-        pageContext.off("page", onPage);
+        (
+          contextOff as (
+            this: BrowserContext,
+            event: "page",
+            listener: (newPage: Page) => Promise<void>
+          ) => void
+        ).call(pageContext, "page", onPage);
       } catch {
         // no-op
       }
