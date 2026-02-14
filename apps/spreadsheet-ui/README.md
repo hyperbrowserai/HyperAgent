@@ -17,7 +17,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard flow: optional XLSX upload + scenario execution in one action
 - Wizard metadata discovery (schema/presets/scenarios) with scenario operation preview
 - Wizard schema panel displays discovered run/import response fields plus formula capability metadata (including supported-function and unsupported-behavior lists) for agent planning awareness
-- Wizard schema panel now also shows discovered `agent/ops` execute + preview endpoints, `agent_ops` execute-request shape, scenario-preview/agent-ops-preview shapes, `agent_ops` response shape metadata, DuckDB query request/response shapes, DuckDB validation error codes, cache stats/list/detail/prefix/clear/replay/reexecute/cleanup endpoints, cache query/request/response shapes, cache validation error codes, and structured operation-error payload fields
+- Wizard schema panel now also shows discovered `openapi` endpoint plus `agent/ops` execute + preview endpoints, `agent_ops` execute-request shape, scenario-preview/agent-ops-preview shapes, `agent_ops` response shape metadata, DuckDB query request/response shapes, DuckDB validation error codes, cache stats/list/detail/prefix/clear/replay/reexecute/cleanup endpoints, cache query/request/response shapes, cache validation error codes, and structured operation-error payload fields
 - Wizard preset operation preview (global/workbook-scoped discovery)
 - Wizard can toggle export payload embedding (`include_file_base64`) before execution
 - Wizard can run selected scenario either on a new workbook flow or current workbook context
@@ -35,7 +35,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Wizard preview panels indicate whether operation plans are global or workbook-scoped
 - Wizard execution can pass preview signatures (`operations_signature`) to guard against stale plan drift
 - Signature mismatch responses trigger automatic preview refresh to reduce stale-plan retries
-- Agent integration panel surfaces discovered `agent/ops` execute + preview endpoint metadata
+- Agent integration panel surfaces discovered `openapi`, `agent/ops` execute, and preview endpoint metadata
 - Top-level preset/scenario run buttons also prefetch signatures before execution
 - Selected preset/scenario controls and wizard runs also fetch fresh signatures before execution
 - Formula-bar apply and agent demo flow also execute through signed `agent/ops` plans

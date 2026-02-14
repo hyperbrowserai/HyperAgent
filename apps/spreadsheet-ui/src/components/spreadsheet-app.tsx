@@ -3265,6 +3265,14 @@ export function SpreadsheetApp() {
                 </span>
               </div>
             ) : null}
+            {wizardSchemaQuery.data?.openapi_endpoint ? (
+              <p className="mb-2 text-[11px] text-slate-500">
+                openapi endpoint:{" "}
+                <span className="font-mono text-slate-300">
+                  {wizardSchemaQuery.data.openapi_endpoint}
+                </span>
+              </p>
+            ) : null}
             {wizardSchemaQuery.data?.signature_error_codes?.length ? (
               <p className="mb-2 text-[11px] text-slate-500">
                 signature codes:{" "}
@@ -4076,6 +4084,14 @@ export function SpreadsheetApp() {
                 Supported ops:{" "}
                 <span className="font-mono text-slate-200">
                   {Object.keys(agentSchemaQuery.data.operation_payloads).join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {agentSchemaQuery.data?.openapi_endpoint ? (
+              <p className="mb-2 text-xs text-slate-400">
+                openapi endpoint:{" "}
+                <span className="font-mono text-slate-200">
+                  {agentSchemaQuery.data.openapi_endpoint}
                 </span>
               </p>
             ) : null}
