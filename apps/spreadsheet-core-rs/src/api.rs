@@ -784,6 +784,7 @@ async fn run_agent_wizard_json(
 async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
     let agent_ops_request_shape = agent_ops_request_shape_schema();
     Json(json!({
+      "openapi_endpoint": "/v1/openapi",
       "endpoint": "/v1/agent/wizard/run",
       "json_endpoint": "/v1/agent/wizard/run-json",
       "presets_endpoint": "/v1/agent/wizard/presets",
@@ -1544,6 +1545,7 @@ async fn get_agent_schema(
     state.get_workbook(workbook_id).await?;
     let agent_ops_request_shape = agent_ops_request_shape_schema();
     Ok(Json(json!({
+      "openapi_endpoint": "/v1/openapi",
       "endpoint": "/v1/workbooks/{id}/agent/ops",
       "request_shape": agent_ops_request_shape.clone(),
       "operation_payloads": {
@@ -7998,6 +8000,12 @@ mod tests {
 
         assert_eq!(
             schema
+                .get("openapi_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/openapi"),
+        );
+        assert_eq!(
+            schema
                 .get("operation_payloads")
                 .and_then(|value| value.get("duckdb_query"))
                 .and_then(|value| value.get("sql"))
@@ -8769,6 +8777,12 @@ mod tests {
         );
         assert_eq!(
             schema
+                .get("openapi_endpoint")
+                .and_then(serde_json::Value::as_str),
+            Some("/v1/openapi"),
+        );
+        assert_eq!(
+            schema
                 .get("run_response_shape")
                 .and_then(|value| value.get("import"))
                 .and_then(serde_json::Value::as_str),
@@ -9253,6 +9267,7 @@ mod tests {
         );
 
         let parity_keys = [
+            "openapi_endpoint",
             "agent_ops_endpoint",
             "agent_ops_request_shape",
             "agent_ops_preview_endpoint",
