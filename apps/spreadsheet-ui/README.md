@@ -55,6 +55,7 @@ Frontend for the DuckDB-backed spreadsheet core.
 - Agent integration panel displays discovered request-id idempotency cache size metadata
 - Agent integration panel displays discovered cache stats/clear endpoint metadata from schema
 - Agent integration panel displays discovered workbook import/export endpoint metadata from schema
+- Agent integration panel displays discovered `agent_ops_result_error_shape` metadata from schema for failed-operation payload discoverability
 - Agent integration panel displays discovered formula capability metadata from schema (supported/unsupported behavior), including explicit supported-function and unsupported-behavior lists
 - Agent integration panel now expands workbook import response fields as dotted key paths with inline descriptions (e.g., `import.formula_cells_imported: ...`)
 - Agent integration panel now expands export header schema fields with inline descriptions (e.g., `x-export-meta: ...`)

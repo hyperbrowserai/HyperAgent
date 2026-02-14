@@ -895,6 +895,10 @@ export function SpreadsheetApp() {
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.duckdb_query_response_shape),
     [agentSchemaQuery.data?.duckdb_query_response_shape],
   );
+  const agentOpsResultErrorFields = useMemo(
+    () => flattenSchemaShapeEntries(agentSchemaQuery.data?.agent_ops_result_error_shape),
+    [agentSchemaQuery.data?.agent_ops_result_error_shape],
+  );
   const agentFormulaCapabilityFields = useMemo(
     () => flattenSchemaShapeEntries(agentSchemaQuery.data?.formula_capabilities),
     [agentSchemaQuery.data?.formula_capabilities],
@@ -3304,6 +3308,14 @@ export function SpreadsheetApp() {
                 duckdb query validation codes:{" "}
                 <span className="font-mono text-slate-200">
                   {agentSchemaQuery.data.duckdb_query_validation_error_codes.join(", ")}
+                </span>
+              </p>
+            ) : null}
+            {agentOpsResultErrorFields.length > 0 ? (
+              <p className="mb-2 text-xs text-slate-400">
+                agent ops result error fields:{" "}
+                <span className="font-mono text-slate-200">
+                  {formatSchemaShapeEntries(agentOpsResultErrorFields)}
                 </span>
               </p>
             ) : null}
