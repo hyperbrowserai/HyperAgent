@@ -318,6 +318,7 @@ Use `cargo run --bin generate_xlsx_fixtures -- --verify-committed` to verify com
 Use `cargo test xlsx::tests::should_keep_committed_file_fixture_corpus_in_sync_with_generator -- --nocapture` to verify committed fixture binaries match generated output.
 Use `cargo test xlsx::tests::should_import_every_committed_fixture_corpus_workbook -- --nocapture` for corpus-wide import smoke coverage.
 Use `cargo test xlsx::tests::should_roundtrip_every_committed_fixture_corpus_workbook -- --nocapture` for corpus-wide import/export/re-import smoke coverage.
+Use `cargo test api::tests::should_import_every_committed_fixture_corpus_via_api_helper -- --nocapture` for corpus-wide API import + event telemetry smoke coverage.
 
 Fixture corpus inventory:
 

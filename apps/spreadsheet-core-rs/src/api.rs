@@ -2820,8 +2820,11 @@ mod tests {
       COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
       COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
       COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
+      COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
       COMPAT_NORMALIZATION_FILE_NAME,
       COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
+      COMPAT_OFFSET_RANGE_FILE_NAME, COMPAT_PREFIX_OPERATOR_FILE_NAME,
+      COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
     },
     models::{
       AgentOperation, AgentOpsRequest, RemoveAgentOpsCacheEntryRequest,
@@ -2921,6 +2924,24 @@ mod tests {
 
   fn workbook_import_formula_only_offset_normalized_fixture_bytes() -> Vec<u8> {
     workbook_fixture_bytes(COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME)
+  }
+
+  fn workbook_import_fixture_file_names() -> [&'static str; 13] {
+    [
+      COMPAT_BASELINE_FILE_NAME,
+      COMPAT_DEFAULT_CACHED_FORMULA_FILE_NAME,
+      COMPAT_ERROR_CACHED_FORMULA_FILE_NAME,
+      COMPAT_FORMULA_MATRIX_FILE_NAME,
+      COMPAT_FORMULA_ONLY_NORMALIZED_FILE_NAME,
+      COMPAT_FORMULA_ONLY_OFFSET_NORMALIZED_FILE_NAME,
+      COMPAT_FORMULA_ONLY_SHEET_FILE_NAME,
+      COMPAT_MIXED_LITERAL_PREFIX_FILE_NAME,
+      COMPAT_NORMALIZATION_FILE_NAME,
+      COMPAT_NORMALIZATION_SINGLE_FILE_NAME,
+      COMPAT_OFFSET_RANGE_FILE_NAME,
+      COMPAT_PREFIX_OPERATOR_FILE_NAME,
+      COMPAT_UNSUPPORTED_FORMULA_FILE_NAME,
+    ]
   }
 
   #[test]
@@ -3208,6 +3229,99 @@ mod tests {
         .and_then(serde_json::Value::as_u64),
       Some(import_result.formula_cells_normalized as u64),
     );
+  }
+
+  #[tokio::test]
+  async fn should_import_every_committed_fixture_corpus_via_api_helper() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+
+    for (fixture_index, fixture_file_name) in workbook_import_fixture_file_names()
+      .iter()
+      .enumerate()
+    {
+      let workbook = state
+        .create_workbook(Some(format!(
+          "api-corpus-import-{fixture_index}-{fixture_file_name}"
+        )))
+        .await
+        .expect("workbook should be created");
+      let mut events = state
+        .subscribe(workbook.id)
+        .await
+        .expect("event subscription should work");
+
+      let import_result = import_bytes_into_workbook(
+        &state,
+        workbook.id,
+        &workbook_fixture_bytes(fixture_file_name),
+        "api-corpus-import",
+      )
+      .await
+      .unwrap_or_else(|error| {
+        panic!(
+          "fixture {fixture_file_name} should import successfully via API helper: {error:?}"
+        )
+      });
+
+      assert!(
+        import_result.sheets_imported >= 1,
+        "fixture {fixture_file_name} should import at least one sheet",
+      );
+      assert!(
+        import_result.cells_imported >= 1,
+        "fixture {fixture_file_name} should import at least one cell",
+      );
+      assert!(
+        import_result.formula_cells_imported <= import_result.cells_imported,
+        "fixture {fixture_file_name} formula cells should not exceed total imported cells",
+      );
+      assert_eq!(
+        import_result.formula_cells_imported,
+        import_result.formula_cells_with_cached_values
+          + import_result.formula_cells_without_cached_values,
+        "fixture {fixture_file_name} cached/non-cached counts should add up",
+      );
+      assert!(
+        import_result.formula_cells_normalized <= import_result.formula_cells_imported,
+        "fixture {fixture_file_name} normalized formula count should be bounded by imported formulas",
+      );
+
+      let emitted_event = timeout(Duration::from_secs(1), events.recv())
+        .await
+        .expect("import event should arrive")
+        .expect("event payload should decode");
+      assert_eq!(emitted_event.event_type, "workbook.imported");
+      assert_eq!(
+        emitted_event
+          .payload
+          .get("formula_cells_imported")
+          .and_then(serde_json::Value::as_u64),
+        Some(import_result.formula_cells_imported as u64),
+      );
+      assert_eq!(
+        emitted_event
+          .payload
+          .get("formula_cells_with_cached_values")
+          .and_then(serde_json::Value::as_u64),
+        Some(import_result.formula_cells_with_cached_values as u64),
+      );
+      assert_eq!(
+        emitted_event
+          .payload
+          .get("formula_cells_without_cached_values")
+          .and_then(serde_json::Value::as_u64),
+        Some(import_result.formula_cells_without_cached_values as u64),
+      );
+      assert_eq!(
+        emitted_event
+          .payload
+          .get("formula_cells_normalized")
+          .and_then(serde_json::Value::as_u64),
+        Some(import_result.formula_cells_normalized as u64),
+      );
+    }
   }
 
   #[tokio::test]
