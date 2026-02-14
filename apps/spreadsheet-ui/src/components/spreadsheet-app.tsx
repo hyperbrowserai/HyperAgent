@@ -82,6 +82,15 @@ interface EndpointCatalogCoverageStats {
   pathMismatches: number;
 }
 
+interface EndpointCatalogViewStats {
+  totalEntries: number;
+  visibleEntries: number;
+  visibleIssueEntries: number;
+  visibleMismatchEntries: number;
+  visibleFallbackEntries: number;
+  visibleUnmappedEntries: number;
+}
+
 interface EndpointCatalogDiagnostics {
   level: "healthy" | "warning" | "error";
   issueCount: number;
@@ -619,6 +628,49 @@ function buildEndpointCatalogDiagnostics(args: {
     unmappedCount: args.unmappedCount,
     openApiSyncIssueCount,
     isOpenApiSyncAvailable: args.isOpenApiSyncAvailable,
+  };
+}
+
+function buildEndpointCatalogViewStats<
+  T extends {
+    hasMethodMismatch: boolean;
+    hasSummaryMismatch: boolean;
+    hasPathMismatch: boolean;
+    methodSource: string;
+    summarySource: string;
+    openApiPathSource: string;
+    methods: string[];
+  },
+>(args: {
+  allEntries: T[];
+  visibleEntries: T[];
+}): EndpointCatalogViewStats {
+  const visibleIssueEntries = args.visibleEntries.filter((entry) =>
+    entry.hasMethodMismatch
+    || entry.hasSummaryMismatch
+    || entry.hasPathMismatch
+    || entry.methodSource !== "operation"
+    || entry.summarySource !== "operation"
+    || entry.openApiPathSource !== "operation"
+    || entry.methods.length === 0
+  ).length;
+  const visibleMismatchEntries = args.visibleEntries.filter((entry) =>
+    entry.hasMethodMismatch || entry.hasSummaryMismatch || entry.hasPathMismatch
+  ).length;
+  const visibleFallbackEntries = args.visibleEntries.filter((entry) =>
+    entry.methodSource !== "operation"
+    || entry.summarySource !== "operation"
+    || entry.openApiPathSource !== "operation"
+  ).length;
+  const visibleUnmappedEntries = args.visibleEntries.filter((entry) => entry.methods.length === 0)
+    .length;
+  return {
+    totalEntries: args.allEntries.length,
+    visibleEntries: args.visibleEntries.length,
+    visibleIssueEntries,
+    visibleMismatchEntries,
+    visibleFallbackEntries,
+    visibleUnmappedEntries,
   };
 }
 
@@ -2197,12 +2249,21 @@ export function SpreadsheetApp() {
     ],
   );
   const isWizardEndpointCatalogFilterActive = wizardEndpointCatalogFilter.trim().length > 0;
+  const wizardEndpointCatalogViewStats = useMemo(
+    () =>
+      buildEndpointCatalogViewStats({
+        allEntries: wizardSchemaEndpointsWithMethods,
+        visibleEntries: wizardVisibleSchemaEndpointsWithMethods,
+      }),
+    [wizardSchemaEndpointsWithMethods, wizardVisibleSchemaEndpointsWithMethods],
+  );
   const wizardEndpointCatalogPayload = useMemo(
     () =>
       ({
         view_mode: wizardEndpointCatalogViewMode,
         filter: wizardEndpointCatalogFilter.trim() || null,
         sort: wizardEndpointCatalogSort,
+        view_stats: wizardEndpointCatalogViewStats,
         coverage: wizardEndpointCoverageStats,
         schema_coverage: wizardSchemaEndpointCoverage,
         coverage_drift: wizardEndpointCoverageDrift,
@@ -2273,6 +2334,7 @@ export function SpreadsheetApp() {
       wizardEndpointCatalogFilter,
       wizardEndpointCatalogSort,
       wizardEndpointCatalogViewMode,
+      wizardEndpointCatalogViewStats,
       wizardEndpointCoverageDrift,
       wizardEndpointCoverageStats,
       wizardEndpointDiagnosticsDrift,
@@ -2724,12 +2786,21 @@ export function SpreadsheetApp() {
     ],
   );
   const isAgentEndpointCatalogFilterActive = agentEndpointCatalogFilter.trim().length > 0;
+  const agentEndpointCatalogViewStats = useMemo(
+    () =>
+      buildEndpointCatalogViewStats({
+        allEntries: agentSchemaEndpointsWithMethods,
+        visibleEntries: agentVisibleSchemaEndpointsWithMethods,
+      }),
+    [agentSchemaEndpointsWithMethods, agentVisibleSchemaEndpointsWithMethods],
+  );
   const agentEndpointCatalogPayload = useMemo(
     () =>
       ({
         view_mode: agentEndpointCatalogViewMode,
         filter: agentEndpointCatalogFilter.trim() || null,
         sort: agentEndpointCatalogSort,
+        view_stats: agentEndpointCatalogViewStats,
         coverage: agentEndpointCoverageStats,
         schema_coverage: agentSchemaEndpointCoverage,
         coverage_drift: agentEndpointCoverageDrift,
@@ -2800,6 +2871,7 @@ export function SpreadsheetApp() {
       agentEndpointCatalogFilter,
       agentEndpointCatalogSort,
       agentEndpointCatalogViewMode,
+      agentEndpointCatalogViewStats,
       agentEndpointCoverageDrift,
       agentEndpointCoverageStats,
       agentEndpointDiagnosticsDrift,
@@ -4983,6 +5055,24 @@ export function SpreadsheetApp() {
                     </button>
                   </div>
                 </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  visible issues:{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogViewStats.visibleIssueEntries}
+                  </span>
+                  , mismatches{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogViewStats.visibleMismatchEntries}
+                  </span>
+                  , fallback{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogViewStats.visibleFallbackEntries}
+                  </span>
+                  , unmapped{" "}
+                  <span className="font-mono text-slate-300">
+                    {wizardEndpointCatalogViewStats.visibleUnmappedEntries}
+                  </span>
+                </p>
                 <p className="mt-2 text-[11px] text-slate-400">
                   coverage: operation methods{" "}
                   <span className="font-mono text-slate-300">
@@ -6432,6 +6522,24 @@ export function SpreadsheetApp() {
                     </button>
                   </div>
                 </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  visible issues:{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogViewStats.visibleIssueEntries}
+                  </span>
+                  , mismatches{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogViewStats.visibleMismatchEntries}
+                  </span>
+                  , fallback{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogViewStats.visibleFallbackEntries}
+                  </span>
+                  , unmapped{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentEndpointCatalogViewStats.visibleUnmappedEntries}
+                  </span>
+                </p>
                 <p className="mt-2 text-xs text-slate-400">
                   coverage: operation methods{" "}
                   <span className="font-mono text-slate-300">
