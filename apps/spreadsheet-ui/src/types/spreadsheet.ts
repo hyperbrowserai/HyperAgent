@@ -208,6 +208,23 @@ export interface FormulaCapabilitiesSchema {
   fallback_behavior?: string;
 }
 
+export interface EndpointCatalogCoverage {
+  total: number;
+  method_operation_backed: number;
+  summary_operation_backed: number;
+  path_operation_backed: number;
+  operation_fallback: number;
+  missing_operation_entries: number;
+}
+
+export interface EndpointCatalogDiagnostics {
+  status: "healthy" | "warning";
+  issue_count: number;
+  operation_fallback_count: number;
+  missing_operation_entries: number;
+  openapi_sync_available: boolean;
+}
+
 export interface AgentSchemaInfo {
   endpoint: string;
   health_endpoint?: string;
@@ -219,6 +236,8 @@ export interface AgentSchemaInfo {
   >;
   endpoint_http_methods?: Record<string, string[]>;
   endpoint_summaries?: Record<string, string>;
+  endpoint_catalog_coverage?: EndpointCatalogCoverage;
+  endpoint_catalog_diagnostics?: EndpointCatalogDiagnostics;
   request_shape?: Record<string, unknown>;
   agent_ops_request_shape?: Record<string, unknown>;
   workbook_import_endpoint?: string;
@@ -350,6 +369,8 @@ export interface AgentWizardSchemaInfo {
   >;
   endpoint_http_methods?: Record<string, string[]>;
   endpoint_summaries?: Record<string, string>;
+  endpoint_catalog_coverage?: EndpointCatalogCoverage;
+  endpoint_catalog_diagnostics?: EndpointCatalogDiagnostics;
   json_endpoint?: string;
   presets_endpoint?: string;
   preset_operations_endpoint?: string;

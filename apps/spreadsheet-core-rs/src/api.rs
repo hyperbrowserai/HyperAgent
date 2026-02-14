@@ -341,7 +341,10 @@ fn endpoint_http_methods_from_openapi(
     openapi_spec: &serde_json::Value,
 ) -> serde_json::Value {
     let mut method_index = std::collections::HashMap::<String, Vec<String>>::new();
-    if let Some(path_entries) = openapi_spec.get("paths").and_then(serde_json::Value::as_object) {
+    if let Some(path_entries) = openapi_spec
+        .get("paths")
+        .and_then(serde_json::Value::as_object)
+    {
         for (path, methods) in path_entries {
             let Some(method_map) = methods.as_object() else {
                 continue;
@@ -399,7 +402,10 @@ fn endpoint_summaries_from_openapi(
     openapi_spec: &serde_json::Value,
 ) -> serde_json::Value {
     let mut summary_index = std::collections::HashMap::<String, String>::new();
-    if let Some(path_entries) = openapi_spec.get("paths").and_then(serde_json::Value::as_object) {
+    if let Some(path_entries) = openapi_spec
+        .get("paths")
+        .and_then(serde_json::Value::as_object)
+    {
         for (path, methods) in path_entries {
             let Some(method_map) = methods.as_object() else {
                 continue;
@@ -458,7 +464,10 @@ fn endpoint_openapi_operations_from_openapi(
 ) -> serde_json::Value {
     let mut method_index = std::collections::HashMap::<String, Vec<String>>::new();
     let mut summary_index = std::collections::HashMap::<String, String>::new();
-    if let Some(path_entries) = openapi_spec.get("paths").and_then(serde_json::Value::as_object) {
+    if let Some(path_entries) = openapi_spec
+        .get("paths")
+        .and_then(serde_json::Value::as_object)
+    {
         for (path, methods) in path_entries {
             let Some(method_map) = methods.as_object() else {
                 continue;
@@ -523,6 +532,113 @@ fn endpoint_openapi_operations_from_openapi(
         }
     }
     serde_json::Value::Object(endpoint_operations)
+}
+
+fn endpoint_catalog_coverage_from_operations(
+    schema: &serde_json::Value,
+    endpoint_operations: &serde_json::Value,
+) -> serde_json::Value {
+    let endpoint_keys = schema
+        .as_object()
+        .map(|schema_object| {
+            schema_object
+                .iter()
+                .filter_map(|(key, value)| {
+                    if key == "endpoint" || key.ends_with("_endpoint") {
+                        value.as_str().map(|_| key.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let total = endpoint_keys.len() as u64;
+    let endpoint_operation_map = endpoint_operations.as_object();
+
+    let mut method_operation_backed = 0u64;
+    let mut summary_operation_backed = 0u64;
+    let mut path_operation_backed = 0u64;
+    let mut operation_fallback = 0u64;
+    let mut missing_operation_entries = 0u64;
+
+    for key in endpoint_keys {
+        let Some(operation) = endpoint_operation_map
+            .and_then(|entries| entries.get(key.as_str()))
+            .and_then(serde_json::Value::as_object)
+        else {
+            operation_fallback += 1;
+            missing_operation_entries += 1;
+            continue;
+        };
+        let has_path = operation
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        let has_methods = operation
+            .get("methods")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|methods| {
+                methods.iter().any(|method| {
+                    method
+                        .as_str()
+                        .map(str::trim)
+                        .is_some_and(|value| !value.is_empty())
+                })
+            });
+        let has_summary = operation
+            .get("summary")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if has_methods {
+            method_operation_backed += 1;
+        }
+        if has_summary {
+            summary_operation_backed += 1;
+        }
+        if has_path {
+            path_operation_backed += 1;
+        }
+        if !(has_path && has_methods && has_summary) {
+            operation_fallback += 1;
+        }
+    }
+
+    json!({
+      "total": total,
+      "method_operation_backed": method_operation_backed,
+      "summary_operation_backed": summary_operation_backed,
+      "path_operation_backed": path_operation_backed,
+      "operation_fallback": operation_fallback,
+      "missing_operation_entries": missing_operation_entries
+    })
+}
+
+fn endpoint_catalog_diagnostics_from_coverage(
+    endpoint_coverage: &serde_json::Value,
+) -> serde_json::Value {
+    let operation_fallback = endpoint_coverage
+        .get("operation_fallback")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let missing_operation_entries = endpoint_coverage
+        .get("missing_operation_entries")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let status = if operation_fallback == 0 {
+        "healthy"
+    } else {
+        "warning"
+    };
+    json!({
+      "status": status,
+      "issue_count": operation_fallback,
+      "operation_fallback_count": operation_fallback,
+      "missing_operation_entries": missing_operation_entries,
+      "openapi_sync_available": true
+    })
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -1275,6 +1391,10 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
     let endpoint_http_methods = endpoint_http_methods_from_openapi(&schema, &openapi_spec);
     let endpoint_openapi_paths = endpoint_openapi_paths_from_schema(&schema);
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
+    let endpoint_catalog_coverage =
+        endpoint_catalog_coverage_from_operations(&schema, &endpoint_openapi_operations);
+    let endpoint_catalog_diagnostics =
+        endpoint_catalog_diagnostics_from_coverage(&endpoint_catalog_coverage);
     if let Some(schema_object) = schema.as_object_mut() {
         schema_object.insert(
             "endpoint_openapi_operations".to_string(),
@@ -1283,6 +1403,14 @@ async fn get_agent_wizard_schema() -> Json<serde_json::Value> {
         schema_object.insert("endpoint_openapi_paths".to_string(), endpoint_openapi_paths);
         schema_object.insert("endpoint_http_methods".to_string(), endpoint_http_methods);
         schema_object.insert("endpoint_summaries".to_string(), endpoint_summaries);
+        schema_object.insert(
+            "endpoint_catalog_coverage".to_string(),
+            endpoint_catalog_coverage,
+        );
+        schema_object.insert(
+            "endpoint_catalog_diagnostics".to_string(),
+            endpoint_catalog_diagnostics,
+        );
     }
     Json(schema)
 }
@@ -2153,6 +2281,10 @@ async fn get_agent_schema(
     let endpoint_http_methods = endpoint_http_methods_from_openapi(&schema, &openapi_spec);
     let endpoint_openapi_paths = endpoint_openapi_paths_from_schema(&schema);
     let endpoint_summaries = endpoint_summaries_from_openapi(&schema, &openapi_spec);
+    let endpoint_catalog_coverage =
+        endpoint_catalog_coverage_from_operations(&schema, &endpoint_openapi_operations);
+    let endpoint_catalog_diagnostics =
+        endpoint_catalog_diagnostics_from_coverage(&endpoint_catalog_coverage);
     if let Some(schema_object) = schema.as_object_mut() {
         schema_object.insert(
             "endpoint_openapi_operations".to_string(),
@@ -2161,6 +2293,14 @@ async fn get_agent_schema(
         schema_object.insert("endpoint_openapi_paths".to_string(), endpoint_openapi_paths);
         schema_object.insert("endpoint_http_methods".to_string(), endpoint_http_methods);
         schema_object.insert("endpoint_summaries".to_string(), endpoint_summaries);
+        schema_object.insert(
+            "endpoint_catalog_coverage".to_string(),
+            endpoint_catalog_coverage,
+        );
+        schema_object.insert(
+            "endpoint_catalog_diagnostics".to_string(),
+            endpoint_catalog_diagnostics,
+        );
     }
     Ok(Json(schema))
 }
@@ -3281,16 +3421,16 @@ mod tests {
         build_scenario_operations, clear_agent_ops_cache, duckdb_query,
         ensure_non_empty_operations, export_workbook, formula_supported_functions_summary,
         formula_unsupported_behaviors_summary, get_agent_schema, get_agent_wizard_schema,
-        import_bytes_into_workbook, normalize_sheet_name, operations_signature,
-        openapi, parse_optional_bool, preview_remove_agent_ops_cache_entries_by_prefix,
+        import_bytes_into_workbook, normalize_sheet_name, openapi, operations_signature,
+        parse_optional_bool, preview_remove_agent_ops_cache_entries_by_prefix,
         reexecute_agent_ops_cache_entry, remove_agent_ops_cache_entries_by_prefix,
         remove_agent_ops_cache_entry, remove_stale_agent_ops_cache_entries,
-        replay_agent_ops_cache_entry, run_agent_preset, run_agent_scenario,
-        run_agent_wizard_json, set_cells_batch, validate_expected_operations_signature,
+        replay_agent_ops_cache_entry, run_agent_preset, run_agent_scenario, run_agent_wizard_json,
+        set_cells_batch, validate_expected_operations_signature,
         validate_request_id_signature_consistency, AgentOpsCacheEntriesQuery,
-        AgentOpsCachePrefixesQuery, AgentOpsCacheStatsQuery, FORMULA_SUPPORTED_FUNCTION_LIST,
+        AgentOpsCachePrefixesQuery, AgentOpsCacheStatsQuery,
+        AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION, FORMULA_SUPPORTED_FUNCTION_LIST,
         FORMULA_UNSUPPORTED_BEHAVIOR_LIST, FORMULA_VALIDATION_ERROR_CODES,
-        AGENT_OPS_EXPECTED_SIGNATURE_DESCRIPTION,
         MAX_AGENT_OPS_CACHE_ENTRIES_LIMIT,
     };
     use crate::{
@@ -3446,10 +3586,7 @@ mod tests {
         );
     }
 
-    fn assert_schema_endpoint_fields_are_normalized(
-        schema: &serde_json::Value,
-        schema_name: &str,
-    ) {
+    fn assert_schema_endpoint_fields_are_normalized(schema: &serde_json::Value, schema_name: &str) {
         let endpoint_entries = schema
             .as_object()
             .expect("schema should be an object")
@@ -3931,12 +4068,18 @@ mod tests {
             .and_then(serde_json::Value::as_object)
             .expect("schema should expose endpoint_openapi_operations");
 
-        let endpoint_openapi_path_keys =
-            endpoint_openapi_paths.keys().cloned().collect::<std::collections::BTreeSet<_>>();
-        let endpoint_http_method_keys =
-            endpoint_http_methods.keys().cloned().collect::<std::collections::BTreeSet<_>>();
-        let endpoint_summary_keys =
-            endpoint_summaries.keys().cloned().collect::<std::collections::BTreeSet<_>>();
+        let endpoint_openapi_path_keys = endpoint_openapi_paths
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let endpoint_http_method_keys = endpoint_http_methods
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let endpoint_summary_keys = endpoint_summaries
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
         let endpoint_openapi_operation_keys = endpoint_openapi_operations
             .keys()
             .cloned()
@@ -3957,6 +4100,132 @@ mod tests {
         assert_eq!(
             endpoint_openapi_operation_keys, endpoint_entries,
             "{schema_name} endpoint_openapi_operations keyset should match endpoint fields",
+        );
+    }
+
+    fn assert_endpoint_catalog_coverage_is_consistent(
+        schema: &serde_json::Value,
+        schema_name: &str,
+    ) {
+        let endpoint_total = schema
+            .as_object()
+            .expect("schema should be encoded as object")
+            .iter()
+            .filter(|(key, value)| {
+                (key.as_str() == "endpoint" || key.ends_with("_endpoint")) && value.is_string()
+            })
+            .count() as u64;
+        let endpoint_openapi_operations = schema
+            .get("endpoint_openapi_operations")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_openapi_operations");
+        let endpoint_coverage = schema
+            .get("endpoint_catalog_coverage")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_catalog_coverage object");
+        let coverage_total = endpoint_coverage
+            .get("total")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_coverage.total should be an integer");
+        let method_operation_backed = endpoint_coverage
+            .get("method_operation_backed")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_coverage.method_operation_backed should be an integer");
+        let summary_operation_backed = endpoint_coverage
+            .get("summary_operation_backed")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_coverage.summary_operation_backed should be an integer");
+        let path_operation_backed = endpoint_coverage
+            .get("path_operation_backed")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_coverage.path_operation_backed should be an integer");
+        let operation_fallback = endpoint_coverage
+            .get("operation_fallback")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_coverage.operation_fallback should be an integer");
+        let missing_operation_entries = endpoint_coverage
+            .get("missing_operation_entries")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_coverage.missing_operation_entries should be an integer");
+
+        assert_eq!(
+            coverage_total, endpoint_total,
+            "{schema_name} endpoint_catalog_coverage.total should match endpoint field count",
+        );
+        assert!(
+            method_operation_backed <= coverage_total,
+            "{schema_name} endpoint_catalog_coverage.method_operation_backed should not exceed total",
+        );
+        assert!(
+            summary_operation_backed <= coverage_total,
+            "{schema_name} endpoint_catalog_coverage.summary_operation_backed should not exceed total",
+        );
+        assert!(
+            path_operation_backed <= coverage_total,
+            "{schema_name} endpoint_catalog_coverage.path_operation_backed should not exceed total",
+        );
+        assert!(
+            operation_fallback <= coverage_total,
+            "{schema_name} endpoint_catalog_coverage.operation_fallback should not exceed total",
+        );
+        assert!(
+            missing_operation_entries <= operation_fallback,
+            "{schema_name} endpoint_catalog_coverage.missing_operation_entries should be <= operation_fallback",
+        );
+        assert_eq!(
+            endpoint_openapi_operations.len() as u64,
+            coverage_total,
+            "{schema_name} endpoint_openapi_operations should cover all endpoint fields",
+        );
+
+        let endpoint_catalog_diagnostics = schema
+            .get("endpoint_catalog_diagnostics")
+            .and_then(serde_json::Value::as_object)
+            .expect("schema should expose endpoint_catalog_diagnostics object");
+        let status = endpoint_catalog_diagnostics
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .expect("endpoint_catalog_diagnostics.status should be a string");
+        let issue_count = endpoint_catalog_diagnostics
+            .get("issue_count")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_diagnostics.issue_count should be an integer");
+        let operation_fallback_count = endpoint_catalog_diagnostics
+            .get("operation_fallback_count")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_diagnostics.operation_fallback_count should be an integer");
+        let diagnostics_missing_entries = endpoint_catalog_diagnostics
+            .get("missing_operation_entries")
+            .and_then(serde_json::Value::as_u64)
+            .expect("endpoint_catalog_diagnostics.missing_operation_entries should be an integer");
+        let openapi_sync_available = endpoint_catalog_diagnostics
+            .get("openapi_sync_available")
+            .and_then(serde_json::Value::as_bool)
+            .expect("endpoint_catalog_diagnostics.openapi_sync_available should be a boolean");
+        assert!(
+            openapi_sync_available,
+            "{schema_name} endpoint_catalog_diagnostics should report openapi sync as available",
+        );
+        assert_eq!(
+            issue_count, operation_fallback,
+            "{schema_name} endpoint_catalog_diagnostics.issue_count should match endpoint_catalog_coverage.operation_fallback",
+        );
+        assert_eq!(
+            operation_fallback_count, operation_fallback,
+            "{schema_name} endpoint_catalog_diagnostics.operation_fallback_count should match endpoint_catalog_coverage.operation_fallback",
+        );
+        assert_eq!(
+            diagnostics_missing_entries, missing_operation_entries,
+            "{schema_name} endpoint_catalog_diagnostics.missing_operation_entries should match coverage missing_operation_entries",
+        );
+        let expected_status = if operation_fallback == 0 {
+            "healthy"
+        } else {
+            "warning"
+        };
+        assert_eq!(
+            status, expected_status,
+            "{schema_name} endpoint_catalog_diagnostics.status should match coverage fallback state",
         );
     }
 
@@ -4520,96 +4789,90 @@ mod tests {
         }
     }
 
-  #[tokio::test]
-  async fn should_allow_duckdb_query_keywords_inside_literals_and_comments() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let state =
-      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
-    let workbook = state
-      .create_workbook(Some("duckdb-query-keyword-literals".to_string()))
-      .await
-      .expect("workbook should be created");
+    #[tokio::test]
+    async fn should_allow_duckdb_query_keywords_inside_literals_and_comments() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("duckdb-query-keyword-literals".to_string()))
+            .await
+            .expect("workbook should be created");
 
-    let query_response = duckdb_query(
-      State(state),
-      Path(workbook.id),
-      Json(QueryRequest {
-        sql: "SELECT 'drop update' AS \"delete\", 1 AS value /* ALTER TABLE */".to_string(),
-        row_limit: Some(5),
-      }),
-    )
-    .await
-    .expect("query should succeed when disallowed keywords appear only in literals/comments")
-    .0;
+        let query_response = duckdb_query(
+            State(state),
+            Path(workbook.id),
+            Json(QueryRequest {
+                sql: "SELECT 'drop update' AS \"delete\", 1 AS value /* ALTER TABLE */".to_string(),
+                row_limit: Some(5),
+            }),
+        )
+        .await
+        .expect("query should succeed when disallowed keywords appear only in literals/comments")
+        .0;
 
-    assert_eq!(
-      query_response.columns,
-      vec!["delete".to_string(), "value".to_string()],
-    );
-    assert_eq!(query_response.row_count, 1);
-    assert!(!query_response.truncated);
-    assert_eq!(
-      query_response.rows[0],
-      vec![Some("drop update".to_string()), Some("1".to_string())],
-    );
-  }
+        assert_eq!(
+            query_response.columns,
+            vec!["delete".to_string(), "value".to_string()],
+        );
+        assert_eq!(query_response.row_count, 1);
+        assert!(!query_response.truncated);
+        assert_eq!(
+            query_response.rows[0],
+            vec![Some("drop update".to_string()), Some("1".to_string())],
+        );
+    }
 
-  #[tokio::test]
-  async fn should_allow_semicolons_inside_duckdb_query_literals() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let state =
-      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
-    let workbook = state
-      .create_workbook(Some("duckdb-query-literal-semicolon".to_string()))
-      .await
-      .expect("workbook should be created");
+    #[tokio::test]
+    async fn should_allow_semicolons_inside_duckdb_query_literals() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("duckdb-query-literal-semicolon".to_string()))
+            .await
+            .expect("workbook should be created");
 
-    let query_response = duckdb_query(
-      State(state),
-      Path(workbook.id),
-      Json(QueryRequest {
-        sql: "SELECT 'left;right' AS literal_value".to_string(),
-        row_limit: Some(5),
-      }),
-    )
-    .await
-    .expect("query should accept semicolons inside string literals")
-    .0;
+        let query_response = duckdb_query(
+            State(state),
+            Path(workbook.id),
+            Json(QueryRequest {
+                sql: "SELECT 'left;right' AS literal_value".to_string(),
+                row_limit: Some(5),
+            }),
+        )
+        .await
+        .expect("query should accept semicolons inside string literals")
+        .0;
 
-    assert_eq!(query_response.columns, vec!["literal_value".to_string()]);
-    assert_eq!(query_response.row_count, 1);
-    assert_eq!(
-      query_response.rows[0],
-      vec![Some("left;right".to_string())],
-    );
-  }
+        assert_eq!(query_response.columns, vec!["literal_value".to_string()]);
+        assert_eq!(query_response.row_count, 1);
+        assert_eq!(query_response.rows[0], vec![Some("left;right".to_string())],);
+    }
 
-  #[tokio::test]
-  async fn should_allow_duckdb_query_with_leading_comment() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let state =
-      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
-    let workbook = state
-      .create_workbook(Some("duckdb-query-leading-comment".to_string()))
-      .await
-      .expect("workbook should be created");
+    #[tokio::test]
+    async fn should_allow_duckdb_query_with_leading_comment() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("duckdb-query-leading-comment".to_string()))
+            .await
+            .expect("workbook should be created");
 
-    let query_response = duckdb_query(
-      State(state),
-      Path(workbook.id),
-      Json(QueryRequest {
-        sql: "/* leading comment */ SELECT 7 AS value".to_string(),
-        row_limit: Some(5),
-      }),
-    )
-    .await
-    .expect("query with leading comment should pass read-only validation")
-    .0;
+        let query_response = duckdb_query(
+            State(state),
+            Path(workbook.id),
+            Json(QueryRequest {
+                sql: "/* leading comment */ SELECT 7 AS value".to_string(),
+                row_limit: Some(5),
+            }),
+        )
+        .await
+        .expect("query with leading comment should pass read-only validation")
+        .0;
 
-    assert_eq!(query_response.columns, vec!["value".to_string()]);
-    assert_eq!(query_response.row_count, 1);
-    assert_eq!(query_response.rows[0], vec![Some("7".to_string())]);
-  }
+        assert_eq!(query_response.columns, vec!["value".to_string()]);
+        assert_eq!(query_response.row_count, 1);
+        assert_eq!(query_response.rows[0], vec![Some("7".to_string())]);
+    }
 
     #[tokio::test]
     async fn should_reject_non_positive_duckdb_query_row_limit() {
@@ -4699,96 +4962,94 @@ mod tests {
         );
     }
 
-  #[tokio::test]
-  async fn should_apply_default_duckdb_query_row_limit() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let state =
-      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
-    let workbook = state
-      .create_workbook(Some("duckdb-query-default-limit".to_string()))
-      .await
-      .expect("workbook should be created");
+    #[tokio::test]
+    async fn should_apply_default_duckdb_query_row_limit() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("duckdb-query-default-limit".to_string()))
+            .await
+            .expect("workbook should be created");
 
-    let query_response = duckdb_query(
-      State(state),
-      Path(workbook.id),
-      Json(QueryRequest {
-        sql: "SELECT CAST(i AS INTEGER) AS value FROM range(0, 205) AS t(i) ORDER BY value"
-          .to_string(),
-        row_limit: None,
-      }),
-    )
-    .await
-    .expect("query should succeed with default row limit")
-    .0;
+        let query_response = duckdb_query(
+            State(state),
+            Path(workbook.id),
+            Json(QueryRequest {
+                sql: "SELECT CAST(i AS INTEGER) AS value FROM range(0, 205) AS t(i) ORDER BY value"
+                    .to_string(),
+                row_limit: None,
+            }),
+        )
+        .await
+        .expect("query should succeed with default row limit")
+        .0;
 
-    assert_eq!(query_response.row_limit, 200);
-    assert_eq!(query_response.row_count, 200);
-    assert!(query_response.truncated);
-    assert_eq!(query_response.rows.len(), 200);
-  }
-
-  #[tokio::test]
-  async fn should_clamp_duckdb_query_row_limit_to_maximum() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let state =
-      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
-    let workbook = state
-      .create_workbook(Some("duckdb-query-max-limit".to_string()))
-      .await
-      .expect("workbook should be created");
-
-    let query_response = duckdb_query(
-      State(state),
-      Path(workbook.id),
-      Json(QueryRequest {
-        sql: "SELECT CAST(i AS INTEGER) AS value FROM range(0, 1205) AS t(i) ORDER BY value"
-          .to_string(),
-        row_limit: Some(5_000),
-      }),
-    )
-    .await
-    .expect("query should clamp oversized row limit")
-    .0;
-
-    assert_eq!(query_response.row_limit, 1_000);
-    assert_eq!(query_response.row_count, 1_000);
-    assert!(query_response.truncated);
-    assert_eq!(query_response.rows.len(), 1_000);
-  }
-
-  #[tokio::test]
-  async fn should_reject_multi_statement_duckdb_query_sql() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let state =
-      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
-    let workbook = state
-      .create_workbook(Some("duckdb-query-multi-statement".to_string()))
-      .await
-      .expect("workbook should be created");
-
-    let error = duckdb_query(
-      State(state),
-      Path(workbook.id),
-      Json(QueryRequest {
-        sql: "SELECT 1; SELECT 2".to_string(),
-        row_limit: Some(5),
-      }),
-    )
-    .await
-    .expect_err("multi-statement sql should be rejected");
-
-    match error {
-      ApiError::BadRequestWithCode { code, message } => {
-        assert_eq!(code, "INVALID_QUERY_SQL");
-        assert!(
-          message.contains("single statement"),
-          "error message should reference single-statement guardrail",
-        );
-      }
-      other => panic!("expected invalid query sql code, got {other:?}"),
+        assert_eq!(query_response.row_limit, 200);
+        assert_eq!(query_response.row_count, 200);
+        assert!(query_response.truncated);
+        assert_eq!(query_response.rows.len(), 200);
     }
-  }
+
+    #[tokio::test]
+    async fn should_clamp_duckdb_query_row_limit_to_maximum() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("duckdb-query-max-limit".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let query_response = duckdb_query(
+            State(state),
+            Path(workbook.id),
+            Json(QueryRequest {
+                sql:
+                    "SELECT CAST(i AS INTEGER) AS value FROM range(0, 1205) AS t(i) ORDER BY value"
+                        .to_string(),
+                row_limit: Some(5_000),
+            }),
+        )
+        .await
+        .expect("query should clamp oversized row limit")
+        .0;
+
+        assert_eq!(query_response.row_limit, 1_000);
+        assert_eq!(query_response.row_count, 1_000);
+        assert!(query_response.truncated);
+        assert_eq!(query_response.rows.len(), 1_000);
+    }
+
+    #[tokio::test]
+    async fn should_reject_multi_statement_duckdb_query_sql() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+        let workbook = state
+            .create_workbook(Some("duckdb-query-multi-statement".to_string()))
+            .await
+            .expect("workbook should be created");
+
+        let error = duckdb_query(
+            State(state),
+            Path(workbook.id),
+            Json(QueryRequest {
+                sql: "SELECT 1; SELECT 2".to_string(),
+                row_limit: Some(5),
+            }),
+        )
+        .await
+        .expect_err("multi-statement sql should be rejected");
+
+        match error {
+            ApiError::BadRequestWithCode { code, message } => {
+                assert_eq!(code, "INVALID_QUERY_SQL");
+                assert!(
+                    message.contains("single statement"),
+                    "error message should reference single-statement guardrail",
+                );
+            }
+            other => panic!("expected invalid query sql code, got {other:?}"),
+        }
+    }
 
     #[tokio::test]
     async fn should_import_fixture_bytes_into_existing_workbook() {
@@ -8009,7 +8270,10 @@ mod tests {
         let expected_signature = operations_signature(&replay_response.operations)
             .expect("replay operation signature should be computed");
         assert_eq!(
-            replay_response.cached_response.operations_signature.as_deref(),
+            replay_response
+                .cached_response
+                .operations_signature
+                .as_deref(),
             Some(expected_signature.as_str()),
         );
     }
@@ -8200,7 +8464,9 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
         let workbook = state
-            .create_workbook(Some("handler-cache-reexecute-invalid-signature".to_string()))
+            .create_workbook(Some(
+                "handler-cache-reexecute-invalid-signature".to_string(),
+            ))
             .await
             .expect("workbook should be created");
 
@@ -8245,7 +8511,9 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
         let workbook = state
-            .create_workbook(Some("handler-cache-reexecute-mismatch-signature".to_string()))
+            .create_workbook(Some(
+                "handler-cache-reexecute-mismatch-signature".to_string(),
+            ))
             .await
             .expect("workbook should be created");
 
@@ -8263,8 +8531,8 @@ mod tests {
         .await
         .expect("initial request should succeed");
 
-        let operation_signature = operations_signature(&[AgentOperation::Recalculate])
-            .expect("signature should build");
+        let operation_signature =
+            operations_signature(&[AgentOperation::Recalculate]).expect("signature should build");
         let mismatched_signature = if operation_signature == "0".repeat(64) {
             "1".repeat(64)
         } else {
@@ -8343,7 +8611,9 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
         let workbook = state
-            .create_workbook(Some("handler-cache-reexecute-trimmed-signature".to_string()))
+            .create_workbook(Some(
+                "handler-cache-reexecute-trimmed-signature".to_string(),
+            ))
             .await
             .expect("workbook should be created");
 
@@ -8361,8 +8631,8 @@ mod tests {
         .await
         .expect("initial request should succeed");
 
-        let operation_signature = operations_signature(&[AgentOperation::Recalculate])
-            .expect("signature should build");
+        let operation_signature =
+            operations_signature(&[AgentOperation::Recalculate]).expect("signature should build");
 
         let reexecute = reexecute_agent_ops_cache_entry(
             State(state),
@@ -8427,7 +8697,10 @@ mod tests {
         .expect("failed cached entry reexecute should succeed with error payload")
         .0;
 
-        assert_eq!(reexecute.response.request_id.as_deref(), Some("reexecute-failed-1"));
+        assert_eq!(
+            reexecute.response.request_id.as_deref(),
+            Some("reexecute-failed-1")
+        );
         assert_eq!(reexecute.response.results.len(), 1);
         assert!(!reexecute.response.results[0].ok);
         assert_eq!(
@@ -8502,7 +8775,9 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
         let workbook = state
-            .create_workbook(Some("handler-cache-reexecute-trimmed-request-id".to_string()))
+            .create_workbook(Some(
+                "handler-cache-reexecute-trimmed-request-id".to_string(),
+            ))
             .await
             .expect("workbook should be created");
 
@@ -8568,7 +8843,9 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
         let workbook = state
-            .create_workbook(Some("handler-cache-reexecute-stop-on-error-override".to_string()))
+            .create_workbook(Some(
+                "handler-cache-reexecute-stop-on-error-override".to_string(),
+            ))
             .await
             .expect("workbook should be created");
 
@@ -8619,7 +8896,9 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
         let workbook = state
-            .create_workbook(Some("handler-cache-reexecute-stop-on-error-default".to_string()))
+            .create_workbook(Some(
+                "handler-cache-reexecute-stop-on-error-default".to_string(),
+            ))
             .await
             .expect("workbook should be created");
 
@@ -8744,7 +9023,9 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir should be created");
         let state = AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
         let workbook = state
-            .create_workbook(Some("handler-cache-reexecute-request-id-conflict".to_string()))
+            .create_workbook(Some(
+                "handler-cache-reexecute-request-id-conflict".to_string(),
+            ))
             .await
             .expect("workbook should be created");
 
@@ -9036,6 +9317,7 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("Get OpenAPI specification document"),
         );
+        assert_endpoint_catalog_coverage_is_consistent(&schema, "agent schema");
         assert_eq!(
             schema
                 .get("operation_payloads")
@@ -9638,7 +9920,9 @@ mod tests {
                 .get("agent_ops_cache_reexecute_request_shape")
                 .and_then(|value| value.get("new_request_id"))
                 .and_then(serde_json::Value::as_str),
-            Some("optional string for target execution request id (trimmed; must remain non-empty)"),
+            Some(
+                "optional string for target execution request id (trimmed; must remain non-empty)"
+            ),
         );
         assert_eq!(
             schema
@@ -9934,6 +10218,7 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("Get OpenAPI specification document"),
         );
+        assert_endpoint_catalog_coverage_is_consistent(&schema, "wizard schema");
         assert_eq!(
             schema
                 .get("run_response_shape")
@@ -10275,7 +10560,9 @@ mod tests {
                 .get("agent_ops_cache_reexecute_request_shape")
                 .and_then(|value| value.get("new_request_id"))
                 .and_then(serde_json::Value::as_str),
-            Some("optional string for target execution request id (trimmed; must remain non-empty)"),
+            Some(
+                "optional string for target execution request id (trimmed; must remain non-empty)"
+            ),
         );
         assert_eq!(
             schema
@@ -10447,6 +10734,8 @@ mod tests {
         assert_endpoint_openapi_metadata_keysets_in_sync(&wizard_schema, "wizard schema");
         assert_endpoint_openapi_paths_match_schema_endpoints(&agent_schema, "agent schema");
         assert_endpoint_openapi_paths_match_schema_endpoints(&wizard_schema, "wizard schema");
+        assert_endpoint_catalog_coverage_is_consistent(&agent_schema, "agent schema");
+        assert_endpoint_catalog_coverage_is_consistent(&wizard_schema, "wizard schema");
     }
 
     #[tokio::test]
@@ -10465,6 +10754,8 @@ mod tests {
 
         assert_endpoint_openapi_metadata_keysets_in_sync(&agent_schema, "agent schema");
         assert_endpoint_openapi_metadata_keysets_in_sync(&wizard_schema, "wizard schema");
+        assert_endpoint_catalog_coverage_is_consistent(&agent_schema, "agent schema");
+        assert_endpoint_catalog_coverage_is_consistent(&wizard_schema, "wizard schema");
     }
 
     #[tokio::test]
@@ -10537,6 +10828,8 @@ mod tests {
             "agent_ops_cache_remove_stale_request_shape",
             "agent_ops_cache_remove_stale_response_shape",
             "agent_ops_idempotency_cache_max_entries",
+            "endpoint_catalog_coverage",
+            "endpoint_catalog_diagnostics",
         ];
 
         for key in parity_keys {
@@ -10890,7 +11183,10 @@ mod tests {
             ("/v1/workbooks/{id}/agent/schema", vec!["get"]),
             ("/v1/workbooks/{id}/agent/ops", vec!["post"]),
             ("/v1/workbooks/{id}/agent/ops/cache", vec!["get"]),
-            ("/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}", vec!["get"]),
+            (
+                "/v1/workbooks/{id}/agent/ops/cache/entries/{request_id}",
+                vec!["get"],
+            ),
             ("/v1/workbooks/{id}/agent/ops/cache/clear", vec!["post"]),
             ("/v1/agent/wizard/schema", vec!["get"]),
             ("/v1/agent/wizard/run", vec!["post"]),
@@ -10901,7 +11197,11 @@ mod tests {
             let actual_methods = paths
                 .get(path)
                 .and_then(serde_json::Value::as_object)
-                .map(|map| map.keys().cloned().collect::<std::collections::BTreeSet<_>>())
+                .map(|map| {
+                    map.keys()
+                        .cloned()
+                        .collect::<std::collections::BTreeSet<_>>()
+                })
                 .expect("openapi path should exist and expose method map");
             let expected_method_set = methods
                 .into_iter()
@@ -11008,6 +11308,7 @@ mod tests {
             "agent schema",
             paths,
         );
+        assert_endpoint_catalog_coverage_is_consistent(&agent_schema, "agent schema");
     }
 
     #[tokio::test]
@@ -11060,6 +11361,7 @@ mod tests {
             "wizard schema",
             paths,
         );
+        assert_endpoint_catalog_coverage_is_consistent(&wizard_schema, "wizard schema");
     }
 
     #[tokio::test]
@@ -11100,10 +11402,7 @@ mod tests {
         let wizard_endpoint_summaries = wizard_schema
             .get("endpoint_summaries")
             .expect("wizard schema should expose endpoint_summaries");
-        assert_endpoint_http_methods_map_is_normalized(
-            agent_endpoint_http_methods,
-            "agent schema",
-        );
+        assert_endpoint_http_methods_map_is_normalized(agent_endpoint_http_methods, "agent schema");
         assert_endpoint_http_methods_map_is_normalized(
             wizard_endpoint_http_methods,
             "wizard schema",
@@ -11137,7 +11436,9 @@ mod tests {
             .keys()
             .filter(|key| wizard_method_map.contains_key(*key))
             .filter(|key| {
-                agent_schema_object.get(*key).and_then(serde_json::Value::as_str)
+                agent_schema_object
+                    .get(*key)
+                    .and_then(serde_json::Value::as_str)
                     == wizard_schema_object
                         .get(*key)
                         .and_then(serde_json::Value::as_str)
