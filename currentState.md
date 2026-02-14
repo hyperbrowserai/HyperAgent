@@ -120,6 +120,7 @@ HyperAgent exposes a TypeScript SDK for browser automation with three primary pa
 - Propagated frame-filter policy through DOM-settle/replay/wait paths so `waitForSettledDOM` and special replay actions honor per-agent ad/tracking frame filtering settings.
 - Added per-invocation frame-filter overrides on `page.ai`, `page.perform`, and replay params so workflows can opt in/out of ad/tracking iframe filtering without constructing a new agent.
 - Synced frame-filter policy into a11y DOM capture setup (`getA11yDOM`/`captureDOMState`) so first-attempt frame discovery uses the active task/action override instead of stale manager state.
+- Hardened per-call frame-filter option reads against trap-prone parameter objects in `executeTask`, `executeTaskAsync`, and `executeSingleAction` (falls back to agent default instead of throwing).
 - Expanded top-level package exports for key workflow/config types at `@hyperbrowser/agent`.
 - Removed stale script entry (`build-dom-tree-script`) and improved README usage docs.
 - Added canonical single-action debug writer helper (`writePerformDebug`) while preserving deprecated alias compatibility.

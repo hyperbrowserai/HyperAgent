@@ -1725,7 +1725,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     }
     const mergedParams = params ?? {};
     const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
-      mergedParams.filterAdTrackingFrames
+      this.safeReadField(mergedParams, "filterAdTrackingFrames")
     );
     let taskResult: Promise<AgentTaskOutput>;
     try {
@@ -1888,7 +1888,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
     try {
       const mergedParams = params ?? {};
       const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
-        mergedParams.filterAdTrackingFrames
+        this.safeReadField(mergedParams, "filterAdTrackingFrames")
       );
       let result = await runAgentTask(
         {
@@ -2784,7 +2784,7 @@ export class HyperAgent<T extends BrowserProviders = "Local"> {
       HyperAgent.PERFORM_CONFIG.MAX_RETRIES
     );
     const filterAdTrackingFrames = this.resolveFilterAdTrackingFrames(
-      params?.filterAdTrackingFrames
+      this.safeReadField(params, "filterAdTrackingFrames")
     );
     const retryDelayMs = this.normalizeRetryDelayMs(
       params?.retryDelayMs,

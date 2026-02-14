@@ -1,6 +1,7 @@
 import type { Page } from "playwright-core";
 import { HyperAgent } from "@/agent";
 import type { HyperAgentLLM } from "@/llm/types";
+import type { PerformTaskParams } from "@/types";
 import { TaskStatus } from "@/types";
 
 jest.mock("@/agent/shared/find-element", () => ({
@@ -181,6 +182,40 @@ describe("HyperAgent.executeSingleAction retry options", () => {
     await agent.executeSingleAction("click login", page, {
       filterAdTrackingFrames: false,
     });
+
+    expect(findElementWithInstruction).toHaveBeenCalledWith(
+      "click login",
+      page,
+      expect.any(Object),
+      expect.objectContaining({
+        filterAdTrackingFrames: false,
+      })
+    );
+  });
+
+  it("falls back to agent filter setting when perform params getter traps", async () => {
+    const agent = new HyperAgent({
+      llm: createMockLLM(),
+      debug: false,
+      cdpActions: false,
+      filterAdTrackingFrames: false,
+    });
+    const page = {
+      url: () => "https://example.com",
+    } as unknown as Page;
+    const trappedParams = new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (prop === "filterAdTrackingFrames") {
+            throw new Error("perform filter trap");
+          }
+          return undefined;
+        },
+      }
+    ) as PerformTaskParams;
+
+    await agent.executeSingleAction("click login", page, trappedParams);
 
     expect(findElementWithInstruction).toHaveBeenCalledWith(
       "click login",
