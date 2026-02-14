@@ -257,14 +257,15 @@ fn normalize_duckdb_query_sql(sql: &str) -> Result<String, ApiError> {
             "sql is required for DuckDB query execution.",
         ));
     }
-    if normalized_sql.contains(';') {
+    let sanitized_sql = sanitize_duckdb_sql_for_keyword_scan(normalized_sql);
+    if sanitized_sql.contains(';') {
         return Err(ApiError::bad_request_with_code(
             "INVALID_QUERY_SQL",
             "DuckDB queries must be a single statement without semicolons.",
         ));
     }
 
-    let uppercase_sql = normalized_sql.to_ascii_uppercase();
+    let uppercase_sql = sanitized_sql.to_ascii_uppercase();
     if !(uppercase_sql.starts_with("SELECT") || uppercase_sql.starts_with("WITH")) {
         return Err(ApiError::bad_request_with_code(
             "INVALID_QUERY_SQL",
@@ -284,6 +285,81 @@ fn normalize_duckdb_query_sql(sql: &str) -> Result<String, ApiError> {
     }
 
     Ok(normalized_sql.to_string())
+}
+
+fn sanitize_duckdb_sql_for_keyword_scan(sql: &str) -> String {
+    let mut sanitized = String::with_capacity(sql.len());
+    let chars = sql.chars().collect::<Vec<_>>();
+    let mut index = 0usize;
+
+    while index < chars.len() {
+        let current = chars[index];
+        if current == '\'' {
+            sanitized.push(' ');
+            index += 1;
+            while index < chars.len() {
+                sanitized.push(' ');
+                if chars[index] == '\'' {
+                    if index + 1 < chars.len() && chars[index + 1] == '\'' {
+                        sanitized.push(' ');
+                        index += 2;
+                        continue;
+                    }
+                    index += 1;
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if current == '"' {
+            sanitized.push(' ');
+            index += 1;
+            while index < chars.len() {
+                sanitized.push(' ');
+                if chars[index] == '"' {
+                    if index + 1 < chars.len() && chars[index + 1] == '"' {
+                        sanitized.push(' ');
+                        index += 2;
+                        continue;
+                    }
+                    index += 1;
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if current == '-' && index + 1 < chars.len() && chars[index + 1] == '-' {
+            sanitized.push(' ');
+            sanitized.push(' ');
+            index += 2;
+            while index < chars.len() && chars[index] != '\n' {
+                sanitized.push(' ');
+                index += 1;
+            }
+            continue;
+        }
+        if current == '/' && index + 1 < chars.len() && chars[index + 1] == '*' {
+            sanitized.push(' ');
+            sanitized.push(' ');
+            index += 2;
+            while index < chars.len() {
+                sanitized.push(' ');
+                if chars[index] == '*' && index + 1 < chars.len() && chars[index + 1] == '/' {
+                    sanitized.push(' ');
+                    index += 2;
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        sanitized.push(current);
+        index += 1;
+    }
+
+    sanitized
 }
 
 fn normalize_duckdb_query_row_limit(row_limit: Option<u32>) -> Result<usize, ApiError> {

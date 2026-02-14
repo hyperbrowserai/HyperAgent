@@ -3195,6 +3195,40 @@ mod tests {
         }
     }
 
+  #[tokio::test]
+  async fn should_allow_duckdb_query_keywords_inside_literals_and_comments() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let state =
+      AppState::new(temp_dir.path().to_path_buf()).expect("state should initialize");
+    let workbook = state
+      .create_workbook(Some("duckdb-query-keyword-literals".to_string()))
+      .await
+      .expect("workbook should be created");
+
+    let query_response = duckdb_query(
+      State(state),
+      Path(workbook.id),
+      Json(QueryRequest {
+        sql: "SELECT 'drop update' AS \"delete\", 1 AS value /* ALTER TABLE */".to_string(),
+        row_limit: Some(5),
+      }),
+    )
+    .await
+    .expect("query should succeed when disallowed keywords appear only in literals/comments")
+    .0;
+
+    assert_eq!(
+      query_response.columns,
+      vec!["delete".to_string(), "value".to_string()],
+    );
+    assert_eq!(query_response.row_count, 1);
+    assert!(!query_response.truncated);
+    assert_eq!(
+      query_response.rows[0],
+      vec![Some("drop update".to_string()), Some("1".to_string())],
+    );
+  }
+
     #[tokio::test]
     async fn should_reject_non_positive_duckdb_query_row_limit() {
         let temp_dir = tempdir().expect("temp dir should be created");
