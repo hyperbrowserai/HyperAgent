@@ -3396,6 +3396,17 @@ mod tests {
         .is_some_and(|value| value >= 1),
       "import event should report normalized formula count for matrix fixture",
     );
+    assert!(
+      emitted_event
+        .payload
+        .get("warnings")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .any(|warning| warning.contains("formula(s) were normalized")),
+      "import event payload warnings should include formula-matrix normalization telemetry",
+    );
   }
 
   #[tokio::test]
