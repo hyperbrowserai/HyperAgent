@@ -155,6 +155,18 @@ The in-memory request-id idempotency cache keeps up to **256** recent `agent/ops
 `/v1/workbooks/{id}/agent/schema` also advertises `health_endpoint`, `openapi_endpoint`, `endpoint_http_methods` (schema endpoint-key to HTTP method list), `agent_ops_request_shape`, workbook import/export and DuckDB-query endpoint metadata (including `x-export-meta` header shape, import formula-metric response fields, DuckDB query request/response schema + validation codes, formula capability metadata with both summary strings and structured lists, and a workbook event-shape catalog for `workbook.created`, `sheet.added`, `cells.updated`, `formula.recalculated`, `chart.updated`, `workbook.imported`, and `workbook.exported`) for agent discoverability.
 `/v1/agent/wizard/schema` includes `health_endpoint`, `openapi_endpoint`, `endpoint_http_methods`, run/import response-shape metadata plus formula capability metadata (summary + structured lists + validation error codes), signature error codes, generic `agent/ops` execute + preview endpoint metadata, `agent_ops_request_shape` + preview request/response shape metadata, top-level `agent_ops_response_shape` metadata, cache endpoint metadata across stats/list/detail/prefix/clear/replay/reexecute/cleanup workflows, cache query/request/response shape contracts (including entries/prefixes age/paging filters), cache validation error codes, structured operation-error payload shape (`agent_ops_result_error_shape`), and DuckDB query request/response schema + validation codes so agent callers can discover wizard import metric fields and supported execution contracts without trial calls.
 
+`endpoint_http_methods` example:
+
+```json
+{
+  "endpoint_http_methods": {
+    "endpoint": ["POST"],
+    "openapi_endpoint": ["GET"],
+    "agent_ops_preview_endpoint": ["POST"]
+  }
+}
+```
+
 Plan-preview helper:
 - `POST /v1/workbooks/{id}/agent/ops/preview` returns `{ operations_signature, operations }` without executing.
 
