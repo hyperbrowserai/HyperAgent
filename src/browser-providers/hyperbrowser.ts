@@ -16,27 +16,47 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
   session: SessionDetail | undefined;
   hbClient: Hyperbrowser | undefined;
   debug: boolean;
+  keepBrowserOpen: boolean;
+  externallyManaged: boolean;
 
   constructor(params?: {
     debug?: boolean;
     browserConfig?: Omit<ConnectOverCDPOptions, "endpointURL">;
     sessionConfig?: CreateSessionParams;
     config?: HyperbrowserConfig;
+    client?: Hyperbrowser;
+    session?: SessionDetail;
+    keepBrowserOpen?: boolean;
   }) {
     super();
     this.debug = params?.debug ?? false;
     this.browserConfig = params?.browserConfig;
     this.sessionConfig = params?.sessionConfig;
     this.config = params?.config;
+    this.keepBrowserOpen = params?.keepBrowserOpen ?? false;
+    if (params?.client && params?.session) {
+      this.hbClient = params.client;
+      this.session = params.session;
+      this.externallyManaged = true;
+    } else this.externallyManaged = false;
   }
 
   async start(): Promise<Browser> {
-    const client = new Hyperbrowser(this.config);
-    const session = await client.sessions.create(this.sessionConfig);
-    this.hbClient = client;
-    this.session = session;
+    if (!this.externallyManaged) {
+      this.hbClient = new Hyperbrowser(this.config);
+      this.session = await this.hbClient.sessions.create(this.sessionConfig);
+    }
+
+    if (!this.session) {
+      throw new Error("Failed to initialize or acquire a Hyperbrowser session");
+    }
+
+    const wsEndpoint = this.keepBrowserOpen 
+      ? this.session.wsEndpoint + (this.session.wsEndpoint.includes('?') ? '&' : '?') + 'keepAlive=true'
+      : this.session.wsEndpoint;
+
     this.browser = await chromium.connectOverCDP(
-      session.wsEndpoint,
+      wsEndpoint,
       this.browserConfig
     );
 
@@ -44,9 +64,9 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
       console.log(
         "\nHyperbrowser session info:",
         {
-          liveUrl: session.liveUrl,
-          sessionID: session.id,
-          infoUrl: session.sessionUrl,
+          liveUrl: this.session.liveUrl,
+          sessionID: this.session.id,
+          infoUrl: this.session.sessionUrl,
         },
         "\n"
       );
@@ -57,7 +77,8 @@ export class HyperbrowserProvider extends BrowserProvider<SessionDetail> {
 
   async close(): Promise<void> {
     await this.browser?.close();
-    if (this.session) {
+    // Only stop the session if it's internally managed
+    if (!this.externallyManaged && this.session) {
       await this.hbClient?.sessions.stop(this.session.id);
     }
   }
