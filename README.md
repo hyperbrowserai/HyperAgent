@@ -59,12 +59,13 @@ $ npx @hyperbrowser/agent -c "Find a route from Miami to New Orleans, and provid
   <img src="assets/flight-schedule.gif" alt="Hyperagent Demo"/>
 </p>
 
-The CLI supports options for debugging or using hyperbrowser instead of a local browser
+The CLI supports options for debugging or using different browser providers
 
 ```bash
 -d, --debug                       Enable debug mode
 -c, --command <task description>  Command to run
 --hyperbrowser                    Use Hyperbrowser for the browser provider
+--remote-chrome <wsEndpoint>      Use Remote Chrome for the browser provider with specified WebSocket endpoint
 ```
 
 ### Library
@@ -186,9 +187,12 @@ const products = await page.extract(
 );
 ```
 
-## ☁️ Cloud
+## ☁️ Cloud & Remote Browsers
 
-You can scale HyperAgent with cloud headless browsers using Hyperbrowser
+You can scale HyperAgent with different browser providers:
+
+### Hyperbrowser Provider
+Scale with cloud headless browsers using Hyperbrowser
 
 1. Get a free api key from [Hyperbrowser](https://app.hyperbrowser.ai/)
 2. Add it to your env as `HYPERBROWSER_API_KEY`
@@ -197,6 +201,28 @@ You can scale HyperAgent with cloud headless browsers using Hyperbrowser
 ```typescript
 const agent = new HyperAgent({
   browserProvider: "Hyperbrowser",
+});
+
+const response = await agent.executeTask(
+  "Go to hackernews, and list me the 5 most recent article titles"
+);
+
+console.log(response);
+await agent.closeAgent();
+```
+
+### Remote Chrome Provider
+Connect to a remote Chrome instance using a WebSocket endpoint
+
+```typescript
+const agent = new HyperAgent({
+  browserProvider: "RemoteChrome",
+  remoteChromeConfig: {
+    wsEndpoint: "ws://your-remote-chrome-instance:9222/devtools/browser/...",
+    browserConfig: {
+      // Additional Playwright connect options
+    }
+  }
 });
 
 const response = await agent.executeTask(

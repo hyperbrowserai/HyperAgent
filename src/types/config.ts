@@ -5,6 +5,7 @@ import {
   HyperbrowserProvider,
   LocalBrowserProvider,
 } from "@/browser-providers";
+import { RemoteChromeProvider } from "@/browser-providers/remote-chrome";
 import type { Page as PlaywrightPage, BrowserContext } from "playwright-core";
 
 export interface MCPServerConfig {
@@ -55,7 +56,7 @@ export interface MCPConfig {
   servers: MCPServerConfig[];
 }
 
-export type BrowserProviders = "Local" | "Hyperbrowser";
+export type BrowserProviders = "Local" | "Hyperbrowser" | "RemoteChrome";
 
 /**
  * Placeholder connector configuration for the Phase 4 connector-only flow.
@@ -89,6 +90,7 @@ export interface HyperAgentConfig<T extends BrowserProviders = "Local"> {
     "debug"
   >;
   localConfig?: ConstructorParameters<typeof LocalBrowserProvider>[0];
+  remoteChromeConfig?: ConstructorParameters<typeof RemoteChromeProvider>[0];
 
   /**
    * Configuration for agent actions

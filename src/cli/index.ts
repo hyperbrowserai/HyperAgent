@@ -39,10 +39,12 @@ program
   .option("-f, --file <file path>", "Path to a file containing a command")
   .option("-m, --mcp <mcp config file>", "Path to a file containing mcp config")
   .option("--hyperbrowser", "Use Hyperbrowser for the browser provider")
+  .option("--remote-chrome <wsEndpoint>", "Use Remote Chrome for the browser provider with specified WebSocket endpoint")
   .action(async function () {
     const options = this.opts();
     const debug = (options.debug as boolean) || false;
     const useHB = (options.hyperbrowser as boolean) || false;
+    const remoteChromeWsEndpoint = (options.remoteChrome as string) || undefined;
     let taskDescription = (options.command as string) || undefined;
     const filePath = (options.file as string) || undefined;
     const mcpPath = (options.mcp as string) || undefined;
@@ -70,7 +72,9 @@ program
 
       const agent = new HyperAgent({
         debug: debug,
-        browserProvider: useHB ? "Hyperbrowser" : "Local",
+        browserProvider: useHB ? "Hyperbrowser" : remoteChromeWsEndpoint ? "RemoteChrome" : "Local",
+        hyperbrowserConfig: useHB ? {} : undefined,
+        remoteChromeConfig: remoteChromeWsEndpoint ? { wsEndpoint: remoteChromeWsEndpoint } : undefined,
         customActions: [
           UserInteractionAction(
             async ({ message, kind, choices }): Promise<ActionOutput> => {
@@ -267,10 +271,14 @@ program
         await agent.initializeMCPClient({ servers: mcpConfig });
       }
 
-      if (useHB && !debug) {
+      if ((useHB || remoteChromeWsEndpoint) && !debug) {
         await agent.initBrowser();
-        const session = agent.getSession() as SessionDetail;
-        console.log(`Hyperbrowser Live URL: ${session.liveUrl}\n`);
+        if (useHB) {
+          const session = agent.getSession() as SessionDetail;
+          console.log(`Hyperbrowser Live URL: ${session.liveUrl}\n`);
+        } else if (remoteChromeWsEndpoint) {
+          console.log(`Connected to Remote Chrome: ${remoteChromeWsEndpoint}\n`);
+        }
       }
 
       task = await agent.executeTaskAsync(taskDescription, {
