@@ -12,6 +12,9 @@
     <a href="https://github.com/hyperbrowserai/hyperagent/blob/main/LICENSE">
       <img src="https://img.shields.io/npm/l/@hyperbrowser/agent?style=flat-square" alt="license" />
     </a>
+    <a href="https://getmanta.ai/hyperagent">
+      <img src="https://getmanta.ai/api/badges?text=Manta%20Graph&link=hyperagent" alt="HyperAgent graph on Manta">
+    </a> 
     <a href="https://discord.gg/zsYzsgVRjh" style="text-decoration:none;">
       <img alt="Discord" src="https://img.shields.io/discord/1313014141165764619?style=flat-square&color=blue">
     </a>
