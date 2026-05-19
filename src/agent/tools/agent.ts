@@ -128,7 +128,7 @@ const getActionHandler = (
   actions: Array<AgentActionDefinition>,
   type: string
 ) => {
-  const foundAction = actions.find((actions) => actions.type === type);
+  const foundAction = actions.find((definedAction) => definedAction.type === type);
   if (foundAction) {
     return foundAction.run;
   } else {
